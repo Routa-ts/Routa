@@ -117,4 +117,9 @@ The deeper architecture notes live here:
 
 ## Naming Notes
 
-Trail is the working name. Routa and Weave are reserved as fallback options.
+Trail is the working name.
+
+Reserved fallback names:
+
+- **Routa**: close to routing, short, and framework-friendly.
+- **Weave**: good if the framework leans into composing routes, middleware, contracts, and services.
