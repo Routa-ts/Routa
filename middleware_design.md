@@ -54,43 +54,43 @@ rejects:
 
 ```ts
 export default defineMiddleware({
-  requires: {
-    user: UserSchema,
-  },
+	requires: {
+		user: UserSchema,
+	},
 
-  provides: {
-    debugInfo: DebugSchema.optional(),
-  },
+	provides: {
+		debugInfo: DebugSchema.optional(),
+	},
 
-  guarantees: {
-    permissions: PermissionsSchema,
-  },
+	guarantees: {
+		permissions: PermissionsSchema,
+	},
 
-  rejects: {
-    cannotLoadPermissions: {
-      status: 500,
-      schema: CannotLoadPermissionsSchema,
-    },
-  },
+	rejects: {
+		cannotLoadPermissions: {
+			status: 500,
+			schema: CannotLoadPermissionsSchema,
+		},
+	},
 
-  run: async ({ ctx, next }) => {
-    const permissions = await getPermissions(ctx.state.user.id)
+	run: async ({ ctx, next }) => {
+		const permissions = await getPermissions(ctx.state.user.id);
 
-    if (!permissions) {
-      return {
-        type: "cannotLoadPermissions",
-        message: "Failed to load permissions",
-      }
-    }
+		if (!permissions) {
+			return {
+				type: "cannotLoadPermissions",
+				message: "Failed to load permissions",
+			};
+		}
 
-    return next({
-      state: {
-        permissions,
-        debugInfo: maybeDebug,
-      },
-    })
-  },
-})
+		return next({
+			state: {
+				permissions,
+				debugInfo: maybeDebug,
+			},
+		});
+	},
+});
 ```
 
 ---
@@ -136,8 +136,8 @@ route → specific flags
 Handler receives:
 
 ```ts
-ctx.state.user.id
-ctx.state.permissions
+ctx.state.user.id;
+ctx.state.permissions;
 ```
 
 No optional chaining if guaranteed.
@@ -150,9 +150,9 @@ Middleware can return early responses using declared types:
 
 ```ts
 return {
-  type: "invalidToken",
-  message: "Invalid token",
-}
+	type: "invalidToken",
+	message: "Invalid token",
+};
 ```
 
 Mapping:
@@ -219,14 +219,12 @@ Routes can define specific middleware:
 
 ```ts
 export default createRoute({
-  middleware: [
-    requirePermission("users.create"),
-  ],
+	middleware: [requirePermission("users.create")],
 
-  run: async ({ ctx }) => {
-    ctx.state.user.id
-  },
-})
+	run: async ({ ctx }) => {
+		ctx.state.user.id;
+	},
+});
 ```
 
 ---

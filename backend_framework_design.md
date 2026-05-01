@@ -47,27 +47,27 @@ routes/
 
 ```ts
 export default createRoute({
-  input: {
-    body: CreateUserSchema,
-    query: QuerySchema,
-    params: ParamsSchema,
-  },
+	input: {
+		body: CreateUserSchema,
+		query: QuerySchema,
+		params: ParamsSchema,
+	},
 
-  responses: {
-    success: {
-      status: 200,
-      schema: UserSchema,
-    },
-    emailConflict: {
-      status: 409,
-      schema: EmailConflictSchema,
-    },
-  },
+	responses: {
+		success: {
+			status: 200,
+			schema: UserSchema,
+		},
+		emailConflict: {
+			status: 409,
+			schema: EmailConflictSchema,
+		},
+	},
 
-  run: async ({ input, ctx }) => {
-    return userService.create(input.body)
-  },
-})
+	run: async ({ input, ctx }) => {
+		return userService.create(input.body);
+	},
+});
 ```
 
 ---
@@ -90,9 +90,9 @@ type Response =
 
 ```ts
 return {
-  type: "emailConflict",
-  message: "Email already exists",
-}
+	type: "emailConflict",
+	message: "Email already exists",
+};
 ```
 
 ---
@@ -121,11 +121,11 @@ return {
 
 ```ts
 defineGlobalErrors({
-  internalError: {
-    status: 500,
-    schema: InternalErrorSchema,
-  },
-})
+	internalError: {
+		status: 500,
+		schema: InternalErrorSchema,
+	},
+});
 ```
 
 ### Overrides
@@ -138,9 +138,9 @@ defineGlobalErrors({
 
 ## Validation Strategy
 
-| Type   | Dev | Prod |
-|--------|-----|------|
-| Input  | ✅  | ✅   |
+| Type   | Dev | Prod        |
+| ------ | --- | ----------- |
+| Input  | ✅  | ✅          |
 | Output | ✅  | ⚙️ optional |
 
 ---
@@ -180,11 +180,11 @@ ctx:
 
 ```ts
 run: async ({ input, ctx }) => {
-  return userService.create({
-    data: input.body,
-    userId: ctx.state.user?.id,
-  })
-}
+	return userService.create({
+		data: input.body,
+		userId: ctx.state.user?.id,
+	});
+};
 ```
 
 ---
