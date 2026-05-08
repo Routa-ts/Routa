@@ -24,10 +24,10 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Route handlers or controllers
 - [x] Per-segment route file metadata (one `route.ts` per URL segment, not one file per HTTP verb)
 - [x] Parent collection segment alongside dynamic child segments (`users/route.ts` + `users/$id/route.ts`, collection `post` → `201` on parent)
-- [ ] Abort or cancellation handling
+- [x] Abort or cancellation handling
 - [ ] Graceful shutdown
 - [x] JSON-first serialization
-- [x] Pluggable body parsers
+- [ ] Pluggable body parsers
 - [x] Content negotiation through `Accept`
 - [x] Content negotiation through `Content-Type`
 - [x] Reject unsupported request media types with `415 Unsupported Media Type`
@@ -89,23 +89,23 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Bearer token support
 - [x] API key support for suitable cases
 - [x] Session or cookie support if browser APIs are a target
-- [x] Per-route authorization hooks
-- [ ] Object-level authorization support
+- [x] Per-route authorization guard middleware and policy callbacks
+- [x] Object-level authorization support
 - [x] Function-level authorization support
-- [ ] Field or property-level authorization support
-- [ ] Avoid relying only on controller-level authorization checks
+- [x] Field or property-level authorization support
+- [x] Avoid relying only on controller-level authorization checks
 - [ ] Mitigation for broken object-level authorization
 - [ ] Mitigation for broken authentication
 - [ ] Mitigation for broken object property-level authorization
 - [ ] Mitigation for unrestricted resource consumption
 - [ ] Mitigation for broken function-level authorization
 - [ ] Mitigation for unrestricted access to sensitive business flows
-- [x] SSRF protection
-- [ ] Security misconfiguration safeguards
-- [x] Safe consumption of third-party APIs
+- [x] SSRF protection for Trail-managed outbound helpers
+- [x] Security misconfiguration safeguards
+- [x] Safe consumption of third-party APIs through `safeFetch`
 - [x] Per-IP rate limits
-- [x] Per-token rate limits
-- [x] Per-route rate limits
+- [x] Per-auth identity rate limits
+- [x] Implicit per-route rate-limit bucket scoping
 - [x] Request timeout limits
 - [x] Concurrency limits
 - [x] Clear `429 Too Many Requests` behavior
@@ -118,11 +118,11 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Security headers for browser-consumed APIs
 - [x] HTTPS assumption
 - [ ] No stack traces in production responses
-- [x] No sensitive data in URLs
-- [ ] Header normalization
+- [x] Guardrails to discourage sensitive data in URLs
+- [x] Header normalization
 - [ ] HTTP method allowlists
 - [x] Safe request parsers
-- [x] SSRF-safe outbound HTTP helpers if outbound helpers are included
+- [x] SSRF-safe outbound HTTP helpers through `safeFetch`
 
 ## Operations
 
@@ -167,7 +167,7 @@ Use this checklist to mark what the framework already covers and identify what i
 - [ ] Shutdown lifecycle hooks
 - [ ] Request start lifecycle hooks
 - [ ] Request end lifecycle hooks
-- [x] Error lifecycle hooks
+- [ ] Error lifecycle hooks
 - [ ] Framework-level metadata registry
 - [ ] Unit testing route handlers
 - [ ] Integration testing HTTP requests
@@ -195,8 +195,8 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Validation
 - [x] Standardized errors
 - [x] OpenAPI
-- [x] Authentication hooks
-- [x] Authorization hooks
+- [x] Authentication provider/strategy hooks
+- [x] Authorization guard middleware and policy callbacks
 - [x] Rate limits
 - [ ] Structured logging
 - [ ] Health endpoint

@@ -52,6 +52,8 @@ Trail is opinionated where APIs need consistency: routing, validation, context, 
 ```ts
 export default defineRoute({
 	post: createRoute({
+		middleware: [requireAuth()],
+
 		input: {
 			body: CreateUserSchema,
 		},
@@ -70,7 +72,7 @@ export default defineRoute({
 		run: async ({ input, ctx }) => {
 			return users.createUser({
 				body: input.body,
-				actorId: ctx.state.user.id,
+				actorId: ctx.state.auth.principal.id,
 			});
 		},
 	}),

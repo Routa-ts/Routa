@@ -88,6 +88,8 @@ The HTTP verb for each handler comes from the key (`get`, `post`, `methods.patch
 ```ts
 export default defineRoute({
 	post: createRoute({
+		middleware: [requireAuth()],
+
 		input: {
 			body: CreateUserSchema,
 			query: QuerySchema,
@@ -108,7 +110,7 @@ export default defineRoute({
 		run: async ({ input, ctx }) => {
 			return userService.createUser({
 				body: input.body,
-				actorId: ctx.state.user.id,
+				actorId: ctx.state.auth.principal.id,
 			});
 		},
 	}),
@@ -220,7 +222,7 @@ ctx:
     cookies
 
   state:
-    user
+    auth
     tenant
     custom middleware data
 
@@ -234,7 +236,10 @@ ctx:
 run: async ({ input, ctx }) => {
 	const user = await userService.createUser({
 		body: input.body,
-		actorId: ctx.state.user?.id,
+		actorId:
+			ctx.state.auth.status === "authenticated"
+				? ctx.state.auth.principal.id
+				: undefined,
 	});
 	return { type: "success", data: user };
 };

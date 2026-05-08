@@ -10,42 +10,24 @@ Completed. Consolidated decisions and checklist alignment are in:
 
 - `http_contract_group1_wrapup.md`
 
-## Suggested Next Group
-
 ### Group 2: Auth and API Security
 
-This should be the next conversation.
-
-Topics to decide:
-
-- Authentication hooks
-- Bearer token support
-- API key support
-- Session or cookie auth support
-- Object-level authorization
-- Field-level authorization
-- Broken auth and broken authorization mitigations
-- Rate limiting model
-- Request timeout limits
-- Concurrency limits
-- `429 Too Many Requests`
-- CORS policy
-- Security headers
-- HTTPS assumptions
-- Sensitive data in URLs
-- Header normalization
-- Method allowlists
-- Safe parsers
-- SSRF protection
-- Safe outbound HTTP helpers
-
-Suggested file:
+Completed. Consolidated decisions and checklist alignment are in:
 
 - `security_design.md`
 
-## Remaining Review Groups
+Deferred for a later hardening pass:
+
+- Broken authentication and broken authorization mitigation mapping.
+- Unrestricted resource consumption mitigation beyond the rate-limit, timeout, and concurrency model.
+- Unrestricted access to sensitive business flows.
+- HTTP method allowlists as a security-specific control.
+
+## Suggested Next Group
 
 ### Group 3: OpenAPI and API Evolution
+
+This should be the next conversation.
 
 Topics to decide:
 
@@ -64,6 +46,8 @@ Topics to decide:
 Suggested file:
 
 - `openapi_and_versioning_design.md`
+
+## Remaining Review Groups
 
 ### Group 4: Collections and REST Query Features
 

@@ -127,32 +127,27 @@ createRoute({
 
 The user can express richer OpenAPI-compatible schemas through helpers without writing raw OpenAPI objects.
 
-Non-JSON adapters such as **`csv()`** take a callback whose parameter type is the **inferred validated canonical type** for that response variant—whatever the **`schema`** expression implies when it uses helpers like **`oneOf`**, **`anyOf`**, **`allOf`**, or **`nullable`**. You implement how that value maps to wire-format text (narrowing, branching, or normalizing as needed). Trail validates against the composed schema first; the serializer then receives a value that satisfies it. The sketch below uses **`oneOf`** only as one illustration of that pattern.
+Non-JSON adapters such as **`csv()`** take a callback whose parameter type is the **inferred validated canonical type** for that response variant—whatever the **`schema`** expression implies when it uses helpers like **`anyOf`**, **`allOf`**, or **`nullable`**. You implement how that value maps to wire-format text (narrowing, branching, or normalizing as needed). Trail validates against the composed schema first; the serializer then receives a value that satisfies it.
 
 ```ts
-// Illustrative: `AdminUserSchema` extends the user shape with something like `adminLevel`.
-type SuccessPayload =
-	| z.infer<typeof UserSchema>
-	| z.infer<typeof AdminUserSchema>;
+const UserWithMetadataSchema = allOf([UserSchema, MetadataSchema]);
+type SuccessPayload = z.infer<typeof UserWithMetadataSchema>;
 
 createRoute({
 	responses: {
 		success: {
 			status: 200,
-			schema: oneOf([UserSchema, AdminUserSchema]),
+			schema: UserWithMetadataSchema,
 			content: {
 				"application/json": json(),
-				"text/csv": csv((row: SuccessPayload) => {
-					if ("adminLevel" in row) {
-						return [
-							"id,name,email,adminLevel",
-							`${row.id},${row.name},${row.email},${row.adminLevel}`,
-						].join("\n");
-					}
-					return ["id,name,email", `${row.id},${row.name},${row.email}`].join(
+				"text/csv": csv((row: SuccessPayload) =>
+					[
+						"id,name,email,updatedAt",
+						`${row.id},${row.name},${row.email},${row.updatedAt}`,
+					].join(
 						"\n",
-					);
-				}),
+					),
+				),
 			},
 		},
 		error: {
@@ -165,7 +160,6 @@ createRoute({
 
 Helper direction:
 
-- `oneOf([...])`
 - `anyOf([...])`
 - `allOf([...])`
 - `nullable(schema)`
@@ -347,7 +341,7 @@ Not included by default in v1:
 - Trail does not require users to model raw CSV strings as their primary response schema.
 - For formats like CSV or plain text, Trail validates the canonical payload and then applies the selected serializer.
 - Adapters such as `csv()` and `text()` take a **user-defined function** that maps the **validated canonical value** to that representation (headers, row order, delimiters, escaping). Trail does not guess CSV layout from the schema alone; the function is the contract for how structure becomes wire-format text.
-- **Advanced (Level 3) authoring:** When the canonical schema is built from **OpenAPI-style helpers** (`oneOf`, `anyOf`, `allOf`, `nullable`, and other composition helpers), Trail infers the **validated payload TypeScript type** from that composition. Serializer and parser callbacks are typed against that same inferred shape; you supply the mapping to or from the wire format for every case the schema allows (including narrowing or branching when the inferred type is a union or otherwise has multiple shapes).
+- **Advanced (Level 3) authoring:** When the canonical schema is built from **OpenAPI-style helpers** (`anyOf`, `allOf`, `nullable`, and other supported composition helpers), Trail infers the **validated payload TypeScript type** from that composition. Serializer and parser callbacks are typed against that same inferred shape; you supply the mapping to or from the wire format for every case the schema allows. Trail does not expose a public `oneOf` route response helper in v1; developers should model different same-status outcomes as named response variants, and Trail generates OpenAPI `oneOf` automatically when needed.
 
 ### Binary and File Responses
 
