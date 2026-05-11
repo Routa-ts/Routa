@@ -57,7 +57,7 @@ rejects:
 ```ts
 export default defineMiddleware({
 	requires: {
-		user: UserSchema,
+		auth: AuthenticatedAuthSchema,
 	},
 
 	provides: {
@@ -76,7 +76,7 @@ export default defineMiddleware({
 	},
 
 	run: async ({ ctx, next }) => {
-		const permissions = await getPermissions(ctx.state.user.id);
+		const permissions = await getPermissions(ctx.state.auth.principal.id);
 
 		if (!permissions) {
 			return {
@@ -134,7 +134,7 @@ global
 
 ```
 global → requestId
-auth → user
+auth → auth
 permissions → permissions
 route file → shared resource flags
 method contract → verb-specific flags
@@ -143,7 +143,7 @@ method contract → verb-specific flags
 Handler receives:
 
 ```ts
-ctx.state.user.id;
+ctx.state.auth.principal.id;
 ctx.state.permissions;
 ```
 
@@ -200,7 +200,7 @@ OpenAPI generation rules:
 Add data to context:
 
 ```
-auth → user
+auth → auth
 permissions → permissions
 ```
 
@@ -242,7 +242,7 @@ export default defineRoute({
 		// …`input`, `responses`, etc.
 
 		run: async ({ ctx }) => {
-			ctx.state.user.id;
+			ctx.state.auth.principal.id;
 		},
 	}),
 });

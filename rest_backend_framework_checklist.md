@@ -24,10 +24,10 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Route handlers or controllers
 - [x] Per-segment route file metadata (one `route.ts` per URL segment, not one file per HTTP verb)
 - [x] Parent collection segment alongside dynamic child segments (`users/route.ts` + `users/$id/route.ts`, collection `post` → `201` on parent)
-- [ ] Abort or cancellation handling
+- [x] Abort or cancellation handling
 - [ ] Graceful shutdown
 - [x] JSON-first serialization
-- [x] Pluggable body parsers
+- [ ] Pluggable body parsers
 - [x] Content negotiation through `Accept`
 - [x] Content negotiation through `Content-Type`
 - [x] Reject unsupported request media types with `415 Unsupported Media Type`
@@ -86,43 +86,43 @@ Use this checklist to mark what the framework already covers and identify what i
 ## Security
 
 - [x] Authentication abstraction
-- [ ] Bearer token support
-- [ ] API key support for suitable cases
-- [ ] Session or cookie support if browser APIs are a target
-- [x] Per-route authorization hooks
-- [ ] Object-level authorization support
+- [x] Bearer token support
+- [x] API key support for suitable cases
+- [x] Session or cookie support if browser APIs are a target
+- [x] Per-route authorization guard middleware and policy callbacks
+- [x] Object-level authorization support
 - [x] Function-level authorization support
-- [ ] Field or property-level authorization support
-- [ ] Avoid relying only on controller-level authorization checks
+- [x] Field or property-level authorization support
+- [x] Avoid relying only on controller-level authorization checks
 - [ ] Mitigation for broken object-level authorization
 - [ ] Mitigation for broken authentication
 - [ ] Mitigation for broken object property-level authorization
 - [ ] Mitigation for unrestricted resource consumption
 - [ ] Mitigation for broken function-level authorization
 - [ ] Mitigation for unrestricted access to sensitive business flows
-- [ ] SSRF protection
-- [ ] Security misconfiguration safeguards
-- [ ] Safe consumption of third-party APIs
-- [ ] Per-IP rate limits
-- [ ] Per-token rate limits
-- [ ] Per-route rate limits
-- [ ] Request timeout limits
-- [ ] Concurrency limits
-- [ ] Clear `429 Too Many Requests` behavior
-- [ ] Explicit CORS configuration
-- [ ] No wildcard CORS credentials
-- [ ] Allowed CORS origins
-- [ ] Allowed CORS methods
-- [ ] Allowed CORS headers
-- [ ] CORS preflight handling
-- [ ] Security headers for browser-consumed APIs
-- [ ] HTTPS assumption
+- [x] SSRF protection for Trail-managed outbound helpers
+- [x] Security misconfiguration safeguards
+- [x] Safe consumption of third-party APIs through `safeFetch`
+- [x] Per-IP rate limits
+- [x] Per-auth identity rate limits
+- [x] Implicit per-route rate-limit bucket scoping
+- [x] Request timeout limits
+- [x] Concurrency limits
+- [x] Clear `429 Too Many Requests` behavior
+- [x] Explicit CORS configuration
+- [x] No wildcard CORS credentials
+- [x] Allowed CORS origins
+- [x] Allowed CORS methods
+- [x] Allowed CORS headers
+- [x] CORS preflight handling
+- [x] Security headers for browser-consumed APIs
+- [x] HTTPS assumption
 - [ ] No stack traces in production responses
-- [ ] No sensitive data in URLs
-- [ ] Header normalization
+- [x] Guardrails to discourage sensitive data in URLs
+- [x] Header normalization
 - [ ] HTTP method allowlists
 - [x] Safe request parsers
-- [ ] SSRF-safe outbound HTTP helpers if outbound helpers are included
+- [x] SSRF-safe outbound HTTP helpers through `safeFetch`
 
 ## Operations
 
@@ -162,12 +162,12 @@ Use this checklist to mark what the framework already covers and identify what i
 - [ ] Replaceable logger
 - [ ] Replaceable validator
 - [ ] Replaceable serializer
-- [ ] Replaceable auth provider
+- [x] Replaceable auth provider
 - [ ] Startup lifecycle hooks
 - [ ] Shutdown lifecycle hooks
 - [ ] Request start lifecycle hooks
 - [ ] Request end lifecycle hooks
-- [x] Error lifecycle hooks
+- [ ] Error lifecycle hooks
 - [ ] Framework-level metadata registry
 - [ ] Unit testing route handlers
 - [ ] Integration testing HTTP requests
@@ -195,9 +195,9 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Validation
 - [x] Standardized errors
 - [x] OpenAPI
-- [ ] Authentication hooks
-- [x] Authorization hooks
-- [ ] Rate limits
+- [x] Authentication provider/strategy hooks
+- [x] Authorization guard middleware and policy callbacks
+- [x] Rate limits
 - [ ] Structured logging
 - [ ] Health endpoint
 - [ ] Readiness endpoint

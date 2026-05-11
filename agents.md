@@ -1,5 +1,11 @@
 # AGENTS.md
 
+## What This Repository Is
+
+This repo holds **planning and design** for **Trail**: a schema-first, file-based REST framework ([README](./README.md)). There is no production implementation here yet; work is product direction, architecture, contracts, and checklists.
+
+**Where to look:** [README](./README.md) for vision, mental model, and status; [backend_framework_design.md](./backend_framework_design.md), [middleware_design.md](./middleware_design.md), and [security_design.md](./security_design.md) for subsystem decisions; [http_contract_group1_wrapup.md](./http_contract_group1_wrapup.md) and [rest_backend_framework_checklist.md](./rest_backend_framework_checklist.md) for HTTP contracts and implementation scope.
+
 ## Conversation Workflow
 
 1. Define the review groups first.
