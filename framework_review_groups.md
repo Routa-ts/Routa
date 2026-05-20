@@ -16,6 +16,12 @@ Completed. Consolidated decisions and checklist alignment are in:
 
 - `security_design.md`
 
+### Group 3: OpenAPI and API Evolution
+
+Completed. Consolidated decisions and checklist alignment are in:
+
+- `openapi_and_versioning_design.md`
+
 Deferred for a later hardening pass:
 
 - Broken authentication and broken authorization mitigation mapping.
@@ -25,31 +31,9 @@ Deferred for a later hardening pass:
 
 ## Suggested Next Group
 
-### Group 3: OpenAPI and API Evolution
+### Group 4: Collections and REST Query Features
 
 This should be the next conversation.
-
-Topics to decide:
-
-- Spec-first support
-- Auth schemes in OpenAPI
-- Examples in OpenAPI
-- Tags in OpenAPI
-- Generated docs
-- Contract checks
-- SDK generation
-- Versioning strategy
-- Deprecation metadata
-- Deprecation headers
-- Breaking-change strategy
-
-Suggested file:
-
-- `openapi_and_versioning_design.md`
-
-## Remaining Review Groups
-
-### Group 4: Collections and REST Query Features
 
 Topics to decide:
 
@@ -72,6 +56,8 @@ Topics to decide:
 Suggested file:
 
 - `collections_and_caching_design.md`
+
+## Remaining Review Groups
 
 ### Group 5: Runtime, Observability, and Deployment
 
