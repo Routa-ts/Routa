@@ -62,28 +62,29 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Use OpenAPI for testing or contract checks
 - [x] Use OpenAPI for SDK generation
   Decision note: emit SDK-ready OpenAPI for external generators; no built-in SDK generator in v1.
-- [ ] Built-in pagination primitives
-- [ ] Cursor pagination
-- [ ] Offset pagination
-- [ ] Stable ordering requirements for pagination
-- [ ] Pagination `next` links or tokens
-- [ ] Pagination `prev` links or tokens
-- [ ] Filtering conventions
-- [ ] Sorting conventions
-- [ ] Allowlisted filter fields
-- [ ] Sparse fieldsets or response projections
-- [ ] Protection against unrestricted arbitrary query execution
+- [x] Built-in pagination primitives
+- [x] Cursor pagination
+- [x] Offset pagination
+- [x] Stable ordering requirements for pagination
+- [x] Pagination `next` links or tokens
+- [x] Pagination `prev` links or tokens
+- [x] Filtering conventions
+- [x] Sorting conventions
+- [x] Allowlisted filter fields
+  Decision note: allowlisted filters are declared by the route query schema; Trail does not add a separate filter DSL in v1.
+- [x] Sparse fieldsets or response projections
+- [x] Protection against unrestricted arbitrary query execution
 - [x] Backward-compatible API changes by default
   Decision note: Trail defaults to additive evolution posture through `trail openapi breaking` baseline comparison, not runtime enforcement.
 - [x] Deprecation metadata
 - [x] Deprecation headers
 - [x] Strategy for breaking changes
 - [x] Versioning strategy
-- [ ] Cache-Control support
-- [ ] ETag support
-- [ ] Last-Modified support
-- [ ] `If-None-Match` support
-- [ ] `If-Match` support for optimistic concurrency
+- [x] Cache-Control support
+- [x] ETag support
+- [x] Last-Modified support
+- [x] `If-None-Match` support
+- [x] `If-Match` support for optimistic concurrency
 
 ## Security
 

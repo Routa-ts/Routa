@@ -21,6 +21,25 @@ Trail is a backend REST API framework inspired by frontend DX (Next.js, TanStack
 
 ---
 
+## Public API Import Convention
+
+Trail's public API should prefer direct, specific imports over one large namespace object.
+
+- Developers import the helper, middleware, function, or condition they need.
+- Documentation should teach direct imports.
+- Namespaced access may exist internally or optionally, but should not be the primary style.
+- This convention applies across framework helpers, middleware, functions, conditions, and route utilities.
+
+Examples:
+
+```ts
+import { defineRoute, createRoute } from "trail";
+import { Fields, Sort } from "trail/query/helpers";
+import { requireAuth } from "trail/middleware/auth";
+```
+
+---
+
 ## Routing
 
 Trail maps folders to URL segments. A **route file** exports **`defineRoute`**, which attaches **one path** (or one parameterized path) to **several HTTP verbs**, each described by a **`createRoute`** call. Shared params, middleware, tags, and schemas for that path live in **one place**, which scales better than splitting every verb into `get.ts`, `patch.ts`, and so on.
