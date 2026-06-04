@@ -25,7 +25,7 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Per-segment route file metadata (one `route.ts` per URL segment, not one file per HTTP verb)
 - [x] Parent collection segment alongside dynamic child segments (`users/route.ts` + `users/$id/route.ts`, collection `post` → `201` on parent)
 - [x] Abort or cancellation handling
-- [ ] Graceful shutdown
+- [x] Graceful shutdown
 - [x] JSON-first serialization
 - [ ] Pluggable body parsers
 - [x] Content negotiation through `Accept`
@@ -129,26 +129,26 @@ Use this checklist to mark what the framework already covers and identify what i
 
 ## Operations
 
-- [ ] Structured logs
+- [x] Structured logs
 - [x] Request IDs
-- [ ] Correlation IDs
-- [ ] Request duration metrics
-- [ ] Active request metrics
-- [ ] Status code metrics
-- [ ] Error rate metrics
-- [ ] Tracing hooks
-- [ ] OpenTelemetry semantic convention alignment
-- [ ] Health endpoint
-- [ ] Readiness endpoint
-- [ ] Startup or liveness semantics
-- [ ] Dependency health checks
-- [ ] Security event logs
-- [ ] Token, secret, and PII redaction in logs
-- [ ] Log injection protection
-- [ ] Environment-based configuration
-- [ ] No hardcoded secrets
-- [ ] Config validation at startup
-- [ ] Separate build, release, and run concerns
+- [x] Correlation IDs
+- [x] Request duration metrics
+- [x] Active request metrics
+- [x] Status code metrics
+- [x] Error rate metrics
+- [x] Tracing hooks
+- [x] OpenTelemetry semantic convention alignment
+- [x] Health endpoint
+- [x] Readiness endpoint
+- [x] Startup or liveness semantics
+- [x] Dependency health checks
+- [x] Security event logs
+- [x] Token, secret, and PII redaction in logs
+- [x] Log injection protection
+- [x] Environment-based configuration
+- [x] No hardcoded secrets
+- [x] Config validation at startup
+- [x] Separate build, release, and run concerns
 
 ## Framework Architecture
 
@@ -162,15 +162,15 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Good defaults
 - [x] Escape hatches for advanced use cases
 - [ ] Plugin or module system
-- [ ] Replaceable logger
+- [x] Replaceable logger
 - [ ] Replaceable validator
 - [ ] Replaceable serializer
 - [x] Replaceable auth provider
-- [ ] Startup lifecycle hooks
-- [ ] Shutdown lifecycle hooks
-- [ ] Request start lifecycle hooks
-- [ ] Request end lifecycle hooks
-- [ ] Error lifecycle hooks
+- [x] Startup lifecycle hooks
+- [x] Shutdown lifecycle hooks
+- [x] Request start lifecycle hooks
+- [x] Request end lifecycle hooks
+- [x] Error lifecycle hooks
 - [ ] Framework-level metadata registry
 - [ ] Unit testing route handlers
 - [ ] Integration testing HTTP requests
@@ -178,10 +178,10 @@ Use this checklist to mark what the framework already covers and identify what i
 - [ ] Security regression tests
 - [ ] Error shape snapshot tests
 - [ ] Middleware ordering tests
-- [ ] Stateless process model
-- [ ] Port binding
-- [ ] Fast startup
-- [ ] Backing services accessed through config
+- [x] Stateless process model
+- [x] Port binding
+- [x] Fast startup
+- [x] Backing services accessed through config
 - [ ] Generated API docs
 - [ ] Route reference documentation
 - [ ] Error catalog
@@ -201,9 +201,9 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Authentication provider/strategy hooks
 - [x] Authorization guard middleware and policy callbacks
 - [x] Rate limits
-- [ ] Structured logging
-- [ ] Health endpoint
-- [ ] Readiness endpoint
+- [x] Structured logging
+- [x] Health endpoint
+- [x] Readiness endpoint
 - [ ] Test helpers
 
 ## Later Priority
@@ -211,5 +211,5 @@ Use this checklist to mark what the framework already covers and identify what i
 - [ ] Cache control
 - [ ] Advanced versioning
 - [ ] Plugin system
-- [ ] Tracing
+- [ ] Deeper tracing
 - [ ] Deeper deployment features

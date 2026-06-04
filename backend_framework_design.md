@@ -228,10 +228,12 @@ Trail uses its own context (not Hono directly).
 ctx:
   core:
     requestId
+    routeId
+    routePattern
     method
     path
     url
-    env
+    env (explicitly exposed request-safe env only)
     logger
 
   request:

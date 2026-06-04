@@ -152,7 +152,7 @@ global
 ### Example
 
 ```
-global → requestId
+runtime → ctx.core.requestId
 auth → auth
 permissions → permissions
 route file → shared resource flags
