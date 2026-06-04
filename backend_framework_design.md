@@ -5,7 +5,7 @@
 Trail is a backend REST API framework inspired by frontend DX (Next.js, TanStack, Astro) with:
 
 - Resource-oriented file routing (one route file per path segment, multiple HTTP methods per file)
-- Strong typing via schemas (Zod/SOD)
+- Strong typing via schemas (Zod in v1)
 - OpenAPI generation
 - Minimal, portable context
 - Non-opinionated service layer
@@ -285,7 +285,7 @@ services → tools → models
 - Resource-oriented route files with per-method contracts
 - Schema-driven contracts
 - No controllers
-- No heavy DI
+- No required heavy DI; optional typed services
 - Clean service layer
 
 ---

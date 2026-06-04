@@ -55,37 +55,27 @@ Remaining topics:
 
 - None
 
-## Remaining Review Groups
-
 ### Group 6: Extensibility, Testing, and DX
 
-Topics to decide:
-
-- Dependency injection or service container
-- Testing helpers
-- Good defaults
-- Plugin or module system
-- Replaceable logger
-- Replaceable validator
-- Replaceable serializer
-- Replaceable auth provider
-- Framework metadata registry
-- Unit test helpers
-- Integration test helpers
-- OpenAPI contract tests
-- Security regression tests
-- Error snapshot tests
-- Middleware ordering tests
-- Route reference docs
-- Error catalog
-- Auth guide
-- Middleware or plugin guide
-- Deployment guide
-- Security recommendations
-
-Suggested file:
+Completed. Consolidated decisions and checklist alignment are in:
 
 - `extensibility_and_testing_design.md`
+
+Completed parts:
+
+- Part 6.1: Services and dependency injection
+- Part 6.2: Validators, serializers, and metadata registry
+- Part 6.3: Integrations instead of plugins
+- Part 6.4: Testing helpers
+- Part 6.5: Security testing and documentation DX
+
+Remaining topics:
+
+- None
+
+## Remaining Review Groups
+
+- None
 
 ## Review Rule
 

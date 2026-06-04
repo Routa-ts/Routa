@@ -578,8 +578,8 @@ They should not include the secret value.
 - Route handlers, utilities, services, and business logic should not read directly from `process.env`.
 - Framework-owned secrets should be passed into framework config at startup.
 - App-owned secrets should be passed into app-owned utilities or services at startup.
-- Group 6 will decide the official service or dependency container shape.
-- Until then, app-owned services may be created with parsed env and imported by route code.
+- The official service and dependency injection model is defined in `extensibility_and_testing_design.md`.
+- App-owned services may be created with parsed env and used through plain imports or optional Trail services.
 
 Example app-owned service setup:
 
@@ -752,7 +752,7 @@ Trail-managed features that use durable local disk should participate in this gu
 - Middleware remains the request behavior and typed context mechanism.
 - Trail provides default lifecycle logging through the configured logger.
 - Applications may add hooks for extra logging, metrics, traces, reporting, cleanup, and flushing.
-- Service logger and dependency access is deferred to Group 6.
+- Service logger and dependency access follow the service model in `extensibility_and_testing_design.md`.
 
 Default lifecycle events should include:
 

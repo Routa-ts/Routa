@@ -120,7 +120,8 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] CORS preflight handling
 - [x] Security headers for browser-consumed APIs
 - [x] HTTPS assumption
-- [ ] No stack traces in production responses
+- [x] No stack traces in production responses
+  Decision note: duplicates the core error-surface item; production stack traces are hidden by default.
 - [x] Guardrails to discourage sensitive data in URLs
 - [x] Header normalization
 - [ ] HTTP method allowlists
@@ -157,38 +158,42 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Typed handlers
 - [x] Schema integration
 - [x] Middleware composition
-- [ ] Dependency injection or service container
-- [ ] Testing helpers
+- [x] Dependency injection or service container
+- [x] Testing helpers
 - [x] Good defaults
 - [x] Escape hatches for advanced use cases
-- [ ] Plugin or module system
+- [x] Plugin or module system
+  Decision note: no plugin/module system in v1; Trail uses CLI integrations and narrow adapters instead.
 - [x] Replaceable logger
-- [ ] Replaceable validator
-- [ ] Replaceable serializer
+- [x] Replaceable validator
+  Decision note: Zod is the only public v1 validator; internal boundaries should preserve future adapter options.
+- [x] Replaceable serializer
+  Decision note: v1 uses built-in response representation helpers; arbitrary serializer registries are deferred.
 - [x] Replaceable auth provider
 - [x] Startup lifecycle hooks
 - [x] Shutdown lifecycle hooks
 - [x] Request start lifecycle hooks
 - [x] Request end lifecycle hooks
 - [x] Error lifecycle hooks
-- [ ] Framework-level metadata registry
-- [ ] Unit testing route handlers
-- [ ] Integration testing HTTP requests
-- [ ] Contract testing against OpenAPI
-- [ ] Security regression tests
-- [ ] Error shape snapshot tests
-- [ ] Middleware ordering tests
+- [x] Framework-level metadata registry
+- [x] Unit testing route handlers
+- [x] Integration testing HTTP requests
+- [x] Contract testing against OpenAPI
+  Decision note: owned by CLI commands `trail openapi check` and `trail openapi breaking`, not test helpers.
+- [x] Security regression tests
+- [x] Error shape snapshot tests
+- [x] Middleware ordering tests
 - [x] Stateless process model
 - [x] Port binding
 - [x] Fast startup
 - [x] Backing services accessed through config
-- [ ] Generated API docs
-- [ ] Route reference documentation
-- [ ] Error catalog
-- [ ] Auth guide
-- [ ] Middleware or plugin guide
-- [ ] Deployment guide
-- [ ] Security recommendations
+- [x] Generated API docs
+- [x] Route reference documentation
+- [x] Error catalog
+- [x] Auth guide
+- [x] Middleware or plugin guide
+- [x] Deployment guide
+- [x] Security recommendations
 
 ## Version 1 Priority
 
@@ -204,11 +209,11 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Structured logging
 - [x] Health endpoint
 - [x] Readiness endpoint
-- [ ] Test helpers
+- [x] Test helpers
 
 ## Later Priority
 
-- [ ] Cache control
+- [x] Cache control
 - [ ] Advanced versioning
 - [ ] Plugin system
 - [ ] Deeper tracing
