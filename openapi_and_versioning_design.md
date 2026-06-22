@@ -169,9 +169,12 @@ OpenAPI input quality checks should cover at least:
 
 ### Contract Checks
 
+- `trail check` should be the top-level project validation command.
 - `trail openapi check` should be a built-in CLI command.
-- The command should be easy to run in CI.
-- The command should return a non-zero exit code on failure.
+- Both commands should be easy to run in CI.
+- Both commands should return a non-zero exit code on failure.
+- `trail check` should include Trail contract/schema/route checks and TypeScript typechecking without emitting JavaScript.
+- `trail build` should run `trail check` before TypeScript emit and fail without emitting when checks fail.
 - Default check severity should favor warnings for quality issues.
 - `--strict` should escalate configured warnings to failures.
 
@@ -180,6 +183,7 @@ OpenAPI input quality checks should cover at least:
 - `trail openapi check` should focus on:
   - drift between generated and provided or committed spec
   - contract quality
+- `trail check` may include relevant OpenAPI checks, but it is broader than OpenAPI drift and quality.
 
 For v0, checks should focus on:
 

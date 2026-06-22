@@ -150,6 +150,7 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] No hardcoded secrets
 - [x] Config validation at startup
 - [x] Separate build, release, and run concerns
+  Decision note: v0 splits `trail check` from `trail build`; build runs check first and emits only after checks pass.
 
 ## Framework Architecture
 
@@ -209,6 +210,9 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Typed response variants
 - [x] Minimal middleware contracts
 - [x] OpenAPI/check validation for generated and scaffolded contracts
+  Decision note: v0 project validation is `trail check`; it includes Trail contract/schema/route checks plus TypeScript typechecking without JavaScript emit.
+- [x] Build blocked by project check failures
+  Decision note: `trail build` runs `trail check` first and must not emit JavaScript when checks fail.
 - [ ] Fastify or Express adapters
 - [ ] Non-Zod schema adapters
 - [ ] Generated flat route output
