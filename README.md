@@ -1,10 +1,10 @@
 # Trail
 
-**A schema-first REST framework for teams that want backend APIs to feel as clear, typed, and navigable as modern frontend apps.**
+**A schema-first, OpenAPI-aware REST framework for new TypeScript APIs.**
 
-Trail brings the developer experience of file-based frameworks to backend services: **resource route files** map cleanly to paths, **each file can hold every HTTP method** for that path behind **`defineRoute`**, contracts are defined up front, middleware is part of the type system, and OpenAPI falls out of the same source of truth your code already uses.
+Trail brings the developer experience of file-based frameworks to backend services: **schemas are the source of truth**, resource route files map cleanly to paths, contracts generate typed handlers and OpenAPI, and OpenAPI can scaffold the HTTP layer when a team starts from a spec.
 
-It is for teams that like the ergonomics of Next.js, Astro, and TanStack, but want that same clarity at the API boundary.
+Trail v0 is **Hono-based**, **Zod-only**, and focused on new APIs. Later versions may add other runtime adapters, but v0 optimizes for proving the core loop instead of pretending to be runtime-neutral too early.
 
 ## The Idea
 
@@ -12,7 +12,19 @@ Backend APIs should not require a maze of controllers, decorators, registries, a
 
 > What does this route accept, what can it return, and what context is available when it runs?
 
-Trail is built around making that answer obvious.
+Trail is built around one source of truth:
+
+```txt
+schemas -> routes -> handlers -> OpenAPI -> docs/checks
+```
+
+When teams start from an API contract, Trail can also run the first step in reverse:
+
+```txt
+openapi.yaml/json -> schemas -> route files -> handler stubs
+```
+
+That OpenAPI-to-source path is a core feature, not an afterthought. It is meant for new APIs, AI-assisted planning, and teams that want to define the HTTP contract first and then focus on business logic.
 
 ```txt
 routes/users/route.ts
@@ -29,11 +41,17 @@ Your backend shape should be visible from the filesystem. Trail uses **folders f
 
 ### Contracts before handlers
 
-Routes define their inputs and possible responses before business logic runs. That gives handlers, services, clients, and documentation the same contract.
+Routes define their inputs and possible responses before business logic runs. That gives handlers, application code, clients, and documentation the same contract.
+
+### OpenAPI to source
+
+Trail v0 accepts OpenAPI `.yaml` and `.json` files and scaffolds the matching Zod schemas, resource route files, typed response variants, and HTTP handler stubs. Generated source is meant to be reviewed, edited, and kept under version control.
+
+Trail does not ask developers to blindly trust generated contracts. OpenAPI input should be validated, linted, and reviewed before it becomes application source.
 
 ### Typed responses, not loose JSON
 
-Services return named outcomes like `success`, `notFound`, or `emailConflict`. If a route did not declare that response, TypeScript should reject it.
+Route handlers return named outcomes like `success`, `notFound`, or `emailConflict`. If a route did not declare that response, TypeScript should reject it.
 
 ### Middleware that carries meaning
 
@@ -43,9 +61,11 @@ Auth, permissions, tenant loading, and request enrichment should not disappear i
 
 The route contract is the documentation model. Inputs, outputs, middleware rejects, and global errors can all contribute to the generated API spec.
 
-### Framework at the boundary, freedom inside
+### HTTP layer only
 
-Trail is opinionated where APIs need consistency: routing, validation, context, middleware, responses, and docs. Your services, models, database, and domain code remain yours.
+Trail is opinionated where the HTTP layer needs consistency: routing, validation, context, middleware, responses, and docs. Trail does not generate or own your services, models, database, domain code, policies, or application architecture.
+
+The handler lives at the route boundary. The service, use case, module, domain model, or any other business logic shape belongs to the developer.
 
 ## What It Feels Like
 
@@ -79,7 +99,7 @@ export default defineRoute({
 });
 ```
 
-The **method** (`post` here) is the map key under **`defineRoute`**. That `createRoute` says what the handler accepts, what it can return, and receives typed input and typed context. **`users.createUser`** returns the framework-generated **`{ type, data }`** union for this route (same contract as `http_contract_group1_wrapup.md`). Trail turns that value into the HTTP response (including **`201`** for this `success` entry).
+The **method** (`post` here) is the map key under **`defineRoute`**. That `createRoute` says what the handler accepts, what it can return, and receives typed input and typed context. The handler may call any application-owned service, use case, module, or domain code. Trail turns the returned **`{ type, data }`** value into the HTTP response (including **`201`** for this `success` entry).
 
 ## The Mental Model
 
@@ -87,7 +107,7 @@ The **method** (`post` here) is the map key under **`defineRoute`**. That `creat
 resource route files define a path segment and its HTTP methods
 schemas define contracts
 middleware defines context
-services define behavior
+business logic belongs to the application
 Trail defines the HTTP boundary
 ```
 
@@ -95,7 +115,8 @@ That is the essence of the framework: make the API boundary explicit, typed, and
 
 ## Built For
 
-- Product teams building REST APIs in TypeScript
+- Product teams starting new REST APIs in TypeScript
+- Teams that want to scaffold source from OpenAPI contracts
 - Teams that want OpenAPI without maintaining parallel documentation
 - Backend codebases that have outgrown ad hoc controllers
 - Services where auth, permissions, tenancy, and typed context matter
@@ -105,16 +126,34 @@ That is the essence of the framework: make the API boundary explicit, typed, and
 
 Trail is currently in the design stage. This repository is the first articulation of the framework: the product direction, the core architecture, and the middleware model.
 
-The next milestone is a small prototype that proves the core loop:
+The next milestone is a v0 proof of concept that proves the core loop:
 
 ```txt
-route file -> schema contract -> typed handler -> typed response -> OpenAPI
+openapi.yaml/json -> Zod schemas -> Hono-backed route files -> HTTP handler stub -> OpenAPI check
 ```
+
+v0 scope:
+
+- Hono runtime adapter only
+- Zod schemas only
+- OpenAPI `.yaml` and `.json` input only
+- OpenAPI-to-source scaffold
+- Generated OpenAPI from route contracts
+- Minimal typed middleware surface
+
+Deferred beyond v0:
+
+- Fastify, Express, or other runtime adapters
+- Non-Zod schema adapters
+- Broad security integrations
+- Broad operational feature set
 
 ## Design Notes
 
 The deeper architecture notes live here:
 
+- [v0 requirements](./v0_requirements.md)
+- [Acceptance specs](./specs/README.md)
 - [Backend framework design](./backend_framework_design.md)
 - [Middleware system design](./middleware_design.md)
 
@@ -125,7 +164,7 @@ Trail is the working name.
 Reserved fallback names:
 
 - **Routa**: close to routing, short, and framework-friendly.
-- **Weave**: good if the framework leans into composing routes, middleware, contracts, and services.
+- **Weave**: good if the framework leans into composing routes, middleware, contracts, docs, and checks.
 
 possible domains:
 

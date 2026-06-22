@@ -193,7 +193,7 @@ This normalized model is the source of truth for:
 
 ## Runtime Return Shape
 
-Handlers and services (when using the generated union) return declared variants using the **`{ type, data }`** shape derived from `responses`.
+Route handlers return declared variants using the **`{ type, data }`** shape derived from `responses`. Application code may also return this shape when the developer chooses that pattern.
 
 ```ts
 type RouteResponse =
@@ -211,12 +211,12 @@ Rules:
 
 - The discriminant `type` is generated from the response key.
 - **`data`** is the **body payload** only. Payload schemas on the route do not include that discriminant; Trail wires `type` and `data` together internally.
-- For error variants modeled as **problem details**, **`data`** carries the fields the service sets (**`title`**, **`detail`**, **`instance`**, optional RFC **`type`** (problem-type URI, distinct from the union discriminant **`type`**), **`code`**, plus any extension properties). **`data` must not include HTTP `status`**: the status line comes from the **`responses`** entry for that variant, so services stay HTTP-agnostic and TypeScript does not require `status` on every return.
-- Services may **import and return** the generated **`{ type, data }`** union for the route, or return **domain-only** results and let **`run`** map into that union; both are supported (see the consolidated example later).
+- For error variants modeled as **problem details**, **`data`** carries the public problem fields (**`title`**, **`detail`**, **`instance`**, optional RFC **`type`** (problem-type URI, distinct from the union discriminant **`type`**), **`code`**, plus any extension properties). **`data` must not include HTTP `status`**: the status line comes from the **`responses`** entry for that variant, so application code does not need to carry HTTP status in payload data.
+- Application code may **import and return** the generated **`{ type, data }`** union for the route, or return **domain-only** results and let **`run`** map into that union; both are supported (see the consolidated example later). Trail does not generate or own that application code.
 
 ---
 
-## Route outcomes, declarations, and service boundary
+## Route outcomes, declarations, and application boundary
 
 ### Success responses
 
@@ -235,9 +235,9 @@ Rules:
 - A route may omit input schemas entirely.
 - A route must still define at least one success output schema.
 
-### Service boundary
+### Application boundary
 
-- A service may return **only domain data** and rely on **`run`** to produce the route’s `{ type, data }` union, or it may **import the framework-generated response type** for that route and return that union directly so types stay tied to the declared `responses`.
+- Application code may return **only domain data** and rely on **`run`** to produce the route’s `{ type, data }` union, or it may **import the framework-generated response type** for that route and return that union directly so types stay tied to the declared `responses`.
 - Either way, **Trail** maps the value **`run`** returns to the HTTP response (status, headers, negotiated body).
 
 ### Escape hatch
@@ -325,15 +325,15 @@ Not included by default in v1:
 - A single declared response variant may support multiple content types.
 - Trail selects the response representation from the request `Accept` header.
 - Trail does not use query parameters for representation negotiation.
-- Services do not choose the representation in the normal path.
+- Application code does not choose the wire representation in the normal path.
 
 ### Canonical Response Schema
 
 - Each response variant has one canonical payload schema.
 - All declared content types for that response variant are representations of the same canonical payload.
-- Services return that canonical payload shape through the generated `{ type, data }` union.
+- Route handlers return that canonical payload shape through the generated `{ type, data }` union. Application services may return that shape if the developer chooses, but Trail does not require or generate services.
 - Trail validates the canonical payload first, then serializes it to the selected content type.
-- Different content types on the same response variant should not require different service payload shapes in the normal path.
+- Different content types on the same response variant should not require different application payload shapes in the normal path.
 
 ### Structured Non-JSON Responses
 
@@ -395,7 +395,7 @@ Default behavior:
 - Trail uses `application/problem+json` for framework-generated errors by default.
 - Trail also uses `application/problem+json` for declared business errors when those errors are modeled with the problem-details shape.
 - Public API error responses include a neutral machine-readable `code` field.
-- From **`run`** / services, declared business errors use **`{ type, data }`**. **`data`** carries problem fields only (**`title`**, **`detail`**, **`instance`**, optional RFC **`type`**, **`code`**, extensions); **HTTP `status` is not part of `data`**—it comes from the matching **`responses`** entry (and from **`problem(...)`** defaults) when Trail builds the wire response.
+- From **`run`** or application code that opts into route response unions, declared business errors use **`{ type, data }`**. **`data`** carries problem fields only (**`title`**, **`detail`**, **`instance`**, optional RFC **`type`**, **`code`**, extensions); **HTTP `status` is not part of `data`**—it comes from the matching **`responses`** entry (and from **`problem(...)`** defaults) when Trail builds the wire response.
 
 Override behavior:
 
@@ -513,7 +513,7 @@ Rules:
 
 ## Consolidated multi-representation example
 
-This section ties together **Level 3 (advanced)** response authoring, the **`{ type, data }`** runtime return shape, the **service boundary**, **content negotiation**, and **OpenAPI same-status merging**.
+This section ties together **Level 3 (advanced)** response authoring, the **`{ type, data }`** runtime return shape, the **application boundary**, **content negotiation**, and **OpenAPI same-status merging**.
 
 What this example illustrates:
 
@@ -522,8 +522,8 @@ What this example illustrates:
 - **Level 3**: `responses` entries declare explicit `status`, `schema`, and `content` adapters (`json()`, `csv()`, `text()`, `binaryFile()`, `problem()`), matching the advanced authoring rules earlier in this document.
 - **GET read contract**: Treat the handler as a `GET` for that resource (`GET` is a strict route-level read; no request body). The verb comes from **`methods.get`** inside **`defineRoute`** on the item file (for example `routes/users/$id/route.ts`), not from a `method` field on each `createRoute`.
 - **Canonical payload**: `success` and `avatarDownload` both use **HTTP 200** but different variant discriminants (`type`), different canonical schemas, and different media types. Runtime keeps them distinct by `type`; OpenAPI merges them under a single **`200`** entry (see OpenAPI note below).
-- **Query-shaped outcomes**: A validated **query** flag (`format=avatar` vs default profile) drives whether the service loads **profile fields** or **avatar bytes**; the returned **`type`** is still `success` vs `avatarDownload` according to that intent.
-- **Service return type (supported)**: The service can **`import` the response union Trail generates** for that route (name and import path are tooling details) and return **`Promise<ThatUnion>`**, using `{ type, data }` directly. **`run`** then forwards to the service with no extra mapping. Other teams may prefer a **domain-only union** and a thin **`run`** that maps into the generated union; Trail allows both.
+- **Query-shaped outcomes**: A validated **query** flag (`format=avatar` vs default profile) drives whether application code loads **profile fields** or **avatar bytes**; the returned **`type`** is still `success` vs `avatarDownload` according to that intent.
+- **Application return type (optional)**: Application code can **`import` the response union Trail generates** for that route (name and import path are tooling details) and return **`Promise<ThatUnion>`**, using `{ type, data }` directly. **`run`** can then forward that result with no extra mapping. Other teams may prefer a **domain-only union** and a thin **`run`** that maps into `{ type, data }`; Trail allows both and does not generate or own application services.
 - **Negotiation**: The response builder chooses a representation from **`Accept`**; if the client cannot accept any declared representation for the chosen variant, Trail responds with **`406 Not Acceptable`** (per the request `Accept` enforcement rules earlier in this document).
 - **Validation**: Output validation follows the response builder rules (strict in development, configurable in production).
 
@@ -627,7 +627,7 @@ export default defineRoute({
 
 ### Generated route handler return type
 
-Trail generates a discriminated union from the `responses` keys. **`run`**, route handlers, and any service that chooses this style return that shape. The type is **importable** next to the route (exact export name and path are implementation details); the explicit union below is what that generated type **means** for this example:
+Trail generates a discriminated union from the `responses` keys. **`run`**, route handlers, and any application code that chooses this style return that shape. The type is **importable** next to the route (exact export name and path are implementation details); the explicit union below is what that generated type **means** for this example:
 
 ```ts
 type RouteResponse =
@@ -672,7 +672,7 @@ type RouteResponse =
 
 ### Service example (import the generated response union)
 
-Here the service **imports** the framework-generated union (this document calls it `RouteResponse`; Trail may emit `GetUserProfileResponse`, `typeof route.$inferResponse`, or another stable alias). The service returns **`Promise<RouteResponse>`** using **`{ type, data }`** so it stays aligned with the route contract. **`run`** forwards **validated** segment **`params`** (from **`defineRoute`**) and **`input.query`** into the service. For problem-style errors, **`data`** omits **HTTP `status`**; Trail fills status (and any defaults from `problem(...)`) from the **`responses`** entry when building the wire response.
+Here application code **imports** the framework-generated union (this document calls it `RouteResponse`; Trail may emit `GetUserProfileResponse`, `typeof route.$inferResponse`, or another stable alias). That code returns **`Promise<RouteResponse>`** using **`{ type, data }`** so it stays aligned with the route contract. **`run`** forwards **validated** segment **`params`** (from **`defineRoute`**) and **`input.query`** into the application code. For problem-style errors, **`data`** omits **HTTP `status`**; Trail fills status (and any defaults from `problem(...)`) from the **`responses`** entry when building the wire response.
 
 ```ts
 // Illustrative: Trail emits an importable type for this route’s responses.
@@ -729,7 +729,7 @@ export async function loadUserProfile(
 
 ### Alternative: domain outcomes and a thin `run`
 
-If you want the service **not** to mention route response keys, return a **domain-only union** (for example `kind: "ok" | "missing" | …`) from `loadUserProfile`, then map in **`run`** into `{ type, data }`. That keeps HTTP variant names out of the service at the cost of a small adapter in the route. Both patterns are valid; pick one per module or team convention.
+If you want application code **not** to mention route response keys, return a **domain-only union** (for example `kind: "ok" | "missing" | ...`) from `loadUserProfile`, then map in **`run`** into `{ type, data }`. That keeps HTTP variant names out of application code at the cost of a small adapter in the route. Both patterns are valid; pick one per module or team convention.
 
 ### Response builder flow (same route)
 

@@ -159,6 +159,7 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Schema integration
 - [x] Middleware composition
 - [x] Dependency injection or service container
+  Decision note: optional wiring for application-owned dependencies; Trail does not generate or own business logic services.
 - [x] Testing helpers
 - [x] Good defaults
 - [x] Escape hatches for advanced use cases
@@ -166,7 +167,7 @@ Use this checklist to mark what the framework already covers and identify what i
   Decision note: no plugin/module system in v1; Trail uses CLI integrations and narrow adapters instead.
 - [x] Replaceable logger
 - [x] Replaceable validator
-  Decision note: Zod is the only public v1 validator; internal boundaries should preserve future adapter options.
+  Decision note: Zod is the only public v0 validator; internal boundaries should preserve future adapter options.
 - [x] Replaceable serializer
   Decision note: v1 uses built-in response representation helpers; arbitrary serializer registries are deferred.
 - [x] Replaceable auth provider
@@ -194,6 +195,26 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Middleware or plugin guide
 - [x] Deployment guide
 - [x] Security recommendations
+
+## v0 Priority
+
+- [x] Hono runtime adapter only
+- [x] Zod schemas only
+- [x] OpenAPI `.yaml` and `.json` input
+- [x] OpenAPI-to-source scaffolding
+- [x] Source-to-OpenAPI generation
+- [x] Resource route files
+- [x] Directory-style generated routes
+- [x] Typed handlers
+- [x] Typed response variants
+- [x] Minimal middleware contracts
+- [x] OpenAPI/check validation for generated and scaffolded contracts
+- [ ] Fastify or Express adapters
+- [ ] Non-Zod schema adapters
+- [ ] Generated flat route output
+- [ ] Full mixed flat/directory route support
+- [ ] Broad auth/security integrations
+- [ ] Broad operational feature set
 
 ## Version 1 Priority
 

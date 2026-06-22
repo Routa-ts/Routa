@@ -8,20 +8,56 @@ This document records decisions for Group 3 in small parts.
 
 ### Decisions
 
-- Trail is `code-first primary`.
-- Trail generates OpenAPI from the same source of truth used by the route contract system:
+- Trail is schema-source-first.
+- Trail supports both source-to-OpenAPI generation and OpenAPI-to-source scaffolding.
+- Trail's normal application source of truth is the schema-backed route contract system:
   - route contracts
   - schemas
   - middleware contracts
   - guard metadata
   - global errors
-- Trail supports limited spec-first workflows for AI-assisted and contract-driven teams:
-  - `check`
+- Trail v0 accepts OpenAPI `.yaml` and `.json` input for scaffolding.
+- Trail v0 generates Zod schemas only.
+- Trail supports spec-first workflows for AI-assisted and contract-driven teams:
   - `scaffold`
+  - `check`
   - `diff`
 - `defineRoute` is the main route authoring surface for OpenAPI-relevant contract data.
 - Schema-level OpenAPI metadata from Zod `.openapi(...)` is first-class.
 - Users should not need to declare the same contract information in multiple places.
+
+### OpenAPI-to-Source v0
+
+Trail v0 can scaffold source from OpenAPI:
+
+```txt
+openapi.yaml/json
+-> Zod schemas
+-> resource route files
+-> typed response variants
+-> handler stubs
+```
+
+The scaffolded source is reviewed, committed, and edited like normal application code. Trail should not silently overwrite user-authored business logic.
+
+Scaffolding rules:
+
+- Preview generated file changes before writing.
+- Preserve existing handler bodies by default.
+- Stop on conflicts unless the user explicitly chooses a conflict path.
+- Prefer stable names for schemas, routes, response variants, and operation ids.
+- Emit warnings for weak or ambiguous OpenAPI input.
+- Treat AI-generated OpenAPI as input that must be validated and reviewed, not as trusted truth.
+
+OpenAPI input quality checks should cover at least:
+
+- Missing or duplicate `operationId`.
+- Missing schemas for request or response bodies.
+- Ambiguous same-status responses.
+- Missing path parameter schemas.
+- Unsupported media types for v0.
+- Names that cannot produce stable TypeScript identifiers.
+- Security metadata that cannot map cleanly to Trail middleware placeholders.
 
 ### Route Metadata
 
@@ -141,9 +177,16 @@ This document records decisions for Group 3 in small parts.
 
 ### Check Scope
 
-- v1 `trail openapi check` should focus on:
+- `trail openapi check` should focus on:
   - drift between generated and provided or committed spec
   - contract quality
+
+For v0, checks should focus on:
+
+- generated OpenAPI matches route contracts
+- scaffold input quality for `.yaml` and `.json`
+- unsupported v0 features
+- stable route/schema/operation naming
 
 ### Contract Quality Checks
 

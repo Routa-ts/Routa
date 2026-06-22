@@ -4,20 +4,62 @@
 
 Trail is a backend REST API framework inspired by frontend DX (Next.js, TanStack, Astro) with:
 
+- Schemas as the framework source of truth
+- OpenAPI-to-source scaffolding for the HTTP layer of new APIs
 - Resource-oriented file routing (one route file per path segment, multiple HTTP methods per file)
-- Strong typing via schemas (Zod in v1)
+- Strong typing via schemas (Zod in v0)
 - OpenAPI generation
+- Hono as the v0 runtime adapter
 - Minimal, portable context
-- Non-opinionated service layer
+- Application-owned service/domain layer
 
 ---
 
 ## Core Principles
 
-1. **Schemas first**
+1. **Schemas are the source of truth**
 2. **Routes consume schemas**
-3. **Services return typed results**
-4. **Trail handles HTTP**
+3. **OpenAPI is generated from schemas and route contracts**
+4. **OpenAPI can scaffold schemas and route source**
+5. **Trail handles the HTTP boundary through Hono in v0**
+6. **Application services and domain logic stay user-owned**
+
+---
+
+## v0 Runtime Position
+
+Trail v0 is Hono-based.
+
+- Trail route contracts compile to Hono route handling.
+- Trail owns the public route, schema, middleware, and response APIs.
+- Hono is the only runtime adapter in v0.
+- Runtime portability is a future adapter goal, not a v0 promise.
+
+Future adapters such as Fastify or Express may be added after the core contract model is proven. The adapter boundary should be kept internal enough that v0 users do not write Hono-specific code unless they intentionally use the raw escape hatch.
+
+---
+
+## Source of Truth
+
+Trail's source of truth is the schema-backed contract model.
+
+```txt
+Zod schemas
++ route contracts
++ middleware contracts
+= route graph
+= typed handlers
+= OpenAPI
+= checks and docs
+```
+
+For spec-first starts, Trail can create the initial source from OpenAPI:
+
+```txt
+openapi.yaml/json -> Zod schemas -> route files -> HTTP handler stubs
+```
+
+After scaffolding, HTTP-layer source remains normal editable TypeScript. Trail should protect user-written route logic during regeneration through previews, diffs, and conflict detection. Trail does not generate or own business services.
 
 ---
 
@@ -55,6 +97,24 @@ routes/
 ```
 
 **Parent vs dynamic child:** Collection verbs (**including `post` create with success `201`**) live on the **parent** segment file (`users/route.ts`). A **dynamic** folder (`users/$id/`) only holds handlers that need that param; it **does not** replace the parent file—both segments are required so the tree matches the REST surface.
+
+### Route authoring styles
+
+Trail v0 generated output uses directory-style route files:
+
+```txt
+routes/users/route.ts
+routes/users/$id/route.ts
+```
+
+Flat dot routes are deferred to v1:
+
+```txt
+routes/users.ts
+routes/users.$id.ts
+```
+
+Future flat route support should resolve into the same route graph as directory routes. Mixed directory and flat routes should be allowed in one project without a style config, but conflicting route ownership must fail build/check. For example, `routes/users/route.ts` and `routes/users.ts` both resolve to `/users`, so Trail must report a duplicate route conflict instead of choosing one silently.
 
 ### `defineRoute` shape
 
@@ -138,11 +198,12 @@ export default defineRoute({
 
 ---
 
-## Responses & Service Contract
+## Responses & Route Contract
 
 - Responses are defined in the route
 - Framework generates a **union type** over **`{ type, data }`** (see `http_contract_group1_wrapup.md`)
-- Services (or **`run`**) return that shape: **`data`** is the payload only; errors omit HTTP **`status`** in **`data`** (status comes from the `responses` entry)
+- **`run`** returns that shape: **`data`** is the payload only; errors omit HTTP **`status`** in **`data`** (status comes from the `responses` entry)
+- Application services may return this shape if the developer chooses, but Trail does not require or generate services.
 
 Example:
 
@@ -155,7 +216,7 @@ type CreateUserResponse =
 	  };
 ```
 
-### Service example
+### Handler return example
 
 ```ts
 return {
@@ -174,7 +235,7 @@ return {
 
 - `type` field is auto-generated from response key
 - Framework applies internal branding
-- Services cannot return undeclared responses
+- Route handlers cannot return undeclared responses
 
 ---
 
@@ -184,7 +245,7 @@ return {
 
 1. **Declared errors (business logic)**
    - Defined in `responses`
-   - Returned by services
+   - Returned by `run` after application code chooses that outcome
 
 2. **Unhandled errors**
    - Handled globally
@@ -272,21 +333,23 @@ run: async ({ input, ctx }) => {
 
 ```
 Trail Opinionated:
-routes → schemas → handler → HTTP
+schemas → routes → handler contract → OpenAPI → Hono HTTP boundary
 
 User Flexible:
-services → tools → models
+services → use cases → modules → policies → tools → models
 ```
 
 ---
 
 ## Differentiator
 
+- Schema source of truth for routes, OpenAPI, handlers, and checks
+- OpenAPI-to-source scaffold for new APIs
 - Resource-oriented route files with per-method contracts
-- Schema-driven contracts
 - No controllers
 - No required heavy DI; optional typed services
-- Clean service layer
+- Hono-backed v0 with future adapter path
+- Service, domain, and application architecture owned by the developer
 
 ---
 

@@ -4,6 +4,26 @@
 
 This document records decisions for Group 2 in small parts.
 
+## Security Posture
+
+Trail does not solve application security.
+
+Trail makes security configuration visible, typed, consistently wired, and documented at the API boundary. The application still owns credential validation, authorization policy decisions, sensitive business-flow protection, secret management, and security review.
+
+Trail's role:
+
+- Provide framework interfaces for auth, guards, rejects, security metadata, and guardrails.
+- Make configured security requirements visible in route contracts and OpenAPI.
+- Generate safe placeholders when scaffolding from OpenAPI security metadata.
+- Warn when declarations look incomplete or risky.
+
+Trail's non-role:
+
+- Do not guarantee that an application's auth logic is correct.
+- Do not prove object-level authorization.
+- Do not replace security testing or review.
+- Do not claim that configuration alone mitigates OWASP API risks.
+
 ## Security Pipeline Terminology
 
 Trail has one request execution pipeline: middleware.
@@ -19,7 +39,7 @@ Initial guardrail implementation can live in Trail's own config and route analys
 
 ### Decisions
 
-- Trail supports multiple authentication modes:
+- Trail can expose configuration and integration points for multiple authentication modes:
   - Bearer token
   - API key
   - Session/cookie
@@ -33,7 +53,7 @@ Initial guardrail implementation can live in Trail's own config and route analys
 
 ### Decisions
 
-- Trail supports two auth provider modes:
+- Trail can support two auth provider modes:
   - `better-auth`: Trail provides a configurable first-party integration powered by Better Auth.
   - `custom`: application defines its own auth structure against Trail's provider contract.
 - Trail defines a stable auth provider contract so framework middleware behavior remains consistent across providers.
@@ -148,7 +168,7 @@ type TrailAuthSession = {
 
 ### Decisions
 
-- Trail models authorization at three levels:
+- Trail can make authorization declarations visible at three levels:
   - Function-level authorization: whether an actor may perform an operation.
   - Object-level authorization: whether an actor may perform an operation on a specific resource instance.
   - Field-level authorization: which declared response shape an actor may receive for an allowed resource.
@@ -195,9 +215,9 @@ responses: {
 
 ### Decisions
 
-- Trail ships opinionated defaults, while allowing full developer overrides.
+- Trail may ship opinionated defaults, while allowing full developer overrides.
 - Trail's public rate-limit API is framework-level, not Hono-specific.
-- In the v1 Hono runtime adapter, Trail may implement rate limiting by composing a Hono-compatible rate limiter. The adapter must preserve Trail semantics.
+- In the Hono runtime adapter, Trail may implement rate limiting by composing a Hono-compatible rate limiter. The adapter must preserve Trail semantics.
 - Global rate-limit config defines available infrastructure and defaults: store, default identity keys, and store outage behavior.
 - Route or group config defines the actual rate-limit policy: `limit`, `window`, optional identity `keys`, and security profile.
 - Developer-facing rate-limit keys are identity dimensions only:
@@ -236,7 +256,7 @@ responses: {
 
 ### Rationale
 
-- Strong defaults reduce insecure deployments.
+- Visible defaults reduce accidental misconfiguration but do not guarantee secure deployments.
 - Override support preserves flexibility for product-specific traffic models.
 - Hybrid outage mode balances security and availability during incidents.
 - Keeping only `ip` and `auth` as public keys avoids accidental cross-route sharing while keeping route scoping automatic.

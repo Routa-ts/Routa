@@ -6,6 +6,12 @@ This document records decisions for Group 6 in small parts.
 
 ## Part 6.1: Services and Dependency Injection
 
+### Boundary
+
+Trail does not generate services or own application business logic.
+
+Any service or dependency support in this document is optional wiring for application-owned code. Developers remain free to use services, modules, use cases, feature folders, hexagonal architecture, plain imports, or any other structure outside the HTTP route boundary.
+
 ### Decisions
 
 - Trail supports both dependency styles:
@@ -146,7 +152,7 @@ services: {
 
 ### Decisions
 
-- Zod is the only public schema adapter in v1.
+- Zod is the only public schema adapter in v0.
 - Trail should keep an internal schema boundary so future adapters remain possible.
 - Trail does not expose a public replaceable validator system in v1.
 - The v1 serializer model follows the response representation decisions from Group 1.
@@ -160,7 +166,7 @@ services: {
 
 ### Validator Boundary
 
-- Route input, output, middleware input, middleware rejects, config, and helper schemas use Zod in v1.
+- Route input, output, middleware input, middleware rejects, config, and helper schemas use Zod in v0.
 - Schema-level OpenAPI metadata on Zod schemas is first-class.
 - Trail should avoid scattering direct Zod coupling through every internal subsystem.
 - Internal schema handling should be shaped so future adapters such as Valibot, ArkType, or TypeBox can be evaluated later.
@@ -185,7 +191,7 @@ services: {
   - binary and file helpers
 - Non-JSON helpers such as `csv()` and `text()` take user callbacks that map the validated canonical payload to the wire format.
 - Trail does not guess structured non-JSON layouts from schemas.
-- Services return canonical payloads and do not choose the response representation in the normal path.
+- Route handlers return canonical payloads and do not choose the response representation in the normal path. Application services may return canonical payloads if the developer chooses, but Trail does not require that structure.
 - Custom user-defined content types are not v1 core.
 
 Example:
@@ -236,7 +242,7 @@ The registry powers:
 - Trail should avoid generated type files by default in v1.
 - Trail should prefer local generic inference from `defineRoute`, `createRoute`, middleware, and config.
 - A generated file such as `trail.gen.ts` should not be required for normal route authoring.
-- Trail must still provide generated or inferred response unions for route handlers and services.
+- Trail must still provide generated or inferred response unions for route handlers. Application services may use those types by choice, but they are not generated or required by Trail.
 - Route response unions should be importable or inferable close to the route contract.
 - Trail should not rewrite user route files to insert generated type aliases.
 - Implementation should prefer route-local inferred aliases such as `typeof route.$inferResponse` or framework-owned declaration output when needed.
@@ -313,7 +319,7 @@ Strong v1 candidates:
 - Rate-limit store integration, starting with Redis.
 - Testing integration, starting with the selected v1 test runner setup.
 
-These integrations should generate code that calls normal framework APIs, such as auth provider adapters, logger adapters, observability adapters, rate-limit store adapters, service definitions, middleware, and config.
+These integrations should generate code that calls normal framework APIs, such as auth provider adapters, logger adapters, observability adapters, rate-limit store adapters, middleware, and config. They should not generate application business logic services by default.
 
 ### What V1 Does Not Support
 
@@ -436,7 +442,7 @@ bunx trail testing
 - `npx trail testing` installs test dependencies and generates setup files.
 - The testing integration defaults to setup only.
 - The CLI should ask whether to generate example tests.
-- Trail wraps the v1 Hono testing surface instead of exposing Hono as the public testing API.
+- Trail wraps the v0 Hono testing surface instead of exposing Hono as the public testing API.
 - Trail test helpers should run HTTP integration tests in memory without starting a real network server by default.
 - Future runtime adapters may provide their own internal test harness implementation without changing Trail's public testing API.
 - Service overrides are test-only and must satisfy the same typed service contract as the real services.

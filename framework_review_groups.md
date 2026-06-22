@@ -2,6 +2,21 @@
 
 Use these groups to review the remaining design decisions one conversation at a time. Each group is sized to end with one new decision document and a checklist update.
 
+## Current Product Direction
+
+Trail v0 is schema-source-first:
+
+- Zod schemas are the v0 schema runtime.
+- Hono is the v0 runtime adapter.
+- OpenAPI `.yaml` and `.json` can scaffold source.
+- Route contracts generate OpenAPI for docs and checks.
+- Security configuration is made visible and documented; Trail does not solve application security.
+
+The v0 validation scope lives in:
+
+- `v0_requirements.md`
+- `specs/README.md`
+
 ## Completed Review Groups
 
 ### Group 1: HTTP Contract Surface
