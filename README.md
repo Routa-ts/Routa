@@ -69,14 +69,13 @@ The repo uses pnpm workspaces and Turborepo for package task orchestration.
 
 ```sh
 pnpm install
-pnpm lint
-pnpm format:check
-pnpm build
 pnpm check
+pnpm typecheck
+pnpm build
 pnpm test
 ```
 
-`pnpm build`, `pnpm check`, `pnpm lint`, and `pnpm test` run through Turborepo so package dependencies build in graph order and repeated work can be cached.
+`pnpm check` runs Biome formatting and lint checks together. `pnpm typecheck`, `pnpm build`, and `pnpm test` run through Turborepo so package dependencies build in graph order and repeated work can be cached.
 
 ## Start Here
 

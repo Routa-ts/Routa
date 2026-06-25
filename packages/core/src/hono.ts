@@ -1,4 +1,4 @@
-import { Hono, type Context } from "hono";
+import { type Context, Hono } from "hono";
 import { ZodError, type z } from "zod";
 import type { HttpMethod, RouteContract, RouteInput, RouteResponses } from "./index.js";
 

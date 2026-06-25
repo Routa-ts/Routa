@@ -3,8 +3,8 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createCommandArgs } from "./index.js";
 import { createProject } from "./create-project.js";
+import { createCommandArgs } from "./index.js";
 
 describe("create-routa", () => {
 	it("forwards pnpm create args to routa create", () => {

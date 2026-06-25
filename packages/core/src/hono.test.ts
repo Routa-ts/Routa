@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { createRoute } from "./index.js";
 import { createHonoApp } from "./hono.js";
+import { createRoute } from "./index.js";
 
 describe("createHonoApp", () => {
 	it("runs route contracts through Hono and maps response status", async () => {

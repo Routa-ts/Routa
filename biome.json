@@ -25,5 +25,8 @@
 			"semicolons": "always",
 			"trailingCommas": "all"
 		}
+	},
+	"assist": {
+		"enabled": true
 	}
 }

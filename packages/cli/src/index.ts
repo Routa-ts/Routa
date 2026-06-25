@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { scaffoldOpenApi } from "./scaffold.js";
 import { runOpenApiBreaking, runOpenApiCheck } from "./openapi.js";
 import { runProjectBuild, runProjectCheck } from "./project.js";
+import { scaffoldOpenApi } from "./scaffold.js";
 
 export type CommandResult = {
 	code: number;

@@ -10,7 +10,7 @@
 			"inputs": ["$TURBO_DEFAULT$", "!src/**/*.test.ts", "!tsconfig.test.json"],
 			"outputs": ["dist/**"]
 		},
-		"check": {
+		"typecheck": {
 			"description": "Typecheck package source without emitting JavaScript.",
 			"dependsOn": ["^build"],
 			"outputs": []
