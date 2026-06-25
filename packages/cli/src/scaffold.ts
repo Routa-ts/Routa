@@ -413,8 +413,8 @@ function schemaForRequestBody(operation: OpenApiOperation): string | undefined {
 
 function schemaForResponse(operation: OpenApiOperation) {
 	const entry =
-		Object.entries(operation.responses ?? {}).find(([status]) => status.startsWith("2")) ??
-		Object.entries(operation.responses ?? {})[0];
+		Object.entries(operation.responses ?? {}).find(([status]) => status.startsWith("2"))
+		?? Object.entries(operation.responses ?? {})[0];
 	const status = entry ? Number(entry[0]) : 200;
 	const schema = firstJsonContent(entry?.[1].content)?.schema;
 	const zodSchema = schema ? zodForSchema(schema) : "z.unknown()";

@@ -24,7 +24,7 @@ describe("route contracts", () => {
 					},
 				},
 				middleware: [requireAuth],
-				run: async ({ ctx }) => {
+				run: ({ ctx }) => {
 					expectType<unknown>(ctx.user);
 					return { type: "success", data: { id: "usr_1" } };
 				},

@@ -85,7 +85,7 @@ async function parseBody(request: Request): Promise<unknown> {
 		throw new Response("Unsupported Media Type", { status: 415 });
 	}
 
-	return request.json();
+	return await request.json();
 }
 
 function parseSchema(schema: z.ZodTypeAny, value: unknown): unknown {
