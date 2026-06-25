@@ -1,0 +1,28 @@
+{
+	"$schema": "https://turborepo.dev/schema.json",
+	"ui": "stream",
+	"globalDependencies": ["biome.json", ".npmrc", "pnpm-workspace.yaml", "tsconfig.base.json"],
+	"globalEnv": ["CI"],
+	"tasks": {
+		"build": {
+			"description": "Compile package TypeScript to dist output.",
+			"dependsOn": ["^build"],
+			"inputs": ["$TURBO_DEFAULT$", "!src/**/*.test.ts", "!tsconfig.test.json"],
+			"outputs": ["dist/**"]
+		},
+		"check": {
+			"description": "Typecheck package source without emitting JavaScript.",
+			"dependsOn": ["^build"],
+			"outputs": []
+		},
+		"lint": {
+			"description": "Lint package source with Biome.",
+			"outputs": []
+		},
+		"test": {
+			"description": "Run package unit tests.",
+			"dependsOn": ["build"],
+			"outputs": []
+		}
+	}
+}

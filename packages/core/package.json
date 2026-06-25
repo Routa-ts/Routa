@@ -1,0 +1,37 @@
+{
+	"name": "@routa/core",
+	"version": "0.0.0",
+	"private": false,
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		},
+		"./query/helpers": {
+			"types": "./dist/query/helpers.d.ts",
+			"import": "./dist/query/helpers.js"
+		},
+		"./hono": {
+			"types": "./dist/hono.d.ts",
+			"import": "./dist/hono.js"
+		},
+		"./middleware/auth": {
+			"types": "./dist/middleware/auth.d.ts",
+			"import": "./dist/middleware/auth.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "tsc -p tsconfig.json",
+		"check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+		"lint": "biome lint src",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"hono": "^4.12.27",
+		"zod": "^3.25.67"
+	}
+}

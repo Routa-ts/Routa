@@ -58,9 +58,25 @@ Handlers return named outcomes from the declared response map. Business logic st
 docs/                 Planning, design, and acceptance specs
 docs/specs/v0/        v0 behavior contracts
 docs/specs/v1/        deferred target behavior
+packages/core/        @routa/core framework API
+packages/cli/         @routa/cli routa command
+packages/create-routa/ create-routa package for pnpm create routa
 ```
 
-Implementation files will live at the repo root as the v0 framework is built.
+The repo uses pnpm workspaces and Turborepo for package task orchestration.
+
+## Development
+
+```sh
+pnpm install
+pnpm lint
+pnpm format:check
+pnpm build
+pnpm check
+pnpm test
+```
+
+`pnpm build`, `pnpm check`, `pnpm lint`, and `pnpm test` run through Turborepo so package dependencies build in graph order and repeated work can be cached.
 
 ## Start Here
 
@@ -73,6 +89,6 @@ Implementation files will live at the repo root as the v0 framework is built.
 
 ## Development Status
 
-Routa is moving from design into v0 development. The acceptance specs in `docs/specs/v0/` are the current implementation target.
+Routa has a v0 implementation baseline in this repo. The acceptance specs in `docs/specs/v0/` are the behavior contract for keeping v0 honest as the framework evolves.
 
 When implementation behavior conflicts with a spec, either update the spec intentionally or reject the implementation.
