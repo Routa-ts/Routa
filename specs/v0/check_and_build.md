@@ -6,14 +6,30 @@ Trail validates projects through `trail check` and builds through `trail build`.
 
 `trail check` is compiler-like validation, not linting. It should report Trail-aware contract, schema, route, and generation problems before TypeScript can only report generic errors.
 
+The reusable unit is Trail graph validation, not the full `trail check` command.
+
+Pipeline:
+
+```txt
+inputs
+-> parse
+-> route graph
+-> schema graph
+-> middleware graph
+-> name registry
+-> diagnostics
+-> command output
+```
+
 ## Scope
 
 In v0:
 
 - `trail check` runs Trail contract, schema, and route checks.
 - `trail check` runs TypeScript typechecking without emitting JavaScript.
-- `trail build` runs `trail check` before build output.
-- `trail build` compiles TypeScript to JavaScript only after checks pass.
+- `trail build` reuses Trail graph validation before build output.
+- `trail build` compiles TypeScript to JavaScript only after Trail graph validation passes.
+- `trail build` should not require a separate TypeScript `noEmit` pass before TypeScript emit.
 - Route-local schemas are the default generated shape.
 - OpenAPI component `$ref` schemas keep shared identity.
 - Schemas without explicit OpenAPI component identity are not auto-shared.
@@ -21,20 +37,19 @@ In v0:
 ## Acceptance Cases
 
 ```yaml
-case: v0_check_runs_trail_and_typescript_checks
-intent: project validation catches Trail and TypeScript errors
+case: v0_check_runs_graph_validation_and_typecheck
+intent: check validates Trail contracts and TypeScript types without emitting JS
 input:
-  files:
-    routes/users/route.ts: route contract source
-    routes/users/schemas.ts: route-local schemas
+  project:
+    has_valid_trail_graph: true
 action: trail check
 expected:
   behavior:
-    - Trail validates route contracts, schema names, imports, route conflicts, and generated-file state where detectable
-    - TypeScript typechecking runs without emitting JavaScript
+    - Trail graph validation runs
+    - TypeScript typecheck runs without emit
     - command exits non-zero on Trail or TypeScript errors
 must_not:
-  - emit JavaScript build output
+  - emit JavaScript output
 ```
 
 ```yaml
@@ -59,34 +74,33 @@ must_not:
 ```
 
 ```yaml
-case: v0_build_runs_check_before_emit
-intent: build cannot emit when checks fail
+case: v0_build_reuses_graph_validation_then_emits
+intent: build avoids redundant noEmit pass while preserving Trail checks
 input:
   project:
-    has_trail_check_error: true
+    has_valid_trail_graph: true
 action: trail build
 expected:
   behavior:
-    - command runs Trail project checks before TypeScript emit
-    - command exits non-zero
+    - Trail graph validation runs
+    - TypeScript compiles to JavaScript
 must_not:
-  - emit JavaScript build output
-  - run TypeScript emit after check failure
+  - require a separate TypeScript noEmit pass before TypeScript emit
 ```
 
 ```yaml
-case: v0_build_emits_after_check_passes
-intent: successful build proves project checks passed first
+case: v0_build_stops_before_emit_on_graph_error
+intent: build cannot emit when Trail graph validation fails
 input:
   project:
-    has_trail_check_error: false
-    has_typescript_error: false
+    has_duplicate_route: true
 action: trail build
 expected:
   behavior:
-    - command runs the same validation as trail check
-    - command compiles TypeScript to JavaScript
-    - command exits successfully
+    - Trail graph validation reports the duplicate route
+    - command exits non-zero
+must_not:
+  - emit JavaScript output after failed Trail validation
 ```
 
 ```yaml
@@ -134,5 +148,6 @@ must_not:
 ## Out of Scope
 
 - Emitting JavaScript from `trail check`.
-- Building production bundles without first passing `trail check`.
+- Requiring `trail build` to run the full `trail check` CLI before emit.
+- Running a redundant `tsc --noEmit` pass inside `trail build`.
 - Replacing focused commands such as `trail openapi check` or `trail openapi breaking`.

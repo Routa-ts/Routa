@@ -31,7 +31,7 @@ expected:
     - routes/users/schemas.ts
   behavior:
     - route handler contains HTTP boundary stub or TODO
-    - manifest tracks route and schema files only
+    - manifest tracks generated HTTP boundary files and route metadata only
     - developer chooses where business logic lives
 must_not:
   - generate services/users.ts
@@ -47,7 +47,7 @@ input:
   files:
     services/users.ts: user-created implementation
     modules/users/list-users.ts: user-created implementation
-    .trail/manifest.json: tracks route and schema files only
+    .trail/manifest.json: tracks generated HTTP boundary files and route metadata only
   change:
     openapi.yaml adds GET /users/{id}
 action: trail scaffold openapi.yaml

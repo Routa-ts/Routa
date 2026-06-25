@@ -6,6 +6,14 @@ Trail route files define the HTTP boundary. They consume Zod schemas, define met
 
 v0 generated output uses directory-style route files. Flat dot route support is deferred to v1, but the route graph model should not prevent it.
 
+Handler types are inferred from route declarations:
+
+```txt
+schemas -> handler input type
+responses -> allowed return variants
+resolved middleware -> handler ctx type
+```
+
 ## Acceptance Cases
 
 ```yaml
@@ -66,6 +74,25 @@ must_not:
 ```
 
 ```yaml
+case: v0_route_handler_input_inferred_from_schemas
+intent: handlers receive typed input without manual annotations
+input:
+  route:
+    input:
+      params: GetUserParams
+      query: GetUserQuery
+      body: UpdateUserBody
+action: typecheck route
+expected:
+  behavior:
+    - input.params is inferred from GetUserParams
+    - input.query is inferred from GetUserQuery
+    - input.body is inferred from UpdateUserBody
+must_not:
+  - require user-authored handler input annotations
+```
+
+```yaml
 case: v0_route_response_variant_required
 intent: handlers return declared variants only
 input:
@@ -79,6 +106,7 @@ action: typecheck route
 expected:
   behavior:
     - TypeScript rejects undeclared response variant
+    - response data is typed from the declared response schema
 failure:
   mode: compile-time type error where possible
 ```
@@ -92,7 +120,7 @@ input:
 action: compile route graph
 expected:
   behavior:
-    - Trail check reports missing success schema
+    - Trail graph validation reports missing success schema
     - trail build fails before emitting JavaScript
 failure:
   mode: check failure or type error

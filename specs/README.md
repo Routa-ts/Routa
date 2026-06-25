@@ -42,6 +42,7 @@ Use stable case ids in future tests, fixtures, docs, and implementation tickets.
 - [OpenAPI Check](./v0/openapi_check.md)
 - [Input Validation](./v0/input_validation.md)
 - [Check and Build](./v0/check_and_build.md)
+- [Middleware and Routes Metadata](./v0/middleware_and_routes_gen.md)
 
 ## v1 Specs
 

@@ -55,7 +55,7 @@ Route handlers return named outcomes like `success`, `notFound`, or `emailConfli
 
 ### Middleware that carries meaning
 
-Auth, permissions, tenant loading, and request enrichment should not disappear into invisible side effects. Middleware declares what state it requires, what it guarantees, and which early responses it can produce.
+Auth, permissions, tenant loading, and request enrichment should not disappear into invisible side effects. Middleware declares what ctx it requires, what it provides, and which early responses it can produce.
 
 ### OpenAPI without a second model
 
@@ -156,6 +156,7 @@ The deeper architecture notes live here:
 - [Acceptance specs](./specs/README.md)
 - [Backend framework design](./backend_framework_design.md)
 - [Middleware system design](./middleware_design.md)
+- [Testing strategy](./testing_strategy.md)
 
 ## Naming Notes
 

@@ -27,8 +27,49 @@ Middleware can exist at multiple levels:
 Execution order:
 
 ```
-global → group → segment folder → route file → method contract → handler
+global → group → resource segment → route file → method contract → handler
 ```
+
+Global, group, and resource segment middleware files are named `middleware.ts`.
+
+Groups use folder syntax such as `(public)`, `(private)`, or `(admin)`. A group participates in middleware inheritance but does not add a URL segment. This lets a project collect routes under shared behavior without changing paths.
+
+The root `routes/middleware.ts` file is global middleware for the route tree.
+
+Example:
+
+```txt
+routes/
+  middleware.ts
+  (private)/
+    middleware.ts
+    users/
+      route.ts
+  (admin)/
+    middleware.ts
+    reports/
+      route.ts
+```
+
+In this layout:
+
+- `routes/(private)/users/route.ts` resolves to `/users`.
+- `routes/(admin)/reports/route.ts` resolves to `/reports`.
+- `(private)/middleware.ts` can require auth for private routes.
+- `(admin)/middleware.ts` can require admin ctx without putting `/admin` in the URL.
+
+Example pipeline for `routes/(admin)/users/route.ts`:
+
+```txt
+routes/middleware.ts
+-> routes/(admin)/middleware.ts
+-> routes/(admin)/users/middleware.ts
+-> routes/(admin)/users/route.ts middleware
+-> createRoute(...) middleware
+-> handler
+```
+
+Middleware inheritance is resolved before route handler ctx inference.
 
 ---
 
@@ -38,16 +79,13 @@ Each middleware can define:
 
 ```
 requires:
-  State that must exist before execution
+  ctx fields that must already exist
 
 provides:
-  State that may be added (optional)
-
-guarantees:
-  State that will exist if middleware continues
+  ctx fields added for later middleware and handlers
 
 input:
-  Contract inputs the middleware depends on
+  HTTP input the middleware reads
 
 rejects:
   Possible early responses
@@ -74,9 +112,6 @@ export default defineMiddleware({
 
 	provides: {
 		debugInfo: DebugSchema.optional(),
-	},
-
-	guarantees: {
 		permissions: PermissionsSchema,
 	},
 
@@ -138,16 +173,18 @@ ctx.request
 
 ## State Typing
 
-Final `ctx.state` is the combination of all middleware:
+Final `ctx.state` is the combination of all middleware in the resolved route pipeline:
 
 ```
-global
-+ group
-+ segment folder
-+ route file
-+ method contract
+global middleware
++ group middleware
++ resource segment middleware
++ route file middleware
++ method contract middleware
 = final state
 ```
+
+The ctx type belongs to the resolved route, not the whole app. Trail should avoid a global `AppCtx` that lets every route access fields only provided by protected or admin middleware.
 
 ### Example
 
@@ -166,7 +203,7 @@ ctx.state.auth.principal.id;
 ctx.state.permissions;
 ```
 
-No optional chaining if guaranteed.
+No optional chaining if provided by the resolved route pipeline.
 
 ---
 
@@ -244,14 +281,97 @@ requireTenant
 - Middleware must satisfy dependencies:
 
 ```
-requires must be fulfilled by previous guarantees
+requires must be fulfilled by previous provides
 ```
 
 - TypeScript should fail if:
 
 ```
-middleware requires state not guaranteed before
+middleware requires state not provided before
 ```
+
+Trail check should also report framework-aware ordering diagnostics, such as:
+
+```txt
+requireAuth requires ctx.db,
+but ctx.db is not provided by earlier middleware.
+
+Suggestion:
+Move withDb before requireAuth.
+```
+
+## Generated Route Metadata
+
+Trail generates resolved route metadata in:
+
+```txt
+.trail/routes.gen.ts
+```
+
+Conceptual flow:
+
+```txt
+filesystem scan
+-> route tree
+-> inherited middleware chain
+-> .trail/routes.gen.ts
+-> route-specific ctx types
+-> trail check validates route handlers
+```
+
+The generated file should include route file, resolved path, methods, group folders, resource segment folders, route-file middleware, method middleware, and route-specific ctx types.
+
+Example metadata should preserve the distinction between a URL-less group and a URL segment:
+
+```ts
+export const routeTree = {
+	routes: [
+		{
+			file: "routes/(admin)/users/route.ts",
+			path: "/users",
+			groups: ["(admin)"],
+			segments: ["users"],
+			methods: ["GET", "POST"],
+			middleware: [
+				"routes/middleware.ts",
+				"routes/(admin)/middleware.ts",
+				"routes/(admin)/users/middleware.ts",
+				"routes/(admin)/users/route.ts",
+			],
+		},
+	],
+} as const;
+```
+
+---
+
+## Route-file Middleware
+
+A **`defineRoute`** export can attach middleware shared by every method in that route file. This is useful for resource loading or route-level guards that apply to all verbs on the same path.
+
+```ts
+export default defineRoute({
+	middleware: [loadUserResource()],
+
+	params: UserParams,
+
+	methods: {
+		get: createRoute({
+			run: async ({ ctx }) => {
+				ctx.state.userResource;
+			},
+		}),
+		patch: createRoute({
+			middleware: [requirePermission("users.update")],
+			run: async ({ ctx }) => {
+				ctx.state.userResource;
+			},
+		}),
+	},
+});
+```
+
+In this example, `loadUserResource()` runs for both `get` and `patch`. The `patch` method then adds method-specific middleware after the route-file middleware.
 
 ---
 

@@ -150,7 +150,7 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] No hardcoded secrets
 - [x] Config validation at startup
 - [x] Separate build, release, and run concerns
-  Decision note: v0 splits `trail check` from `trail build`; build runs check first and emits only after checks pass.
+  Decision note: v0 splits `trail check` from `trail build`; build reuses Trail graph validation and does not need a redundant `tsc --noEmit` pass before emit.
 
 ## Framework Architecture
 
@@ -185,6 +185,8 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Security regression tests
 - [x] Error shape snapshot tests
 - [x] Middleware ordering tests
+- [x] Internal framework test matrix
+  Decision note: Trail needs layered internal tests for type behavior, graph validation, generation, CLI commands, OpenAPI drift, Hono runtime behavior, diagnostics, regeneration safety, and guardrails.
 - [x] Stateless process model
 - [x] Port binding
 - [x] Fast startup
@@ -209,10 +211,14 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Typed handlers
 - [x] Typed response variants
 - [x] Minimal middleware contracts
+- [x] Global, group, segment, route-file, and method middleware inheritance
+  Decision note: v0 uses `middleware.ts`; `(group)` folders affect middleware but not URL paths, and middleware resolves before route handler ctx inference.
+- [x] Route-specific ctx generation
+  Decision note: v0 records resolved route and middleware metadata in `.trail/routes.gen.ts`; ctx belongs to the route, not a global AppCtx.
 - [x] OpenAPI/check validation for generated and scaffolded contracts
-  Decision note: v0 project validation is `trail check`; it includes Trail contract/schema/route checks plus TypeScript typechecking without JavaScript emit.
-- [x] Build blocked by project check failures
-  Decision note: `trail build` runs `trail check` first and must not emit JavaScript when checks fail.
+  Decision note: v0 project validation is `trail check`; it runs Trail graph validation plus TypeScript typechecking without JavaScript emit.
+- [x] Build blocked by Trail graph validation failures
+  Decision note: `trail build` runs Trail graph validation first and must not emit JavaScript when graph validation fails.
 - [ ] Fastify or Express adapters
 - [ ] Non-Zod schema adapters
 - [ ] Generated flat route output

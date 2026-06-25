@@ -53,6 +53,16 @@ Zod schemas
 = checks and docs
 ```
 
+Route handler types come from the route graph:
+
+```txt
+schemas -> handler input type
+responses -> allowed return variants
+middleware flow -> handler ctx type
+```
+
+Middleware is resolved in order from global to group folders, resource segment folders, route-file middleware, and method middleware before ctx inference. Trail records resolved route metadata in `.trail/routes.gen.ts`.
+
 For spec-first starts, Trail can create the initial source from OpenAPI:
 
 ```txt
@@ -358,7 +368,7 @@ services → use cases → modules → policies → tools → models
 ### To Define
 
 - Middleware file structure (`middleware.ts`)
-- Execution order (global → group → resource route file → method)
+- Execution order (global → group → resource segment → resource route file → method)
 - How middleware extends `ctx.state`
 - Type-safe state injection
 - Auth patterns

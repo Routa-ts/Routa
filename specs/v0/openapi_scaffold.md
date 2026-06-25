@@ -38,13 +38,15 @@ expected:
     - routes/users/schemas.ts
     - .trail/manifest.json
     - .trail/openapi-baseline.json
+    - .trail/routes.gen.ts
   behavior:
     - route file contains get and post contracts
     - route file imports route-local schemas
     - route handler contains an HTTP boundary stub or TODO
     - generated files include Trail comment header
-    - manifest tracks route and schema files
+    - manifest tracks route, schema, and route metadata files
     - baseline is created and not gitignored by Trail defaults
+    - route metadata records resolved paths, methods, and middleware chains
 must_not:
   - generate Fastify or Express code
   - generate non-Zod schemas

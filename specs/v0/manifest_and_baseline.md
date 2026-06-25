@@ -9,9 +9,10 @@ Trail tracks generated files and OpenAPI state with committed metadata.
 ```txt
 .trail/manifest.json
 .trail/openapi-baseline.json
+.trail/routes.gen.ts
 ```
 
-Both files should be committed to git.
+These files should be committed to git.
 
 Trail-generated `.gitignore` defaults must not ignore them.
 
@@ -31,6 +32,7 @@ expected:
     - manifest contains OpenAPI baseline path
     - manifest tracks generated route files
     - manifest tracks generated schema files
+    - manifest tracks generated route metadata file
     - manifest does not mark application business logic files as Trail-managed by default
 must_not:
   - rely only on generated file comments for ownership
@@ -81,6 +83,10 @@ failure:
       "source": "openapi.yaml",
       "operationIds": ["listUsers"],
       "kind": "route"
+    },
+    {
+      "path": ".trail/routes.gen.ts",
+      "kind": "route-metadata"
     }
   ]
 }

@@ -174,7 +174,8 @@ OpenAPI input quality checks should cover at least:
 - Both commands should be easy to run in CI.
 - Both commands should return a non-zero exit code on failure.
 - `trail check` should include Trail contract/schema/route checks and TypeScript typechecking without emitting JavaScript.
-- `trail build` should run `trail check` before TypeScript emit and fail without emitting when checks fail.
+- `trail build` should reuse Trail graph validation before TypeScript emit and fail without emitting when graph validation fails.
+- `trail build` should not require a redundant `tsc --noEmit` pass before TypeScript emit.
 - Default check severity should favor warnings for quality issues.
 - `--strict` should escalate configured warnings to failures.
 

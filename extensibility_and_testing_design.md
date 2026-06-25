@@ -219,7 +219,7 @@ It should include:
 
 - Route ids, paths, route patterns, and methods.
 - Params, input schemas, response variants, and response representations.
-- Middleware order, middleware inputs, guarantees, and rejects.
+- Middleware order, middleware inputs, provided ctx, and rejects.
 - Auth, authorization, rate-limit, cache, and deprecation metadata.
 - Global errors and framework-managed errors.
 - Service scopes and service keys.
@@ -517,7 +517,7 @@ Trail should provide a middleware unit helper.
 The helper should test middleware contracts directly:
 
 - Required prior state.
-- Provided or guaranteed state.
+- Provided state.
 - Early reject variants.
 - `next` behavior.
 
@@ -534,10 +534,10 @@ expect(result).toRejectWith("missingCredentials");
 Middleware tests must align with the existing middleware model:
 
 ```txt
-global -> group -> segment folder -> route file -> method contract -> handler
+global -> group -> resource segment -> route file -> method contract -> handler
 ```
 
-`requires` must be fulfilled by previous `guarantees`, and tests should make this easy to verify.
+`requires` must be fulfilled by previous `provides`, and tests should make this easy to verify.
 
 ### HTTP Integration Tests
 
@@ -854,7 +854,7 @@ The Auth guide should cover:
 The Middleware and Integrations guide should cover:
 
 - Middleware levels and order.
-- `requires`, `provides`, `guarantees`, `input`, `rejects`, and `openapi`.
+- `requires`, `provides`, `input`, `rejects`, and `openapi`.
 - Middleware testing.
 - Integration commands.
 - Why integrations are generated code instead of plugins.

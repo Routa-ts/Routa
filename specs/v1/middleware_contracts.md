@@ -2,25 +2,25 @@
 
 ## Feature
 
-Middleware declares requirements, state guarantees, early rejects, and OpenAPI-visible metadata.
+Middleware declares requirements, provided ctx, early rejects, HTTP input it reads, and OpenAPI-visible metadata.
 
 ## Acceptance Cases
 
 ```yaml
-case: v1_middleware_requires_previous_guarantee
+case: v1_middleware_requires_previous_provider
 intent: middleware order is type-checked
 input:
   middleware:
     - requirePermissions:
         requires: auth
     - requireAuth:
-        guarantees: auth
+        provides: auth
 action: compile route
 expected:
   behavior:
     - TypeScript or Trail check reports invalid order
 must_not:
-  - allow handler to assume ctx.state.auth when not guaranteed
+  - allow handler to assume ctx.state.auth when not provided
 ```
 
 ```yaml
@@ -42,12 +42,12 @@ expected:
 ```
 
 ```yaml
-case: v1_middleware_state_guarantee_typed
-intent: handler receives guaranteed state without optional chaining
+case: v1_middleware_provided_state_typed
+intent: handler receives provided state without optional chaining
 input:
   middleware:
     loadTenant:
-      guarantees: tenant
+      provides: tenant
 action: typecheck handler
 expected:
   behavior:
@@ -56,4 +56,4 @@ expected:
 
 ## Out of Scope for v0
 
-Full middleware type graph validation is not required in v0 beyond minimal proof.
+Broad middleware integrations are not required in v0 beyond the minimal typed pipeline, folder inheritance, and route-specific ctx proof.
