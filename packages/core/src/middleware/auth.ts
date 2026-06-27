@@ -1,7 +1,10 @@
+import { z } from "zod";
 import { createMiddleware } from "../index.js";
 
 export function requireAuth() {
 	return createMiddleware({
-		provides: ["auth"],
+		provides: {
+			auth: z.object({}),
+		},
 	});
 }

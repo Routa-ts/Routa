@@ -6,7 +6,16 @@ export type CreateProjectResult = {
 	files: string[];
 };
 
-export function createProject(targetDir: string, cwd = process.cwd()): CreateProjectResult {
+export type CreateProjectOptions = {
+	openApi?: boolean;
+	routaVersion?: string;
+};
+
+export function createProject(
+	targetDir: string,
+	cwd = process.cwd(),
+	options: CreateProjectOptions = {},
+): CreateProjectResult {
 	const projectDir = resolve(cwd, targetDir);
 
 	if (existsSync(projectDir)) {
@@ -14,13 +23,20 @@ export function createProject(targetDir: string, cwd = process.cwd()): CreatePro
 	}
 
 	const files = new Map<string, string>([
-		["package.json", packageJson(targetDir)],
+		[".gitignore", gitignore()],
+		[".vscode/settings.json", vscodeSettings()],
+		["README.md", readme(targetDir)],
+		["biome.json", biomeJson()],
+		["package.json", packageJson(targetDir, options.routaVersion ?? "latest")],
+		["src/routa.ts", routaSource()],
 		["tsconfig.json", tsconfigJson()],
-		["openapi.yaml", openApiYaml()],
-		["src/index.ts", serverSource()],
-		["routes/status/route.ts", statusRouteSource()],
-		["routes/status/schemas.ts", statusSchemasSource()],
+		["src/routes/status/route.ts", statusRouteSource()],
+		["src/routes/status/schemas.ts", statusSchemasSource()],
 	]);
+
+	if (options.openApi ?? true) {
+		files.set("openapi.yaml", openApiYaml());
+	}
 
 	for (const [path, content] of files) {
 		const absolutePath = join(projectDir, path);
@@ -31,7 +47,7 @@ export function createProject(targetDir: string, cwd = process.cwd()): CreatePro
 	return { projectDir, files: Array.from(files.keys()) };
 }
 
-function packageJson(name: string): string {
+function packageJson(name: string, routaVersion: string): string {
 	return `${JSON.stringify(
 		{
 			name,
@@ -39,20 +55,25 @@ function packageJson(name: string): string {
 			private: true,
 			type: "module",
 			scripts: {
-				dev: "tsx src/index.ts",
+				dev: "routa dev",
+				start: "routa start",
 				check: "routa check",
 				build: "routa build",
+				lint: "biome check .",
+				format: "biome check --write .",
 				scaffold: "routa scaffold openapi.yaml",
+				"openapi:check": "routa openapi check",
 			},
 			dependencies: {
-				"@routa/cli": "latest",
-				"@routa/core": "latest",
-				hono: "^4.0.0",
-				zod: "^3.0.0",
+				"@routa/cli": routaVersion,
+				"@routa/core": routaVersion,
+				tsx: "^4.22.4",
+				zod: "^4.4.3",
 			},
 			devDependencies: {
-				tsx: "^4.0.0",
-				typescript: "^5.0.0",
+				"@biomejs/biome": "^2.5.1",
+				"@types/node": "^24.0.4",
+				typescript: "^6.0.3",
 			},
 		},
 		null,
@@ -61,20 +82,154 @@ function packageJson(name: string): string {
 }
 
 function tsconfigJson(): string {
+	return `{
+\t"compilerOptions": {
+\t\t"target": "ES2022",
+\t\t"module": "NodeNext",
+\t\t"moduleResolution": "NodeNext",
+\t\t"strict": true,
+\t\t"skipLibCheck": true,
+\t\t"noEmitOnError": true,
+\t\t"outDir": "dist",
+\t\t"types": ["node"]
+\t},
+\t"include": ["src/**/*.ts", ".routa/**/*.ts"]
+}
+`;
+}
+
+function gitignore(): string {
+	return `node_modules/
+dist/
+.env
+.env.local
+coverage/
+`;
+}
+
+function vscodeSettings(): string {
 	return `${JSON.stringify(
 		{
-			compilerOptions: {
-				target: "ES2022",
-				module: "NodeNext",
-				moduleResolution: "NodeNext",
-				strict: true,
-				skipLibCheck: true,
+			"files.watcherExclude": {
+				"**/.routa/routes.gen.ts": true,
 			},
-			include: ["src/**/*.ts", "routes/**/*.ts", ".routa/**/*.ts"],
+			"search.exclude": {
+				"**/.routa/routes.gen.ts": true,
+			},
+			"files.readonlyInclude": {
+				"**/.routa/routes.gen.ts": true,
+			},
+			"[typescript]": {
+				"editor.defaultFormatter": "biomejs.biome",
+			},
+			"[json]": {
+				"editor.defaultFormatter": "biomejs.biome",
+			},
+			"[jsonc]": {
+				"editor.defaultFormatter": "biomejs.biome",
+			},
+			"editor.codeActionsOnSave": {
+				"source.organizeImports.biome": "explicit",
+			},
 		},
 		null,
 		"\t",
 	)}\n`;
+}
+
+function readme(name: string): string {
+	return `# ${name}
+
+Routa API generated with \`pnpm create routa@latest\`.
+
+## Development
+
+\`\`\`sh
+pnpm install
+pnpm dev
+\`\`\`
+
+\`pnpm dev\` runs \`routa dev\`, which validates the route graph, generates Routa metadata, typechecks, and starts the internal development server.
+
+## Scripts
+
+\`\`\`sh
+pnpm dev
+pnpm start
+pnpm check
+pnpm build
+pnpm lint
+pnpm format
+pnpm openapi:check
+\`\`\`
+
+## Routes
+
+\`src/routa.ts\` is the user-owned Routa entry point. Routes live in \`src/routes\`.
+
+\`\`\`txt
+src/routa.ts
+src/routes/status/route.ts
+src/routes/status/schemas.ts
+\`\`\`
+
+Routa owns generated project metadata in \`.routa/\`. Commit those files so OpenAPI drift and regeneration safety work across machines.
+`;
+}
+
+function biomeJson(): string {
+	return `${JSON.stringify(
+		{
+			$schema: "./node_modules/@biomejs/biome/configuration_schema.json",
+			root: false,
+			vcs: {
+				enabled: true,
+				clientKind: "git",
+				useIgnoreFile: true,
+			},
+			files: {
+				ignoreUnknown: true,
+				includes: ["**", "!node_modules", "!dist", "!coverage", "!.routa"],
+			},
+			formatter: {
+				enabled: true,
+				indentStyle: "tab",
+				lineWidth: 100,
+			},
+			linter: {
+				enabled: true,
+				rules: {
+					preset: "recommended",
+					correctness: {
+						useImportExtensions: "off",
+					},
+					suspicious: {
+						noConsole: "off",
+						noExplicitAny: "off",
+					},
+				},
+			},
+			assist: {
+				enabled: true,
+				actions: {
+					source: {
+						recommended: true,
+					},
+				},
+			},
+		},
+		null,
+		"\t",
+	)}\n`;
+}
+
+function routaSource(): string {
+	return `import { createRouta } from "@routa/core";
+
+export default createRouta({
+\tport: 3000,
+});
+`;
 }
 
 function openApiYaml(): string {
@@ -101,22 +256,6 @@ paths:
 `;
 }
 
-function serverSource(): string {
-	return `import { createHonoApp } from "@routa/core/hono";
-import statusRoute from "../routes/status/route.js";
-
-const app = createHonoApp([
-\t{
-\t\tmethod: "get",
-\t\tpath: "/status",
-\t\tcontract: statusRoute.get,
-\t},
-]);
-
-export default app;
-`;
-}
-
 function statusRouteSource(): string {
 	return `import { createRoute, defineRoute } from "@routa/core";
 import { GetStatusResponse } from "./schemas.js";
@@ -129,7 +268,7 @@ export default defineRoute({
 \t\t\t\tschema: GetStatusResponse,
 \t\t\t},
 \t\t},
-\t\trun: async () => ({ type: "success", data: { ok: true } }),
+\t\trun: () => ({ type: "success", data: { ok: true } }),
 \t}),
 });
 `;

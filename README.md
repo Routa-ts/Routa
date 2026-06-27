@@ -25,8 +25,8 @@ pnpm create routa@latest
 Routa routes are filesystem-backed. Folders map to URL segments, and each `route.ts` file owns the methods for that path.
 
 ```txt
-routes/users/route.ts
-routes/users/$id/route.ts
+src/routes/users/route.ts
+src/routes/users/$id/route.ts
 ```
 
 Each method is declared as a route contract:
@@ -61,6 +61,7 @@ docs/specs/v1/        deferred target behavior
 packages/core/        @routa/core framework API
 packages/cli/         @routa/cli routa command
 packages/create-routa/ create-routa package for pnpm create routa
+examples/basic-api/   End-to-end Routa example app
 ```
 
 The repo uses pnpm workspaces and Turborepo for package task orchestration.

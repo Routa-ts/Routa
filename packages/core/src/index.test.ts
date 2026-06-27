@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { createMiddleware, createRoute, defineRoute } from "./index.js";
+import { createMiddleware, createRouta, createRoute, defineRoute } from "./index.js";
 
 describe("route contracts", () => {
 	it("preserves route method declarations", () => {
 		const requireAuth = createMiddleware({
-			provides: ["user"],
+			provides: {
+				user: z.object({
+					id: z.string(),
+				}),
+			},
 		});
 
 		const route = defineRoute({
@@ -25,13 +29,21 @@ describe("route contracts", () => {
 				},
 				middleware: [requireAuth],
 				run: ({ ctx }) => {
-					expectType<unknown>(ctx.user);
+					expectType<string>(ctx.user.id);
 					return { type: "success", data: { id: "usr_1" } };
 				},
 			}),
 		});
 
 		expect(route.post.responses.success.status).toBe(201);
+	});
+
+	it("preserves Routa app configuration", () => {
+		const app = createRouta({
+			port: 3001,
+		});
+
+		expect(app.port).toBe(3001);
 	});
 });
 

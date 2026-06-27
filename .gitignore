@@ -1,5 +1,11 @@
+.vscode
 node_modules/
+**/node_modules/
 .pnpm-store/
+**/.pnpm-store/
 .turbo/
+**/.turbo/
 dist/
+**/dist/
 coverage/
+**/coverage/

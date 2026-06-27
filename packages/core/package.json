@@ -16,6 +16,10 @@
 			"types": "./dist/hono.d.ts",
 			"import": "./dist/hono.js"
 		},
+		"./logger": {
+			"types": "./dist/logger.d.ts",
+			"import": "./dist/logger.js"
+		},
 		"./middleware/auth": {
 			"types": "./dist/middleware/auth.d.ts",
 			"import": "./dist/middleware/auth.js"
@@ -32,6 +36,6 @@
 	},
 	"dependencies": {
 		"hono": "^4.12.27",
-		"zod": "^3.25.67"
+		"zod": "^4.4.3"
 	}
 }

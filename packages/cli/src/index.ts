@@ -1,7 +1,18 @@
 #!/usr/bin/env node
 
+import { spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { createProject, resolveRoutaVersion } from "create-routa";
 import { runOpenApiBreaking, runOpenApiCheck } from "./openapi.js";
-import { runProjectBuild, runProjectCheck } from "./project.js";
+import {
+	runProjectBuild,
+	runProjectCheck,
+	runProjectDev,
+	runProjectDevProcess,
+	runProjectStart,
+} from "./project.js";
+import type { ScaffoldPreviewChange } from "./scaffold.js";
 import { scaffoldOpenApi } from "./scaffold.js";
 
 export type CommandResult = {
@@ -15,13 +26,13 @@ const helpText = `Routa
 Usage:
   routa create [dir]
   routa scaffold <openapi.yaml|openapi.json>
+  routa dev
+  routa start
   routa check
   routa build
   routa openapi check
   routa openapi breaking [--update-baseline]
 `;
-
-const notImplementedCode = 2;
 
 export type RunOptions = {
 	cwd?: string;
@@ -36,7 +47,7 @@ export function run(argv: readonly string[], options: RunOptions = {}): CommandR
 	}
 
 	if (command === "create") {
-		return { code: notImplementedCode, stderr: "Routa project creation is not implemented yet.\n" };
+		return runCreateCommand(argv.slice(1), cwd);
 	}
 
 	if (command === "scaffold") {
@@ -51,7 +62,7 @@ export function run(argv: readonly string[], options: RunOptions = {}): CommandR
 			});
 			return {
 				code: 0,
-				stdout: `${result.preview ? "Previewed" : "Scaffolded"} ${result.routes.length} Routa route file(s).\n${result.files.join("\n")}\n`,
+				stdout: formatScaffoldResult(result),
 			};
 		} catch (error) {
 			return { code: 1, stderr: `${error instanceof Error ? error.message : String(error)}\n` };
@@ -66,6 +77,14 @@ export function run(argv: readonly string[], options: RunOptions = {}): CommandR
 		return runProjectBuild(cwd);
 	}
 
+	if (command === "dev") {
+		return runProjectDev(argv.slice(1), cwd);
+	}
+
+	if (command === "start") {
+		return runProjectStart(argv.slice(1), cwd);
+	}
+
 	if (command === "openapi" && (subcommand === "check" || subcommand === "breaking")) {
 		return subcommand === "check" ? runOpenApiCheck(cwd) : runOpenApiBreaking(argv.slice(2), cwd);
 	}
@@ -73,7 +92,105 @@ export function run(argv: readonly string[], options: RunOptions = {}): CommandR
 	return { code: 1, stderr: `Unknown command: ${command}\n\n${helpText}` };
 }
 
+function runCreateCommand(argv: readonly string[], cwd: string): CommandResult {
+	const targetDir = argv.find((item) => !item.startsWith("--")) ?? "routa-app";
+
+	try {
+		const result = createProject(targetDir, cwd, {
+			openApi: !argv.includes("--no-openapi"),
+			routaVersion: resolveRoutaVersion(cwd, targetDir),
+		});
+		let stdout = createSummary(targetDir, result.files);
+		let stderr = "";
+
+		if (argv.includes("--git")) {
+			const git = spawnSync("git", ["init"], {
+				cwd: result.projectDir,
+				encoding: "utf8",
+			});
+
+			if (git.status === 0) {
+				stdout += "Initialized git repository.\n";
+			} else {
+				stderr += `git init failed. ${git.stderr ?? ""}\n`;
+			}
+		}
+
+		if (argv.includes("--install")) {
+			const install = spawnSync("pnpm", ["install"], {
+				cwd: result.projectDir,
+				encoding: "utf8",
+			});
+
+			if (install.status !== 0) {
+				stderr +=
+					'Command "pnpm install" did not run successfully. Please run this manually in your project.\n';
+				stderr += install.stderr ?? "";
+			} else {
+				stdout += install.stdout ?? "";
+			}
+		}
+
+		stdout += `\nYour Routa app is ready in '${targetDir}'.\n\n`;
+		stdout += "Use the following commands to start your app:\n";
+		stdout += `cd ${targetDir}\n`;
+
+		if (!argv.includes("--install")) {
+			stdout += "pnpm install\n";
+		}
+
+		stdout += "pnpm dev\n";
+
+		return { code: 0, stdout, stderr: stderr || undefined };
+	} catch (error) {
+		return { code: 1, stderr: `${error instanceof Error ? error.message : String(error)}\n` };
+	}
+}
+
+function createSummary(targetDir: string, files: string[]): string {
+	return `Created Routa project '${targetDir}' with ${files.length} file(s).\n${files.join("\n")}\n`;
+}
+
+function formatScaffoldResult(result: ReturnType<typeof scaffoldOpenApi>): string {
+	const lines = [
+		`${result.preview ? "Previewed" : "Scaffolded"} ${result.routes.length} Routa route file(s).`,
+		...result.files,
+	];
+
+	if (result.preview && result.changes.length > 0) {
+		lines.push("", "Preview diff:");
+
+		for (const change of result.changes) {
+			lines.push(
+				`${previewMarker(change.status)} ${change.path}${change.detail ? ` (${change.detail})` : ""}`,
+			);
+		}
+	}
+
+	return `${lines.join("\n")}\n`;
+}
+
+function previewMarker(status: ScaffoldPreviewChange["status"]): string {
+	switch (status) {
+		case "add":
+			return "+ add";
+		case "update":
+			return "~ update";
+		case "unchanged":
+			return "= unchanged";
+		case "conflict":
+			return "! conflict";
+		case "remove":
+			return "- remove";
+	}
+}
+
 export function main(argv = process.argv.slice(2)): void {
+	if (argv[0] === "dev") {
+		runProjectDevProcess(argv.slice(1));
+		return;
+	}
+
 	const result = run(argv);
 
 	if (result.stdout) {
@@ -87,6 +204,18 @@ export function main(argv = process.argv.slice(2)): void {
 	process.exitCode = result.code;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isCliEntry()) {
 	main();
+}
+
+function isCliEntry(): boolean {
+	if (!process.argv[1]) {
+		return false;
+	}
+
+	try {
+		return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+	} catch {
+		return false;
+	}
 }
