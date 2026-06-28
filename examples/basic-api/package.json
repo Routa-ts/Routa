@@ -1,0 +1,27 @@
+{
+	"name": "basic-api",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "routa dev",
+		"start": "routa start",
+		"check": "routa check",
+		"build": "routa build",
+		"lint": "biome check .",
+		"format": "biome check --write .",
+		"scaffold": "routa scaffold openapi.yaml",
+		"openapi:check": "routa openapi check"
+	},
+	"dependencies": {
+		"@routa/cli": "workspace:*",
+		"@routa/core": "workspace:*",
+		"tsx": "^4.22.4",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.1",
+		"@types/node": "^24.0.4",
+		"typescript": "^6.0.3"
+	}
+}
