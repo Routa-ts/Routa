@@ -1,5 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	unlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -905,6 +912,12 @@ paths:
   /users/{id}:
     get:
       operationId: getUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
         "200":
           description: User
@@ -943,6 +956,409 @@ components:
 		expect(result.stderr).toContain("Unsupported OpenAPI input");
 	});
 
+	it("reports missing OpenAPI input files with next steps", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-missing-file-"));
+		createTypeScriptProject(cwd);
+
+		const result = run(["scaffold", "missing.yaml"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("ROUTA_OPENAPI_FILE_NOT_FOUND");
+		expect(result.stderr).toContain("Could not find missing.yaml");
+		expect(result.stderr).toContain("Run this command from the project root");
+	});
+
+	it("accepts .yml OpenAPI input files", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-scaffold-yml-"));
+		createTypeScriptProject(cwd);
+		writeFileSync(join(cwd, "openapi.yml"), simpleUsersOpenApi());
+
+		const result = run(["scaffold", "openapi.yml"], { cwd });
+
+		expect(result.code).toBe(0);
+		expect(existsSync(join(cwd, "src/routes/users/route.ts"))).toBe(true);
+	});
+
+	it("explains when an OpenAPI paths fragment is missing the root paths object", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-fragment-"));
+		createTypeScriptProject(cwd);
+		writeFileSync(
+			join(cwd, "openapi.yaml"),
+			`  /users:
+    get:
+      operationId: listUsers
+      responses:
+        "200":
+          description: Users
+`,
+		);
+
+		const result = run(["scaffold", "openapi.yaml"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain(
+			'ROUTA_OPENAPI_MISSING_PATHS: openapi.yaml is missing the required top-level "paths" object.',
+		);
+		expect(result.stderr).toContain('Found path-like root key "/users".');
+		expect(result.stderr).toContain(
+			"Those route definitions need to be nested under top-level paths:",
+		);
+		expect(result.stderr).toContain("paths:");
+		expect(result.stderr).toContain("  /users:");
+		expect(existsSync(join(cwd, "src/routes/users/route.ts"))).toBe(false);
+	});
+
+	it("reports OpenAPI YAML parser errors with file context", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-yaml-error-"));
+		createTypeScriptProject(cwd);
+		writeFileSync(join(cwd, "openapi.yaml"), "openapi: [\n");
+
+		const result = run(["scaffold", "openapi.yaml"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain(
+			"ROUTA_OPENAPI_PARSE_ERROR: openapi.yaml could not be parsed as YAML.",
+		);
+		expect(result.stderr).toContain("Parser error:");
+	});
+
+	it("explains when paths is not an object", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-invalid-paths-"));
+		createTypeScriptProject(cwd);
+		writeFileSync(
+			join(cwd, "openapi.yaml"),
+			`openapi: 3.1.0
+info:
+  title: Users API
+  version: 0.0.0
+paths: []
+`,
+		);
+
+		const result = run(["scaffold", "openapi.yaml"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("ROUTA_OPENAPI_INVALID_PATHS");
+		expect(result.stderr).toContain('"paths" must be an object');
+	});
+
+	it("explains missing OpenAPI version and info metadata", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-root-metadata-"));
+		createTypeScriptProject(cwd);
+		writeFileSync(
+			join(cwd, "openapi.yaml"),
+			`info:
+  title: Users API
+  version: 0.0.0
+paths:
+  /users:
+    get:
+      operationId: listUsers
+      responses:
+        "200":
+          description: Users
+`,
+		);
+
+		const missingVersion = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(missingVersion.code).toBe(1);
+		expect(missingVersion.stderr).toContain("ROUTA_OPENAPI_MISSING_OPENAPI_VERSION");
+
+		writeFileSync(
+			join(cwd, "openapi.yaml"),
+			`openapi: 3.1.0
+paths:
+  /users:
+    get:
+      operationId: listUsers
+      responses:
+        "200":
+          description: Users
+`,
+		);
+
+		const missingInfo = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(missingInfo.code).toBe(1);
+		expect(missingInfo.stderr).toContain("ROUTA_OPENAPI_MISSING_INFO");
+		expect(missingInfo.stderr).toContain("info:");
+	});
+
+	it("explains invalid path keys and unsupported methods", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-path-method-"));
+		createTypeScriptProject(cwd);
+		writeOpenApiPaths(
+			cwd,
+			`  users:
+    get:
+      operationId: listUsers
+      responses:
+        "200":
+          description: Users
+`,
+		);
+
+		const invalidPath = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(invalidPath.code).toBe(1);
+		expect(invalidPath.stderr).toContain("ROUTA_OPENAPI_INVALID_PATH_KEY");
+		expect(invalidPath.stderr).toContain('Use "/users" instead of "users"');
+
+		writeOpenApiPaths(
+			cwd,
+			`  /users:
+    GET:
+      operationId: listUsers
+      responses:
+        "200":
+          description: Users
+`,
+		);
+
+		const uppercaseMethod = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(uppercaseMethod.code).toBe(1);
+		expect(uppercaseMethod.stderr).toContain("ROUTA_OPENAPI_UNSUPPORTED_METHOD");
+		expect(uppercaseMethod.stderr).toContain('Use lowercase "get" instead of "GET"');
+
+		writeOpenApiPaths(
+			cwd,
+			`  /users:
+    gets:
+      operationId: listUsers
+      responses:
+        "200":
+          description: Users
+`,
+		);
+
+		const typoMethod = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(typoMethod.code).toBe(1);
+		expect(typoMethod.stderr).toContain("Allowed methods: get, post, put");
+	});
+
+	it("explains operations and responses that cannot be scaffolded", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-operation-response-"));
+		createTypeScriptProject(cwd);
+		writeOpenApiPaths(
+			cwd,
+			`  /users:
+    get: listUsers
+`,
+		);
+
+		const invalidOperation = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(invalidOperation.code).toBe(1);
+		expect(invalidOperation.stderr).toContain("ROUTA_OPENAPI_INVALID_OPERATION");
+
+		writeOpenApiPaths(
+			cwd,
+			`  /users:
+    get:
+      operationId: listUsers
+`,
+		);
+
+		const missingResponses = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(missingResponses.code).toBe(1);
+		expect(missingResponses.stderr).toContain("ROUTA_OPENAPI_MISSING_RESPONSES");
+
+		writeOpenApiPaths(
+			cwd,
+			`  /users:
+    get:
+      operationId: listUsers
+      responses:
+        default:
+          description: Users
+`,
+		);
+
+		const invalidStatus = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(invalidStatus.code).toBe(1);
+		expect(invalidStatus.stderr).toContain("ROUTA_OPENAPI_INVALID_RESPONSE_STATUS");
+		expect(invalidStatus.stderr).toContain("Use explicit numeric HTTP status strings");
+	});
+
+	it("explains path parameter mismatches", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-path-params-"));
+		createTypeScriptProject(cwd);
+		writeOpenApiPaths(
+			cwd,
+			`  /users/{id}:
+    get:
+      operationId: getUser
+      responses:
+        "200":
+          description: User
+`,
+		);
+
+		const missingParam = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(missingParam.code).toBe(1);
+		expect(missingParam.stderr).toContain("ROUTA_OPENAPI_MISSING_PATH_PARAMETER");
+		expect(missingParam.stderr).toContain('missing path parameter "id"');
+
+		writeOpenApiPaths(
+			cwd,
+			`  /users:
+    get:
+      operationId: listUsers
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Users
+`,
+		);
+
+		const unusedParam = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(unusedParam.code).toBe(1);
+		expect(unusedParam.stderr).toContain("ROUTA_OPENAPI_UNUSED_PATH_PARAMETER");
+		expect(unusedParam.stderr).toContain('Path parameter "id" is declared but not used');
+	});
+
+	it("explains malformed request and response content", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-content-"));
+		createTypeScriptProject(cwd);
+		writeOpenApiPaths(
+			cwd,
+			`  /users:
+    post:
+      operationId: createUser
+      requestBody:
+        content: []
+      responses:
+        "201":
+          description: Created
+`,
+		);
+
+		const invalidRequest = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(invalidRequest.code).toBe(1);
+		expect(invalidRequest.stderr).toContain("ROUTA_OPENAPI_INVALID_REQUEST_BODY");
+
+		writeOpenApiPaths(
+			cwd,
+			`  /users:
+    get:
+      operationId: listUsers
+      responses:
+        "200":
+          description: Users
+          content: []
+`,
+		);
+
+		const invalidResponse = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(invalidResponse.code).toBe(1);
+		expect(invalidResponse.stderr).toContain("ROUTA_OPENAPI_INVALID_RESPONSE_CONTENT");
+	});
+
+	it("explains unsupported schemas and refs", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-schema-ref-"));
+		createTypeScriptProject(cwd);
+		writeOpenApiPaths(
+			cwd,
+			`  /users:
+    get:
+      operationId: listUsers
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: string
+`,
+		);
+
+		const oneOf = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(oneOf.code).toBe(1);
+		expect(oneOf.stderr).toContain("ROUTA_OPENAPI_UNSUPPORTED_SCHEMA");
+		expect(oneOf.stderr).toContain("oneOf, anyOf, and allOf are not supported");
+
+		writeOpenApiPaths(
+			cwd,
+			`  /users:
+    get:
+      operationId: listUsers
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+`,
+		);
+
+		const additionalProperties = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(additionalProperties.code).toBe(1);
+		expect(additionalProperties.stderr).toContain("nullable or additionalProperties");
+
+		writeOpenApiPaths(
+			cwd,
+			`  /users:
+    get:
+      operationId: listUsers
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MissingUser"
+`,
+		);
+
+		const missingRef = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(missingRef.code).toBe(1);
+		expect(missingRef.stderr).toContain("ROUTA_OPENAPI_MISSING_REF");
+		expect(missingRef.stderr).toContain("#/components/schemas/MissingUser");
+
+		writeOpenApiPaths(
+			cwd,
+			`  /users:
+    get:
+      operationId: listUsers
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas.yaml#/User"
+`,
+		);
+
+		const unsupportedRef = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(unsupportedRef.code).toBe(1);
+		expect(unsupportedRef.stderr).toContain("ROUTA_OPENAPI_UNSUPPORTED_REF");
+		expect(unsupportedRef.stderr).toContain("#/components/schemas/User");
+	});
+
+	it("explains when no supported operations are present", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-no-ops-"));
+		createTypeScriptProject(cwd);
+		writeOpenApiPaths(
+			cwd,
+			`  /users:
+    parameters: []
+`,
+		);
+
+		const result = run(["scaffold", "openapi.yaml"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("ROUTA_OPENAPI_NO_SUPPORTED_OPERATIONS");
+		expect(result.stderr).toContain("Add at least one supported HTTP method");
+	});
+
 	it("rejects OpenAPI operations without operationId", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-missing-operation-id-"));
 		createTypeScriptProject(cwd);
@@ -964,7 +1380,8 @@ paths:
 		const result = run(["scaffold", "openapi.yaml"], { cwd });
 
 		expect(result.code).toBe(1);
-		expect(result.stderr).toContain("Missing operationId");
+		expect(result.stderr).toContain("ROUTA_OPENAPI_MISSING_OPERATION_ID");
+		expect(result.stderr).toContain("operationId: getUsers");
 	});
 
 	it("rejects duplicate operationIds", () => {
@@ -995,7 +1412,9 @@ paths:
 		const result = run(["scaffold", "openapi.yaml"], { cwd });
 
 		expect(result.code).toBe(1);
-		expect(result.stderr).toContain("Duplicate operationId");
+		expect(result.stderr).toContain("ROUTA_OPENAPI_DUPLICATE_OPERATION_ID");
+		expect(result.stderr).toContain("First used by GET /users");
+		expect(result.stderr).toContain("Also used by GET /admins");
 	});
 
 	it("rejects generated names that are not valid TypeScript identifiers", () => {
@@ -1028,7 +1447,7 @@ components:
 		const result = run(["scaffold", "openapi.yaml"], { cwd });
 
 		expect(result.code).toBe(1);
-		expect(result.stderr).toContain("Invalid generated TypeScript identifier");
+		expect(result.stderr).toContain("ROUTA_OPENAPI_INVALID_TYPESCRIPT_IDENTIFIER");
 		expect(result.stderr).toContain("123BadName");
 	});
 
@@ -1137,7 +1556,10 @@ paths:
 		const result = run(["scaffold", "openapi.yaml"], { cwd });
 
 		expect(result.code).toBe(1);
-		expect(result.stderr).toContain("Refusing to overwrite unmanaged file");
+		expect(result.stderr).toContain("ROUTA_SCAFFOLD_UNMANAGED_FILE");
+		expect(result.stderr).toContain(
+			"Routa can only overwrite files tracked in .routa/manifest.json",
+		);
 	});
 
 	it("refuses to overwrite modified generated route files during regeneration", () => {
@@ -1150,7 +1572,40 @@ paths:
 		const result = run(["scaffold", "openapi.yaml", "--yes"], { cwd });
 
 		expect(result.code).toBe(1);
-		expect(result.stderr).toContain("Refusing to overwrite modified generated file");
+		expect(result.stderr).toContain("ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE");
+		expect(result.stderr).toContain("changed since the last Routa manifest hash");
+	});
+
+	it("regenerates modified routes metadata without treating it as user code", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-routes-gen-rewrite-"));
+		createTypeScriptProject(cwd);
+		writeSimpleUsersOpenApi(cwd);
+		run(["scaffold", "openapi.yaml"], { cwd });
+		writeFileSync(join(cwd, ".routa/routes.gen.ts"), "export const routaRoutes = [];\n");
+		writeUsersAndItemOpenApi(cwd);
+
+		const preview = run(["scaffold", "openapi.yaml", "--preview"], { cwd });
+		const result = run(["scaffold", "openapi.yaml", "--yes"], { cwd });
+
+		expect(preview.code).toBe(0);
+		expect(preview.stdout).toContain("~ update .routa/routes.gen.ts");
+		expect(preview.stdout).toContain("framework metadata will be regenerated");
+		expect(result.code).toBe(0);
+		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain('"/users/:id"');
+	});
+
+	it("explains when regeneration cannot prove ownership because the manifest is missing", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-missing-manifest-"));
+		createTypeScriptProject(cwd);
+		writeSimpleUsersOpenApi(cwd);
+		run(["scaffold", "openapi.yaml"], { cwd });
+		unlinkSync(join(cwd, ".routa/manifest.json"));
+
+		const result = run(["scaffold", "openapi.yaml", "--yes"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("ROUTA_SCAFFOLD_UNMANAGED_FILE");
+		expect(result.stderr).toContain("restore .routa/manifest.json");
 	});
 
 	it("requires preview or confirmation before regenerating an existing project", () => {
@@ -1179,6 +1634,9 @@ paths:
 		expect(result.stdout).toContain("Preview diff:");
 		expect(result.stdout).toContain("+ add src/routes/users/$id/route.ts");
 		expect(result.stdout).toContain("~ update .routa/manifest.json");
+		expect(result.stdout).toContain("@@ line");
+		expect(result.stdout).toContain("- ");
+		expect(result.stdout).toContain("+ ");
 		expect(() => readFileSync(join(cwd, "src/routes/users/$id/route.ts"), "utf8")).toThrow();
 		expect(existsSync(join(cwd, "src/routes/users/$id"))).toBe(false);
 	});
@@ -1410,6 +1868,18 @@ export default defineRoute({
 		});
 	});
 
+	it("preserves operationIds from the OpenAPI baseline during source generation", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-operation-id-"));
+		createTypeScriptProject(cwd);
+		writeSimpleUsersOpenApi(cwd);
+		run(["scaffold", "openapi.yaml"], { cwd });
+
+		const openapi = generateOpenApi(cwd);
+
+		expect(openapi.paths?.["/users"]?.get?.operationId).toBe("listUsers");
+		expect(openapi.paths?.["/users"]?.post?.operationId).toBe("createUser");
+	});
+
 	it("reports removed methods in openapi breaking checks", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-breaking-"));
 		createTypeScriptProject(cwd);
@@ -1574,6 +2044,18 @@ function writeUsersAndItemOpenApi(cwd: string): void {
               schema:
                 type: object
 `,
+	);
+}
+
+function writeOpenApiPaths(cwd: string, paths: string): void {
+	writeFileSync(
+		join(cwd, "openapi.yaml"),
+		`openapi: 3.1.0
+info:
+  title: Users API
+  version: 0.0.0
+paths:
+${paths}`,
 	);
 }
 

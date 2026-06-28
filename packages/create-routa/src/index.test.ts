@@ -22,9 +22,20 @@ describe("create-routa", () => {
 		expect(result.files).toContain("package.json");
 		expect(result.files).toContain("src/routa.ts");
 		expect(result.files).toContain("tsconfig.json");
+		expect(result.files).toContain(".routa/manifest.json");
+		expect(result.files).toContain(".routa/openapi-baseline.json");
+		expect(result.files).toContain(".routa/routes.gen.ts");
 		expect(existsSync(join(cwd, "my-api/src/index.ts"))).toBe(false);
 		expect(existsSync(join(cwd, "my-api/src/routes/status/route.ts"))).toBe(true);
 		expect(existsSync(join(cwd, "my-api/openapi.yaml"))).toBe(true);
+		expect(existsSync(join(cwd, "my-api/.routa/manifest.json"))).toBe(true);
+		expect(readFileSync(join(cwd, "my-api/.routa/manifest.json"), "utf8")).toContain(
+			"src/routes/status/route.ts",
+		);
+		expect(readFileSync(join(cwd, "my-api/.routa/openapi-baseline.json"), "utf8")).toContain(
+			'"operationId": "getStatus"',
+		);
+		expect(readFileSync(join(cwd, "my-api/.routa/routes.gen.ts"), "utf8")).toContain('"/status"');
 		const packageJson = readFileSync(join(cwd, "my-api/package.json"), "utf8");
 		expect(packageJson).toContain('"dev": "routa dev"');
 		expect(packageJson).toContain('"start": "routa start"');
@@ -56,6 +67,7 @@ describe("create-routa", () => {
 			expect(output).toContain("pnpm install");
 			expect(output).toContain("pnpm dev");
 			expect(existsSync(join(cwd, "my-api/openapi.yaml"))).toBe(false);
+			expect(existsSync(join(cwd, "my-api/.routa/manifest.json"))).toBe(false);
 		} finally {
 			process.stdout.write = stdout;
 		}

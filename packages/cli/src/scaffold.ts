@@ -10,11 +10,13 @@ type HttpMethod = (typeof httpMethods)[number];
 type OpenApiDocument = {
 	openapi?: string;
 	info?: unknown;
-	paths?: Record<string, Record<string, OpenApiOperation>>;
+	paths?: Record<string, OpenApiPathItem>;
 	components?: {
 		schemas?: Record<string, OpenApiSchema>;
 	};
 };
+
+type OpenApiPathItem = Record<string, OpenApiOperation | unknown>;
 
 type OpenApiOperation = {
 	operationId?: string;
@@ -46,6 +48,11 @@ type OpenApiSchema = {
 	properties?: Record<string, OpenApiSchema>;
 	required?: string[];
 	$ref?: string;
+	oneOf?: unknown[];
+	anyOf?: unknown[];
+	allOf?: unknown[];
+	nullable?: boolean;
+	additionalProperties?: unknown;
 };
 
 type Manifest = {
@@ -81,6 +88,7 @@ export type ScaffoldPreviewChange = {
 	path: string;
 	status: "add" | "update" | "unchanged" | "conflict" | "remove";
 	detail?: string;
+	diff?: string[];
 };
 
 export type ScaffoldOptions = {
@@ -102,14 +110,33 @@ export function scaffoldOpenApi(
 
 	const extension = extname(inputFile).toLowerCase();
 
-	if (![".yaml", ".json"].includes(extension)) {
-		throw new Error("Unsupported OpenAPI input. Use .yaml or .json.");
+	if (![".yaml", ".yml", ".json"].includes(extension)) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_UNSUPPORTED_EXTENSION",
+				`Unsupported OpenAPI input "${inputFile}".`,
+				[
+					"Routa v0 scaffold accepts .yaml, .yml, and .json files.",
+					"Example: routa scaffold openapi.yaml",
+				],
+			),
+		);
 	}
 
 	const absoluteInput = join(cwd, inputFile);
 	const source = relative(cwd, absoluteInput);
+
+	if (!existsSync(absoluteInput)) {
+		throw new Error(
+			scaffoldError("ROUTA_OPENAPI_FILE_NOT_FOUND", `Could not find ${source}.`, [
+				"Run this command from the project root or pass the correct OpenAPI file path.",
+				"Example: routa scaffold openapi.yaml",
+			]),
+		);
+	}
+
 	const raw = readFileSync(absoluteInput, "utf8");
-	const document = parseOpenApi(raw, extension);
+	const document = parseOpenApi(raw, extension, source);
 	validateOpenApiDocument(document);
 	const paths = document.paths ?? {};
 	const generated = new Set<string>();
@@ -349,70 +376,434 @@ declare module "@routa/core" {
 	};
 }
 
-function parseOpenApi(raw: string, extension: string): OpenApiDocument {
-	const document = extension === ".json" ? JSON.parse(raw) : parseYaml(raw);
+function parseOpenApi(raw: string, extension: string, source: string): OpenApiDocument {
+	let document: unknown;
+
+	try {
+		document = extension === ".json" ? JSON.parse(raw) : parseYaml(raw);
+	} catch (error) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_PARSE_ERROR",
+				`${source} could not be parsed as ${extension === ".json" ? "JSON" : "YAML"}.`,
+				[
+					`Parser error: ${error instanceof Error ? error.message : String(error)}`,
+					"Fix the syntax, then rerun the scaffold command.",
+				],
+			),
+		);
+	}
 
 	if (!document || typeof document !== "object" || !("paths" in document)) {
-		throw new Error("Invalid OpenAPI document: missing paths.");
+		throw new Error(formatMissingPathsError(source, document));
+	}
+
+	if (!isRecord((document as OpenApiDocument).paths)) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_INVALID_PATHS",
+				`${source} has an invalid top-level "paths" value.`,
+				[
+					'"paths" must be an object that maps URL paths to HTTP methods.',
+					"Example:",
+					"paths:",
+					"  /users:",
+					"    get:",
+					"      operationId: listUsers",
+				],
+			),
+		);
 	}
 
 	return document as OpenApiDocument;
 }
 
+function formatMissingPathsError(source: string, document: unknown): string {
+	const keys =
+		document && typeof document === "object" && !Array.isArray(document)
+			? Object.keys(document)
+			: [];
+	const pathLikeKeys = keys.filter((key) => key.startsWith("/"));
+	const lines = [`${source} is missing the required top-level "paths" object.`];
+
+	if (pathLikeKeys.length > 0) {
+		lines.push(
+			`Found path-like root key${pathLikeKeys.length === 1 ? "" : "s"} ${pathLikeKeys.map((key) => JSON.stringify(key)).join(", ")}.`,
+			"Those route definitions need to be nested under top-level paths:",
+			"openapi: 3.1.0",
+			"info:",
+			"  title: My API",
+			"  version: 0.0.0",
+			"paths:",
+			`  ${pathLikeKeys[0]}:`,
+			"    get:",
+			"      operationId: listUsers",
+			"      responses:",
+			'        "200":',
+			"          description: OK",
+		);
+	} else if (keys.length > 0) {
+		lines.push(
+			`Found top-level keys: ${keys.map((key) => JSON.stringify(key)).join(", ")}.`,
+			'Expected at least "openapi", "info", and "paths".',
+		);
+	} else {
+		lines.push(
+			"The file is empty or does not contain an OpenAPI object.",
+			'Expected at least "openapi", "info", and "paths".',
+		);
+	}
+
+	return scaffoldError("ROUTA_OPENAPI_MISSING_PATHS", lines[0], lines.slice(1));
+}
+
 function validateOpenApiDocument(document: OpenApiDocument): void {
-	const operationIds = new Set<string>();
+	if (!document.openapi) {
+		throw new Error(
+			scaffoldError("ROUTA_OPENAPI_MISSING_OPENAPI_VERSION", 'Missing top-level "openapi".', [
+				"Add `openapi: 3.1.0` at the top of the file.",
+			]),
+		);
+	}
+
+	if (!isRecord(document.info)) {
+		throw new Error(
+			scaffoldError("ROUTA_OPENAPI_MISSING_INFO", 'Missing or invalid top-level "info".', [
+				"Add API metadata before paths:",
+				"info:",
+				"  title: My API",
+				"  version: 0.0.0",
+			]),
+		);
+	}
+
+	const operationIds = new Map<string, string>();
+	let supportedOperationCount = 0;
 
 	for (const name of Object.keys(document.components?.schemas ?? {})) {
 		validateGeneratedIdentifier(
 			refName(`#/components/schemas/${name}`),
 			`component schema ${name}`,
 		);
+		validateSchema(document.components?.schemas?.[name], document, `component schema ${name}`);
 	}
 
 	for (const [path, pathItem] of Object.entries(document.paths ?? {})) {
+		if (!path.startsWith("/")) {
+			throw new Error(
+				scaffoldError("ROUTA_OPENAPI_INVALID_PATH_KEY", `Invalid path key "${path}".`, [
+					'OpenAPI path keys must start with "/".',
+					`Use "/${path.replace(/^\/+/, "")}" instead of "${path}".`,
+				]),
+			);
+		}
+
+		if (!isRecord(pathItem)) {
+			throw new Error(
+				scaffoldError("ROUTA_OPENAPI_INVALID_PATH_ITEM", `Invalid path item for ${path}.`, [
+					"Each path must contain HTTP method objects such as get, post, patch, or delete.",
+				]),
+			);
+		}
+
 		for (const [method, operation] of Object.entries(pathItem)) {
-			if (!httpMethods.includes(method as HttpMethod)) {
+			if (isOpenApiPathItemMetadata(method)) {
 				continue;
 			}
 
-			if (!operation.operationId) {
-				throw new Error(`Missing operationId for ${method.toUpperCase()} ${path}.`);
+			if (!httpMethods.includes(method as HttpMethod)) {
+				const lowerMethod = method.toLowerCase();
+				const maybeCase = httpMethods.includes(lowerMethod as HttpMethod);
+				throw new Error(
+					scaffoldError(
+						"ROUTA_OPENAPI_UNSUPPORTED_METHOD",
+						`Unsupported method "${method}" under ${path}.`,
+						[
+							maybeCase
+								? `Use lowercase "${lowerMethod}" instead of "${method}".`
+								: `Allowed methods: ${httpMethods.join(", ")}.`,
+						],
+					),
+				);
 			}
 
-			if (operationIds.has(operation.operationId)) {
-				throw new Error(`Duplicate operationId: ${operation.operationId}.`);
+			if (!isRecord(operation)) {
+				throw new Error(
+					scaffoldError(
+						"ROUTA_OPENAPI_INVALID_OPERATION",
+						`${method.toUpperCase()} ${path} must be an operation object.`,
+						["Add operationId and responses under this method."],
+					),
+				);
+			}
+			const typedOperation = operation as OpenApiOperation;
+
+			if (!typedOperation.operationId) {
+				throw new Error(
+					scaffoldError(
+						"ROUTA_OPENAPI_MISSING_OPERATION_ID",
+						`${method.toUpperCase()} ${path} is missing operationId.`,
+						[`Add operationId: ${suggestOperationId(method as HttpMethod, path)} under ${method}.`],
+					),
+				);
 			}
 
-			operationIds.add(operation.operationId);
+			const operationLocation = `${method.toUpperCase()} ${path}`;
+			const previousLocation = operationIds.get(typedOperation.operationId);
 
-			if (method === "get" && operation.requestBody) {
-				throw new Error(`GET ${path} cannot declare a request body.`);
+			if (previousLocation) {
+				throw new Error(
+					scaffoldError(
+						"ROUTA_OPENAPI_DUPLICATE_OPERATION_ID",
+						`Duplicate operationId "${typedOperation.operationId}".`,
+						[
+							`First used by ${previousLocation}.`,
+							`Also used by ${operationLocation}.`,
+							"Operation IDs must be unique because Routa uses them for generated schema names.",
+						],
+					),
+				);
 			}
 
-			const names = operationNames(method as HttpMethod, path, operation);
+			operationIds.set(typedOperation.operationId, operationLocation);
+			supportedOperationCount++;
+
+			if (method === "get" && typedOperation.requestBody) {
+				throw new Error(
+					scaffoldError(
+						"ROUTA_OPENAPI_GET_BODY_UNSUPPORTED",
+						`GET ${path} cannot declare a request body.`,
+						["Routa v0 does not support request bodies on GET route contracts."],
+					),
+				);
+			}
+
+			validatePathParameters(path, typedOperation);
+			validateRequestBody(typedOperation, method as HttpMethod, path, document);
+			validateResponses(typedOperation, method as HttpMethod, path, document);
+
+			const names = operationNames(method as HttpMethod, path, typedOperation);
 			for (const [kind, name] of Object.entries(names)) {
 				validateGeneratedIdentifier(name, `${kind} name for ${method.toUpperCase()} ${path}`);
 			}
-
-			for (const mediaType of Object.keys(operation.requestBody?.content ?? {})) {
-				if (mediaType !== "application/json") {
-					throw new Error(
-						`Unsupported request media type for ${method.toUpperCase()} ${path}. Use application/json.`,
-					);
-				}
-			}
-
-			for (const [status, response] of Object.entries(operation.responses ?? {})) {
-				for (const mediaType of Object.keys(response.content ?? {})) {
-					if (mediaType !== "application/json") {
-						throw new Error(
-							`Unsupported response media type for ${method.toUpperCase()} ${path} ${status}. Use application/json.`,
-						);
-					}
-				}
-			}
 		}
 	}
+
+	if (supportedOperationCount === 0) {
+		throw new Error(
+			scaffoldError("ROUTA_OPENAPI_NO_SUPPORTED_OPERATIONS", "No scaffoldable operations found.", [
+				`Add at least one supported HTTP method under paths: ${httpMethods.join(", ")}.`,
+			]),
+		);
+	}
+}
+
+function validatePathParameters(path: string, operation: OpenApiOperation): void {
+	const pathParams = new Set(
+		path
+			.split("/")
+			.filter((segment) => segment.startsWith("{") && segment.endsWith("}"))
+			.map((segment) => segment.slice(1, -1)),
+	);
+	const declaredParams = new Set(
+		(operation.parameters ?? [])
+			.filter((parameter) => parameter.in === "path" && parameter.name)
+			.map((parameter) => parameter.name as string),
+	);
+
+	for (const name of pathParams) {
+		if (!declaredParams.has(name)) {
+			throw new Error(
+				scaffoldError(
+					"ROUTA_OPENAPI_MISSING_PATH_PARAMETER",
+					`${path} is missing path parameter "${name}".`,
+					[
+						`Add a parameter entry: { name: "${name}", in: "path", required: true, schema: { type: "string" } }.`,
+					],
+				),
+			);
+		}
+	}
+
+	for (const name of declaredParams) {
+		if (!pathParams.has(name)) {
+			throw new Error(
+				scaffoldError(
+					"ROUTA_OPENAPI_UNUSED_PATH_PARAMETER",
+					`Path parameter "${name}" is declared but not used in ${path}.`,
+					[`Either add {${name}} to the path or remove the parameter entry.`],
+				),
+			);
+		}
+	}
+}
+
+function validateRequestBody(
+	operation: OpenApiOperation,
+	method: HttpMethod,
+	path: string,
+	document: OpenApiDocument,
+): void {
+	if (!operation.requestBody) {
+		return;
+	}
+
+	if (!isRecord(operation.requestBody.content)) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_INVALID_REQUEST_BODY",
+				`${method.toUpperCase()} ${path} has an invalid requestBody.content value.`,
+				["requestBody.content must be an object with an application/json entry."],
+			),
+		);
+	}
+
+	for (const [mediaType, entry] of Object.entries(operation.requestBody.content)) {
+		if (mediaType !== "application/json") {
+			throw new Error(
+				scaffoldError(
+					"ROUTA_OPENAPI_UNSUPPORTED_REQUEST_MEDIA_TYPE",
+					`Unsupported request media type "${mediaType}" for ${method.toUpperCase()} ${path}.`,
+					["Routa v0 scaffold only supports application/json request bodies."],
+				),
+			);
+		}
+
+		validateSchema(entry.schema, document, `${method.toUpperCase()} ${path} request body`);
+	}
+}
+
+function validateResponses(
+	operation: OpenApiOperation,
+	method: HttpMethod,
+	path: string,
+	document: OpenApiDocument,
+): void {
+	if (!isRecord(operation.responses) || Object.keys(operation.responses).length === 0) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_MISSING_RESPONSES",
+				`${method.toUpperCase()} ${path} is missing responses.`,
+				[
+					"Add at least one response, for example:",
+					"responses:",
+					'  "200":',
+					"    description: OK",
+				],
+			),
+		);
+	}
+
+	for (const [status, response] of Object.entries(operation.responses)) {
+		if (!/^[1-5][0-9][0-9]$/.test(status)) {
+			throw new Error(
+				scaffoldError(
+					"ROUTA_OPENAPI_INVALID_RESPONSE_STATUS",
+					`Invalid response status "${status}" for ${method.toUpperCase()} ${path}.`,
+					['Use explicit numeric HTTP status strings such as "200" or "201".'],
+				),
+			);
+		}
+
+		if (response.content === undefined) {
+			continue;
+		}
+
+		if (!isRecord(response.content)) {
+			throw new Error(
+				scaffoldError(
+					"ROUTA_OPENAPI_INVALID_RESPONSE_CONTENT",
+					`${method.toUpperCase()} ${path} response ${status} has invalid content.`,
+					["Response content must be an object with an application/json entry."],
+				),
+			);
+		}
+
+		for (const [mediaType, entry] of Object.entries(response.content)) {
+			if (mediaType !== "application/json") {
+				throw new Error(
+					scaffoldError(
+						"ROUTA_OPENAPI_UNSUPPORTED_RESPONSE_MEDIA_TYPE",
+						`Unsupported response media type "${mediaType}" for ${method.toUpperCase()} ${path} ${status}.`,
+						["Routa v0 scaffold only supports application/json responses."],
+					),
+				);
+			}
+
+			validateSchema(entry.schema, document, `${method.toUpperCase()} ${path} response ${status}`);
+		}
+	}
+}
+
+function validateSchema(
+	schema: OpenApiSchema | undefined,
+	document: OpenApiDocument,
+	location: string,
+): void {
+	if (!schema) {
+		return;
+	}
+
+	if (schema.oneOf || schema.anyOf || schema.allOf) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_UNSUPPORTED_SCHEMA",
+				`Unsupported composed schema in ${location}.`,
+				[
+					"Routa v0 supports object, array, string, number, integer, boolean, enum, and local component refs.",
+					"oneOf, anyOf, and allOf are not supported by scaffold yet.",
+				],
+			),
+		);
+	}
+
+	if (schema.nullable || schema.additionalProperties !== undefined) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_UNSUPPORTED_SCHEMA",
+				`Unsupported schema option in ${location}.`,
+				["Routa v0 scaffold does not support nullable or additionalProperties yet."],
+			),
+		);
+	}
+
+	if (schema.$ref) {
+		const name = refName(schema.$ref);
+
+		if (!document.components?.schemas?.[name]) {
+			throw new Error(
+				scaffoldError(
+					"ROUTA_OPENAPI_MISSING_REF",
+					`Missing $ref target ${schema.$ref} in ${location}.`,
+					[`Add components.schemas.${name}, or change the $ref to an existing component schema.`],
+				),
+			);
+		}
+
+		return;
+	}
+
+	validateSchema(schema.items, document, `${location} items`);
+
+	for (const [name, property] of Object.entries(schema.properties ?? {})) {
+		validateSchema(property, document, `${location} property "${name}"`);
+	}
+}
+
+function isOpenApiPathItemMetadata(key: string): boolean {
+	return ["parameters", "summary", "description", "servers"].includes(key);
+}
+
+function suggestOperationId(method: HttpMethod, path: string): string {
+	return `${method}${pascalCase(path)}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function scaffoldError(code: string, message: string, details: string[] = []): string {
+	return [`${code}: ${message}`, ...details].join("\n");
 }
 
 function pathToRouteDir(openApiPath: string): string {
@@ -653,10 +1044,22 @@ function refsInSchema(schema: OpenApiSchema | undefined): string[] {
 }
 
 function refName(ref: string): string {
+	if (!ref.startsWith("#/components/schemas/")) {
+		throw new Error(
+			scaffoldError("ROUTA_OPENAPI_UNSUPPORTED_REF", `Unsupported OpenAPI $ref "${ref}".`, [
+				'Routa v0 scaffold only supports local refs like "#/components/schemas/User".',
+			]),
+		);
+	}
+
 	const name = ref.split("/").at(-1);
 
 	if (!name) {
-		throw new Error(`Unsupported OpenAPI $ref: ${ref}`);
+		throw new Error(
+			scaffoldError("ROUTA_OPENAPI_UNSUPPORTED_REF", `Unsupported OpenAPI $ref "${ref}".`, [
+				'Routa v0 scaffold only supports local refs like "#/components/schemas/User".',
+			]),
+		);
 	}
 
 	return pascalCase(name);
@@ -665,7 +1068,13 @@ function refName(ref: string): string {
 function validateGeneratedIdentifier(name: string, context: string): void {
 	if (!/^[$A-Z_a-z][$\w]*$/.test(name)) {
 		throw new Error(
-			`Invalid generated TypeScript identifier ${name} from ${context}. Rename it before scaffolding.`,
+			scaffoldError(
+				"ROUTA_OPENAPI_INVALID_TYPESCRIPT_IDENTIFIER",
+				`Invalid generated TypeScript identifier "${name}" from ${context}.`,
+				[
+					"Rename the OpenAPI operationId, parameter, or component so Routa can generate valid TypeScript.",
+				],
+			),
 		);
 	}
 }
@@ -710,11 +1119,39 @@ function writeManagedFile(
 		const previous = previousManifest?.generated.find((file) => file.path === path);
 
 		if (!previous) {
-			throw new Error(`Refusing to overwrite unmanaged file: ${path}`);
+			if (canRewriteFrameworkMetadata(path)) {
+				writeFile(absolutePath, content);
+				return;
+			}
+
+			throw new Error(
+				scaffoldError(
+					"ROUTA_SCAFFOLD_UNMANAGED_FILE",
+					`Refusing to overwrite unmanaged file: ${path}.`,
+					[
+						"Routa can only overwrite files tracked in .routa/manifest.json.",
+						"If this is user-owned code, move it or rename it before scaffolding.",
+						"If this was generated by Routa, restore .routa/manifest.json or run with --preview to inspect conflicts.",
+					],
+				),
+			);
 		}
 
-		if (previous.sha256 && sha256(readFileSync(absolutePath, "utf8")) !== previous.sha256) {
-			throw new Error(`Refusing to overwrite modified generated file: ${path}`);
+		if (
+			previous.sha256
+			&& sha256(readFileSync(absolutePath, "utf8")) !== previous.sha256
+			&& !canRewriteFrameworkMetadata(path)
+		) {
+			throw new Error(
+				scaffoldError(
+					"ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE",
+					`Refusing to overwrite modified generated file: ${path}.`,
+					[
+						"This file changed since the last Routa manifest hash.",
+						"Move manual edits into application-owned files or review with --preview before regenerating.",
+					],
+				),
+			);
 		}
 	}
 
@@ -738,7 +1175,16 @@ function removeStaleGeneratedFiles(
 		}
 
 		if (previous.sha256 && sha256(readFileSync(absolutePath, "utf8")) !== previous.sha256) {
-			throw new Error(`Refusing to remove modified generated file: ${previous.path}`);
+			throw new Error(
+				scaffoldError(
+					"ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE",
+					`Refusing to remove modified generated file: ${previous.path}.`,
+					[
+						"This file is no longer present in the OpenAPI output, but it has local edits.",
+						"Review with --preview and preserve any user-owned logic before deleting it.",
+					],
+				),
+			);
 		}
 
 		unlinkSync(absolutePath);
@@ -787,18 +1233,57 @@ function previewChanges(
 		}
 
 		if (previous?.sha256 && currentHash !== previous.sha256) {
+			if (canRewriteFrameworkMetadata(path)) {
+				changes.push({
+					path,
+					status: "update",
+					detail: "framework metadata will be regenerated",
+					diff: previewDiff(currentContent, nextContent),
+				});
+				continue;
+			}
+
 			changes.push({
 				path,
 				status: "conflict",
 				detail: "generated file has local edits",
+				diff: previewDiff(currentContent, nextContent),
 			});
 			continue;
 		}
 
-		changes.push({ path, status: currentHash === nextHash ? "unchanged" : "update" });
+		changes.push({
+			path,
+			status: currentHash === nextHash ? "unchanged" : "update",
+			diff: currentHash === nextHash ? undefined : previewDiff(currentContent, nextContent),
+		});
 	}
 
 	return changes;
+}
+
+function previewDiff(currentContent: string, nextContent: string): string[] {
+	const currentLines = currentContent.split("\n");
+	const nextLines = nextContent.split("\n");
+	const max = Math.max(currentLines.length, nextLines.length);
+
+	for (let index = 0; index < max; index++) {
+		if (currentLines[index] === nextLines[index]) {
+			continue;
+		}
+
+		return [
+			`@@ line ${index + 1} @@`,
+			`- ${currentLines[index] ?? ""}`,
+			`+ ${nextLines[index] ?? ""}`,
+		];
+	}
+
+	return [];
+}
+
+function canRewriteFrameworkMetadata(path: string): boolean {
+	return path === ".routa/routes.gen.ts";
 }
 
 function sha256(content: string): string {

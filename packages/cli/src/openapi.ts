@@ -11,6 +11,7 @@ type OpenApiLike = {
 		Record<
 			string,
 			{
+				operationId?: string;
 				parameters?: Array<Record<string, unknown>>;
 				requestBody?: Record<string, unknown>;
 				responses?: Record<string, unknown>;
@@ -105,10 +106,12 @@ export function generateOpenApi(cwd = process.cwd()): OpenApiLike {
 
 	for (const route of validation.routes) {
 		const contracts = readRouteContracts(cwd, route.file, components?.schemas ?? {});
-		paths[route.path.replaceAll(/:([^/]+)/g, "{$1}")] = Object.fromEntries(
+		const openApiPath = route.path.replaceAll(/:([^/]+)/g, "{$1}");
+		paths[openApiPath] = Object.fromEntries(
 			Object.entries(route.responses).map(([method, statuses]) => [
 				method,
 				{
+					...operationIdForBaseline(baseline, openApiPath, method),
 					...operationInput(route.path, contracts[method]?.input),
 					responses: Object.fromEntries(
 						statuses.map((status) => [
@@ -134,6 +137,15 @@ export function generateOpenApi(cwd = process.cwd()): OpenApiLike {
 		paths,
 		...(components ? { components } : {}),
 	};
+}
+
+function operationIdForBaseline(
+	baseline: OpenApiLike | undefined,
+	path: string,
+	method: string,
+): { operationId: string } | Record<string, never> {
+	const operationId = baseline?.paths?.[path]?.[method]?.operationId;
+	return operationId ? { operationId } : {};
 }
 
 function invalidGraphDiagnostics(document: OpenApiLike): string[] {

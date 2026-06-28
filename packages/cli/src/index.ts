@@ -164,6 +164,10 @@ function formatScaffoldResult(result: ReturnType<typeof scaffoldOpenApi>): strin
 			lines.push(
 				`${previewMarker(change.status)} ${change.path}${change.detail ? ` (${change.detail})` : ""}`,
 			);
+
+			if (change.diff) {
+				lines.push(...change.diff.map((line) => `  ${line}`));
+			}
 		}
 	}
 
