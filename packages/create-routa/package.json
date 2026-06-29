@@ -1,0 +1,25 @@
+{
+	"name": "create-routa",
+	"version": "0.0.0",
+	"private": false,
+	"type": "module",
+	"bin": {
+		"create-routa": "./dist/index.js"
+	},
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "tsc -p tsconfig.json",
+		"typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+		"lint": "biome lint src",
+		"test": "vitest run"
+	}
+}

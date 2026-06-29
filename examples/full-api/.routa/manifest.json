@@ -1,0 +1,114 @@
+{
+	"version": 1,
+	"openapi": {
+		"baseline": ".routa/openapi-baseline.json"
+	},
+	"generated": [
+		{
+			"path": "src/routes/admin/audit-events/route.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"listAuditEvents"
+			],
+			"kind": "route",
+			"sha256": "54bac4066e42743f917471b465098c82321e0c1b3c43818095db39db723fb5e1"
+		},
+		{
+			"path": "src/routes/admin/audit-events/schemas.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"listAuditEvents"
+			],
+			"kind": "schema",
+			"sha256": "bc6cc175ebbe469f68eb8285eee2fe12b415cba07ff1907cdde2551ea8318c29"
+		},
+		{
+			"path": "src/routes/auth/session/route.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"getSession"
+			],
+			"kind": "route",
+			"sha256": "8306a8181a1317e3959ec75a98c519e8ecf0117370badc4dd445ce1c9c150541"
+		},
+		{
+			"path": "src/routes/auth/session/schemas.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"getSession"
+			],
+			"kind": "schema",
+			"sha256": "1fb82522caae98418a691291e8f04456b33fa5b1e1370d3d299991d6e00efcb8"
+		},
+		{
+			"path": "src/routes/status/route.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"getStatus"
+			],
+			"kind": "route",
+			"sha256": "7a0070a3b05766f48a623bbe5707d65a2f5315141e033d40b02e0644a295d4e6"
+		},
+		{
+			"path": "src/routes/status/schemas.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"getStatus"
+			],
+			"kind": "schema",
+			"sha256": "86bb6d4269da63a36f4f833bd5c2dc5b7a6c5c8ec24b50bd99f2bab753c6ab35"
+		},
+		{
+			"path": "src/routes/tenants/$tenantId/projects/$projectId/route.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"getProject",
+				"updateProject"
+			],
+			"kind": "route",
+			"sha256": "8595b56be248462c5dc2ef7bbda9a0b399e458634fc23ff47aa64fb5754cfeab"
+		},
+		{
+			"path": "src/routes/tenants/$tenantId/projects/$projectId/schemas.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"getProject",
+				"updateProject"
+			],
+			"kind": "schema",
+			"sha256": "38ee9f09a7ddce871bce7f36d7418d21e20bb01ca3e3885ffb821a9525ba1867"
+		},
+		{
+			"path": "src/routes/tenants/$tenantId/projects/route.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"listProjects",
+				"createProject"
+			],
+			"kind": "route",
+			"sha256": "211315ebd3109bce9d3cb1a89107833763508b351cf2264c3a857d2f589f7b6d"
+		},
+		{
+			"path": "src/routes/tenants/$tenantId/projects/schemas.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"listProjects",
+				"createProject"
+			],
+			"kind": "schema",
+			"sha256": "e0b45fb7d74da769056f009be4b2bca2e5e3c5797029eae37d4b41803dc5104e"
+		},
+		{
+			"path": ".routa/routes.gen.ts",
+			"source": "openapi.yaml",
+			"kind": "route-metadata",
+			"sha256": "4131a3067386fdd5845bb0bdf918bf2532500488df16fa1728941598c8d942cf"
+		},
+		{
+			"path": ".routa/openapi-baseline.json",
+			"source": "openapi.yaml",
+			"kind": "openapi-baseline",
+			"sha256": "485db2316d45d9c28b35f35cf1636827a14723f3d672a637611b78bddbf901fa"
+		}
+	]
+}

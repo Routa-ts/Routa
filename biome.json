@@ -1,0 +1,129 @@
+{
+	"$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+	"root": true,
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true,
+		"defaultBranch": "main"
+	},
+	"files": {
+		"ignoreUnknown": true,
+		"maxSize": 1048576,
+		"includes": [
+			"**",
+			"!**/node_modules",
+			"!**/dist",
+			"!**/coverage",
+			"!**/.turbo",
+			"!**/.pnpm-store",
+			"!**/.routa",
+			"!pnpm-lock.yaml"
+		]
+	},
+	"formatter": {
+		"enabled": true,
+		"formatWithErrors": false,
+		"indentStyle": "tab",
+		"indentWidth": 2,
+		"lineEnding": "lf",
+		"lineWidth": 100,
+		"bracketSpacing": true,
+		"trailingNewline": true
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"preset": "recommended",
+			"correctness": {
+				"noInvalidUseBeforeDeclaration": "error",
+				"noUndeclaredDependencies": "error",
+				"noUnusedImports": "error",
+				"noUnusedVariables": "error",
+				"useImportExtensions": "off",
+				"useJsonImportAttributes": "off"
+			},
+			"suspicious": {
+				"noConsole": "warn",
+				"noDebugger": "error",
+				"noExplicitAny": "off",
+				"noFocusedTests": "error",
+				"noSkippedTests": "error",
+				"noTsIgnore": "error",
+				"useAwait": "warn"
+			},
+			"style": {
+				"noDefaultExport": "off",
+				"noInferrableTypes": "off",
+				"noMagicNumbers": "off",
+				"useExportType": "warn",
+				"useImportType": "error",
+				"useNodejsImportProtocol": "error",
+				"useTemplate": "warn"
+			},
+			"complexity": {
+				"noBannedTypes": "error",
+				"noUselessConstructor": "error",
+				"useOptionalChain": "warn"
+			},
+			"security": {
+				"noBlankTarget": "error",
+				"noGlobalEval": "error",
+				"noSecrets": "error"
+			},
+			"performance": {
+				"noAccumulatingSpread": "warn"
+			}
+		}
+	},
+	"javascript": {
+		"formatter": {
+			"arrowParentheses": "always",
+			"quoteStyle": "double",
+			"jsxQuoteStyle": "double",
+			"quoteProperties": "asNeeded",
+			"semicolons": "always",
+			"trailingCommas": "all",
+			"operatorLinebreak": "before"
+		}
+	},
+	"json": {
+		"parser": {
+			"allowComments": false,
+			"allowTrailingCommas": false
+		},
+		"formatter": {
+			"enabled": true,
+			"trailingCommas": "none"
+		}
+	},
+	"assist": {
+		"enabled": true,
+		"actions": {
+			"source": {
+				"recommended": true
+			}
+		}
+	},
+	"overrides": [
+		{
+			"includes": ["**/*.test.ts", "**/*.spec.ts"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noConsole": "off"
+					},
+					"correctness": {
+						"noUndeclaredDependencies": "off"
+					},
+					"complexity": {
+						"noExcessiveNestedTestSuites": "warn"
+					},
+					"security": {
+						"noSecrets": "off"
+					}
+				}
+			}
+		}
+	]
+}

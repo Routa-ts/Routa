@@ -1,0 +1,92 @@
+{
+	"version": 1,
+	"openapi": {
+		"baseline": ".routa/openapi-baseline.json"
+	},
+	"generated": [
+		{
+			"path": "src/routes/status/route.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"getStatus"
+			],
+			"kind": "route",
+			"sha256": "749e1040309ff64add2d12c11bb36414489e4bf974ae08f989b30b29effb020c"
+		},
+		{
+			"path": "src/routes/status/schemas.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"getStatus"
+			],
+			"kind": "schema",
+			"sha256": "5315692bca1e43e1216e0933fe58fded206dfca2da578fb2acde8739d30627eb"
+		},
+		{
+			"path": "src/routes/users/$userId/posts/route.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"listUserPosts"
+			],
+			"kind": "route",
+			"sha256": "c1c0821b9111d18f328cefdd9eae532bc96ff414fa53c7f6906688193209be46"
+		},
+		{
+			"path": "src/routes/users/$userId/posts/schemas.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"listUserPosts"
+			],
+			"kind": "schema",
+			"sha256": "56028a26a2de438f4af5f344b0c3d647cf12ef2e0c68df2cb8603d15d0fb382b"
+		},
+		{
+			"path": "src/routes/users/$userId/route.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"getUser",
+				"updateUser",
+				"deleteUser"
+			],
+			"kind": "route",
+			"sha256": "3ddf26194dd527c2d5bdff0e865b2cccfed6a7744eaec02c6873708477aeb43e"
+		},
+		{
+			"path": "src/routes/users/$userId/schemas.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"getUser",
+				"updateUser",
+				"deleteUser"
+			],
+			"kind": "schema",
+			"sha256": "6d8b014e1728cd67d25a3256bd2104f41c397beec706a174f11779cbf5c052df"
+		},
+		{
+			"path": "src/routes/users/route.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"listUsers",
+				"createUser"
+			],
+			"kind": "route",
+			"sha256": "a334c00cfc9c99718f4daf01f72f2a74234c14677c358cd20be4167c0afdb439"
+		},
+		{
+			"path": "src/routes/users/schemas.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"listUsers",
+				"createUser"
+			],
+			"kind": "schema",
+			"sha256": "fc5217b02bf8d0424885d00d8f6a5e0f65c5615406134103e411be44eed1f811"
+		},
+		{
+			"path": ".routa/openapi-baseline.json",
+			"source": "openapi.yaml",
+			"kind": "openapi-baseline",
+			"sha256": "3809e82a1661a36e4851a08d3531b3b37b6b72491057498107b45f8b34bf4180"
+		}
+	]
+}
