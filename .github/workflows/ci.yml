@@ -1,0 +1,207 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repo-checks:
+    name: Repo checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run repository checks
+        run: pnpm check
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run lint
+        run: pnpm lint
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run typecheck
+        run: pnpm typecheck
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace CLIs
+        run: pnpm --filter './packages/*' build
+
+      - name: Link local Routa CLI
+        run: |
+          mkdir -p node_modules/.bin examples/basic-api/node_modules/.bin examples/full-api/node_modules/.bin
+          printf '%s\n' '#!/usr/bin/env sh' 'exec node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" "$@"' > node_modules/.bin/routa
+          chmod +x node_modules/.bin/routa
+          cp node_modules/.bin/routa examples/basic-api/node_modules/.bin/routa
+          cp node_modules/.bin/routa examples/full-api/node_modules/.bin/routa
+
+      - name: Run tests
+        run: pnpm test
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace CLIs
+        run: pnpm --filter './packages/*' build
+
+      - name: Link local Routa CLI
+        run: |
+          mkdir -p node_modules/.bin examples/basic-api/node_modules/.bin examples/full-api/node_modules/.bin
+          printf '%s\n' '#!/usr/bin/env sh' 'exec node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" "$@"' > node_modules/.bin/routa
+          chmod +x node_modules/.bin/routa
+          cp node_modules/.bin/routa examples/basic-api/node_modules/.bin/routa
+          cp node_modules/.bin/routa examples/full-api/node_modules/.bin/routa
+
+      - name: Run build
+        run: pnpm build
+
+  cli-validation:
+    name: CLI validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace CLIs
+        run: pnpm --filter './packages/*' build
+
+      - name: Link local Routa CLI
+        run: |
+          mkdir -p node_modules/.bin examples/basic-api/node_modules/.bin examples/full-api/node_modules/.bin
+          printf '%s\n' '#!/usr/bin/env sh' 'exec node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" "$@"' > node_modules/.bin/routa
+          chmod +x node_modules/.bin/routa
+          cp node_modules/.bin/routa examples/basic-api/node_modules/.bin/routa
+          cp node_modules/.bin/routa examples/full-api/node_modules/.bin/routa
+
+      - name: Build examples
+        run: pnpm build
+
+      - name: Run generated project checks
+        run: pnpm --filter './examples/*' check
+
+      - name: Run OpenAPI checks
+        run: pnpm --filter './examples/*' openapi:check
+
+      - name: Run CLI smoke test
+        run: scripts/scaffold-error-smoke.sh

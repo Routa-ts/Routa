@@ -2130,6 +2130,7 @@ export default defineRoute({
 			},
 		]);
 		expect(operation?.requestBody).toEqual({
+			required: true,
 			content: {
 				"application/json": {
 					schema: {
