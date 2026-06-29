@@ -326,6 +326,10 @@ function validateRuntimeOutput(
 
 	for (const route of routes) {
 		runtimeFiles.add(route.file);
+		const schemaFile = join(dirname(route.file), "schemas.ts");
+		if (existsSync(join(cwd, schemaFile))) {
+			runtimeFiles.add(schemaFile);
+		}
 		for (const middleware of route.middleware) {
 			runtimeFiles.add(middleware.file);
 		}

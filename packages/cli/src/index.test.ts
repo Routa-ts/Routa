@@ -808,6 +808,51 @@ export default defineRoute({
 		expect(start.stderr).toContain("Run routa build first.");
 	});
 
+	it("fails production start preparation when generated schema output is missing", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-start-missing-schema-dist-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/status/schemas.ts"),
+			`import { z } from "zod";
+
+export const GetStatusResponse = z.object({ ok: z.boolean() });
+`,
+		);
+		writeFileSync(
+			join(cwd, "src/routes/status/route.ts"),
+			`import { createRoute, defineRoute } from "@routa/core";
+import { GetStatusResponse } from "./schemas.js";
+
+export default defineRoute({
+\tget: createRoute({
+\t\tresponses: {
+\t\t\tsuccess: {
+\t\t\t\tstatus: 200,
+\t\t\t\tschema: GetStatusResponse,
+\t\t\t},
+\t\t},
+\t\trun: () => ({ type: "success", data: { ok: true } }),
+\t}),
+});
+`,
+		);
+
+		const dev = run(["dev", "--print"], { cwd });
+		writeCompiledRuntimeFiles(cwd, [
+			"src/routa.ts",
+			".routa/routes.gen.ts",
+			"src/routes/status/route.ts",
+		]);
+		const start = run(["start", "--print"], { cwd });
+
+		expect(dev.code).toBe(0);
+		expect(start.code).toBe(1);
+		expect(start.stderr).toContain(
+			"Missing compiled runtime output for src/routes/status/schemas.ts.",
+		);
+	});
+
 	it("stubs empty route files without overwriting user code", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-route-stub-"));
 		createTypeScriptProject(cwd);
