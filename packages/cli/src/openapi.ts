@@ -267,7 +267,7 @@ function operationInput(
 		...(input?.body
 			? {
 					requestBody: {
-						...requestBodyMetadataForBaseline(baselineOperation?.requestBody),
+						...requestBodyMetadata(input.body, baselineOperation?.requestBody),
 						content: {
 							"application/json": {
 								schema: input.body,
@@ -280,14 +280,20 @@ function operationInput(
 }
 
 /**
- * Looks up baseline request body metadata that route code does not yet model.
+ * Builds request body metadata from route code, falling back to the baseline when needed.
  *
+ * @param body - The parsed route body contract.
  * @param requestBody - The baseline request body to read from.
  * @returns Request body metadata that should survive regeneration.
  */
-function requestBodyMetadataForBaseline(
+function requestBodyMetadata(
+	body: unknown,
 	requestBody: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
+	if (body) {
+		return { required: true };
+	}
+
 	return "required" in (requestBody ?? {}) ? { required: requestBody?.required } : {};
 }
 
