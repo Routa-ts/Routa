@@ -42,7 +42,7 @@ export type MiddlewareProvidedCtx<TProvides extends MiddlewareProvidesSpec> = {
 export type MiddlewareContract<
 	TRequires extends readonly RegisteredCtxKey[] = readonly RegisteredCtxKey[],
 	TProvides extends MiddlewareProvidesSpec = Record<never, never>,
-	TRejects extends readonly string[] = readonly string[],
+	TRejects extends readonly string[] = readonly never[],
 	TInput extends RouteInput | undefined = RouteInput | undefined,
 > = {
 	requires?: TRequires;
@@ -280,7 +280,7 @@ export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPa
 export function createMiddleware<
 	const TRequires extends readonly RegisteredCtxKey[] = readonly RegisteredCtxKey[],
 	const TProvides extends MiddlewareProvidesSpec = Record<never, never>,
-	const TRejects extends readonly string[] = readonly string[],
+	const TRejects extends readonly string[] = readonly never[],
 	const TInput extends RouteInput | undefined = undefined,
 >(
 	contract: MiddlewareContract<TRequires, TProvides, TRejects, TInput>,

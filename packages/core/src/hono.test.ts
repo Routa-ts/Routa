@@ -366,7 +366,7 @@ describe("createHonoApp", () => {
 		});
 	});
 
-	it("returns problem details for malformed cookies", async () => {
+	it("keeps percent-encoded cookie values raw", async () => {
 		const app = createHonoApp([
 			{
 				method: "get",
@@ -378,10 +378,10 @@ describe("createHonoApp", () => {
 					responses: {
 						success: {
 							status: 200,
-							schema: z.object({ ok: z.boolean() }),
+							schema: z.object({ session: z.string().optional() }),
 						},
 					},
-					run: () => ({ type: "success", data: { ok: true } }),
+					run: ({ input }) => ({ type: "success", data: input.cookies }),
 				}),
 			},
 		]);
@@ -390,11 +390,8 @@ describe("createHonoApp", () => {
 			headers: { cookie: "session=%E0%A4%A" },
 		});
 
-		expect(response.status).toBe(400);
-		await expect(response.json()).resolves.toMatchObject({
-			title: "Invalid Cookie",
-			status: 400,
-		});
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual({ session: "%E0%A4%A" });
 	});
 
 	it("rejects unsupported response accept headers", async () => {
@@ -440,6 +437,30 @@ describe("createHonoApp", () => {
 
 		const response = await app.request("/status", {
 			headers: { accept: "application/json;q=0" },
+		});
+
+		expect(response.status).toBe(406);
+	});
+
+	it("rejects json suffix accept headers without a wildcard", async () => {
+		const app = createHonoApp([
+			{
+				method: "get",
+				path: "/status",
+				contract: createRoute({
+					responses: {
+						success: {
+							status: 200,
+							schema: z.object({ ok: z.boolean() }),
+						},
+					},
+					run: async () => ({ type: "success", data: { ok: true } }),
+				}),
+			},
+		]);
+
+		const response = await app.request("/status", {
+			headers: { accept: "application/problem+json" },
 		});
 
 		expect(response.status).toBe(406);

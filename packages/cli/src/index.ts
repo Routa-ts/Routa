@@ -107,7 +107,7 @@ export function run(argv: readonly string[], options: RunOptions = {}): CommandR
  * @returns The command exit code and any output or error text
  */
 function runCreateCommand(argv: readonly string[], cwd: string): CommandResult {
-	const targetDir = argv.find((item) => !item.startsWith("--")) ?? "routa-app";
+	const targetDir = argv.find((item) => !item.startsWith("-")) ?? "routa-app";
 
 	try {
 		const result = createProject(targetDir, cwd, {

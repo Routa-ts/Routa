@@ -31,10 +31,20 @@ export const withSession = createMiddleware({
 		}),
 	},
 	run: async ({ input, next }) => {
+		const session = verifySession(input.cookies.session);
+
 		return next({
-			session: input.cookies.session
-				? { authenticated: true, userId: input.cookies.session }
-				: { authenticated: false },
+			session,
 		});
 	},
 });
+
+function verifySession(token: string | undefined): { authenticated: boolean; userId?: string } {
+	if (!token?.startsWith("demo-user:")) {
+		return { authenticated: false };
+	}
+
+	const userId = token.slice("demo-user:".length).trim();
+
+	return userId ? { authenticated: true, userId } : { authenticated: false };
+}

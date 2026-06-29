@@ -18,9 +18,9 @@ type RoutaConfig = {
  *
  * @param cwd - The working directory that contains the Routa project files.
  */
-export async function startRuntime(cwd: string): Promise<void> {
-	const routes = await loadRoutes(cwd);
-	const routa = await loadRoutaConfig(cwd);
+export async function startRuntime(cwd: string, runtimeRoot = cwd): Promise<void> {
+	const routes = await loadRoutes(cwd, runtimeRoot);
+	const routa = await loadRoutaConfig(cwd, runtimeRoot);
 	const logger = routa.logger === false ? undefined : (routa.logger ?? createLogger());
 	const app = createHonoApp(routes, { logger });
 	const hostname = process.env.HOST ?? routa.host ?? "127.0.0.1";
@@ -49,8 +49,10 @@ export async function startRuntime(cwd: string): Promise<void> {
  * @param cwd - Working directory containing the Routa project
  * @returns The default export from `src/routa.ts`, or an empty object when no default export is provided
  */
-async function loadRoutaConfig(cwd: string): Promise<RoutaConfig> {
-	const module = (await import(pathToFileURL(join(cwd, "src/routa.ts")).href)) as {
+async function loadRoutaConfig(cwd: string, runtimeRoot: string): Promise<RoutaConfig> {
+	const module = (await import(
+		pathToFileURL(runtimePath(cwd, runtimeRoot, "src/routa.ts")).href
+	)) as {
 		default?: RoutaConfig;
 	};
 
@@ -66,14 +68,18 @@ async function loadRoutaConfig(cwd: string): Promise<RoutaConfig> {
  * @returns The assembled Hono route definitions
  * @throws If a route file does not export a default route config or is missing a required method contract
  */
-export async function loadRoutes(cwd: string): Promise<HonoRoute[]> {
-	const metadataModule = (await import(pathToFileURL(join(cwd, ".routa/routes.gen.ts")).href)) as {
+export async function loadRoutes(cwd: string, runtimeRoot = cwd): Promise<HonoRoute[]> {
+	const metadataModule = (await import(
+		pathToFileURL(runtimePath(cwd, runtimeRoot, ".routa/routes.gen.ts")).href
+	)) as {
 		routaRoutes: readonly RouteMetadata[];
 	};
 	const routes: HonoRoute[] = [];
 
 	for (const route of metadataModule.routaRoutes) {
-		const routeModule = (await import(pathToFileURL(join(cwd, route.file)).href)) as {
+		const routeModule = (await import(
+			pathToFileURL(runtimePath(cwd, runtimeRoot, route.file)).href
+		)) as {
 			default?: Record<string, HonoRoute["contract"]> & {
 				middleware?: readonly NonNullable<HonoRoute["contract"]["middleware"]>[number][];
 			};
@@ -100,6 +106,7 @@ export async function loadRoutes(cwd: string): Promise<HonoRoute[]> {
 					middleware: [
 						...(await loadFileMiddleware(
 							cwd,
+							runtimeRoot,
 							route.file,
 							route.methodMiddleware[key] ?? route.middleware,
 						)),
@@ -124,6 +131,7 @@ export async function loadRoutes(cwd: string): Promise<HonoRoute[]> {
  */
 async function loadFileMiddleware(
 	cwd: string,
+	runtimeRoot: string,
 	routeFile: string,
 	metadata: readonly MiddlewareMetadata[],
 ): Promise<NonNullable<HonoRoute["contract"]["middleware"]>> {
@@ -134,13 +142,17 @@ async function loadFileMiddleware(
 			continue;
 		}
 
-		const module = (await import(pathToFileURL(join(cwd, item.file)).href)) as Record<
-			string,
-			unknown
-		>;
+		const module = (await import(
+			pathToFileURL(runtimePath(cwd, runtimeRoot, item.file)).href
+		)) as Record<string, unknown>;
 		const contract = module[item.name];
 
-		if (!contract || typeof contract !== "object") {
+		if (
+			!contract
+			|| typeof contract !== "object"
+			|| Array.isArray(contract)
+			|| typeof (contract as { run?: unknown }).run !== "function"
+		) {
 			throw new Error(`Middleware ${item.name} was not exported by ${item.file}.`);
 		}
 
@@ -150,7 +162,13 @@ async function loadFileMiddleware(
 	return middleware;
 }
 
+function runtimePath(cwd: string, runtimeRoot: string, file: string): string {
+	const runtimeFile = runtimeRoot === cwd ? file : file.replace(/\.ts$/, ".js");
+	return join(runtimeRoot, runtimeFile);
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	const cwd = process.argv[2] ?? process.cwd();
-	await startRuntime(cwd);
+	const runtimeRoot = process.argv[3] ?? cwd;
+	await startRuntime(cwd, runtimeRoot);
 }

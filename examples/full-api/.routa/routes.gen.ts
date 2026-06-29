@@ -58,7 +58,7 @@ export const routaRoutes = [
 					"admin"
 				],
 				"providesTypes": {
-					"admin": "{\n\treadonly \"role\": string;\n}"
+					"admin": "{\n\treadonly \"role\": \"owner\";\n}"
 				},
 				"rejects": []
 			}
@@ -101,7 +101,7 @@ export const routaRoutes = [
 						"admin"
 					],
 					"providesTypes": {
-						"admin": "{\n\treadonly \"role\": string;\n}"
+						"admin": "{\n\treadonly \"role\": \"owner\";\n}"
 					},
 					"rejects": []
 				}
@@ -811,7 +811,7 @@ export type RoutaRouteCtxByPath = {
 	"/admin/audit-events": {
 		get: {
 			"admin": {
-				readonly "role": string;
+				readonly "role": "owner";
 			};
 			"requestId": string;
 			"session": {
@@ -821,7 +821,7 @@ export type RoutaRouteCtxByPath = {
 		};
 		post: {
 			"admin": {
-				readonly "role": string;
+				readonly "role": "owner";
 			};
 			"requestId": string;
 			"session": {
@@ -831,7 +831,7 @@ export type RoutaRouteCtxByPath = {
 		};
 		put: {
 			"admin": {
-				readonly "role": string;
+				readonly "role": "owner";
 			};
 			"requestId": string;
 			"session": {
@@ -841,7 +841,7 @@ export type RoutaRouteCtxByPath = {
 		};
 		patch: {
 			"admin": {
-				readonly "role": string;
+				readonly "role": "owner";
 			};
 			"requestId": string;
 			"session": {
@@ -851,7 +851,7 @@ export type RoutaRouteCtxByPath = {
 		};
 		delete: {
 			"admin": {
-				readonly "role": string;
+				readonly "role": "owner";
 			};
 			"requestId": string;
 			"session": {
@@ -861,7 +861,7 @@ export type RoutaRouteCtxByPath = {
 		};
 		head: {
 			"admin": {
-				readonly "role": string;
+				readonly "role": "owner";
 			};
 			"requestId": string;
 			"session": {
@@ -871,7 +871,7 @@ export type RoutaRouteCtxByPath = {
 		};
 		options: {
 			"admin": {
-				readonly "role": string;
+				readonly "role": "owner";
 			};
 			"requestId": string;
 			"session": {
@@ -1227,7 +1227,7 @@ export type RoutaRouteCtxByPath = {
 
 export type RoutaCtxByKey = {
 	"admin": {
-		readonly "role": string;
+		readonly "role": "owner";
 	};
 	"projectListMode": {
 		readonly "status": "active" | "archived";

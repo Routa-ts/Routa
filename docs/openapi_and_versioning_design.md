@@ -99,7 +99,6 @@ OpenAPI input quality checks should cover at least:
 - Middleware contract fields should include:
   - `requires`
   - `provides`
-  - `provides`
   - `input`
   - `rejects`
   - `run`

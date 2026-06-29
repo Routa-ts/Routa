@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 export type CreateProjectResult = {
 	projectDir: string;
@@ -27,9 +27,14 @@ export function createProject(
 	options: CreateProjectOptions = {},
 ): CreateProjectResult {
 	const projectDir = resolve(cwd, targetDir);
+	const projectName = basename(projectDir);
 
 	if (existsSync(projectDir)) {
 		throw new Error(`Target directory already exists: ${targetDir}`);
+	}
+
+	if (!isValidPackageName(projectName)) {
+		throw new Error(`Invalid package name from target directory: ${projectName}`);
 	}
 
 	const statusRoute = statusRouteSource();
@@ -46,11 +51,11 @@ export function createProject(
 	const files = new Map<string, string>([
 		[".gitignore", gitignore()],
 		[".vscode/settings.json", vscodeSettings()],
-		["README.md", readme(targetDir, options.openApi ?? true)],
+		["README.md", readme(projectName, options.openApi ?? true)],
 		["biome.json", biomeJson()],
 		[
 			"package.json",
-			packageJson(targetDir, options.routaVersion ?? "latest", options.openApi ?? true),
+			packageJson(projectName, options.routaVersion ?? "latest", options.openApi ?? true),
 		],
 		["src/routa.ts", routaSource()],
 		["tsconfig.json", tsconfigJson()],
@@ -72,6 +77,10 @@ export function createProject(
 	}
 
 	return { projectDir, files: Array.from(files.keys()) };
+}
+
+function isValidPackageName(name: string): boolean {
+	return /^[a-z0-9][a-z0-9._-]*$/.test(name);
 }
 
 /**

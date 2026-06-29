@@ -221,11 +221,15 @@ function runProjectServer(
 		return result;
 	}
 
-	const server = spawnSync(process.execPath, runtimeArgs(result.runtimeFile, cwd), {
-		cwd,
-		encoding: "utf8",
-		stdio: "inherit",
-	});
+	const server = spawnSync(
+		process.execPath,
+		runtimeArgs(result.runtimeFile, cwd, result.runtimeRoot, result.useTsx),
+		{
+			cwd,
+			encoding: "utf8",
+			stdio: "inherit",
+		},
+	);
 
 	return { code: server.status ?? 1 };
 }
@@ -235,6 +239,8 @@ type PreparedServer = {
 	stdout?: string;
 	stderr?: string;
 	runtimeFile: string;
+	runtimeRoot: string;
+	useTsx: boolean;
 	print: boolean;
 };
 
@@ -266,27 +272,36 @@ function prepareProjectServer(
 			code: 1,
 			stderr: formatDiagnostics(validation.diagnostics),
 			runtimeFile: "",
+			runtimeRoot: "",
+			useTsx: false,
 			print: false,
 		};
 	}
 
 	const runtimeFile = join(dirname(fileURLToPath(import.meta.url)), "runtime.js");
+	const runtimeRoot = mode === "start" ? join(cwd, "dist") : cwd;
+	const useTsx = mode === "dev";
 
 	if (argv.includes("--print")) {
-		return { code: 0, stdout: `${runtimeFile}\n`, runtimeFile, print: true };
+		return { code: 0, stdout: `${runtimeFile}\n`, runtimeFile, runtimeRoot, useTsx, print: true };
+	}
+
+	if (mode === "start") {
+		return { code: 0, runtimeFile, runtimeRoot, useTsx, print: false };
 	}
 
 	const typecheck = runTypeScript(cwd, ["-p", "tsconfig.json", "--noEmit"]);
-
 	if (typecheck.code !== 0) {
 		return {
 			...typecheck,
 			runtimeFile,
+			runtimeRoot,
+			useTsx,
 			print: false,
 		};
 	}
 
-	return { code: 0, runtimeFile, print: false };
+	return { code: 0, runtimeFile, runtimeRoot, useTsx, print: false };
 }
 
 /**
@@ -311,8 +326,13 @@ function writeCommandResult(result: { stdout?: string; stderr?: string }): void 
  * @param cwd - The project directory passed to the runtime
  * @returns The argument list for the Node process
  */
-function runtimeArgs(runtimeFile: string, cwd: string): string[] {
-	return ["--import", "tsx", runtimeFile, cwd];
+function runtimeArgs(
+	runtimeFile: string,
+	cwd: string,
+	runtimeRoot: string,
+	useTsx: boolean,
+): string[] {
+	return [...(useTsx ? ["--import", "tsx"] : []), runtimeFile, cwd, runtimeRoot];
 }
 
 /**
@@ -368,7 +388,7 @@ function runDevSupervisor(cwd: string, runtimeFile: string): void {
  * @returns The spawned child process
  */
 function startRuntimeProcess(cwd: string, runtimeFile: string): ChildProcess {
-	return spawn(process.execPath, runtimeArgs(runtimeFile, cwd), {
+	return spawn(process.execPath, runtimeArgs(runtimeFile, cwd, cwd, true), {
 		cwd,
 		stdio: "inherit",
 	});

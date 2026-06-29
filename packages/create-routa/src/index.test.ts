@@ -48,6 +48,24 @@ describe("create-routa", () => {
 		);
 	});
 
+	it("uses the target directory basename as the package name", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "create-routa-nested-"));
+		createProject("apps/my-api", cwd);
+
+		expect(readFileSync(join(cwd, "apps/my-api/package.json"), "utf8")).toContain(
+			'"name": "my-api"',
+		);
+		expect(readFileSync(join(cwd, "apps/my-api/README.md"), "utf8")).toContain("# my-api");
+	});
+
+	it("rejects target basenames that are invalid package names", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "create-routa-invalid-name-"));
+
+		expect(() => createProject("My API", cwd)).toThrow(
+			"Invalid package name from target directory: My API",
+		);
+	});
+
 	it("prints a create summary and next steps in non-interactive mode", async () => {
 		const cwd = await mkdtemp(join(tmpdir(), "create-routa-run-"));
 		const stdout = process.stdout.write;
@@ -79,13 +97,39 @@ describe("create-routa", () => {
 
 	it("does not require final confirmation when all inputs are provided", async () => {
 		const cwd = await mkdtemp(join(tmpdir(), "create-routa-yes-"));
-		const code = await runCreate(
-			["my-api", "--no-openapi", "--no-git", "--no-install", "--yes"],
-			cwd,
-		);
+		const stdinIsTTY = process.stdin.isTTY;
+		const stdoutIsTTY = process.stdout.isTTY;
+
+		Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });
+		Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+
+		try {
+			const code = await runCreate(
+				["my-api", "--no-openapi", "--no-git", "--no-install", "--yes"],
+				cwd,
+			);
+
+			expect(code).toBe(0);
+			expect(existsSync(join(cwd, "my-api/package.json"))).toBe(true);
+		} finally {
+			Object.defineProperty(process.stdin, "isTTY", {
+				value: stdinIsTTY,
+				configurable: true,
+			});
+			Object.defineProperty(process.stdout, "isTTY", {
+				value: stdoutIsTTY,
+				configurable: true,
+			});
+		}
+	});
+
+	it("does not treat short flags as the target directory", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "create-routa-short-flag-"));
+		const code = await runCreate(["-y", "--no-openapi", "--no-git", "--no-install"], cwd);
 
 		expect(code).toBe(0);
-		expect(existsSync(join(cwd, "my-api/package.json"))).toBe(true);
+		expect(existsSync(join(cwd, "routa-app/package.json"))).toBe(true);
+		expect(existsSync(join(cwd, "-y/package.json"))).toBe(false);
 	});
 
 	it("uses workspace packages for examples inside the Routa monorepo", async () => {

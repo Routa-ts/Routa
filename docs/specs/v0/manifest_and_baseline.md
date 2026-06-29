@@ -93,6 +93,11 @@ failure:
     {
       "path": ".routa/routes.gen.ts",
       "kind": "route-metadata"
+    },
+    {
+      "path": ".routa/openapi-baseline.json",
+      "source": "openapi.yaml",
+      "kind": "openapi-baseline"
     }
   ]
 }

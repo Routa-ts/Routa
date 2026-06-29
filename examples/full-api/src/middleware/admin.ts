@@ -5,12 +5,16 @@ export const withAdmin = createMiddleware({
 	requires: ["session"],
 	provides: {
 		admin: z.object({
-			role: z.string(),
+			role: z.enum(["owner"]),
 		}),
 	},
 	run: async ({ ctx, next }) => {
 		if (!ctx.session.authenticated) {
 			throw new Response("Authentication required", { status: 401 });
+		}
+
+		if (ctx.session.userId !== "admin") {
+			throw new Response("Admin access required", { status: 403 });
 		}
 
 		return next({

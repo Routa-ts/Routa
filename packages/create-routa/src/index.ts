@@ -162,7 +162,7 @@ function findWorkspaceRoot(cwd: string): string | undefined {
  */
 async function resolveCreateConfig(argv: readonly string[], cwd: string): Promise<CreateConfig> {
 	const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
-	const targetArg = argv.find((item) => !item.startsWith("--"));
+	const targetArg = argv.find((item) => !item.startsWith("-"));
 	let targetDir = targetArg ?? "routa-app";
 	let prompted = false;
 

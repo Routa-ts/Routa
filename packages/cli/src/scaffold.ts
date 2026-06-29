@@ -16,7 +16,9 @@ type OpenApiDocument = {
 	};
 };
 
-type OpenApiPathItem = Record<string, OpenApiOperation | unknown>;
+type OpenApiPathItem = {
+	parameters?: OpenApiOperation["parameters"];
+} & Record<string, OpenApiOperation | unknown>;
 
 type OpenApiOperation = {
 	operationId?: string;
@@ -171,15 +173,18 @@ export function scaffoldOpenApi(
 		const operationIds: string[] = [];
 
 		for (const [method, operation] of operations) {
-			const names = operationNames(method, openApiPath, operation);
-			operationIds.push(operation.operationId ?? `${method}${pascalCase(openApiPath)}`);
+			const operationWithParameters = mergePathItemParameters(pathItem, operation);
+			const names = operationNames(method, openApiPath, operationWithParameters);
+			operationIds.push(
+				operationWithParameters.operationId ?? `${method}${pascalCase(openApiPath)}`,
+			);
 			const inputParts: string[] = [];
-			const paramsSchema = schemaForPathParams(openApiPath, operation);
-			const querySchema = schemaForParameters(operation, "query");
-			const headersSchema = schemaForParameters(operation, "header");
-			const cookiesSchema = schemaForParameters(operation, "cookie");
-			const bodySchema = schemaForRequestBody(operation);
-			const responses = schemasForResponses(operation, document);
+			const paramsSchema = schemaForPathParams(openApiPath, operationWithParameters);
+			const querySchema = schemaForParameters(operationWithParameters, "query");
+			const headersSchema = schemaForParameters(operationWithParameters, "header");
+			const cookiesSchema = schemaForParameters(operationWithParameters, "cookie");
+			const bodySchema = schemaForRequestBody(operationWithParameters);
+			const responses = schemasForResponses(operationWithParameters, document);
 			const primaryResponse = responses[0];
 
 			if (paramsSchema) {
@@ -207,7 +212,11 @@ export function scaffoldOpenApi(
 			}
 
 			if (bodySchema) {
-				addReferencedComponents(schemaExports, requestBodySchema(operation), document);
+				addReferencedComponents(
+					schemaExports,
+					requestBodySchema(operationWithParameters),
+					document,
+				);
 				schemaExports.set(names.body, bodySchema);
 				routeImports.add(names.body);
 				inputParts.push(`body: ${names.body}`);
@@ -215,8 +224,11 @@ export function scaffoldOpenApi(
 
 			for (const response of responses) {
 				addReferencedComponents(schemaExports, response.schemaSource, document);
-				schemaExports.set(responseSchemaName(names.response, response.status), response.schema);
-				routeImports.add(responseSchemaName(names.response, response.status));
+				schemaExports.set(
+					responseSchemaName(names.response, response.status, responses),
+					response.schema,
+				);
+				routeImports.add(responseSchemaName(names.response, response.status, responses));
 			}
 
 			const inputBlock =
@@ -229,7 +241,7 @@ export function scaffoldOpenApi(
 \t\t\t${responses
 				.map((response, index) => {
 					const key = index === 0 ? "success" : `success${response.status}`;
-					const schemaName = responseSchemaName(names.response, response.status);
+					const schemaName = responseSchemaName(names.response, response.status, responses);
 					return `${key}: {
 \t\t\t\tstatus: ${response.status},
 \t\t\t\tschema: ${schemaName},
@@ -241,7 +253,7 @@ export function scaffoldOpenApi(
 \t\t\t// TODO: call application-owned business logic.
 \t\t\treturn {
 \t\t\t\ttype: "success",
-\t\t\t\tdata: ${primaryResponse.placeholder} as unknown as z.output<typeof ${responseSchemaName(names.response, primaryResponse.status)}>,
+\t\t\t\tdata: ${primaryResponse.placeholder} as unknown as z.output<typeof ${responseSchemaName(names.response, primaryResponse.status, responses)}>,
 \t\t\t};
 \t\t},
 \t})`);
@@ -575,7 +587,10 @@ function validateOpenApiDocument(document: OpenApiDocument): void {
 					),
 				);
 			}
-			const typedOperation = operation as OpenApiOperation;
+			const typedOperation = mergePathItemParameters(
+				pathItem as OpenApiPathItem,
+				operation as OpenApiOperation,
+			);
 
 			if (!typedOperation.operationId) {
 				throw new Error(
@@ -693,6 +708,32 @@ function validatePathParameters(path: string, operation: OpenApiOperation): void
 			);
 		}
 	}
+}
+
+function mergePathItemParameters(
+	pathItem: OpenApiPathItem,
+	operation: OpenApiOperation,
+): OpenApiOperation {
+	const pathParameters = pathItem.parameters ?? [];
+	const operationParameters = operation.parameters ?? [];
+
+	if (pathParameters.length === 0) {
+		return operation;
+	}
+
+	const operationKeys = new Set(
+		operationParameters.map((parameter) => `${parameter.in ?? ""}:${parameter.name ?? ""}`),
+	);
+
+	return {
+		...operation,
+		parameters: [
+			...pathParameters.filter(
+				(parameter) => !operationKeys.has(`${parameter.in ?? ""}:${parameter.name ?? ""}`),
+			),
+			...operationParameters,
+		],
+	};
 }
 
 /**
@@ -1068,8 +1109,14 @@ function schemasForResponses(operation: OpenApiOperation, document: OpenApiDocum
 	});
 }
 
-function responseSchemaName(baseName: string, status: number): string {
-	return status === 200 || status === 201 ? baseName : `${baseName}${status}`;
+function responseSchemaName(
+	baseName: string,
+	status: number,
+	responses: readonly { status: number }[],
+): string {
+	return responses.length === 1 && (status === 200 || status === 201)
+		? baseName
+		: `${baseName}${status}`;
 }
 
 /**

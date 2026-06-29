@@ -265,27 +265,23 @@ function parseCookies(request: Request): Record<string, string> {
 		return {};
 	}
 
-	try {
-		return Object.fromEntries(
-			header.split(";").flatMap((item) => {
-				const index = item.indexOf("=");
+	return Object.fromEntries(
+		header.split(";").flatMap((item) => {
+			const index = item.indexOf("=");
 
-				if (index === -1) {
-					return [];
-				}
+			if (index === -1) {
+				return [];
+			}
 
-				const key = item.slice(0, index).trim();
+			const key = item.slice(0, index).trim();
 
-				if (!key) {
-					return [];
-				}
+			if (!key) {
+				return [];
+			}
 
-				return [[key, decodeURIComponent(item.slice(index + 1).trim())]];
-			}),
-		);
-	} catch {
-		throw problem("https://routa.dev/problems/invalid-cookie", "Invalid Cookie", 400);
-	}
+			return [[key, item.slice(index + 1).trim()]];
+		}),
+	);
 }
 
 function parseMediaRanges(header: string): Array<{ type: string; subtype: string; q: number }> {
@@ -324,9 +320,7 @@ function acceptsJson(request: Request): boolean {
 
 	return parseMediaRanges(accept).some(
 		({ type, subtype }) =>
-			type === "*"
-			|| (type === "application"
-				&& (subtype === "*" || subtype === "json" || subtype.endsWith("+json"))),
+			type === "*" || (type === "application" && (subtype === "*" || subtype === "json")),
 	);
 }
 

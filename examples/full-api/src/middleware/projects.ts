@@ -10,10 +10,12 @@ export const withProjectScope = createMiddleware({
 		}),
 	},
 	run: async ({ ctx, next }) => {
+		const canWrite = ctx.session.authenticated && ctx.session.userId === `${ctx.tenant.id}:writer`;
+
 		return next({
 			projectScope: {
 				tenantId: ctx.tenant.id,
-				canWrite: ctx.session.authenticated,
+				canWrite,
 			},
 		});
 	},
