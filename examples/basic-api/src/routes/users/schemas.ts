@@ -5,7 +5,7 @@
 import { z } from "zod";
 
 export const ListUsersQuery = z.object({
-	limit: z.number().optional(),
+	limit: z.number().int().optional(),
 	search: z.string().optional(),
 });
 
