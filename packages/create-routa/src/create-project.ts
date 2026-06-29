@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { builtinModules } from "node:module";
 import { basename, dirname, join, resolve } from "node:path";
 
 export type CreateProjectResult = {
@@ -80,7 +81,18 @@ export function createProject(
 }
 
 function isValidPackageName(name: string): boolean {
-	return /^[a-z0-9][a-z0-9._-]*$/.test(name);
+	const reservedNames = new Set([
+		"node_modules",
+		"favicon.ico",
+		...builtinModules.map((moduleName) => moduleName.replace(/^node:/, "")),
+	]);
+
+	return (
+		name.length <= 214
+		&& !reservedNames.has(name)
+		&& /^[a-z0-9][a-z0-9._-]*$/.test(name)
+		&& encodeURIComponent(name) === name
+	);
 }
 
 /**

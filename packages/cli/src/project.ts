@@ -281,6 +281,19 @@ function prepareProjectServer(
 	const runtimeFile = join(dirname(fileURLToPath(import.meta.url)), "runtime.js");
 	const runtimeRoot = mode === "start" ? join(cwd, "dist") : cwd;
 	const useTsx = mode === "dev";
+	const runtimeOutputError =
+		mode === "start" ? validateRuntimeOutput(cwd, runtimeRoot, validation.routes) : undefined;
+
+	if (runtimeOutputError) {
+		return {
+			code: 1,
+			stderr: `${runtimeOutputError}\n`,
+			runtimeFile,
+			runtimeRoot,
+			useTsx,
+			print: false,
+		};
+	}
 
 	if (argv.includes("--print")) {
 		return { code: 0, stdout: `${runtimeFile}\n`, runtimeFile, runtimeRoot, useTsx, print: true };
@@ -302,6 +315,41 @@ function prepareProjectServer(
 	}
 
 	return { code: 0, runtimeFile, runtimeRoot, useTsx, print: false };
+}
+
+function validateRuntimeOutput(
+	cwd: string,
+	runtimeRoot: string,
+	routes: readonly RouteMetadata[],
+): string | undefined {
+	const runtimeFiles = new Set(["src/routa.ts", ".routa/routes.gen.ts"]);
+
+	for (const route of routes) {
+		runtimeFiles.add(route.file);
+		for (const middleware of route.middleware) {
+			runtimeFiles.add(middleware.file);
+		}
+		for (const middlewareList of Object.values(route.methodMiddleware)) {
+			for (const middleware of middlewareList) {
+				runtimeFiles.add(middleware.file);
+			}
+		}
+	}
+
+	for (const file of runtimeFiles) {
+		const sourceFile = join(cwd, file);
+		const outputFile = join(runtimeRoot, file.replace(/\.ts$/, ".js"));
+
+		if (!existsSync(outputFile)) {
+			return `Missing compiled runtime output for ${file}. Run routa build first.`;
+		}
+
+		if (statSync(outputFile).mtimeMs < statSync(sourceFile).mtimeMs) {
+			return `Compiled runtime output for ${file} is stale. Run routa build first.`;
+		}
+	}
+
+	return undefined;
 }
 
 /**
@@ -1865,14 +1913,17 @@ function duplicateRouteDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
  */
 function writeRoutesMetadata(cwd: string, routes: RouteMetadata[]): void {
 	const file = join(cwd, ".routa/routes.gen.ts");
-	mkdirSync(dirname(file), { recursive: true });
-	writeFileSync(
-		file,
-		`${generatedHeader}export const routaRoutes = ${JSON.stringify(routes, null, "\t")} as const;
+	const source = `${generatedHeader}export const routaRoutes = ${JSON.stringify(routes, null, "\t")} as const;
 
 ${routeContextTypes(routes)}
-`,
-	);
+`;
+
+	if (existsSync(file) && readFileSync(file, "utf8") === source) {
+		return;
+	}
+
+	mkdirSync(dirname(file), { recursive: true });
+	writeFileSync(file, source);
 }
 
 /**

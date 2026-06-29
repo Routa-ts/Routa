@@ -296,7 +296,7 @@ function parseMediaRanges(header: string): Array<{ type: string; subtype: string
 		const qParameter = parameters.find((parameter) => parameter.toLowerCase().startsWith("q="));
 		const q = qParameter ? Number(qParameter.slice(2)) : 1;
 
-		if (!Number.isFinite(q) || q <= 0) {
+		if (!Number.isFinite(q) || q < 0 || q > 1) {
 			return [];
 		}
 
@@ -318,10 +318,33 @@ function acceptsJson(request: Request): boolean {
 		return true;
 	}
 
-	return parseMediaRanges(accept).some(
-		({ type, subtype }) =>
-			type === "*" || (type === "application" && (subtype === "*" || subtype === "json")),
-	);
+	const matches = parseMediaRanges(accept)
+		.map((range, index) => ({
+			...range,
+			index,
+			specificity:
+				range.type === "application" && range.subtype === "json"
+					? 2
+					: range.type === "application" && range.subtype === "*"
+						? 1
+						: range.type === "*" && range.subtype === "*"
+							? 0
+							: -1,
+		}))
+		.filter((range) => range.specificity >= 0)
+		.sort((left, right) => {
+			if (right.specificity !== left.specificity) {
+				return right.specificity - left.specificity;
+			}
+
+			if (right.q !== left.q) {
+				return right.q - left.q;
+			}
+
+			return left.index - right.index;
+		});
+
+	return (matches[0]?.q ?? 0) > 0;
 }
 
 function problem(

@@ -66,6 +66,17 @@ describe("create-routa", () => {
 		);
 	});
 
+	it("rejects target basenames reserved by npm package naming rules", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "create-routa-reserved-name-"));
+
+		expect(() => createProject("node_modules", cwd)).toThrow(
+			"Invalid package name from target directory: node_modules",
+		);
+		expect(() => createProject("favicon.ico", cwd)).toThrow(
+			"Invalid package name from target directory: favicon.ico",
+		);
+	});
+
 	it("prints a create summary and next steps in non-interactive mode", async () => {
 		const cwd = await mkdtemp(join(tmpdir(), "create-routa-run-"));
 		const stdout = process.stdout.write;

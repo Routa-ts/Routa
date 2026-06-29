@@ -173,7 +173,10 @@ export function scaffoldOpenApi(
 		const operationIds: string[] = [];
 
 		for (const [method, operation] of operations) {
-			const operationWithParameters = mergePathItemParameters(pathItem, operation);
+			const operationWithParameters = mergePathItemParameters(pathItem, operation, {
+				path: openApiPath,
+				method,
+			});
 			const names = operationNames(method, openApiPath, operationWithParameters);
 			operationIds.push(
 				operationWithParameters.operationId ?? `${method}${pascalCase(openApiPath)}`,
@@ -590,6 +593,7 @@ function validateOpenApiDocument(document: OpenApiDocument): void {
 			const typedOperation = mergePathItemParameters(
 				pathItem as OpenApiPathItem,
 				operation as OpenApiOperation,
+				{ path, method: method as HttpMethod },
 			);
 
 			if (!typedOperation.operationId) {
@@ -713,9 +717,30 @@ function validatePathParameters(path: string, operation: OpenApiOperation): void
 function mergePathItemParameters(
 	pathItem: OpenApiPathItem,
 	operation: OpenApiOperation,
+	location: { path: string; method: HttpMethod },
 ): OpenApiOperation {
 	const pathParameters = pathItem.parameters ?? [];
 	const operationParameters = operation.parameters ?? [];
+
+	if (!Array.isArray(pathParameters)) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_INVALID_PARAMETERS",
+				`Path-level parameters for ${location.path} must be an array.`,
+				["Use parameters: [] or remove the path-level parameters field."],
+			),
+		);
+	}
+
+	if (!Array.isArray(operationParameters)) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_INVALID_PARAMETERS",
+				`${location.method.toUpperCase()} ${location.path} parameters must be an array.`,
+				["Use parameters: [] or remove the operation parameters field."],
+			),
+		);
+	}
 
 	if (pathParameters.length === 0) {
 		return operation;

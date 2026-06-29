@@ -764,6 +764,11 @@ export default defineRoute({
 		);
 
 		const dev = run(["dev", "--print"], { cwd });
+		writeCompiledRuntimeFiles(cwd, [
+			"src/routa.ts",
+			".routa/routes.gen.ts",
+			"src/routes/status/route.ts",
+		]);
 		const start = run(["start", "--print"], { cwd });
 
 		expect(dev.code).toBe(0);
@@ -774,16 +779,14 @@ export default defineRoute({
 		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain('"/status"');
 	});
 
-	it("skips full TypeScript typechecking for production start preparation", () => {
-		const cwd = mkdtempSync(join(tmpdir(), "routa-start-no-typecheck-"));
+	it("fails production start preparation when dist output is missing", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-start-missing-dist-"));
 		createTypeScriptProject(cwd);
 		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/status/route.ts"),
 			`import { createRoute, defineRoute } from "@routa/core";
 import { z } from "zod";
-
-const broken: string = 1;
 
 export default defineRoute({
 \tget: createRoute({
@@ -793,18 +796,16 @@ export default defineRoute({
 \t\t\t\tschema: z.object({ ok: z.boolean() }),
 \t\t\t},
 \t\t},
-\t\trun: () => ({ type: "success", data: { ok: broken === "1" } }),
+\t\trun: () => ({ type: "success", data: { ok: true } }),
 \t}),
 });
 `,
 		);
 
 		const start = run(["start", "--print"], { cwd });
-		const check = run(["check"], { cwd });
 
-		expect(start.code).toBe(0);
-		expect(check.code).toBe(2);
-		expect(check.stderr).toContain("TypeScript check failed.");
+		expect(start.code).toBe(1);
+		expect(start.stderr).toContain("Run routa build first.");
 	});
 
 	it("stubs empty route files without overwriting user code", () => {
@@ -1048,6 +1049,30 @@ paths:
 		expect(route).toContain("params: GetUserParams");
 		expect(schemas).toContain("export const GetUserParams = z.object({");
 		expect(schemas).toContain("id: z.string()");
+	});
+
+	it("explains malformed OpenAPI parameters without throwing raw type errors", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-scaffold-bad-params-"));
+		createTypeScriptProject(cwd);
+		writeOpenApiPaths(
+			cwd,
+			`  /users/{id}:
+    parameters:
+      id:
+        in: path
+    get:
+      operationId: getUser
+      responses:
+        "200":
+          description: User
+`,
+		);
+
+		const result = run(["scaffold", "openapi.yaml"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("ROUTA_OPENAPI_INVALID_PARAMETERS");
+		expect(result.stderr).toContain("Path-level parameters for /users/{id} must be an array.");
 	});
 
 	it("preserves multiple successful scaffold responses", () => {
@@ -2281,6 +2306,14 @@ export default createRouta({
 });
 `,
 	);
+}
+
+function writeCompiledRuntimeFiles(cwd: string, sourceFiles: readonly string[]): void {
+	for (const sourceFile of sourceFiles) {
+		const outputFile = join(cwd, "dist", sourceFile.replace(/\.ts$/, ".js"));
+		mkdirSync(dirname(outputFile), { recursive: true });
+		writeFileSync(outputFile, "export default {};\n");
+	}
 }
 
 function writeSimpleUsersOpenApi(cwd: string): void {

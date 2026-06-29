@@ -442,6 +442,30 @@ describe("createHonoApp", () => {
 		expect(response.status).toBe(406);
 	});
 
+	it("honors a more specific json rejection over accept wildcards", async () => {
+		const app = createHonoApp([
+			{
+				method: "get",
+				path: "/status",
+				contract: createRoute({
+					responses: {
+						success: {
+							status: 200,
+							schema: z.object({ ok: z.boolean() }),
+						},
+					},
+					run: async () => ({ type: "success", data: { ok: true } }),
+				}),
+			},
+		]);
+
+		const response = await app.request("/status", {
+			headers: { accept: "application/*;q=1, application/json;q=0" },
+		});
+
+		expect(response.status).toBe(406);
+	});
+
 	it("rejects json suffix accept headers without a wildcard", async () => {
 		const app = createHonoApp([
 			{

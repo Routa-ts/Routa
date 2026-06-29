@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { createMiddleware } from "@routa/core";
 import { z } from "zod";
 
@@ -39,12 +40,38 @@ export const withSession = createMiddleware({
 	},
 });
 
+const demoSessionSecret = process.env.ROUTA_DEMO_SESSION_SECRET;
+
 function verifySession(token: string | undefined): { authenticated: boolean; userId?: string } {
-	if (!token?.startsWith("demo-user:")) {
+	if (!token?.startsWith("demo-user:") || !demoSessionSecret) {
 		return { authenticated: false };
 	}
 
-	const userId = token.slice("demo-user:".length).trim();
+	const payload = token.slice("demo-user:".length);
+	const separator = payload.lastIndexOf(".");
 
-	return userId ? { authenticated: true, userId } : { authenticated: false };
+	if (separator === -1) {
+		return { authenticated: false };
+	}
+
+	const userId = payload.slice(0, separator).trim();
+	const signature = payload.slice(separator + 1);
+
+	if (!userId || !isValidSignature(userId, signature)) {
+		return { authenticated: false };
+	}
+
+	return { authenticated: true, userId };
+}
+
+function isValidSignature(userId: string, signature: string): boolean {
+	const expected = createHmac("sha256", demoSessionSecret ?? "")
+		.update(userId)
+		.digest("base64url");
+
+	try {
+		return timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+	} catch {
+		return false;
+	}
 }
