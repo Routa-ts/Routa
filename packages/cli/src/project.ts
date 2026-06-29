@@ -64,6 +64,12 @@ export default defineRoute({
 });
 `;
 
+/**
+ * Validates a Routa project and generates route metadata when validation succeeds.
+ *
+ * @param cwd - The project root directory
+ * @returns The discovered routes and any validation diagnostics
+ */
 export function validateProject(cwd = process.cwd()): ProjectValidationResult {
 	const routes = discoverRoutes(cwd);
 	const diagnostics = [
@@ -81,6 +87,11 @@ export function validateProject(cwd = process.cwd()): ProjectValidationResult {
 	return { routes, diagnostics };
 }
 
+/**
+ * Runs project validation and a TypeScript no-emit check.
+ *
+ * @returns A result object containing the exit code and any captured output.
+ */
 export function runProjectCheck(cwd = process.cwd()): {
 	code: number;
 	stdout?: string;
@@ -115,6 +126,11 @@ export function runProjectCheck(cwd = process.cwd()): {
 	};
 }
 
+/**
+ * Builds a Routa project after validating its routes.
+ *
+ * @returns Build output. On success, `stdout` reports how many route files passed validation and build.
+ */
 export function runProjectBuild(cwd = process.cwd()): {
 	code: number;
 	stdout?: string;
@@ -138,6 +154,13 @@ export function runProjectBuild(cwd = process.cwd()): {
 	return { code: 0, stdout: `Routa build passed for ${validation.routes.length} route file(s).\n` };
 }
 
+/**
+ * Runs the Routa project in dev mode.
+ *
+ * @param argv - Command-line arguments to pass to the server launcher
+ * @param cwd - Project root directory
+ * @returns The process result, including an exit code and any captured output
+ */
 export function runProjectDev(
 	argv: readonly string[] = [],
 	cwd = process.cwd(),
@@ -145,6 +168,14 @@ export function runProjectDev(
 	return runProjectServer("dev", argv, cwd);
 }
 
+/**
+ * Starts the Routa development supervisor.
+ *
+ * Prepares the dev runtime, writes any preparation output to the console on failure or when printing the runtime command, and then supervises the runtime process for source changes.
+ *
+ * @param argv - Command-line arguments to pass to the dev server
+ * @param cwd - Project root directory
+ */
 export function runProjectDevProcess(argv: readonly string[] = [], cwd = process.cwd()): void {
 	const result = prepareProjectServer("dev", argv, cwd);
 
@@ -157,6 +188,13 @@ export function runProjectDevProcess(argv: readonly string[] = [], cwd = process
 	runDevSupervisor(cwd, result.runtimeFile);
 }
 
+/**
+ * Starts the Routa project server.
+ *
+ * @param argv - Command-line arguments to pass to the server preparation step
+ * @param cwd - The project working directory
+ * @returns The command result with an exit code and optional output
+ */
 export function runProjectStart(
 	argv: readonly string[] = [],
 	cwd = process.cwd(),
@@ -164,6 +202,14 @@ export function runProjectStart(
 	return runProjectServer("start", argv, cwd);
 }
 
+/**
+ * Prepares and launches the project runtime for development or production start.
+ *
+ * @param mode - The server mode to prepare.
+ * @param argv - Command-line arguments to pass to server preparation.
+ * @param cwd - The working directory of the project.
+ * @returns The preparation result, or the spawned process result code.
+ */
 function runProjectServer(
 	mode: "dev" | "start",
 	argv: readonly string[],
@@ -192,6 +238,18 @@ type PreparedServer = {
 	print: boolean;
 };
 
+/**
+ * Prepares a project server launch or dev-supervision run.
+ *
+ * In dev mode, empty route files are stubbed before validation. If validation fails, the returned result
+ * contains the formatted diagnostics. Otherwise, the runtime file is resolved and the project is
+ * type-checked before the server can start.
+ *
+ * @param mode - The server mode to prepare.
+ * @param argv - Command-line arguments passed to the server command.
+ * @param cwd - The project root directory.
+ * @returns The prepared server result, including the runtime file path when preparation succeeds.
+ */
 function prepareProjectServer(
 	mode: "dev" | "start",
 	argv: readonly string[],
@@ -231,6 +289,11 @@ function prepareProjectServer(
 	return { code: 0, runtimeFile, print: false };
 }
 
+/**
+ * Writes captured output to the process streams.
+ *
+ * @param result - The command output to write.
+ */
 function writeCommandResult(result: { stdout?: string; stderr?: string }): void {
 	if (result.stdout) {
 		process.stdout.write(result.stdout);
@@ -241,10 +304,22 @@ function writeCommandResult(result: { stdout?: string; stderr?: string }): void 
 	}
 }
 
+/**
+ * Builds the command-line arguments for launching the Routa runtime.
+ *
+ * @param runtimeFile - The runtime script to execute
+ * @param cwd - The project directory passed to the runtime
+ * @returns The argument list for the Node process
+ */
 function runtimeArgs(runtimeFile: string, cwd: string): string[] {
 	return ["--import", "tsx", runtimeFile, cwd];
 }
 
+/**
+ * Supervises the Routa dev runtime and restarts it when source files change.
+ *
+ * Re-stubs empty route files before each validation, reports validation diagnostics, and exits cleanly on termination signals.
+ */
 function runDevSupervisor(cwd: string, runtimeFile: string): void {
 	let child = startRuntimeProcess(cwd, runtimeFile);
 	let snapshot = sourceSnapshot(cwd);
@@ -285,6 +360,13 @@ function runDevSupervisor(cwd: string, runtimeFile: string): void {
 	process.once("SIGTERM", stop);
 }
 
+/**
+ * Starts the Routa runtime process.
+ *
+ * @param cwd - Working directory for the spawned process
+ * @param runtimeFile - Path to the generated runtime entry file
+ * @returns The spawned child process
+ */
 function startRuntimeProcess(cwd: string, runtimeFile: string): ChildProcess {
 	return spawn(process.execPath, runtimeArgs(runtimeFile, cwd), {
 		cwd,
@@ -294,6 +376,12 @@ function startRuntimeProcess(cwd: string, runtimeFile: string): ChildProcess {
 
 export type SourceSnapshot = Map<string, number>;
 
+/**
+ * Replaces empty route files with the default route stub.
+ *
+ * @param cwd - Project root directory
+ * @returns The relative paths of the files that were written
+ */
 export function stubEmptyRouteFiles(cwd = process.cwd()): string[] {
 	const routesDir = join(cwd, routesRoot);
 
@@ -318,6 +406,11 @@ export function stubEmptyRouteFiles(cwd = process.cwd()): string[] {
 	return written;
 }
 
+/**
+ * Captures modification times for Routa source files.
+ *
+ * @returns A map of file paths relative to `cwd` to their last modification time in milliseconds.
+ */
 export function sourceSnapshot(cwd = process.cwd()): SourceSnapshot {
 	const files = [
 		...walk(join(cwd, "src")).filter((file) => file.endsWith(".ts")),
@@ -332,6 +425,13 @@ export function sourceSnapshot(cwd = process.cwd()): SourceSnapshot {
 	return snapshot;
 }
 
+/**
+ * Detects whether two source snapshots differ.
+ *
+ * @param previous - The earlier snapshot
+ * @param next - The later snapshot
+ * @returns `true` if the snapshots differ, `false` otherwise.
+ */
 export function sourceSnapshotChanged(previous: SourceSnapshot, next: SourceSnapshot): boolean {
 	if (previous.size !== next.size) {
 		return true;
@@ -346,6 +446,12 @@ export function sourceSnapshotChanged(previous: SourceSnapshot, next: SourceSnap
 	return false;
 }
 
+/**
+ * Discovers route metadata from a Routa project's route files.
+ *
+ * @param cwd - Project root directory
+ * @returns The discovered route metadata for each `route.ts` file under `src/routes`
+ */
 function discoverRoutes(cwd: string): RouteMetadata[] {
 	const routesDir = join(cwd, routesRoot);
 
@@ -406,6 +512,12 @@ function discoverRoutes(cwd: string): RouteMetadata[] {
 	});
 }
 
+/**
+ * Extracts route method contract metadata from a route file.
+ *
+ * @param file - Path to the route file
+ * @returns A map of HTTP methods to their declared response statuses and input flags
+ */
 function parseRouteContract(
 	file: string,
 ): Record<string, { responses: number[]; inputs: RouteMethodInputMetadata }> {
@@ -438,6 +550,12 @@ function parseRouteContract(
 	return contract;
 }
 
+/**
+ * Reports route methods that do not declare a 2xx success response.
+ *
+ * @param routes - Route metadata to inspect
+ * @returns Diagnostics for route methods missing a declared 2xx response
+ */
 function missingSuccessResponseDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 	const diagnostics: Diagnostic[] = [];
 
@@ -463,6 +581,12 @@ function missingSuccessResponseDiagnostics(routes: RouteMetadata[]): Diagnostic[
 	return diagnostics;
 }
 
+/**
+ * Reports duplicate schema export names in route schema files.
+ *
+ * @param cwd - Project root directory
+ * @returns Diagnostics for repeated `export const` names in `**/schemas.ts` files under `src/routes`
+ */
 function duplicateSchemaDiagnostics(cwd: string): Diagnostic[] {
 	const routesDir = join(cwd, routesRoot);
 
@@ -498,6 +622,13 @@ function duplicateSchemaDiagnostics(cwd: string): Diagnostic[] {
 	return diagnostics;
 }
 
+/**
+ * Collects middleware declarations inherited from the route directory hierarchy.
+ *
+ * @param cwd - Project root directory
+ * @param rawSegments - Route path segments used to locate nested `middleware.ts` files
+ * @returns Middleware declarations from the global route middleware file and any matching nested middleware files
+ */
 function middlewareChain(cwd: string, rawSegments: string[]): MiddlewareMetadata[] {
 	const candidates = [`${routesRoot}/middleware.ts`];
 	let current = routesRoot;
@@ -512,6 +643,11 @@ function middlewareChain(cwd: string, rawSegments: string[]): MiddlewareMetadata
 		.flatMap((file) => parseMiddlewareFile(cwd, file));
 }
 
+/**
+ * Verifies that the required Routa project files and directories exist.
+ *
+ * @returns Diagnostics for each missing required project item.
+ */
 function projectStructureDiagnostics(cwd: string): Diagnostic[] {
 	const required = [
 		{ path: "package.json", message: "Missing package.json." },
@@ -532,6 +668,13 @@ function projectStructureDiagnostics(cwd: string): Diagnostic[] {
 		}));
 }
 
+/**
+ * Parses exported middleware declarations from a middleware file.
+ *
+ * @param cwd - Project root used to resolve `file`.
+ * @param file - Path to the middleware file relative to `cwd`.
+ * @returns Metadata for each exported middleware declaration found in the file.
+ */
 function parseMiddlewareFile(cwd: string, file: string): MiddlewareMetadata[] {
 	const sourceFile = parseTypeScriptFile(join(cwd, file));
 
@@ -540,6 +683,14 @@ function parseMiddlewareFile(cwd: string, file: string): MiddlewareMetadata[] {
 	);
 }
 
+/**
+ * Resolves exported middleware declarations from a module and its re-exports.
+ *
+ * @param cwd - The project root directory
+ * @param file - The module being inspected
+ * @param sourceFile - The parsed TypeScript source file for `file`
+ * @returns Middleware declarations found in the module graph
+ */
 function exportedMiddlewareDeclarations(
 	cwd: string,
 	file: string,
@@ -633,6 +784,14 @@ function exportedMiddlewareDeclarations(
 	return declarations;
 }
 
+/**
+ * Maps named imports to their source module and exported name.
+ *
+ * @param cwd - The project root directory.
+ * @param file - The file containing the import declarations.
+ * @param sourceFile - The parsed TypeScript source file.
+ * @returns A map from local import names to the resolved module file and imported name.
+ */
 function namedImportMap(
 	cwd: string,
 	file: string,
@@ -667,6 +826,14 @@ function namedImportMap(
 	return imports;
 }
 
+/**
+ * Resolves a relative module specifier to an existing TypeScript file.
+ *
+ * @param cwd - The project root used to resolve candidate paths.
+ * @param fromFile - The file containing the import or re-export.
+ * @param specifier - The module specifier to resolve.
+ * @returns The first matching file path relative to `cwd`, or `undefined` if no relative file exists.
+ */
 function resolveImportFile(cwd: string, fromFile: string, specifier: string): string | undefined {
 	if (!specifier.startsWith(".")) {
 		return;
@@ -683,6 +850,13 @@ function resolveImportFile(cwd: string, fromFile: string, specifier: string): st
 	return candidates.find((candidate) => existsSync(join(cwd, candidate)));
 }
 
+/**
+ * Extracts middleware metadata declared in a route file.
+ *
+ * @param cwd - The project root directory.
+ * @param routeFile - The route file path relative to `cwd`.
+ * @returns The route-level middleware list and per-method middleware lists.
+ */
 function parseRouteFileMiddleware(
 	cwd: string,
 	routeFile: string,
@@ -778,6 +952,13 @@ function parseRouteFileMiddleware(
 	return { route, methods };
 }
 
+/**
+ * Extracts string literals from an object property's array value.
+ *
+ * @param source - The object literal to read from
+ * @param property - The property name to inspect
+ * @returns The string values found in the property's array, or an empty array when the property is missing or not an array of strings
+ */
 function stringArrayProperty(source: ts.ObjectLiteralExpression, property: string): string[] {
 	const item = objectProperty(source, property);
 
@@ -791,6 +972,11 @@ function stringArrayProperty(source: ts.ObjectLiteralExpression, property: strin
 	});
 }
 
+/**
+ * Creates metadata for a middleware declaration.
+ *
+ * @returns Middleware metadata including its source file, name, required context keys, provided context keys and types, and rejected keys.
+ */
 function middlewareMetadata(
 	file: string,
 	name: string,
@@ -814,6 +1000,12 @@ function middlewareMetadata(
 	};
 }
 
+/**
+ * Extracts the context keys and value types provided by a middleware contract.
+ *
+ * @param contract - The middleware contract object.
+ * @returns The provided keys and their inferred types.
+ */
 function middlewareProvides(contract: ts.ObjectLiteralExpression): {
 	keys: string[];
 	types: Record<string, string>;
@@ -841,6 +1033,11 @@ function middlewareProvides(contract: ts.ObjectLiteralExpression): {
 	};
 }
 
+/**
+ * Infers context value types supplied to the middleware's `next()` call.
+ *
+ * @returns A record mapping each context key to its inferred type.
+ */
 function middlewareNextProvidesTypes(contract: ts.ObjectLiteralExpression): Record<string, string> {
 	const nextCtx = middlewareNextContext(contract);
 
@@ -862,6 +1059,12 @@ function middlewareNextProvidesTypes(contract: ts.ObjectLiteralExpression): Reco
 	return result;
 }
 
+/**
+ * Finds the context object passed to `next()` in a middleware's `run` function.
+ *
+ * @param contract - The middleware contract object.
+ * @returns The first object literal passed to `next()`, or `undefined` if none is found.
+ */
 function middlewareNextContext(
 	contract: ts.ObjectLiteralExpression,
 ): ts.ObjectLiteralExpression | undefined {
@@ -895,6 +1098,12 @@ function middlewareNextContext(
 	return context;
 }
 
+/**
+ * Infers input field types declared by a middleware contract.
+ *
+ * @param contract - Middleware contract object literal
+ * @returns A map of `location.field` paths to inferred type strings
+ */
 function middlewareInputTypes(contract: ts.ObjectLiteralExpression): Map<string, string> {
 	const input = objectProperty(contract, "input");
 	const inputObject = input ? objectLiteral(input.initializer) : undefined;
@@ -926,6 +1135,12 @@ function middlewareInputTypes(contract: ts.ObjectLiteralExpression): Map<string,
 	return result;
 }
 
+/**
+ * Extracts the shape object from a Zod `object(...)` expression.
+ *
+ * @param expression - The expression to inspect
+ * @returns The object literal shape when the expression is a `object(...)` call, `undefined` otherwise
+ */
 function zodObjectShape(expression: ts.Expression): ts.ObjectLiteralExpression | undefined {
 	const unwrapped = unwrapExpression(expression);
 
@@ -936,6 +1151,11 @@ function zodObjectShape(expression: ts.Expression): ts.ObjectLiteralExpression |
 	return objectLiteral(unwrapped.arguments[0]);
 }
 
+/**
+ * Infers a TypeScript type string from a Zod expression.
+ *
+ * @returns The inferred type string, or `"unknown"` when the expression is not recognized.
+ */
 function zodType(expression: ts.Expression): string {
 	const unwrapped = unwrapExpression(expression);
 
@@ -988,6 +1208,12 @@ function zodType(expression: ts.Expression): string {
 	return "unknown";
 }
 
+/**
+ * Builds a readonly object type from a Zod object shape.
+ *
+ * @param shape - The object literal that defines the Zod shape
+ * @returns A TypeScript-like object type for the shape
+ */
 function zodObjectType(shape: ts.ObjectLiteralExpression): string {
 	const properties = objectProperties(shape).flatMap((property) => {
 		const name = propertyName(property.name);
@@ -1005,6 +1231,12 @@ function zodObjectType(shape: ts.ObjectLiteralExpression): string {
 	return properties.length > 0 ? `{\n${properties.join("\n")}\n}` : "{}";
 }
 
+/**
+ * Determines whether an expression is a Zod optional schema.
+ *
+ * @param expression - The expression to inspect
+ * @returns `true` if the expression is an `optional(...)` call, `false` otherwise
+ */
 function isZodOptional(expression: ts.Expression): boolean {
 	const unwrapped = unwrapExpression(expression);
 
@@ -1015,6 +1247,13 @@ function isZodOptional(expression: ts.Expression): boolean {
 	return callName(unwrapped) === "optional";
 }
 
+/**
+ * Infers a string representation of the type produced by an expression.
+ *
+ * @param expression - The expression to analyze
+ * @param inputTypes - Known types for `input` access paths
+ * @returns A TypeScript-like type string for the expression
+ */
 function typeForExpression(expression: ts.Expression, inputTypes: Map<string, string>): string {
 	const unwrapped = unwrapExpression(expression);
 
@@ -1063,6 +1302,11 @@ function typeForExpression(expression: ts.Expression, inputTypes: Map<string, st
 	return "unknown";
 }
 
+/**
+ * Formats an object literal as a readonly TypeScript object type.
+ *
+ * @returns A TypeScript type string with one readonly property per named object literal member, or `{}` when no named properties are present.
+ */
 function objectType(object: ts.ObjectLiteralExpression, inputTypes: Map<string, string>): string {
 	const properties = objectProperties(object)
 		.map((property) => {
@@ -1076,6 +1320,13 @@ function objectType(object: ts.ObjectLiteralExpression, inputTypes: Map<string, 
 	return properties.length > 0 ? `{\n${properties.map((item) => `\t${item}`).join("\n")}\n}` : "{}";
 }
 
+/**
+ * Merges two type representations into a combined type.
+ *
+ * @param left - The first type representation.
+ * @param right - The second type representation.
+ * @returns The shared object type when both inputs are object types, otherwise a union or the matching type.
+ */
 function mergeTypes(left: string, right: string): string {
 	const leftObject = parseObjectType(left);
 	const rightObject = parseObjectType(right);
@@ -1099,6 +1350,12 @@ function mergeTypes(left: string, right: string): string {
 	return `{\n${lines.join("\n")}\n}`;
 }
 
+/**
+ * Parses a readonly object type string into a key-to-type map.
+ *
+ * @param type - The type string to parse
+ * @returns An object map of property names to their declared types, or `undefined` if the string is not an object type
+ */
 function parseObjectType(type: string): Record<string, string> | undefined {
 	const trimmed = type.trim();
 
@@ -1114,6 +1371,13 @@ function parseObjectType(type: string): Record<string, string> | undefined {
 	return result;
 }
 
+/**
+ * Removes `undefined` from a union type string and merges it with a fallback type.
+ *
+ * @param left - The type string to narrow
+ * @param fallback - The type string to preserve in the result
+ * @returns The narrowed type string, or a merged type when the fallback adds information
+ */
 function removeUndefined(left: string, fallback: string): string {
 	const narrowed = left
 		.split("|")
@@ -1124,6 +1388,13 @@ function removeUndefined(left: string, fallback: string): string {
 	return narrowed === fallback ? narrowed : mergeTypes(narrowed || "unknown", fallback);
 }
 
+/**
+ * Looks up the inferred type for an input access expression.
+ *
+ * @param expression - The expression to inspect
+ * @param inputTypes - The map of input access paths to inferred types
+ * @returns The inferred type for the access path, or `undefined` if no type is known
+ */
 function inputAccessType(
 	expression: ts.Expression,
 	inputTypes: Map<string, string>,
@@ -1132,6 +1403,12 @@ function inputAccessType(
 	return path ? inputTypes.get(path) : undefined;
 }
 
+/**
+ * Resolves an `input.<location>.<field>` access path.
+ *
+ * @param expression - The expression to inspect
+ * @returns The access path as `<location>.<field>` when the expression matches, `undefined` otherwise
+ */
 function inputAccessPath(expression: ts.Expression): string | undefined {
 	const segments: string[] = [];
 	let current = unwrapExpression(expression);
@@ -1159,6 +1436,12 @@ function inputAccessPath(expression: ts.Expression): string | undefined {
 	return `${segments[0]}.${segments[1]}`;
 }
 
+/**
+ * Parses a TypeScript source file.
+ *
+ * @param file - The file path to read and parse.
+ * @returns The parsed TypeScript source file.
+ */
 function parseTypeScriptFile(file: string): ts.SourceFile {
 	return ts.createSourceFile(
 		file,
@@ -1169,6 +1452,12 @@ function parseTypeScriptFile(file: string): ts.SourceFile {
 	);
 }
 
+/**
+ * Extracts the exported route configuration object from a source file.
+ *
+ * @param sourceFile - The parsed TypeScript source file to inspect
+ * @returns The exported route configuration object, if present
+ */
 function routeConfigObject(sourceFile: ts.SourceFile): ts.ObjectLiteralExpression | undefined {
 	for (const statement of sourceFile.statements) {
 		if (ts.isExportAssignment(statement)) {
@@ -1177,6 +1466,11 @@ function routeConfigObject(sourceFile: ts.SourceFile): ts.ObjectLiteralExpressio
 	}
 }
 
+/**
+ * Extracts the route definition object from a `defineRoute(...)` call.
+ *
+ * @returns The first argument as an object literal, if the expression is a `defineRoute` call.
+ */
 function defineRouteObject(expression: ts.Expression): ts.ObjectLiteralExpression | undefined {
 	const unwrapped = unwrapExpression(expression);
 
@@ -1187,6 +1481,12 @@ function defineRouteObject(expression: ts.Expression): ts.ObjectLiteralExpressio
 	return objectLiteral(unwrapped.arguments[0]);
 }
 
+/**
+ * Extracts the route contract object from a `createRoute` call.
+ *
+ * @param expression - The expression to inspect
+ * @returns The first argument object literal when the expression is a `createRoute(...)` call; otherwise `undefined`
+ */
 function createRouteObject(expression: ts.Expression): ts.ObjectLiteralExpression | undefined {
 	const unwrapped = unwrapExpression(expression);
 
@@ -1197,6 +1497,13 @@ function createRouteObject(expression: ts.Expression): ts.ObjectLiteralExpressio
 	return objectLiteral(unwrapped.arguments[0]);
 }
 
+/**
+ * Collects middleware declarations from a source file.
+ *
+ * @param sourceFile - The TypeScript source file to inspect.
+ * @param exportedOnly - Whether to include only exported variable declarations.
+ * @returns The discovered middleware names and their `createMiddleware(...)` contract objects.
+ */
 function middlewareDeclarations(
 	sourceFile: ts.SourceFile,
 	exportedOnly: boolean,
@@ -1230,12 +1537,23 @@ function middlewareDeclarations(
 	return declarations;
 }
 
+/**
+ * Determines whether a variable statement is exported.
+ *
+ * @returns `true` if the statement has an `export` modifier, `false` otherwise.
+ */
 function hasExportModifier(statement: ts.VariableStatement): boolean {
 	return (
 		statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false
 	);
 }
 
+/**
+ * Extracts the middleware contract object from a `createMiddleware` call.
+ *
+ * @param expression - The expression to inspect
+ * @returns The first argument object literal when the expression is a `createMiddleware(...)` call, otherwise `undefined`
+ */
 function createMiddlewareObject(expression: ts.Expression): ts.ObjectLiteralExpression | undefined {
 	const unwrapped = unwrapExpression(expression);
 
@@ -1246,6 +1564,13 @@ function createMiddlewareObject(expression: ts.Expression): ts.ObjectLiteralExpr
 	return objectLiteral(unwrapped.arguments[0]);
 }
 
+/**
+ * Resolves a middleware expression to its declaration contract.
+ *
+ * @param expression - The middleware expression to inspect.
+ * @param middlewareByName - A lookup of locally declared middleware contracts by name.
+ * @returns The middleware name and contract object when the expression resolves, or `undefined` otherwise.
+ */
 function middlewareExpressionMetadata(
 	expression: ts.Expression,
 	middlewareByName: Map<string, ts.ObjectLiteralExpression>,
@@ -1267,6 +1592,12 @@ function middlewareExpressionMetadata(
 	}
 }
 
+/**
+ * Extracts middleware expressions from an expression or middleware array literal.
+ *
+ * @param expression - The expression to inspect
+ * @returns The unwrapped expression, or the array elements when the expression is an array literal
+ */
 function middlewareExpressions(expression: ts.Expression): ts.Expression[] {
 	const unwrapped = unwrapExpression(expression);
 
@@ -1279,6 +1610,12 @@ function middlewareExpressions(expression: ts.Expression): ts.Expression[] {
 	return [unwrapped];
 }
 
+/**
+ * Extracts the declared input locations from a route contract.
+ *
+ * @param routeContract - The route contract object literal to inspect.
+ * @returns An object indicating whether `params`, `query`, and `body` inputs are declared.
+ */
 function routeInputs(routeContract: ts.ObjectLiteralExpression): RouteMethodInputMetadata {
 	const input = objectProperty(routeContract, "input");
 	const inputObject = input ? objectLiteral(input.initializer) : undefined;
@@ -1290,6 +1627,12 @@ function routeInputs(routeContract: ts.ObjectLiteralExpression): RouteMethodInpu
 	};
 }
 
+/**
+ * Collects declared response status codes from a route contract.
+ *
+ * @param routeContract - The route contract object literal
+ * @returns The numeric status codes declared under `responses`
+ */
 function responseStatuses(routeContract: ts.ObjectLiteralExpression): number[] {
 	const responses = objectProperty(routeContract, "responses");
 
@@ -1314,6 +1657,12 @@ function responseStatuses(routeContract: ts.ObjectLiteralExpression): number[] {
 	return statuses;
 }
 
+/**
+ * Extracts a numeric literal value from an expression.
+ *
+ * @param expression - The expression to inspect
+ * @returns The numeric value, or `undefined` when the expression is not a numeric literal
+ */
 function numericValue(expression: ts.Expression): number | undefined {
 	const unwrapped = unwrapExpression(expression);
 
@@ -1322,6 +1671,13 @@ function numericValue(expression: ts.Expression): number | undefined {
 	}
 }
 
+/**
+ * Finds a property assignment with the given name in an object literal.
+ *
+ * @param object - The object literal to search.
+ * @param name - The property name to match.
+ * @returns The matching property assignment, or `undefined` if none is found.
+ */
 function objectProperty(
 	object: ts.ObjectLiteralExpression,
 	name: string,
@@ -1329,10 +1685,22 @@ function objectProperty(
 	return objectProperties(object).find((property) => propertyName(property.name) === name);
 }
 
+/**
+ * Gets the property assignments declared in an object literal.
+ *
+ * @param object - The object literal to inspect
+ * @returns The property assignments contained in `object`
+ */
 function objectProperties(object: ts.ObjectLiteralExpression): ts.PropertyAssignment[] {
 	return object.properties.filter(ts.isPropertyAssignment);
 }
 
+/**
+ * Gets an object literal expression from a node.
+ *
+ * @param node - The node to inspect
+ * @returns The object literal expression if the node resolves to one, `undefined` otherwise
+ */
 function objectLiteral(node: ts.Node | undefined): ts.ObjectLiteralExpression | undefined {
 	if (!node || !ts.isExpression(node)) {
 		return;
@@ -1342,6 +1710,11 @@ function objectLiteral(node: ts.Node | undefined): ts.ObjectLiteralExpression | 
 	return ts.isObjectLiteralExpression(unwrapped) ? unwrapped : undefined;
 }
 
+/**
+ * Gets the name of a called function or property access.
+ *
+ * @returns The identifier or property name used by the expression, or `undefined` when it cannot be determined.
+ */
 function callName(expression: ts.Expression): string | undefined {
 	const callee = ts.isCallExpression(expression)
 		? unwrapExpression(expression.expression)
@@ -1356,12 +1729,24 @@ function callName(expression: ts.Expression): string | undefined {
 	}
 }
 
+/**
+ * Gets the text name of a property declaration.
+ *
+ * @param name - The property name node
+ * @returns The property name text, or `undefined` for computed names
+ */
 function propertyName(name: ts.PropertyName): string | undefined {
 	if (ts.isIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)) {
 		return name.text;
 	}
 }
 
+/**
+ * Removes common TypeScript wrapper expressions from an expression.
+ *
+ * @param expression - The expression to unwrap.
+ * @returns The innermost expression after removing wrappers.
+ */
 function unwrapExpression(expression: ts.Expression): ts.Expression {
 	let current = expression;
 
@@ -1378,6 +1763,11 @@ function unwrapExpression(expression: ts.Expression): ts.Expression {
 	return current;
 }
 
+/**
+ * Validates middleware ordering for each route.
+ *
+ * @returns Diagnostics for middleware that requires context before it has been provided.
+ */
 function middlewareOrderDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 	const diagnostics: Diagnostic[] = [];
 
@@ -1416,6 +1806,12 @@ function middlewareOrderDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 	return diagnostics;
 }
 
+/**
+ * Reports routes that share the same path.
+ *
+ * @param routes - The discovered route metadata to inspect.
+ * @returns Diagnostics for each duplicate route path.
+ */
 function duplicateRouteDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 	const seen = new Map<string, RouteMetadata>();
 	const diagnostics: Diagnostic[] = [];
@@ -1441,6 +1837,12 @@ function duplicateRouteDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 	return diagnostics;
 }
 
+/**
+ * Writes generated route metadata to `.routa/routes.gen.ts`.
+ *
+ * @param cwd - The project root directory.
+ * @param routes - The discovered route metadata to serialize.
+ */
 function writeRoutesMetadata(cwd: string, routes: RouteMetadata[]): void {
 	const file = join(cwd, ".routa/routes.gen.ts");
 	mkdirSync(dirname(file), { recursive: true });
@@ -1453,6 +1855,11 @@ ${routeContextTypes(routes)}
 	);
 }
 
+/**
+ * Builds TypeScript declarations for route context types and module registration.
+ *
+ * @returns Generated source text for per-route context types, route-to-method context maps, and the `@routa/core` module augmentation.
+ */
 function routeContextTypes(routes: RouteMetadata[]): string {
 	const ctxTypes = routes
 		.map((route) => {
@@ -1474,6 +1881,12 @@ function routeContextTypes(routes: RouteMetadata[]): string {
 	return `${ctxTypes}\n\n${ctxMap}\n\n${ctxByKey}\n\ndeclare module "@routa/core" {\n\texport interface Register {\n\t\trouteCtxByPath: RoutaRouteCtxByPath;\n\t\tctxByKey: RoutaCtxByKey;\n\t}\n}`;
 }
 
+/**
+ * Builds the aggregate context type contributed by all middleware across the project.
+ *
+ * @param routes - Route metadata used to collect provided context keys and their inferred types
+ * @returns A TypeScript object type string for the combined context map, or `{ readonly __empty?: never }` when no context is provided
+ */
 function ctxByKeyType(routes: RouteMetadata[]): string {
 	const ctx = new Map<string, string>();
 
@@ -1499,6 +1912,12 @@ function ctxByKeyType(routes: RouteMetadata[]): string {
 		.join("\n")}\n}`;
 }
 
+/**
+ * Builds the route context map for all HTTP methods.
+ *
+ * @param route - The route metadata to describe.
+ * @returns A TypeScript object type mapping each HTTP method to its context type.
+ */
 function routeMethodCtxMap(route: RouteMetadata): string {
 	const methods: string[] = [];
 
@@ -1509,6 +1928,13 @@ function routeMethodCtxMap(route: RouteMetadata): string {
 	return `{\n${methods.join("\n")}\n\t}`;
 }
 
+/**
+ * Builds the context type for a route method's middleware chain.
+ *
+ * @param route - The route metadata to inspect
+ * @param method - The HTTP method whose middleware chain is used when present
+ * @returns A TypeScript object type for the middleware-provided context keys
+ */
 function routeCtxTypeNameForMiddleware(route: RouteMetadata, method: string): string {
 	const chain = route.methodMiddleware[method] ?? route.middleware;
 	const ctx = new Map<string, string>();
@@ -1529,16 +1955,35 @@ function routeCtxTypeNameForMiddleware(route: RouteMetadata, method: string): st
 		.join("\n")}\n\t\t}`;
 }
 
+/**
+ * Indents each line of a type string.
+ *
+ * @param type - The type text to indent
+ * @param tabs - The number of tab characters to prepend to each line after the first
+ * @returns The type text with newline-separated lines indented
+ */
 function indentType(type: string, tabs: number): string {
 	const indentation = "\t".repeat(tabs);
 	return type.replaceAll("\n", `\n${indentation}`);
 }
 
+/**
+ * Builds the generated context type name for a route path.
+ *
+ * @param route - The route metadata used to derive the name
+ * @returns The route context type name
+ */
 function routeCtxTypeName(route: RouteMetadata): string {
 	const suffix = route.path === "/" ? "Root" : pascalCase(route.path);
 	return `${suffix}Ctx`;
 }
 
+/**
+ * Converts a string to PascalCase.
+ *
+ * @param value - The input string
+ * @returns The PascalCase form of `value`, or `"Route"` when no alphanumeric characters are present
+ */
 function pascalCase(value: string): string {
 	const text = value.replaceAll(/[^a-zA-Z0-9]+/g, " ").trim();
 
@@ -1552,6 +1997,13 @@ function pascalCase(value: string): string {
 		.join("");
 }
 
+/**
+ * Runs the TypeScript compiler for a project.
+ *
+ * @param cwd - Project root directory
+ * @param args - Arguments passed to `tsc`
+ * @returns The compiler result, or `{ code: 0 }` when `tsconfig.json` is missing
+ */
 function runTypeScript(
 	cwd: string,
 	args: string[],
@@ -1572,6 +2024,13 @@ function runTypeScript(
 	};
 }
 
+/**
+ * Appends captured output to a list of lines.
+ *
+ * @param lines - The lines to join.
+ * @param output - Additional output to append after the joined lines.
+ * @returns The combined text with a trailing newline.
+ */
 function appendOutput(lines: string[], output?: string): string {
 	const base = `${lines.join("\n")}\n`;
 
@@ -1582,6 +2041,12 @@ function appendOutput(lines: string[], output?: string): string {
 	return `${base}${output.endsWith("\n") ? output : `${output}\n`}`;
 }
 
+/**
+ * Formats diagnostics into a newline-separated report.
+ *
+ * @param diagnostics - Diagnostics to format
+ * @returns The formatted diagnostic report
+ */
 function formatDiagnostics(diagnostics: Diagnostic[]): string {
 	return diagnostics
 		.map((diagnostic) => {
@@ -1592,6 +2057,12 @@ function formatDiagnostics(diagnostics: Diagnostic[]): string {
 		.join("\n");
 }
 
+/**
+ * Recursively lists all files under a directory.
+ *
+ * @param dir - The directory to traverse
+ * @returns The full paths of all files found under `dir`
+ */
 function walk(dir: string): string[] {
 	return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
 		const file = join(dir, entry.name);

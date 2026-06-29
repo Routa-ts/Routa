@@ -23,6 +23,12 @@ export type CreateLoggerOptions = {
 	now?: () => Date;
 };
 
+/**
+ * Creates a logger with optional custom output, time source, and enablement.
+ *
+ * @param options - Logger configuration.
+ * @returns A logger that writes events through the configured sink.
+ */
 export function createLogger(options: CreateLoggerOptions = {}): RoutaLogger {
 	const enabled = options.enabled ?? true;
 	const now = options.now ?? (() => new Date());
@@ -54,6 +60,11 @@ export function createLogger(options: CreateLoggerOptions = {}): RoutaLogger {
 	};
 }
 
+/**
+ * Writes a log event to the console.
+ *
+ * @param event - The log event to write
+ */
 function writeConsoleLog(event: RoutaLogEvent): void {
 	const payload = event.data ? ` ${JSON.stringify(event.data)}` : "";
 	const line = `[${event.timestamp}] ${event.level.toUpperCase()} ${event.event} ${event.message}${payload}`;

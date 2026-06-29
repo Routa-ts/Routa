@@ -23,6 +23,11 @@ type OpenApiLike = {
 	};
 };
 
+/**
+ * Checks the generated OpenAPI document against the saved baseline.
+ *
+ * @returns An object with an exit code and either standard output on success or standard error on failure.
+ */
 export function runOpenApiCheck(cwd = process.cwd()): {
 	code: number;
 	stdout?: string;
@@ -50,6 +55,15 @@ export function runOpenApiCheck(cwd = process.cwd()): {
 	return { code: 0, stdout: "OpenAPI check passed. No drift detected.\n" };
 }
 
+/**
+ * Checks for removed OpenAPI operations against the baseline.
+ *
+ * Writes the generated OpenAPI document back to the baseline file when `--update-baseline` is present.
+ *
+ * @param argv - Command-line arguments
+ * @param cwd - The working directory containing the Routa project
+ * @returns An exit result with diagnostics or a success message
+ */
 export function runOpenApiBreaking(
 	argv: readonly string[],
 	cwd = process.cwd(),
@@ -84,6 +98,12 @@ export function runOpenApiBreaking(
 	return { code: 0, stdout: "OpenAPI breaking check passed. No removed operations detected.\n" };
 }
 
+/**
+ * Builds an OpenAPI document for the current project.
+ *
+ * @param cwd - The project directory to inspect.
+ * @returns The generated OpenAPI document, including diagnostics when project validation fails.
+ */
 export function generateOpenApi(cwd = process.cwd()): OpenApiLike {
 	const validation = validateProject(cwd);
 	const baseline = readBaseline(cwd);
@@ -139,6 +159,14 @@ export function generateOpenApi(cwd = process.cwd()): OpenApiLike {
 	};
 }
 
+/**
+ * Looks up a baseline operation ID for a path and method.
+ *
+ * @param baseline - The baseline OpenAPI document to read from
+ * @param path - The OpenAPI path to look up
+ * @param method - The HTTP method to look up
+ * @returns An object containing `operationId` when one is defined, or an empty object otherwise
+ */
 function operationIdForBaseline(
 	baseline: OpenApiLike | undefined,
 	path: string,
@@ -148,6 +176,11 @@ function operationIdForBaseline(
 	return operationId ? { operationId } : {};
 }
 
+/**
+ * Formats Routa graph diagnostics from an OpenAPI document.
+ *
+ * @returns The diagnostics as formatted strings.
+ */
 function invalidGraphDiagnostics(document: OpenApiLike): string[] {
 	const diagnostics = (
 		document as { "x-routa-diagnostics"?: Array<{ code: string; message: string; file?: string }> }
@@ -164,6 +197,13 @@ type ParsedContract = {
 	responses: Map<number, unknown>;
 };
 
+/**
+ * Builds OpenAPI input for a route.
+ *
+ * @param path - The route path containing `:param` segments.
+ * @param input - The parsed contract input for the route.
+ * @returns An object containing OpenAPI `parameters` and, when present, a JSON `requestBody`.
+ */
 function operationInput(path: string, input: ParsedContract["input"] | undefined) {
 	const parameters = [
 		...pathParams(path).map((name) => ({
@@ -193,6 +233,14 @@ function operationInput(path: string, input: ParsedContract["input"] | undefined
 	};
 }
 
+/**
+ * Reads request and response contracts from a route file.
+ *
+ * @param cwd - The working directory containing the route file
+ * @param routeFile - The route file path relative to `cwd`
+ * @param components - Available component schemas for resolving references
+ * @returns A record of HTTP methods to parsed route contracts
+ */
 function readRouteContracts(
 	cwd: string,
 	routeFile: string,
@@ -373,10 +421,23 @@ class SchemaReader {
 	}
 }
 
+/**
+ * Creates a schema reader for exported schema definitions in a file.
+ *
+ * @param schemaFile - Path to the TypeScript file containing schema exports
+ * @param components - Component schemas available for `$ref` resolution
+ * @returns A schema reader initialized with the file contents
+ */
 function readSchemaExports(schemaFile: string, components: Record<string, unknown>): SchemaReader {
 	return new SchemaReader(readFileSync(schemaFile, "utf8"), components);
 }
 
+/**
+ * Collects property assignments from object literals passed to function calls.
+ *
+ * @param ast - The source file to scan
+ * @returns The property assignments found inside call expression arguments
+ */
 function defineRouteProperties(ast: ts.SourceFile): ts.PropertyAssignment[] {
 	const properties: ts.PropertyAssignment[] = [];
 
@@ -400,6 +461,12 @@ function defineRouteProperties(ast: ts.SourceFile): ts.PropertyAssignment[] {
 	return properties;
 }
 
+/**
+ * Extracts the route configuration object from a `createRoute` call.
+ *
+ * @param expression - The expression to inspect
+ * @returns The object literal passed to `createRoute`, or `undefined` if the expression is not a matching call
+ */
 function createRouteConfig(expression: ts.Expression): ts.ObjectLiteralExpression | undefined {
 	const unwrapped = unwrapExpression(expression);
 
@@ -414,6 +481,13 @@ function createRouteConfig(expression: ts.Expression): ts.ObjectLiteralExpressio
 	return undefined;
 }
 
+/**
+ * Reads input schema definitions from a route configuration.
+ *
+ * @param config - The route configuration object.
+ * @param schemas - The schema resolver used to convert TypeScript expressions into schema objects.
+ * @returns A mapping of input field names to resolved schema objects.
+ */
 function readInputSchemas(
 	config: ts.ObjectLiteralExpression,
 	schemas: SchemaReader,
@@ -437,6 +511,13 @@ function readInputSchemas(
 	) as ParsedContract["input"];
 }
 
+/**
+ * Reads response schemas from a route configuration.
+ *
+ * @param config - The route configuration object.
+ * @param schemas - The schema resolver used to convert expressions into OpenAPI schemas.
+ * @returns A map of HTTP status codes to resolved response schemas.
+ */
 function readResponseSchemas(
 	config: ts.ObjectLiteralExpression,
 	schemas: SchemaReader,
@@ -464,6 +545,13 @@ function readResponseSchemas(
 	return result;
 }
 
+/**
+ * Gets the initializer for a named property in an object literal.
+ *
+ * @param object - The object literal to search
+ * @param name - The property name to match
+ * @returns The matching property's initializer, or `undefined` if no match is found
+ */
 function objectProperty(
 	object: ts.ObjectLiteralExpression,
 	name: string,
@@ -477,6 +565,13 @@ function objectProperty(
 	return undefined;
 }
 
+/**
+ * Gets a numeric property value from an object literal.
+ *
+ * @param object - The object literal to read from.
+ * @param name - The property name.
+ * @returns The numeric value when the property exists and is a numeric literal; otherwise, `undefined`.
+ */
 function numericProperty(object: ts.ObjectLiteralExpression, name: string): number | undefined {
 	const value = objectProperty(object, name);
 
@@ -487,6 +582,12 @@ function numericProperty(object: ts.ObjectLiteralExpression, name: string): numb
 	return undefined;
 }
 
+/**
+ * Gets the text of a property name node.
+ *
+ * @param name - The property name node to read.
+ * @returns The property name text, or `undefined` for unsupported name nodes.
+ */
 function propertyName(name: ts.PropertyName): string | undefined {
 	if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
 		return name.text;
@@ -495,6 +596,11 @@ function propertyName(name: ts.PropertyName): string | undefined {
 	return undefined;
 }
 
+/**
+ * Gets the name of a callable expression.
+ *
+ * @returns The identifier or property name for the expression, or `undefined` if no name can be resolved.
+ */
 function callName(expression: ts.Expression): string | undefined {
 	const unwrapped = unwrapExpression(expression);
 
@@ -509,15 +615,33 @@ function callName(expression: ts.Expression): string | undefined {
 	return undefined;
 }
 
+/**
+ * Determines whether an expression calls `optional`.
+ *
+ * @param expression - The expression to inspect
+ * @returns `true` if the expression is an `optional(...)` call, `false` otherwise.
+ */
 function isOptionalCall(expression: ts.Expression): boolean {
 	const unwrapped = unwrapExpression(expression);
 	return ts.isCallExpression(unwrapped) && callName(unwrapped.expression) === "optional";
 }
 
+/**
+ * Determines whether a value is an HTTP method name.
+ *
+ * @param value - The value to check
+ * @returns `true` if `value` is `get`, `post`, `put`, `patch`, `delete`, `head`, or `options`, `false` otherwise.
+ */
 function isHttpMethod(value: string): boolean {
 	return ["get", "post", "put", "patch", "delete", "head", "options"].includes(value);
 }
 
+/**
+ * Removes wrapper expressions and returns the inner expression.
+ *
+ * @param expression - The expression to unwrap
+ * @returns The innermost expression after removing wrapper syntax
+ */
 function unwrapExpression(expression: ts.Expression): ts.Expression {
 	let current = expression;
 
@@ -534,6 +658,13 @@ function unwrapExpression(expression: ts.Expression): ts.Expression {
 	return current;
 }
 
+/**
+ * Builds OpenAPI parameter definitions from an object schema.
+ *
+ * @param schema - The schema whose properties become parameters.
+ * @param location - The OpenAPI parameter location.
+ * @returns The parameter definitions for each property in `schema`.
+ */
 function parameterSchemas(schema: unknown, location: string): Array<Record<string, unknown>> {
 	if (!isObjectSchema(schema)) {
 		return [];
@@ -547,6 +678,13 @@ function parameterSchemas(schema: unknown, location: string): Array<Record<strin
 	}));
 }
 
+/**
+ * Gets the schema for a named object property.
+ *
+ * @param schema - The object schema to read from
+ * @param name - The property name
+ * @returns The property's schema, or `{ type: "string" }` when no schema is defined
+ */
 function propertySchema(schema: unknown, name: string): unknown {
 	if (!isObjectSchema(schema)) {
 		return { type: "string" };
@@ -555,6 +693,12 @@ function propertySchema(schema: unknown, name: string): unknown {
 	return schema.properties?.[name] ?? { type: "string" };
 }
 
+/**
+ * Determines whether a value is an object schema.
+ *
+ * @param value - The value to check.
+ * @returns `true` if the value is a non-null object, `false` otherwise.
+ */
 function isObjectSchema(value: unknown): value is {
 	type?: string;
 	properties?: Record<string, unknown>;
@@ -563,10 +707,20 @@ function isObjectSchema(value: unknown): value is {
 	return typeof value === "object" && value !== null;
 }
 
+/**
+ * Extracts parameter names from a route path.
+ *
+ * @returns The parameter names found in `:name` segments.
+ */
 function pathParams(path: string): string[] {
 	return Array.from(path.matchAll(/:([^/]+)/g)).map((match) => match[1]);
 }
 
+/**
+ * Compares two OpenAPI documents and reports drift between them.
+ *
+ * @returns Diagnostic strings for removed operations, removed response statuses, schema changes, and added response statuses.
+ */
 function driftDiagnostics(baseline: OpenApiLike, current: OpenApiLike): string[] {
 	const diagnostics: string[] = [];
 
@@ -612,6 +766,11 @@ function driftDiagnostics(baseline: OpenApiLike, current: OpenApiLike): string[]
 	return diagnostics;
 }
 
+/**
+ * Normalizes an operation for stable comparison.
+ *
+ * @returns A normalized object containing the operation's parameters, request body, and responses.
+ */
 function comparableOperation(operation: {
 	parameters?: Array<Record<string, unknown>>;
 	requestBody?: Record<string, unknown>;
@@ -624,6 +783,12 @@ function comparableOperation(operation: {
 	};
 }
 
+/**
+ * Normalizes a request body for comparison.
+ *
+ * @param requestBody - The request body to normalize.
+ * @returns The normalized request body without the `required` field.
+ */
 function normalizeRequestBody(requestBody: Record<string, unknown> | undefined): unknown {
 	if (!requestBody) {
 		return normalize(requestBody);
@@ -633,6 +798,9 @@ function normalizeRequestBody(requestBody: Record<string, unknown> | undefined):
 	return normalize(rest);
 }
 
+/**
+ * Normalizes a value for stable JSON comparison.
+ */
 function normalize(value: unknown): unknown {
 	if (Array.isArray(value)) {
 		return value
@@ -653,10 +821,22 @@ function normalize(value: unknown): unknown {
 	return value;
 }
 
+/**
+ * Serializes a normalized value to JSON.
+ *
+ * @param value - The value to serialize
+ * @returns The JSON string for the normalized value
+ */
 function stableJson(value: unknown): string {
 	return JSON.stringify(normalize(value));
 }
 
+/**
+ * Determines whether a value is an empty schema container.
+ *
+ * @param value - The value to inspect.
+ * @returns `true` if `value` is an empty array or an object with no own keys, `false` otherwise.
+ */
 function isEmptySchemaContainer(value: unknown): boolean {
 	return (
 		(Array.isArray(value) && value.length === 0)
@@ -667,6 +847,11 @@ function isEmptySchemaContainer(value: unknown): boolean {
 	);
 }
 
+/**
+ * Reports operations that exist in the baseline but are missing from the current OpenAPI document.
+ *
+ * @returns Diagnostic strings for each removed operation.
+ */
 function removedOperationDiagnostics(baseline: OpenApiLike, current: OpenApiLike): string[] {
 	const diagnostics: string[] = [];
 
@@ -681,6 +866,12 @@ function removedOperationDiagnostics(baseline: OpenApiLike, current: OpenApiLike
 	return diagnostics;
 }
 
+/**
+ * Loads the OpenAPI baseline from the project.
+ *
+ * @param cwd - The directory containing the `.routa/openapi-baseline.json` file.
+ * @returns The parsed baseline document, or `undefined` if the file does not exist.
+ */
 function readBaseline(cwd: string): OpenApiLike | undefined {
 	const file = join(cwd, ".routa/openapi-baseline.json");
 

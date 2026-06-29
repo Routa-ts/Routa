@@ -189,12 +189,24 @@ export type RoutaConfig = {
 	logger?: RoutaLogger | false;
 };
 
+/**
+ * Preserves a Routa configuration object.
+ *
+ * @param config - The Routa configuration to use
+ * @returns The provided configuration with Routa configuration typing
+ */
 export function createRouta<const TConfig extends RoutaConfig>(
 	config: TConfig,
 ): TConfig & RoutaConfig {
 	return config;
 }
 
+/**
+ * Preserves a route contract with its inferred types.
+ *
+ * @param contract - The route contract to preserve
+ * @returns The same route contract
+ */
 export function createRoute<
 	const TInput extends RouteInput | undefined,
 	const TResponses extends RouteResponses,
@@ -206,10 +218,21 @@ export function createRoute<
 	return contract;
 }
 
+/**
+ * Defines a route configuration.
+ *
+ * @param config - The route configuration to preserve.
+ * @returns The provided route configuration.
+ */
 export function defineRoute<const TConfig extends DefineRouteConfig>(config: TConfig): TConfig {
 	return config;
 }
 
+/**
+ * Creates a route definition factory that binds route configs to per-path context types.
+ *
+ * @returns A function that accepts a route path and returns a config helper for that path.
+ */
 export function createRouteRootFactory<
 	TCtxByPath extends Record<string, Partial<Record<HttpMethod, unknown>>>,
 >() {
@@ -222,6 +245,12 @@ export function createRouteRootFactory<
 	};
 }
 
+/**
+ * Creates a route definition factory for a specific path.
+ *
+ * @param _path - The route path used to select the matching context type
+ * @returns A function that accepts a route configuration for the selected path
+ */
 export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPath & string>(
 	_path: TPath,
 ) {
@@ -232,6 +261,12 @@ export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPa
 	};
 }
 
+/**
+ * Preserves a middleware contract's type information.
+ *
+ * @param contract - The middleware contract to preserve
+ * @returns The provided middleware contract
+ */
 export function createMiddleware<
 	const TRequires extends readonly RegisteredCtxKey[] = readonly RegisteredCtxKey[],
 	const TProvides extends MiddlewareProvidesSpec = Record<string, z.ZodTypeAny>,

@@ -35,6 +35,12 @@ export type CreateHonoAppOptions = {
 	logger?: RoutaLogger;
 };
 
+/**
+ * Creates a Hono app for the provided routes.
+ *
+ * @param routes - Route definitions to register
+ * @returns The configured Hono app
+ */
 export function createHonoApp(
 	routes: readonly HonoRoute[],
 	options: CreateHonoAppOptions = {},
@@ -104,6 +110,18 @@ export function createHonoApp(
 	return app;
 }
 
+/**
+ * Runs route middleware and the final handler in sequence.
+ *
+ * Middleware can either return a runtime result or call `next()` to continue to the next step.
+ * Context updates passed to `next()` are merged into the shared context object.
+ *
+ * @param contract - The route contract to execute
+ * @param routeInput - Parsed input passed to the final handler
+ * @param ctx - Shared context object available to middleware and the final handler
+ * @param inputReader - Reader used to parse middleware-specific input
+ * @returns The runtime result produced by middleware or the final handler
+ */
 async function runWithMiddleware(
 	contract: RuntimeRouteContract,
 	routeInput: Record<string, unknown>,
@@ -191,6 +209,14 @@ class RequestInputReader {
 	}
 }
 
+/**
+ * Parses a JSON request body.
+ *
+ * @param request - The incoming request
+ * @returns The parsed JSON value
+ * @throws {Response} When the request content type is not JSON
+ * @throws {InvalidJsonBodyError} When the body cannot be parsed as JSON
+ */
 async function parseBody(request: Request): Promise<unknown> {
 	const contentType = request.headers.get("content-type") ?? "";
 
@@ -205,10 +231,23 @@ async function parseBody(request: Request): Promise<unknown> {
 	}
 }
 
+/**
+ * Parses a value with the given schema.
+ *
+ * @param schema - The schema used to validate and transform the value
+ * @param value - The value to parse
+ * @returns The parsed value
+ */
 function parseSchema(schema: z.ZodTypeAny, value: unknown): unknown {
 	return schema.parse(value);
 }
 
+/**
+ * Parses cookies from the request header.
+ *
+ * @param request - The request containing the `cookie` header
+ * @returns A record of cookie names to decoded values
+ */
 function parseCookies(request: Request): Record<string, string> {
 	const header = request.headers.get("cookie");
 
@@ -235,6 +274,13 @@ function parseCookies(request: Request): Record<string, string> {
 	);
 }
 
+/**
+ * Validates a handler result against the declared response contract.
+ *
+ * @param contract - The route contract that defines allowed response types and schemas.
+ * @param result - The value returned by a handler.
+ * @returns A validated runtime result with the corresponding HTTP status.
+ */
 function validateResult(
 	contract: RuntimeRouteContract,
 	result: unknown,
@@ -266,6 +312,12 @@ function validateResult(
 	}
 }
 
+/**
+ * Determines whether a value matches the runtime result shape.
+ *
+ * @param value - The value to check
+ * @returns `true` if the value is a non-null object with a string `type` property and a `data` property, `false` otherwise.
+ */
 function isRuntimeResult(value: unknown): value is RuntimeResult {
 	return (
 		typeof value === "object"
@@ -276,6 +328,11 @@ function isRuntimeResult(value: unknown): value is RuntimeResult {
 	);
 }
 
+/**
+ * Converts an object-like value to a plain record.
+ *
+ * @returns The value as a record when it is a non-array object, or an empty object otherwise.
+ */
 function toRecord(value: unknown): Record<string, unknown> {
 	if (typeof value === "object" && value !== null && !Array.isArray(value)) {
 		return value as Record<string, unknown>;
@@ -284,6 +341,13 @@ function toRecord(value: unknown): Record<string, unknown> {
 	return {};
 }
 
+/**
+ * Creates a JSON response.
+ *
+ * @param data - The response body to serialize as JSON
+ * @param status - The HTTP status code for the response
+ * @returns A `Response` with a JSON body and `application/json; charset=utf-8` content type
+ */
 function json(data: unknown, status: number): Response {
 	return new Response(JSON.stringify(data), {
 		status,
@@ -293,6 +357,11 @@ function json(data: unknown, status: number): Response {
 	});
 }
 
+/**
+ * Determines whether a request accepts JSON responses.
+ *
+ * @returns `true` if the `Accept` header allows `application/json`, `application/*`, or `*/*`, `false` otherwise.
+ */
 function acceptsJson(request: Request): boolean {
 	const accept = request.headers.get("accept");
 
@@ -306,6 +375,11 @@ function acceptsJson(request: Request): boolean {
 		.some((value) => value === "*/*" || value === "application/*" || value === "application/json");
 }
 
+/**
+ * Converts an error into an HTTP response.
+ *
+ * @returns A response that preserves `Response` values and maps known error types to problem JSON responses.
+ */
 function errorResponse(error: unknown): Response {
 	if (error instanceof Response) {
 		return error;
@@ -358,6 +432,13 @@ function errorResponse(error: unknown): Response {
 	);
 }
 
+/**
+ * Logs failed server requests.
+ *
+ * @param context - The request context.
+ * @param error - The error associated with the failure.
+ * @param response - The response returned for the request.
+ */
 function logRequestError(
 	logger: RoutaLogger | undefined,
 	context: Context,
@@ -379,6 +460,12 @@ function logRequestError(
 	logger.error("http.error", "Request failed.", data);
 }
 
+/**
+ * Builds structured log data for an error value.
+ *
+ * @param error - The error value to describe
+ * @returns An object containing error details, or a stringified error value for non-`Error` inputs
+ */
 function errorLogData(error: unknown): Record<string, unknown> {
 	if (error instanceof Error) {
 		return {

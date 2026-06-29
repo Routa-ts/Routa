@@ -14,6 +14,11 @@ type RoutaConfig = {
 	logger?: ReturnType<typeof createLogger> | false;
 };
 
+/**
+ * Starts the Routa API server for a working directory.
+ *
+ * @param cwd - The working directory that contains the Routa project files.
+ */
 export async function startRuntime(cwd: string): Promise<void> {
 	const stubPoller = startRouteStubPoller(cwd);
 	const routes = await loadRoutes(cwd);
@@ -41,6 +46,12 @@ export async function startRuntime(cwd: string): Promise<void> {
 	});
 }
 
+/**
+ * Periodically reports stubbed route files for a working directory.
+ *
+ * @param cwd - The working directory to scan for empty route files
+ * @returns An object with a method that stops the poller
+ */
 function startRouteStubPoller(cwd: string): { close: () => void } {
 	const stub = () => {
 		for (const file of stubEmptyRouteFiles(cwd)) {
@@ -55,6 +66,12 @@ function startRouteStubPoller(cwd: string): { close: () => void } {
 	};
 }
 
+/**
+ * Loads runtime configuration from `src/routa.ts`.
+ *
+ * @param cwd - Working directory containing the Routa project
+ * @returns The default export from `src/routa.ts`, or an empty object when no default export is provided
+ */
 async function loadRoutaConfig(cwd: string): Promise<RoutaConfig> {
 	const module = (await import(pathToFileURL(join(cwd, "src/routa.ts")).href)) as {
 		default?: RoutaConfig;
@@ -63,6 +80,15 @@ async function loadRoutaConfig(cwd: string): Promise<RoutaConfig> {
 	return module.default ?? {};
 }
 
+/**
+ * Builds the Hono route list for a project.
+ *
+ * Loads generated route metadata, imports each route module, and assembles the route contracts with file-level and contract-level middleware.
+ *
+ * @param cwd - The project working directory
+ * @returns The assembled Hono route definitions
+ * @throws If a route file does not export a default route config or is missing a required method contract
+ */
 export async function loadRoutes(cwd: string): Promise<HonoRoute[]> {
 	const metadataModule = (await import(pathToFileURL(join(cwd, ".routa/routes.gen.ts")).href)) as {
 		routaRoutes: readonly RouteMetadata[];
@@ -111,6 +137,14 @@ export async function loadRoutes(cwd: string): Promise<HonoRoute[]> {
 	return routes;
 }
 
+/**
+ * Loads middleware contracts referenced by route metadata.
+ *
+ * @param cwd - The working directory used to resolve middleware files
+ * @param routeFile - The current route file to exclude from loading
+ * @param metadata - Middleware references to resolve
+ * @returns The resolved middleware contracts
+ */
 async function loadFileMiddleware(
 	cwd: string,
 	routeFile: string,

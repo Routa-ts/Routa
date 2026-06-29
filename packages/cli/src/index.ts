@@ -38,6 +38,13 @@ export type RunOptions = {
 	cwd?: string;
 };
 
+/**
+ * Dispatches a Routa CLI command.
+ *
+ * @param argv - Command-line arguments after the executable name
+ * @param options - Command options
+ * @returns The command result, including an exit code and optional output
+ */
 export function run(argv: readonly string[], options: RunOptions = {}): CommandResult {
 	const [command, subcommand] = argv;
 	const cwd = options.cwd ?? process.cwd();
@@ -92,6 +99,13 @@ export function run(argv: readonly string[], options: RunOptions = {}): CommandR
 	return { code: 1, stderr: `Unknown command: ${command}\n\n${helpText}` };
 }
 
+/**
+ * Creates a Routa project in the target directory and formats the CLI result.
+ *
+ * @param argv - Command-line arguments after `create`
+ * @param cwd - Base working directory for project creation
+ * @returns The command exit code and any output or error text
+ */
 function runCreateCommand(argv: readonly string[], cwd: string): CommandResult {
 	const targetDir = argv.find((item) => !item.startsWith("--")) ?? "routa-app";
 
@@ -147,10 +161,23 @@ function runCreateCommand(argv: readonly string[], cwd: string): CommandResult {
 	}
 }
 
+/**
+ * Formats a summary of the created project files.
+ *
+ * @param targetDir - The project directory name
+ * @param files - The created file paths
+ * @returns A summary string listing the created files
+ */
 function createSummary(targetDir: string, files: string[]): string {
 	return `Created Routa project '${targetDir}' with ${files.length} file(s).\n${files.join("\n")}\n`;
 }
 
+/**
+ * Formats scaffold output for display in the CLI.
+ *
+ * @param result - The scaffold result to format
+ * @returns The formatted output text
+ */
 function formatScaffoldResult(result: ReturnType<typeof scaffoldOpenApi>): string {
 	const lines = [
 		`${result.preview ? "Previewed" : "Scaffolded"} ${result.routes.length} Routa route file(s).`,
@@ -174,6 +201,12 @@ function formatScaffoldResult(result: ReturnType<typeof scaffoldOpenApi>): strin
 	return `${lines.join("\n")}\n`;
 }
 
+/**
+ * Maps a scaffold preview status to its display marker.
+ *
+ * @param status - The preview change status.
+ * @returns The marker string for the given status.
+ */
 function previewMarker(status: ScaffoldPreviewChange["status"]): string {
 	switch (status) {
 		case "add":
@@ -189,6 +222,11 @@ function previewMarker(status: ScaffoldPreviewChange["status"]): string {
 	}
 }
 
+/**
+ * Runs the CLI command and writes its output to the process streams.
+ *
+ * @param argv - Command-line arguments to process
+ */
 export function main(argv = process.argv.slice(2)): void {
 	if (argv[0] === "dev") {
 		runProjectDevProcess(argv.slice(1));
@@ -212,6 +250,11 @@ if (isCliEntry()) {
 	main();
 }
 
+/**
+ * Determines whether this module is running as the CLI entrypoint.
+ *
+ * @returns `true` if the current process was started through this file, `false` otherwise.
+ */
 function isCliEntry(): boolean {
 	if (!process.argv[1]) {
 		return false;

@@ -18,10 +18,23 @@ type CreateConfig = {
 	cwd: string;
 };
 
+/**
+ * Prepends the create subcommand to an argument list.
+ *
+ * @param argv - The original command-line arguments
+ * @returns The arguments with `"create"` inserted at the beginning
+ */
 export function createCommandArgs(argv: readonly string[]): string[] {
 	return ["create", ...argv];
 }
 
+/**
+ * Creates a new Routa app from the provided command-line arguments.
+ *
+ * @param argv - Command-line arguments to parse
+ * @param cwd - Current working directory used to resolve paths
+ * @returns `0` on success or cancellation, `1` if project creation fails
+ */
 export async function runCreate(
 	argv = process.argv.slice(2),
 	cwd = process.cwd(),
@@ -84,6 +97,13 @@ export async function runCreate(
 	}
 }
 
+/**
+ * Resolves the Routa package version for a new project.
+ *
+ * @param cwd - The current working directory used to locate a pnpm workspace
+ * @param targetDir - The target project directory
+ * @returns `"workspace:*"` for example projects in matching workspaces, `"latest"` otherwise
+ */
 export function resolveRoutaVersion(cwd: string, targetDir: string): "latest" | "workspace:*" {
 	const workspaceRoot = findWorkspaceRoot(cwd);
 
@@ -102,6 +122,12 @@ export function resolveRoutaVersion(cwd: string, targetDir: string): "latest" | 
 	return "latest";
 }
 
+/**
+ * Finds the nearest pnpm workspace root for a directory.
+ *
+ * @param cwd - The directory to start searching from
+ * @returns The path to the first directory containing `pnpm-workspace.yaml`, or `undefined` if none is found
+ */
 function findWorkspaceRoot(cwd: string): string | undefined {
 	let current = resolve(cwd);
 
@@ -120,6 +146,13 @@ function findWorkspaceRoot(cwd: string): string | undefined {
 	}
 }
 
+/**
+ * Resolves project creation settings from command-line arguments and prompts.
+ *
+ * @param argv - Command-line arguments after the command name
+ * @param cwd - Current working directory
+ * @returns The resolved creation configuration
+ */
 async function resolveCreateConfig(argv: readonly string[], cwd: string): Promise<CreateConfig> {
 	const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
 	const targetArg = argv.find((item) => !item.startsWith("--"));
@@ -158,6 +191,16 @@ async function resolveCreateConfig(argv: readonly string[], cwd: string): Promis
 	};
 }
 
+/**
+ * Resolves a boolean option from CLI flags or an interactive prompt.
+ *
+ * @param argv - The command-line arguments to inspect.
+ * @param enabledFlag - The flag that enables the option.
+ * @param disabledFlag - The flag that disables the option.
+ * @param label - The prompt text shown when asking the user.
+ * @param defaultValue - The value used when prompting is unavailable.
+ * @returns The resolved boolean option value.
+ */
 async function flagOrPrompt(
 	argv: readonly string[],
 	enabledFlag: string,
@@ -180,6 +223,12 @@ async function flagOrPrompt(
 	return await confirm(label, defaultValue);
 }
 
+/**
+ * Prompts for a line of user input.
+ *
+ * @param label - The prompt text to display
+ * @returns The text entered by the user
+ */
 async function question(label: string): Promise<string> {
 	const prompt = createInterface({
 		input: process.stdin,
@@ -193,6 +242,13 @@ async function question(label: string): Promise<string> {
 	}
 }
 
+/**
+ * Prompts for a yes-or-no response.
+ *
+ * @param label - The prompt text shown to the user
+ * @param defaultValue - The value used when the user submits an empty response
+ * @returns `true` if the user answers yes, `false` otherwise
+ */
 async function confirm(label: string, defaultValue: boolean): Promise<boolean> {
 	const suffix = defaultValue ? "Y/n" : "y/N";
 	const answer = (await question(`${label} (${suffix})`)).trim().toLowerCase();
@@ -204,6 +260,11 @@ async function confirm(label: string, defaultValue: boolean): Promise<boolean> {
 	return ["y", "yes"].includes(answer);
 }
 
+/**
+ * Prints a summary of the project configuration.
+ *
+ * @param config - The resolved project creation settings
+ */
 function printSummary(config: CreateConfig): void {
 	process.stdout.write("Let's configure your Routa API\n\n");
 	process.stdout.write("About to create:\n\n");
@@ -227,6 +288,11 @@ if (isCliEntry()) {
 		});
 }
 
+/**
+ * Determines whether this module is being executed directly.
+ *
+ * @returns `true` if the current process entry point matches this module, `false` otherwise.
+ */
 function isCliEntry(): boolean {
 	if (!process.argv[1]) {
 		return false;

@@ -101,6 +101,14 @@ const generatedHeader = (source: string) =>
 
 const routesRoot = join("src", "routes");
 
+/**
+ * Scaffolds Routa route and schema files from an OpenAPI document.
+ *
+ * @param inputFile - Path to the OpenAPI source file.
+ * @param cwd - Project root used to resolve input and generated files.
+ * @param options - Scaffolding options.
+ * @returns The generated file list, preview changes, route metadata, and preview mode flag.
+ */
 export function scaffoldOpenApi(
 	inputFile: string,
 	cwd = process.cwd(),
@@ -376,6 +384,14 @@ declare module "@routa/core" {
 	};
 }
 
+/**
+ * Parses an OpenAPI document and verifies its top-level `paths` structure.
+ *
+ * @param raw - The raw JSON or YAML source text.
+ * @param extension - The input file extension used to select the parser.
+ * @param source - The source file path used in error messages.
+ * @returns The parsed OpenAPI document.
+ */
 function parseOpenApi(raw: string, extension: string, source: string): OpenApiDocument {
 	let document: unknown;
 
@@ -418,6 +434,13 @@ function parseOpenApi(raw: string, extension: string, source: string): OpenApiDo
 	return document as OpenApiDocument;
 }
 
+/**
+ * Formats the error for an OpenAPI document that is missing a top-level `paths` object.
+ *
+ * @param source - The input file path used in the error message.
+ * @param document - The parsed document used to suggest a corrected structure.
+ * @returns A formatted scaffold error message.
+ */
 function formatMissingPathsError(source: string, document: unknown): string {
 	const keys =
 		document && typeof document === "object" && !Array.isArray(document)
@@ -457,6 +480,13 @@ function formatMissingPathsError(source: string, document: unknown): string {
 	return scaffoldError("ROUTA_OPENAPI_MISSING_PATHS", lines[0], lines.slice(1));
 }
 
+/**
+ * Validates an OpenAPI document for Routa scaffolding support.
+ *
+ * Ensures the document includes required top-level fields, supported paths and operations, unique operation IDs, compatible request and response shapes, and supported schema definitions.
+ *
+ * @param document - The OpenAPI document to validate
+ */
 function validateOpenApiDocument(document: OpenApiDocument): void {
 	if (!document.openapi) {
 		throw new Error(
@@ -598,6 +628,12 @@ function validateOpenApiDocument(document: OpenApiDocument): void {
 	}
 }
 
+/**
+ * Validates that a path template and its declared path parameters match.
+ *
+ * @param path - The OpenAPI path template to check.
+ * @param operation - The operation whose `in: "path"` parameters are validated against the template.
+ */
 function validatePathParameters(path: string, operation: OpenApiOperation): void {
 	const pathParams = new Set(
 		path
@@ -638,6 +674,14 @@ function validatePathParameters(path: string, operation: OpenApiOperation): void
 	}
 }
 
+/**
+ * Validates an operation's request body for scaffold generation.
+ *
+ * @param operation - The OpenAPI operation to validate
+ * @param method - The HTTP method for error reporting
+ * @param path - The OpenAPI path for error reporting
+ * @param document - The OpenAPI document used to validate referenced schemas
+ */
 function validateRequestBody(
 	operation: OpenApiOperation,
 	method: HttpMethod,
@@ -673,6 +717,15 @@ function validateRequestBody(
 	}
 }
 
+/**
+ * Validates the response definitions for an operation.
+ *
+ * @param operation - The OpenAPI operation to validate
+ * @param method - The HTTP method for error messages
+ * @param path - The OpenAPI path for error messages
+ * @param document - The OpenAPI document used to validate referenced schemas
+ * @throws Error when the operation has no responses, uses an invalid status code, or includes unsupported response content
+ */
 function validateResponses(
 	operation: OpenApiOperation,
 	method: HttpMethod,
@@ -735,6 +788,13 @@ function validateResponses(
 	}
 }
 
+/**
+ * Validates a supported OpenAPI schema for scaffolding.
+ *
+ * @param schema - The schema to validate.
+ * @param document - The OpenAPI document containing component references.
+ * @param location - The location label used in validation errors.
+ */
 function validateSchema(
 	schema: OpenApiSchema | undefined,
 	document: OpenApiDocument,
@@ -790,22 +850,53 @@ function validateSchema(
 	}
 }
 
+/**
+ * Determines whether a path item key is OpenAPI metadata.
+ *
+ * @param key - The path item key to check
+ * @returns `true` if the key is `parameters`, `summary`, `description`, or `servers`, `false` otherwise.
+ */
 function isOpenApiPathItemMetadata(key: string): boolean {
 	return ["parameters", "summary", "description", "servers"].includes(key);
 }
 
+/**
+ * Suggests an operation ID for an HTTP method and path.
+ *
+ * @returns A PascalCase identifier built from the method and path.
+ */
 function suggestOperationId(method: HttpMethod, path: string): string {
 	return `${method}${pascalCase(path)}`;
 }
 
+/**
+ * Determines whether a value is a plain object.
+ *
+ * @param value - The value to check.
+ * @returns `true` if `value` is a non-null object and not an array, `false` otherwise.
+ */
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Formats a scaffold error message.
+ *
+ * @param code - The error code prefix
+ * @param message - The main error message
+ * @param details - Additional detail lines to append
+ * @returns The formatted error text
+ */
 function scaffoldError(code: string, message: string, details: string[] = []): string {
 	return [`${code}: ${message}`, ...details].join("\n");
 }
 
+/**
+ * Converts an OpenAPI path to its route directory path.
+ *
+ * @param openApiPath - The OpenAPI path template
+ * @returns The route directory path under `src/routes`
+ */
 function pathToRouteDir(openApiPath: string): string {
 	const segments = pathSegments(openApiPath).map((segment) =>
 		segment.startsWith("{") && segment.endsWith("}") ? `$${segment.slice(1, -1)}` : segment,
@@ -814,6 +905,12 @@ function pathToRouteDir(openApiPath: string): string {
 	return join(routesRoot, ...segments);
 }
 
+/**
+ * Ensures the current directory contains the files required for a TypeScript Routa project.
+ *
+ * @param cwd - The project directory to check.
+ * @throws If any required project file or directory is missing.
+ */
 function assertTypeScriptProject(cwd: string): void {
 	const missing = ["package.json", "tsconfig.json", "src"].filter(
 		(path) => !existsSync(join(cwd, path)),
@@ -826,10 +923,24 @@ function assertTypeScriptProject(cwd: string): void {
 	}
 }
 
+/**
+ * Splits an OpenAPI path into its individual segments.
+ *
+ * @param openApiPath - The OpenAPI path to split
+ * @returns The non-empty path segments in order
+ */
 function pathSegments(openApiPath: string): string[] {
 	return openApiPath.split("/").filter(Boolean);
 }
 
+/**
+ * Builds generated type names for an OpenAPI operation.
+ *
+ * @param method - The HTTP method for the operation
+ * @param path - The OpenAPI path template
+ * @param operation - The OpenAPI operation definition
+ * @returns The generated names for params, query, headers, cookies, body, and response types
+ */
 function operationNames(method: HttpMethod, path: string, operation: OpenApiOperation) {
 	const base = pascalCase(operation.operationId ?? `${method} ${path}`);
 
@@ -843,6 +954,11 @@ function operationNames(method: HttpMethod, path: string, operation: OpenApiOper
 	};
 }
 
+/**
+ * Builds a Zod object schema for an operation's path parameters.
+ *
+ * @returns A `z.object(...)` expression for the path parameters, or `undefined` when the path has no parameters.
+ */
 function schemaForPathParams(path: string, operation: OpenApiOperation): string | undefined {
 	const names = new Set(
 		path
@@ -868,6 +984,13 @@ function schemaForPathParams(path: string, operation: OpenApiOperation): string 
 	return formatZodObject(props);
 }
 
+/**
+ * Builds a Zod object schema for parameters at a specific location.
+ *
+ * @param operation - The OpenAPI operation to read parameters from
+ * @param location - The OpenAPI parameter location to include, such as `query` or `header`
+ * @returns The Zod object expression for the matching parameters, or `undefined` when none are present
+ */
 function schemaForParameters(operation: OpenApiOperation, location: string): string | undefined {
 	const parameters = (operation.parameters ?? []).filter(
 		(parameter) => parameter.in === location && parameter.name,
@@ -886,11 +1009,21 @@ function schemaForParameters(operation: OpenApiOperation, location: string): str
 	return formatZodObject(props);
 }
 
+/**
+ * Builds a Zod schema for an operation request body.
+ *
+ * @returns The Zod expression for the request body schema, or `undefined` when the operation has no request body schema.
+ */
 function schemaForRequestBody(operation: OpenApiOperation): string | undefined {
 	const schema = requestBodySchema(operation);
 	return schema ? zodForSchema(schema) : undefined;
 }
 
+/**
+ * Builds scaffold metadata from an operation response.
+ *
+ * @returns The selected response status, generated Zod schema, original schema source, and a placeholder value.
+ */
 function schemaForResponse(operation: OpenApiOperation) {
 	const entry =
 		Object.entries(operation.responses ?? {}).find(([status]) => status.startsWith("2"))
@@ -907,14 +1040,31 @@ function schemaForResponse(operation: OpenApiOperation) {
 	};
 }
 
+/**
+ * Gets the JSON request body schema for an operation.
+ *
+ * @returns The schema from the `application/json` request body content, or `undefined` if none exists.
+ */
 function requestBodySchema(operation: OpenApiOperation): OpenApiSchema | undefined {
 	return firstJsonContent(operation.requestBody?.content)?.schema;
 }
 
+/**
+ * Selects the JSON schema entry from a content map.
+ *
+ * @param content - A map of media types to OpenAPI content entries.
+ * @returns The `application/json` entry when present, otherwise the first entry in the map.
+ */
 function firstJsonContent(content: OpenApiContent | undefined) {
 	return content?.["application/json"] ?? Object.values(content ?? {})[0];
 }
 
+/**
+ * Converts an OpenAPI schema into a Zod expression.
+ *
+ * @param schema - The schema to convert
+ * @returns A Zod expression string for the schema, or `z.unknown()` when no schema is provided
+ */
 function zodForSchema(schema: OpenApiSchema | undefined): string {
 	if (!schema) {
 		return "z.unknown()";
@@ -957,6 +1107,11 @@ function zodForSchema(schema: OpenApiSchema | undefined): string {
 	return "z.string()";
 }
 
+/**
+ * Builds a placeholder value for an OpenAPI schema.
+ *
+ * @returns A TypeScript expression string representing a sample value for the schema.
+ */
 function placeholderForSchema(schema: OpenApiSchema | undefined): string {
 	if (schema?.type === "array") {
 		return "[]";
@@ -985,6 +1140,12 @@ function placeholderForSchema(schema: OpenApiSchema | undefined): string {
 	return "null";
 }
 
+/**
+ * Formats a named import from `./schemas.js`.
+ *
+ * @param names - The imported binding names
+ * @returns A single-line or multi-line import statement
+ */
 function formatNamedImport(names: string[]): string {
 	if (names.length <= 3) {
 		return `import { ${names.join(", ")} } from "./schemas.js";`;
@@ -995,6 +1156,12 @@ function formatNamedImport(names: string[]): string {
 } from "./schemas.js";`;
 }
 
+/**
+ * Formats a Zod object schema expression.
+ *
+ * @param props - The object property expressions to include.
+ * @returns The Zod object expression string.
+ */
 function formatZodObject(props: string[]): string {
 	if (props.length === 0) {
 		return "z.object({})";
@@ -1009,10 +1176,23 @@ function formatZodObject(props: string[]): string {
 	return `z.object({ ${props.join(", ")} })`;
 }
 
+/**
+ * Formats a property name for use in generated TypeScript.
+ *
+ * @param name - The property name to format.
+ * @returns The identifier when it is valid, otherwise a JSON string literal.
+ */
 function propertyKey(name: string): string {
 	return /^[$A-Z_a-z][$\w]*$/.test(name) ? name : JSON.stringify(name);
 }
 
+/**
+ * Adds Zod exports for schemas referenced by a schema.
+ *
+ * @param schemaExports - The collected schema export definitions
+ * @param schema - The schema to inspect for referenced components
+ * @param document - The OpenAPI document containing component schemas
+ */
 function addReferencedComponents(
 	schemaExports: Map<string, string>,
 	schema: OpenApiSchema | undefined,
@@ -1031,6 +1211,12 @@ function addReferencedComponents(
 	}
 }
 
+/**
+ * Collects all schema references contained in an OpenAPI schema.
+ *
+ * @param schema - The schema to inspect.
+ * @returns The `$ref` values found in the schema, including nested array items and object properties.
+ */
 function refsInSchema(schema: OpenApiSchema | undefined): string[] {
 	if (!schema) {
 		return [];
@@ -1043,6 +1229,13 @@ function refsInSchema(schema: OpenApiSchema | undefined): string[] {
 	];
 }
 
+/**
+ * Converts a local schema reference to a PascalCase name.
+ *
+ * @param ref - The OpenAPI `$ref` value
+ * @returns The PascalCase schema name
+ * @throws If `ref` does not point to `#/components/schemas/*`
+ */
 function refName(ref: string): string {
 	if (!ref.startsWith("#/components/schemas/")) {
 		throw new Error(
@@ -1065,6 +1258,12 @@ function refName(ref: string): string {
 	return pascalCase(name);
 }
 
+/**
+ * Validates that a generated name is a valid TypeScript identifier.
+ *
+ * @param name - The generated identifier to validate
+ * @param context - The OpenAPI source description used in the error message
+ */
 function validateGeneratedIdentifier(name: string, context: string): void {
 	if (!/^[$A-Z_a-z][$\w]*$/.test(name)) {
 		throw new Error(
@@ -1079,6 +1278,12 @@ function validateGeneratedIdentifier(name: string, context: string): void {
 	}
 }
 
+/**
+ * Converts a string to PascalCase.
+ *
+ * @param value - The input text
+ * @returns The PascalCase form of `value`, or `Operation` when the input is empty after normalization
+ */
 function pascalCase(value: string): string {
 	const text = value.replaceAll(/[^a-zA-Z0-9]+/g, " ").trim();
 
@@ -1092,11 +1297,23 @@ function pascalCase(value: string): string {
 		.join("");
 }
 
+/**
+ * Writes content to a file and creates parent directories if needed.
+ *
+ * @param filePath - The file path to write
+ * @param content - The file contents
+ */
 function writeFile(filePath: string, content: string): void {
 	mkdirSync(dirname(filePath), { recursive: true });
 	writeFileSync(filePath, content);
 }
 
+/**
+ * Reads the scaffold manifest from the project root.
+ *
+ * @param cwd - Project root directory
+ * @returns The parsed manifest, or `undefined` if no manifest exists
+ */
 function readManifest(cwd: string): Manifest | undefined {
 	const file = join(cwd, ".routa/manifest.json");
 
@@ -1107,6 +1324,14 @@ function readManifest(cwd: string): Manifest | undefined {
 	return JSON.parse(readFileSync(file, "utf8")) as Manifest;
 }
 
+/**
+ * Writes a managed generated file, refusing to overwrite unmanaged or locally modified files.
+ *
+ * @param cwd - Project root directory
+ * @param path - File path relative to `cwd`
+ * @param content - File content to write
+ * @param previousManifest - Previously generated file manifest used to verify ownership and hashes
+ */
 function writeManagedFile(
 	cwd: string,
 	path: string,
@@ -1158,6 +1383,14 @@ function writeManagedFile(
 	writeFile(absolutePath, content);
 }
 
+/**
+ * Removes generated files that are no longer produced.
+ *
+ * @param cwd - Current working directory used to resolve generated file paths
+ * @param generatedContent - Current generated file contents keyed by relative path
+ * @param previousManifest - Previously written manifest used to identify stale files
+ * @throws If a stale generated file exists locally and its contents differ from the manifest
+ */
 function removeStaleGeneratedFiles(
 	cwd: string,
 	generatedContent: Map<string, string>,
@@ -1191,6 +1424,14 @@ function removeStaleGeneratedFiles(
 	}
 }
 
+/**
+ * Compares generated output with the current filesystem state.
+ *
+ * @param cwd - The project root directory.
+ * @param generatedContent - The next generated file contents keyed by relative path.
+ * @param previousManifest - The manifest from the previous scaffold run, if any.
+ * @returns A list of preview changes for each tracked path.
+ */
 function previewChanges(
 	cwd: string,
 	generatedContent: Map<string, string>,
@@ -1262,6 +1503,11 @@ function previewChanges(
 	return changes;
 }
 
+/**
+ * Produces a one-line diff for the first differing line between two strings.
+ *
+ * @returns A diff array containing the line header and the differing current and next lines, or an empty array if the contents match.
+ */
 function previewDiff(currentContent: string, nextContent: string): string[] {
 	const currentLines = currentContent.split("\n");
 	const nextLines = nextContent.split("\n");
@@ -1282,10 +1528,22 @@ function previewDiff(currentContent: string, nextContent: string): string[] {
 	return [];
 }
 
+/**
+ * Determines whether a generated framework metadata file can be overwritten.
+ *
+ * @param path - The file path to check
+ * @returns `true` if the path is `.routa/routes.gen.ts`, `false` otherwise.
+ */
 function canRewriteFrameworkMetadata(path: string): boolean {
 	return path === ".routa/routes.gen.ts";
 }
 
+/**
+ * Computes the SHA-256 hash of a string.
+ *
+ * @param content - The input string
+ * @returns The hexadecimal digest of the hash
+ */
 function sha256(content: string): string {
 	return createHash("sha256").update(content).digest("hex");
 }
