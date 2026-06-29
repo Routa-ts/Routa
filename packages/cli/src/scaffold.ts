@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, extname, join, relative } from "node:path";
+import { dirname, extname, join, relative, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 
 const httpMethods = ["get", "post", "put", "patch", "delete", "head", "options"] as const;
@@ -131,7 +131,7 @@ export function scaffoldOpenApi(
 		);
 	}
 
-	const absoluteInput = join(cwd, inputFile);
+	const absoluteInput = resolve(cwd, inputFile);
 	const source = relative(cwd, absoluteInput);
 
 	if (!existsSync(absoluteInput)) {
@@ -179,7 +179,8 @@ export function scaffoldOpenApi(
 			const headersSchema = schemaForParameters(operation, "header");
 			const cookiesSchema = schemaForParameters(operation, "cookie");
 			const bodySchema = schemaForRequestBody(operation);
-			const response = schemaForResponse(operation);
+			const responses = schemasForResponses(operation, document);
+			const primaryResponse = responses[0];
 
 			if (paramsSchema) {
 				schemaExports.set(names.params, paramsSchema);
@@ -212,9 +213,11 @@ export function scaffoldOpenApi(
 				inputParts.push(`body: ${names.body}`);
 			}
 
-			addReferencedComponents(schemaExports, response.schemaSource, document);
-			schemaExports.set(names.response, response.schema);
-			routeImports.add(names.response);
+			for (const response of responses) {
+				addReferencedComponents(schemaExports, response.schemaSource, document);
+				schemaExports.set(responseSchemaName(names.response, response.status), response.schema);
+				routeImports.add(responseSchemaName(names.response, response.status));
+			}
 
 			const inputBlock =
 				inputParts.length > 0
@@ -223,16 +226,22 @@ export function scaffoldOpenApi(
 
 			methodBlocks.push(`\t${method}: createRoute({${inputBlock}
 \t\tresponses: {
-\t\t\tsuccess: {
+\t\t\t${responses
+				.map((response, index) => {
+					const key = index === 0 ? "success" : `success${response.status}`;
+					const schemaName = responseSchemaName(names.response, response.status);
+					return `${key}: {
 \t\t\t\tstatus: ${response.status},
-\t\t\t\tschema: ${names.response},
-\t\t\t},
+\t\t\t\tschema: ${schemaName},
+\t\t\t}`;
+				})
+				.join(",\n\t\t\t")},
 \t\t},
 \t\trun: () => {
 \t\t\t// TODO: call application-owned business logic.
 \t\t\treturn {
 \t\t\t\ttype: "success",
-\t\t\t\tdata: ${response.placeholder} as unknown as z.output<typeof ${names.response}>,
+\t\t\t\tdata: ${primaryResponse.placeholder} as unknown as z.output<typeof ${responseSchemaName(names.response, primaryResponse.status)}>,
 \t\t\t};
 \t\t},
 \t})`);
@@ -647,6 +656,18 @@ function validatePathParameters(path: string, operation: OpenApiOperation): void
 			.map((parameter) => parameter.name as string),
 	);
 
+	for (const parameter of operation.parameters ?? []) {
+		if (parameter.in === "path" && parameter.required !== true) {
+			throw new Error(
+				scaffoldError(
+					"ROUTA_OPENAPI_PATH_PARAMETER_REQUIRED",
+					`Path parameter "${parameter.name ?? "<unknown>"}" in ${path} must set required: true.`,
+					["OpenAPI path parameters are always required; add required: true to the parameter."],
+				),
+			);
+		}
+	}
+
 	for (const name of pathParams) {
 		if (!declaredParams.has(name)) {
 			throw new Error(
@@ -1020,24 +1041,35 @@ function schemaForRequestBody(operation: OpenApiOperation): string | undefined {
 }
 
 /**
- * Builds scaffold metadata from an operation response.
+ * Builds scaffold metadata for supported operation responses.
  *
- * @returns The selected response status, generated Zod schema, original schema source, and a placeholder value.
+ * @returns The response status, generated Zod schema, original schema source, and placeholder value for each success response.
  */
-function schemaForResponse(operation: OpenApiOperation) {
-	const entry =
-		Object.entries(operation.responses ?? {}).find(([status]) => status.startsWith("2"))
-		?? Object.entries(operation.responses ?? {})[0];
-	const status = entry ? Number(entry[0]) : 200;
-	const schema = firstJsonContent(entry?.[1].content)?.schema;
-	const zodSchema = schema ? zodForSchema(schema) : "z.unknown()";
+function schemasForResponses(operation: OpenApiOperation, document: OpenApiDocument) {
+	const successEntries = Object.entries(operation.responses ?? {}).filter(([status]) =>
+		status.startsWith("2"),
+	);
+	const entries =
+		successEntries.length > 0
+			? successEntries
+			: Object.entries(operation.responses ?? {}).slice(0, 1);
 
-	return {
-		status: Number.isFinite(status) ? status : 200,
-		schema: zodSchema,
-		schemaSource: schema,
-		placeholder: placeholderForSchema(schema),
-	};
+	return entries.map(([rawStatus, response]) => {
+		const status = Number(rawStatus);
+		const schema = firstJsonContent(response.content)?.schema;
+		const zodSchema = schema ? zodForSchema(schema) : "z.unknown()";
+
+		return {
+			status: Number.isFinite(status) ? status : 200,
+			schema: zodSchema,
+			schemaSource: schema,
+			placeholder: placeholderForSchema(schema, document),
+		};
+	});
+}
+
+function responseSchemaName(baseName: string, status: number): string {
+	return status === 200 || status === 201 ? baseName : `${baseName}${status}`;
 }
 
 /**
@@ -1112,14 +1144,29 @@ function zodForSchema(schema: OpenApiSchema | undefined): string {
  *
  * @returns A TypeScript expression string representing a sample value for the schema.
  */
-function placeholderForSchema(schema: OpenApiSchema | undefined): string {
+function placeholderForSchema(
+	schema: OpenApiSchema | undefined,
+	document: OpenApiDocument,
+	seen = new Set<string>(),
+): string {
+	if (schema?.$ref) {
+		const name = refName(schema.$ref);
+
+		if (seen.has(name)) {
+			return "{}";
+		}
+
+		const component = document.components?.schemas?.[name];
+		return placeholderForSchema(component, document, new Set([...seen, name]));
+	}
+
 	if (schema?.type === "array") {
 		return "[]";
 	}
 
 	if (schema?.type === "object" || schema?.properties) {
 		const entries = Object.entries(schema.properties ?? {}).map(
-			([name, value]) => `${propertyKey(name)}: ${placeholderForSchema(value)}`,
+			([name, value]) => `${propertyKey(name)}: ${placeholderForSchema(value, document, seen)}`,
 		);
 
 		return `{ ${entries.join(", ")} }`;

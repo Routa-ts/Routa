@@ -134,7 +134,13 @@ async function runWithMiddleware(
 		const item = middleware[index];
 
 		if (!item) {
-			return await contract.run({ input: routeInput, ctx });
+			const result = await contract.run({ input: routeInput, ctx });
+
+			if (isRuntimeResult(result)) {
+				return result;
+			}
+
+			throw new InvalidHandlerOutputError("Handler returned invalid output.");
 		}
 
 		if (!item.run) {
@@ -220,8 +226,12 @@ class RequestInputReader {
 async function parseBody(request: Request): Promise<unknown> {
 	const contentType = request.headers.get("content-type") ?? "";
 
-	if (!contentType.includes("application/json")) {
-		throw new Response("Unsupported Media Type", { status: 415 });
+	if (!isJsonMediaType(contentType)) {
+		throw problem(
+			"https://routa.dev/problems/unsupported-media-type",
+			"Unsupported Media Type",
+			415,
+		);
 	}
 
 	try {
@@ -255,22 +265,85 @@ function parseCookies(request: Request): Record<string, string> {
 		return {};
 	}
 
-	return Object.fromEntries(
-		header.split(";").flatMap((item) => {
-			const index = item.indexOf("=");
+	try {
+		return Object.fromEntries(
+			header.split(";").flatMap((item) => {
+				const index = item.indexOf("=");
 
-			if (index === -1) {
-				return [];
-			}
+				if (index === -1) {
+					return [];
+				}
 
-			const key = item.slice(0, index).trim();
+				const key = item.slice(0, index).trim();
 
-			if (!key) {
-				return [];
-			}
+				if (!key) {
+					return [];
+				}
 
-			return [[key, decodeURIComponent(item.slice(index + 1).trim())]];
-		}),
+				return [[key, decodeURIComponent(item.slice(index + 1).trim())]];
+			}),
+		);
+	} catch {
+		throw problem("https://routa.dev/problems/invalid-cookie", "Invalid Cookie", 400);
+	}
+}
+
+function parseMediaRanges(header: string): Array<{ type: string; subtype: string; q: number }> {
+	return header.split(",").flatMap((item) => {
+		const [mediaRange, ...parameters] = item.split(";").map((part) => part.trim());
+		const [type, subtype] = mediaRange.toLowerCase().split("/");
+
+		if (!type || !subtype) {
+			return [];
+		}
+
+		const qParameter = parameters.find((parameter) => parameter.toLowerCase().startsWith("q="));
+		const q = qParameter ? Number(qParameter.slice(2)) : 1;
+
+		if (!Number.isFinite(q) || q <= 0) {
+			return [];
+		}
+
+		return [{ type, subtype, q }];
+	});
+}
+
+function isJsonMediaType(value: string): boolean {
+	return parseMediaRanges(value).some(
+		({ type, subtype }) =>
+			type === "application" && (subtype === "json" || subtype.endsWith("+json")),
+	);
+}
+
+function acceptsJson(request: Request): boolean {
+	const accept = request.headers.get("accept");
+
+	if (!accept) {
+		return true;
+	}
+
+	return parseMediaRanges(accept).some(
+		({ type, subtype }) =>
+			type === "*"
+			|| (type === "application"
+				&& (subtype === "*" || subtype === "json" || subtype.endsWith("+json"))),
+	);
+}
+
+function problem(
+	type: string,
+	title: string,
+	status: number,
+	extra?: Record<string, unknown>,
+): Response {
+	return json(
+		{
+			type,
+			title,
+			status,
+			...(extra ?? {}),
+		},
+		status,
 	);
 }
 
@@ -358,24 +431,6 @@ function json(data: unknown, status: number): Response {
 }
 
 /**
- * Determines whether a request accepts JSON responses.
- *
- * @returns `true` if the `Accept` header allows `application/json`, `application/*`, or `*/*`, `false` otherwise.
- */
-function acceptsJson(request: Request): boolean {
-	const accept = request.headers.get("accept");
-
-	if (!accept) {
-		return true;
-	}
-
-	return accept
-		.split(",")
-		.map((value) => value.trim().split(";")[0])
-		.some((value) => value === "*/*" || value === "application/*" || value === "application/json");
-}
-
-/**
  * Converts an error into an HTTP response.
  *
  * @returns A response that preserves `Response` values and maps known error types to problem JSON responses.
@@ -386,50 +441,23 @@ function errorResponse(error: unknown): Response {
 	}
 
 	if (error instanceof InvalidHandlerOutputError) {
-		return json(
-			{
-				type: "https://routa.dev/problems/handler-output",
-				title: "Invalid handler output",
-				status: 500,
-			},
-			500,
-		);
+		return problem("https://routa.dev/problems/handler-output", "Invalid handler output", 500);
 	}
 
 	if (error instanceof InvalidJsonBodyError) {
-		return json(
-			{
-				type: "https://routa.dev/problems/invalid-json",
-				title: "Invalid JSON body",
-				status: 400,
-			},
-			400,
-		);
+		return problem("https://routa.dev/problems/invalid-json", "Invalid JSON body", 400);
 	}
 
 	if (error instanceof ZodError) {
-		return json(
-			{
-				type: "https://routa.dev/problems/validation",
-				title: "Validation failed",
-				status: 400,
-				issues: error.issues.map((issue) => ({
-					path: issue.path,
-					message: issue.message,
-				})),
-			},
-			400,
-		);
+		return problem("https://routa.dev/problems/validation", "Validation failed", 400, {
+			issues: error.issues.map((issue) => ({
+				path: issue.path,
+				message: issue.message,
+			})),
+		});
 	}
 
-	return json(
-		{
-			type: "https://routa.dev/problems/internal",
-			title: "Internal Server Error",
-			status: 500,
-		},
-		500,
-	);
+	return problem("https://routa.dev/problems/internal", "Internal Server Error", 500);
 }
 
 /**

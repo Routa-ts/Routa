@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 
-export const ListAuditEventsQuery = z.object({ limit: z.int().optional() });
+export const ListAuditEventsQuery = z.object({ limit: z.int().min(1).max(100).optional() });
 
 export const AuditEvent = z.object({
 	id: z.string(),

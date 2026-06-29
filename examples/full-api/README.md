@@ -1,11 +1,11 @@
 # examples/full-api
 
-Routa API generated with `pnpm create routa@latest`.
+Routa monorepo example app. This package uses workspace-linked `@routa/cli` and `@routa/core` dependencies, so run it from the repository root.
 
 ## Development
 
 ```sh
-pnpm install
+pnpm install # from the repository root
 pnpm dev
 ```
 

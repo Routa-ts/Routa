@@ -40,11 +40,16 @@ export default defineRoute({
 				schema: CreateUserResponse,
 			},
 		},
-		run: () => {
+		run: ({ input }) => {
 			// TODO: call application-owned business logic.
 			return {
 				type: "success",
-				data: null as unknown as z.output<typeof CreateUserResponse>,
+				data: {
+					id: "user_new",
+					email: input.body.email,
+					name: input.body.name,
+					active: true,
+				} as unknown as z.output<typeof CreateUserResponse>,
 			};
 		},
 	}),

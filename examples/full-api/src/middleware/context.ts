@@ -30,10 +30,10 @@ export const withSession = createMiddleware({
 			userId: z.string().optional(),
 		}),
 	},
-	run: async ({ ctx, input, next }) => {
+	run: async ({ input, next }) => {
 		return next({
 			session: input.cookies.session
-				? { authenticated: ctx.requestId.length > 0, userId: input.cookies.session }
+				? { authenticated: true, userId: input.cookies.session }
 				: { authenticated: false },
 		});
 	},

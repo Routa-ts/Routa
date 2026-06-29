@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createHonoApp } from "./hono.js";
 import { createMiddleware, createRoute } from "./index.js";
 import { createLogger, type RoutaLogEvent } from "./logger.js";
+import { requireAuth } from "./middleware/auth.js";
 
 describe("createHonoApp", () => {
 	it("runs route contracts through Hono and maps response status", async () => {
@@ -217,6 +218,35 @@ describe("createHonoApp", () => {
 		expect(response.status).toBe(415);
 	});
 
+	it("rejects invalid request body media type tokens", async () => {
+		const app = createHonoApp([
+			{
+				method: "post",
+				path: "/users",
+				contract: createRoute({
+					input: {
+						body: z.object({ name: z.string() }),
+					},
+					responses: {
+						success: {
+							status: 201,
+							schema: z.object({ id: z.string() }),
+						},
+					},
+					run: async () => ({ type: "success", data: { id: "user_1" } }),
+				}),
+			},
+		]);
+
+		const response = await app.request("/users", {
+			method: "POST",
+			body: JSON.stringify({ name: "Jane" }),
+			headers: { "content-type": "text/application/json" },
+		});
+
+		expect(response.status).toBe(415);
+	});
+
 	it("returns problem details for malformed JSON request bodies", async () => {
 		const app = createHonoApp([
 			{
@@ -336,6 +366,37 @@ describe("createHonoApp", () => {
 		});
 	});
 
+	it("returns problem details for malformed cookies", async () => {
+		const app = createHonoApp([
+			{
+				method: "get",
+				path: "/session",
+				contract: createRoute({
+					input: {
+						cookies: z.object({ session: z.string().optional() }),
+					},
+					responses: {
+						success: {
+							status: 200,
+							schema: z.object({ ok: z.boolean() }),
+						},
+					},
+					run: () => ({ type: "success", data: { ok: true } }),
+				}),
+			},
+		]);
+
+		const response = await app.request("/session", {
+			headers: { cookie: "session=%E0%A4%A" },
+		});
+
+		expect(response.status).toBe(400);
+		await expect(response.json()).resolves.toMatchObject({
+			title: "Invalid Cookie",
+			status: 400,
+		});
+	});
+
 	it("rejects unsupported response accept headers", async () => {
 		const app = createHonoApp([
 			{
@@ -358,6 +419,64 @@ describe("createHonoApp", () => {
 		});
 
 		expect(response.status).toBe(406);
+	});
+
+	it("rejects json accept headers with zero quality", async () => {
+		const app = createHonoApp([
+			{
+				method: "get",
+				path: "/status",
+				contract: createRoute({
+					responses: {
+						success: {
+							status: 200,
+							schema: z.object({ ok: z.boolean() }),
+						},
+					},
+					run: async () => ({ type: "success", data: { ok: true } }),
+				}),
+			},
+		]);
+
+		const response = await app.request("/status", {
+			headers: { accept: "application/json;q=0" },
+		});
+
+		expect(response.status).toBe(406);
+	});
+
+	it("enforces requireAuth middleware at runtime", async () => {
+		const withSession = createMiddleware({
+			provides: {
+				session: z.object({ authenticated: z.boolean(), userId: z.string().optional() }),
+			},
+			run: ({ next }) => next({ session: { authenticated: false } }),
+		});
+		const app = createHonoApp([
+			{
+				method: "get",
+				path: "/me",
+				contract: createRoute({
+					middleware: [withSession, requireAuth()],
+					responses: {
+						success: {
+							status: 200,
+							schema: z.object({ id: z.string() }),
+						},
+						unauthorized: {
+							status: 401,
+							schema: z.object({ message: z.string() }),
+						},
+					},
+					run: ({ ctx }) => ({ type: "success", data: { id: ctx.auth.userId } }),
+				}),
+			},
+		]);
+
+		const response = await app.request("/me");
+
+		expect(response.status).toBe(401);
+		await expect(response.json()).resolves.toEqual({ message: "Authentication required" });
 	});
 
 	it("returns 405 for unsupported methods on known paths", async () => {

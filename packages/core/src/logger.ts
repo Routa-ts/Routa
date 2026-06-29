@@ -66,7 +66,7 @@ export function createLogger(options: CreateLoggerOptions = {}): RoutaLogger {
  * @param event - The log event to write
  */
 function writeConsoleLog(event: RoutaLogEvent): void {
-	const payload = event.data ? ` ${JSON.stringify(event.data)}` : "";
+	const payload = event.data ? ` ${stringifyLogData(event.data)}` : "";
 	const line = `[${event.timestamp}] ${event.level.toUpperCase()} ${event.event} ${event.message}${payload}`;
 
 	if (event.level === "error") {
@@ -77,4 +77,12 @@ function writeConsoleLog(event: RoutaLogEvent): void {
 
 	// biome-ignore lint/suspicious/noConsole: The default logger intentionally writes runtime logs.
 	globalThis.console.log(line);
+}
+
+function stringifyLogData(data: RoutaLogData): string {
+	try {
+		return JSON.stringify(data);
+	} catch {
+		return "[unserializable]";
+	}
 }

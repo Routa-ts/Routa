@@ -32,6 +32,8 @@ paths:
   /tenants/{tenantId}/projects:
     get:
       operationId: listProjects
+      security:
+        - sessionCookie: []
       parameters:
         - name: tenantId
           in: path
@@ -65,8 +67,14 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Project"
+        "401":
+          description: Authentication required
+        "403":
+          description: Forbidden
     post:
       operationId: createProject
+      security:
+        - sessionCookie: []
       parameters:
         - name: tenantId
           in: path
@@ -86,9 +94,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Project"
+        "401":
+          description: Authentication required
+        "403":
+          description: Forbidden
   /tenants/{tenantId}/projects/{projectId}:
     get:
       operationId: getProject
+      security:
+        - sessionCookie: []
       parameters:
         - name: tenantId
           in: path
@@ -107,8 +121,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Project"
+        "401":
+          description: Authentication required
+        "403":
+          description: Forbidden
     patch:
       operationId: updateProject
+      security:
+        - sessionCookie: []
       parameters:
         - name: tenantId
           in: path
@@ -133,9 +153,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Project"
+        "401":
+          description: Authentication required
+        "403":
+          description: Forbidden
   /admin/audit-events:
     get:
       operationId: listAuditEvents
+      security:
+        - sessionCookie: []
       parameters:
         - name: limit
           in: query
@@ -156,7 +182,16 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/AuditEvent"
+        "401":
+          description: Authentication required
+        "403":
+          description: Admin access required
 components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
   schemas:
     Status:
       type: object

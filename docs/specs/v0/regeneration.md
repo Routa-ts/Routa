@@ -59,7 +59,7 @@ input:
   manifest:
     generated:
       - path: routes/users/schemas.ts
-        kind: schemas
+        kind: schema
   change:
     User.email becomes required
 action: routa scaffold openapi.yaml
@@ -115,7 +115,7 @@ must_not:
 - Stop on conflicts by default.
 - Show file path, reason, and suggested resolution.
 - Never delete user-owned files silently.
-- Never overwrite files not tracked in manifest unless user explicitly accepts.
+- Never overwrite files not tracked in manifest.
 
 ## Out of Scope
 

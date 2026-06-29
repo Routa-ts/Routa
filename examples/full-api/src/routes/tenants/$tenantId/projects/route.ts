@@ -62,13 +62,17 @@ export default route({
 			},
 		},
 		run: ({ ctx, input }) => {
+			if (!ctx.projectScope.canWrite) {
+				throw new Response("Forbidden", { status: 403 });
+			}
+
 			return {
 				type: "success",
 				data: {
 					id: "project_new",
 					tenantId: ctx.projectScope.tenantId,
 					name: input.body.name,
-					status: ctx.projectScope.canWrite ? "active" : "archived",
+					status: "active",
 				},
 			};
 		},

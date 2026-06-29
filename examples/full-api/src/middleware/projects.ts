@@ -52,11 +52,11 @@ export const withProjectPermissions = createMiddleware({
 			canWrite: z.boolean(),
 		}),
 	},
-	run: async ({ next }) => {
+	run: async ({ ctx, next }) => {
 		return next({
 			projectPermissions: {
 				canRead: true,
-				canWrite: true,
+				canWrite: ctx.projectScope.canWrite,
 			},
 		});
 	},

@@ -85,6 +85,12 @@ failure:
       "kind": "route"
     },
     {
+      "path": "routes/users/schemas.ts",
+      "source": "openapi.yaml",
+      "operationIds": ["listUsers"],
+      "kind": "schema"
+    },
+    {
       "path": ".routa/routes.gen.ts",
       "kind": "route-metadata"
     }

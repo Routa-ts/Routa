@@ -259,8 +259,8 @@ Example:
 		{
 			"path": "routes/users/schemas.ts",
 			"source": "openapi.yaml",
-			"schemas": ["User", "CreateUserInput"],
-			"kind": "schemas"
+			"operationIds": ["listUsers", "createUser"],
+			"kind": "schema"
 		},
 		{
 			"path": ".routa/routes.gen.ts",

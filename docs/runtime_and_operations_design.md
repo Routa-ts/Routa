@@ -486,7 +486,7 @@ Safe structured output should preserve the value as data, not as a new log entry
 
 ### Decisions
 
-- Routa has one typed runtime config boundary through `defineRoutaConfig`.
+- Routa has one typed runtime config boundary through `createRouta`.
 - Routa config includes framework-level runtime config such as:
   - server
   - logging

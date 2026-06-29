@@ -9,9 +9,13 @@ export const withAdmin = createMiddleware({
 		}),
 	},
 	run: async ({ ctx, next }) => {
+		if (!ctx.session.authenticated) {
+			throw new Response("Authentication required", { status: 401 });
+		}
+
 		return next({
 			admin: {
-				role: ctx.session.authenticated ? "owner" : "guest",
+				role: "owner",
 			},
 		});
 	},

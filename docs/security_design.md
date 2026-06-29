@@ -191,7 +191,7 @@ middleware: [
 	authorizeResource("users.read", {
 		resource: ({ ctx }) => ctx.state.targetUser,
 		policy: ({ auth, resource }) =>
-			auth.principal.id === resource.id || auth.roles.includes("admin"),
+			auth.principal.id === resource.id || auth.roles?.includes("admin") === true,
 	}),
 ];
 ```

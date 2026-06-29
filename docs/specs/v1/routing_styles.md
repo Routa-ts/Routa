@@ -105,4 +105,4 @@ Directory and flat route files are just authoring styles. Once parsed, Routa sho
 ## Out of Scope for v0
 
 - Generated flat route output.
-- Full mixed style support.
+- Automatic conversion between route styles.

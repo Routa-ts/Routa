@@ -141,8 +141,7 @@ must_not:
 - issue code
 - severity
 - file path
-- route path and method when available
-- schema or operation name when available
+- route path when available
 - short fix suggestion when possible
 
 ## Out of Scope

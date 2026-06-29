@@ -46,9 +46,12 @@ export function createProject(
 	const files = new Map<string, string>([
 		[".gitignore", gitignore()],
 		[".vscode/settings.json", vscodeSettings()],
-		["README.md", readme(targetDir)],
+		["README.md", readme(targetDir, options.openApi ?? true)],
 		["biome.json", biomeJson()],
-		["package.json", packageJson(targetDir, options.routaVersion ?? "latest")],
+		[
+			"package.json",
+			packageJson(targetDir, options.routaVersion ?? "latest", options.openApi ?? true),
+		],
 		["src/routa.ts", routaSource()],
 		["tsconfig.json", tsconfigJson()],
 		["src/routes/status/route.ts", statusRoute],
@@ -241,9 +244,10 @@ function sha256(content: string): string {
  *
  * @param name - The package name
  * @param routaVersion - The version specifier used for Routa dependencies
+ * @param openApi - Whether to include OpenAPI-related scripts
  * @returns A formatted `package.json` file
  */
-function packageJson(name: string, routaVersion: string): string {
+function packageJson(name: string, routaVersion: string, openApi: boolean): string {
 	return `${JSON.stringify(
 		{
 			name,
@@ -257,8 +261,12 @@ function packageJson(name: string, routaVersion: string): string {
 				build: "routa build",
 				lint: "biome check .",
 				format: "biome check --write .",
-				scaffold: "routa scaffold openapi.yaml",
-				"openapi:check": "routa openapi check",
+				...(openApi
+					? {
+							scaffold: "routa scaffold openapi.yaml",
+							"openapi:check": "routa openapi check",
+						}
+					: {}),
 			},
 			dependencies: {
 				"@routa/cli": routaVersion,
@@ -269,7 +277,7 @@ function packageJson(name: string, routaVersion: string): string {
 			devDependencies: {
 				"@biomejs/biome": "^2.5.1",
 				"@types/node": "^24.0.4",
-				typescript: "^6.0.3",
+				typescript: "^5.8.3",
 			},
 		},
 		null,
@@ -352,9 +360,10 @@ function vscodeSettings(): string {
  * Generates the project README content.
  *
  * @param name - The project name used in the heading.
+ * @param openApi - Whether to include OpenAPI-related instructions.
  * @returns The README markdown content.
  */
-function readme(name: string): string {
+function readme(name: string, openApi: boolean): string {
 	return `# ${name}
 
 Routa API generated with \`pnpm create routa@latest\`.
@@ -377,7 +386,7 @@ pnpm check
 pnpm build
 pnpm lint
 pnpm format
-pnpm openapi:check
+${openApi ? "pnpm openapi:check\n" : ""}\
 \`\`\`
 
 ## Routes
@@ -390,7 +399,7 @@ src/routes/status/route.ts
 src/routes/status/schemas.ts
 \`\`\`
 
-Routa owns generated project metadata in \`.routa/\`. Commit those files so OpenAPI drift and regeneration safety work across machines.
+${openApi ? "Routa owns generated project metadata in `.routa/`. Commit those files so OpenAPI drift and regeneration safety work across machines." : "This starter was created without OpenAPI files. Add `openapi.yaml` later and run `routa scaffold openapi.yaml` if you want generated route metadata."}
 `;
 }
 

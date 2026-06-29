@@ -15,6 +15,8 @@ type CreateConfig = {
 	git: boolean;
 	install: boolean;
 	interactive: boolean;
+	prompted: boolean;
+	yes: boolean;
 	cwd: string;
 };
 
@@ -44,7 +46,12 @@ export async function runCreate(
 	try {
 		printSummary(config);
 
-		if (config.interactive && !(await confirm("Continue with these settings?", true))) {
+		if (
+			config.interactive
+			&& config.prompted
+			&& !config.yes
+			&& !(await confirm("Continue with these settings?", true))
+		) {
 			process.stdout.write("Creation cancelled.\n");
 			return 0;
 		}
@@ -157,36 +164,44 @@ async function resolveCreateConfig(argv: readonly string[], cwd: string): Promis
 	const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
 	const targetArg = argv.find((item) => !item.startsWith("--"));
 	let targetDir = targetArg ?? "routa-app";
+	let prompted = false;
 
 	if (interactive && !targetArg) {
 		const answer = await question("Project name (leave empty to use routa-app)");
+		prompted = true;
 		targetDir = answer.trim() || targetDir;
 	}
+	const openApi = await flagOrPrompt(
+		argv,
+		"--openapi",
+		"--no-openapi",
+		"Include a starter OpenAPI file?",
+		true,
+	);
+	const git = await flagOrPrompt(
+		argv,
+		"--git",
+		"--no-git",
+		"Initialize a new git repository?",
+		interactive,
+	);
+	const install = await flagOrPrompt(
+		argv,
+		"--install",
+		"--no-install",
+		"Install dependencies?",
+		interactive,
+	);
+	prompted = prompted || openApi.prompted || git.prompted || install.prompted;
 
 	return {
 		targetDir,
-		openApi: await flagOrPrompt(
-			argv,
-			"--openapi",
-			"--no-openapi",
-			"Include a starter OpenAPI file?",
-			true,
-		),
-		git: await flagOrPrompt(
-			argv,
-			"--git",
-			"--no-git",
-			"Initialize a new git repository?",
-			interactive,
-		),
-		install: await flagOrPrompt(
-			argv,
-			"--install",
-			"--no-install",
-			"Install dependencies?",
-			interactive,
-		),
+		openApi: openApi.value,
+		git: git.value,
+		install: install.value,
 		interactive,
+		prompted,
+		yes: argv.includes("--yes") || argv.includes("-y"),
 		cwd,
 	};
 }
@@ -207,20 +222,20 @@ async function flagOrPrompt(
 	disabledFlag: string,
 	label: string,
 	defaultValue: boolean,
-): Promise<boolean> {
+): Promise<{ value: boolean; prompted: boolean }> {
 	if (argv.includes(enabledFlag)) {
-		return true;
+		return { value: true, prompted: false };
 	}
 
 	if (argv.includes(disabledFlag)) {
-		return false;
+		return { value: false, prompted: false };
 	}
 
 	if (!process.stdin.isTTY || !process.stdout.isTTY) {
-		return defaultValue;
+		return { value: defaultValue, prompted: false };
 	}
 
-	return await confirm(label, defaultValue);
+	return { value: await confirm(label, defaultValue), prompted: true };
 }
 
 /**

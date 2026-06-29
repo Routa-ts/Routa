@@ -68,9 +68,24 @@ describe("create-routa", () => {
 			expect(output).toContain("pnpm dev");
 			expect(existsSync(join(cwd, "my-api/openapi.yaml"))).toBe(false);
 			expect(existsSync(join(cwd, "my-api/.routa/manifest.json"))).toBe(false);
+			expect(readFileSync(join(cwd, "my-api/package.json"), "utf8")).not.toContain("openapi:check");
+			expect(readFileSync(join(cwd, "my-api/README.md"), "utf8")).not.toContain(
+				"pnpm openapi:check",
+			);
 		} finally {
 			process.stdout.write = stdout;
 		}
+	});
+
+	it("does not require final confirmation when all inputs are provided", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "create-routa-yes-"));
+		const code = await runCreate(
+			["my-api", "--no-openapi", "--no-git", "--no-install", "--yes"],
+			cwd,
+		);
+
+		expect(code).toBe(0);
+		expect(existsSync(join(cwd, "my-api/package.json"))).toBe(true);
 	});
 
 	it("uses workspace packages for examples inside the Routa monorepo", async () => {

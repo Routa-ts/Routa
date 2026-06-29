@@ -6,7 +6,6 @@ import { serve } from "@hono/node-server";
 import { createHonoApp, type HonoRoute } from "@routa/core/hono";
 import { createLogger } from "@routa/core/logger";
 import type { MiddlewareMetadata, RouteMetadata } from "./project.js";
-import { stubEmptyRouteFiles } from "./project.js";
 
 type RoutaConfig = {
 	host?: string;
@@ -20,7 +19,6 @@ type RoutaConfig = {
  * @param cwd - The working directory that contains the Routa project files.
  */
 export async function startRuntime(cwd: string): Promise<void> {
-	const stubPoller = startRouteStubPoller(cwd);
 	const routes = await loadRoutes(cwd);
 	const routa = await loadRoutaConfig(cwd);
 	const logger = routa.logger === false ? undefined : (routa.logger ?? createLogger());
@@ -36,7 +34,6 @@ export async function startRuntime(cwd: string): Promise<void> {
 	});
 
 	server.once("error", (error) => {
-		stubPoller.close();
 		logger?.error("api.start_failed", "Routa API failed to start.", {
 			error: error instanceof Error ? error.message : String(error),
 			host: hostname,
@@ -44,26 +41,6 @@ export async function startRuntime(cwd: string): Promise<void> {
 		});
 		process.exitCode = 1;
 	});
-}
-
-/**
- * Periodically reports stubbed route files for a working directory.
- *
- * @param cwd - The working directory to scan for empty route files
- * @returns An object with a method that stops the poller
- */
-function startRouteStubPoller(cwd: string): { close: () => void } {
-	const stub = () => {
-		for (const file of stubEmptyRouteFiles(cwd)) {
-			process.stdout.write(`Stubbed ${file}\n`);
-		}
-	};
-	const timer = setInterval(stub, 250);
-	stub();
-
-	return {
-		close: () => clearInterval(timer),
-	};
 }
 
 /**
@@ -163,9 +140,11 @@ async function loadFileMiddleware(
 		>;
 		const contract = module[item.name];
 
-		if (contract && typeof contract === "object") {
-			middleware.push(contract as NonNullable<HonoRoute["contract"]["middleware"]>[number]);
+		if (!contract || typeof contract !== "object") {
+			throw new Error(`Middleware ${item.name} was not exported by ${item.file}.`);
 		}
+
+		middleware.push(contract as NonNullable<HonoRoute["contract"]["middleware"]>[number]);
 	}
 
 	return middleware;

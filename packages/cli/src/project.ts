@@ -585,7 +585,7 @@ function missingSuccessResponseDiagnostics(routes: RouteMetadata[]): Diagnostic[
  * Reports duplicate schema export names in route schema files.
  *
  * @param cwd - Project root directory
- * @returns Diagnostics for repeated `export const` names in `**/schemas.ts` files under `src/routes`
+ * @returns Diagnostics for repeated `export const` names in route `schemas.ts` files under `src/routes`
  */
 function duplicateSchemaDiagnostics(cwd: string): Diagnostic[] {
 	const routesDir = join(cwd, routesRoot);

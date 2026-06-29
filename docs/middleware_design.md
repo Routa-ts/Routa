@@ -203,7 +203,7 @@ ctx.state.auth.principal.id;
 ctx.state.permissions;
 ```
 
-No optional chaining if provided by the resolved route pipeline.
+No optional chaining is needed for context keys guaranteed by the resolved route pipeline; optional payload fields still require normal TypeScript checks.
 
 ---
 

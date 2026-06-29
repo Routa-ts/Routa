@@ -41,7 +41,7 @@ export type MiddlewareProvidedCtx<TProvides extends MiddlewareProvidesSpec> = {
 
 export type MiddlewareContract<
 	TRequires extends readonly RegisteredCtxKey[] = readonly RegisteredCtxKey[],
-	TProvides extends MiddlewareProvidesSpec = Record<string, z.ZodTypeAny>,
+	TProvides extends MiddlewareProvidesSpec = Record<never, never>,
 	TRejects extends readonly string[] = readonly string[],
 	TInput extends RouteInput | undefined = RouteInput | undefined,
 > = {
@@ -52,13 +52,21 @@ export type MiddlewareContract<
 	run?: (args: {
 		input: InferInput<TInput>;
 		ctx: RequiredMiddlewareCtx<TRequires>;
-		next: (ctx?: MiddlewareProvidedCtx<TProvides>) => Promise<
-			| {
-					type: TRejects[number];
-					data: unknown;
-			  }
-			| unknown
-		>;
+		next: keyof TProvides extends never
+			? (ctx?: MiddlewareProvidedCtx<TProvides>) => Promise<
+					| {
+							type: TRejects[number];
+							data: unknown;
+					  }
+					| unknown
+				>
+			: (ctx: MiddlewareProvidedCtx<TProvides>) => Promise<
+					| {
+							type: TRejects[number];
+							data: unknown;
+					  }
+					| unknown
+				>;
 	}) =>
 		| Promise<
 				| {
@@ -74,7 +82,9 @@ export type MiddlewareContract<
 		| unknown;
 };
 
-export type AnyMiddlewareContract = MiddlewareContract<any, any, any, any>;
+export type AnyMiddlewareContract = Omit<MiddlewareContract<any, any, any, any>, "run"> & {
+	run?: (args: any) => unknown;
+};
 
 type RegisteredCtxByKey = Register extends {
 	ctxByKey: infer TCtxByKey;
@@ -142,7 +152,7 @@ export type AnyRouteContract = {
 	input?: RouteInput;
 	responses: RouteResponses;
 	middleware?: readonly AnyMiddlewareContract[];
-	run: unknown;
+	run: (args: any) => unknown;
 };
 
 export type DefineRouteConfig = Partial<Record<HttpMethod, AnyRouteContract>> & {
@@ -269,7 +279,7 @@ export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPa
  */
 export function createMiddleware<
 	const TRequires extends readonly RegisteredCtxKey[] = readonly RegisteredCtxKey[],
-	const TProvides extends MiddlewareProvidesSpec = Record<string, z.ZodTypeAny>,
+	const TProvides extends MiddlewareProvidesSpec = Record<never, never>,
 	const TRejects extends readonly string[] = readonly string[],
 	const TInput extends RouteInput | undefined = undefined,
 >(

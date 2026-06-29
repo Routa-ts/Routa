@@ -18,7 +18,7 @@ export default defineRoute({
 			// TODO: call application-owned business logic.
 			return {
 				type: "success",
-				data: { ok: false } as unknown as z.output<typeof GetStatusResponse>,
+				data: { ok: true } as unknown as z.output<typeof GetStatusResponse>,
 			};
 		},
 	}),

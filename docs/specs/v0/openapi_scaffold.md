@@ -2,13 +2,13 @@
 
 ## Feature
 
-Routa reads an OpenAPI `.yaml` or `.json` file and scaffolds Hono-backed route contracts, route-local Zod schemas, HTTP handler stubs, a manifest, and a baseline.
+Routa reads an OpenAPI `.yaml`, `.yml`, or `.json` file and scaffolds Hono-backed route contracts, route-local Zod schemas, HTTP handler stubs, a manifest, and a baseline.
 
 ## Scope
 
 In v0:
 
-- OpenAPI input supports `.yaml` and `.json`.
+- OpenAPI input supports `.yaml`, `.yml`, and `.json`.
 - Generated schemas use Zod.
 - Generated routes target the Hono adapter.
 - `schemas.ts` is the recommended route-local schema file.

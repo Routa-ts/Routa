@@ -31,6 +31,12 @@ pnpm openapi:check
 src/routa.ts
 src/routes/status/route.ts
 src/routes/status/schemas.ts
+src/routes/users/route.ts
+src/routes/users/schemas.ts
+src/routes/users/$userId/route.ts
+src/routes/users/$userId/schemas.ts
+src/routes/users/$userId/posts/route.ts
+src/routes/users/$userId/posts/schemas.ts
 ```
 
 Routa owns generated project metadata in `.routa/`. Commit those files so OpenAPI drift and regeneration safety work across machines.

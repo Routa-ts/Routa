@@ -29,7 +29,9 @@ input:
     paths:
       /users:
         get:
-          operationId: missing
+          responses:
+            "200":
+              description: OK
 action: routa scaffold openapi.yaml
 expected:
   behavior:

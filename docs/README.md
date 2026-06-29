@@ -124,7 +124,7 @@ That is the essence of the framework: make the API boundary explicit, typed, and
 
 ## Current Status
 
-Routa is currently in the design stage. This repository is the first articulation of the framework: the product direction, the core architecture, and the middleware model.
+Routa has a v0 implementation baseline in this repository. These docs describe the product direction, core architecture, middleware model, and behavior contracts that keep the implementation aligned.
 
 The next milestone is a v0 proof of concept that proves the core loop:
 

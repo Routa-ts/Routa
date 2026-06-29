@@ -25,11 +25,16 @@ export default defineRoute({
 				schema: GetUserResponse,
 			},
 		},
-		run: () => {
+		run: ({ input }) => {
 			// TODO: call application-owned business logic.
 			return {
 				type: "success",
-				data: null as unknown as z.output<typeof GetUserResponse>,
+				data: {
+					id: input.params.userId,
+					email: "jane@example.com",
+					name: "Jane Example",
+					active: true,
+				} as unknown as z.output<typeof GetUserResponse>,
 			};
 		},
 	}),
@@ -44,11 +49,16 @@ export default defineRoute({
 				schema: UpdateUserResponse,
 			},
 		},
-		run: () => {
+		run: ({ input }) => {
 			// TODO: call application-owned business logic.
 			return {
 				type: "success",
-				data: null as unknown as z.output<typeof UpdateUserResponse>,
+				data: {
+					id: input.params.userId,
+					email: input.body.email ?? "jane@example.com",
+					name: input.body.name ?? "Jane Example",
+					active: input.body.active ?? true,
+				} as unknown as z.output<typeof UpdateUserResponse>,
 			};
 		},
 	}),
