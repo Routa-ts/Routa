@@ -3,7 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createProject, resolveRoutaVersion } from "create-routa";
+import { createProject, resolveRoutaVersion, runCreate } from "create-routa";
 import { runOpenApiBreaking, runOpenApiCheck } from "./openapi.js";
 import {
 	runProjectBuild,
@@ -14,6 +14,7 @@ import {
 } from "./project.js";
 import type { ScaffoldPreviewChange } from "./scaffold.js";
 import { scaffoldOpenApi } from "./scaffold.js";
+import { createUi, shouldUseColor, type Ui } from "./ui.js";
 
 export type CommandResult = {
 	code: number;
@@ -21,21 +22,24 @@ export type CommandResult = {
 	stderr?: string;
 };
 
-const helpText = `Routa
+function helpText(ui: Ui): string {
+	return `${ui.heading("Routa")}
 
-Usage:
-  routa create [dir]
-  routa scaffold <openapi.yaml|openapi.json>
-  routa dev
-  routa start
-  routa check
-  routa build
-  routa openapi check
-  routa openapi breaking [--update-baseline]
+${ui.muted("Usage:")}
+  ${ui.command("routa create [dir]")}
+  ${ui.command("routa scaffold <openapi.yaml|openapi.json>")}
+  ${ui.command("routa dev")}
+  ${ui.command("routa start")}
+  ${ui.command("routa check")}
+  ${ui.command("routa build")}
+  ${ui.command("routa openapi check")}
+  ${ui.command("routa openapi breaking [--update-baseline]")}
 `;
+}
 
 export type RunOptions = {
 	cwd?: string;
+	color?: boolean;
 };
 
 /**
@@ -48,18 +52,19 @@ export type RunOptions = {
 export function run(argv: readonly string[], options: RunOptions = {}): CommandResult {
 	const [command, subcommand] = argv;
 	const cwd = options.cwd ?? process.cwd();
+	const ui = createUi(options.color ?? false);
 
 	if (!command || command === "--help" || command === "-h") {
-		return { code: 0, stdout: helpText };
+		return { code: 0, stdout: helpText(ui) };
 	}
 
 	if (command === "create") {
-		return runCreateCommand(argv.slice(1), cwd);
+		return runCreateCommand(argv.slice(1), cwd, ui);
 	}
 
 	if (command === "scaffold") {
 		if (!subcommand) {
-			return { code: 1, stderr: "Missing OpenAPI input file.\n" };
+			return { code: 1, stderr: `${ui.error("Error:")} Missing OpenAPI input file.\n` };
 		}
 
 		try {
@@ -69,10 +74,13 @@ export function run(argv: readonly string[], options: RunOptions = {}): CommandR
 			});
 			return {
 				code: 0,
-				stdout: formatScaffoldResult(result),
+				stdout: formatScaffoldResult(result, ui),
 			};
 		} catch (error) {
-			return { code: 1, stderr: `${error instanceof Error ? error.message : String(error)}\n` };
+			return {
+				code: 1,
+				stderr: `${ui.error("Error:")} ${error instanceof Error ? error.message : String(error)}\n`,
+			};
 		}
 	}
 
@@ -96,7 +104,10 @@ export function run(argv: readonly string[], options: RunOptions = {}): CommandR
 		return subcommand === "check" ? runOpenApiCheck(cwd) : runOpenApiBreaking(argv.slice(2), cwd);
 	}
 
-	return { code: 1, stderr: `Unknown command: ${command}\n\n${helpText}` };
+	return {
+		code: 1,
+		stderr: `${ui.error("Error:")} Unknown command: ${command}\n\n${helpText(ui)}`,
+	};
 }
 
 /**
@@ -106,7 +117,7 @@ export function run(argv: readonly string[], options: RunOptions = {}): CommandR
  * @param cwd - Base working directory for project creation
  * @returns The command exit code and any output or error text
  */
-function runCreateCommand(argv: readonly string[], cwd: string): CommandResult {
+function runCreateCommand(argv: readonly string[], cwd: string, ui: Ui): CommandResult {
 	const targetDir = argv.find((item) => !item.startsWith("-")) ?? "routa-app";
 
 	try {
@@ -114,7 +125,7 @@ function runCreateCommand(argv: readonly string[], cwd: string): CommandResult {
 			openApi: !argv.includes("--no-openapi"),
 			routaVersion: resolveRoutaVersion(cwd, targetDir),
 		});
-		let stdout = createSummary(targetDir, result.files);
+		let stdout = createSummary(targetDir, result.files, ui);
 		let stderr = "";
 
 		if (argv.includes("--git")) {
@@ -124,9 +135,9 @@ function runCreateCommand(argv: readonly string[], cwd: string): CommandResult {
 			});
 
 			if (git.status === 0) {
-				stdout += "Initialized git repository.\n";
+				stdout += `${ui.success("Initialized git repository.")}\n`;
 			} else {
-				stderr += `git init failed. ${git.stderr ?? ""}\n`;
+				stderr += `${ui.error("git init failed.")} ${git.stderr ?? ""}\n`;
 			}
 		}
 
@@ -137,27 +148,29 @@ function runCreateCommand(argv: readonly string[], cwd: string): CommandResult {
 			});
 
 			if (install.status !== 0) {
-				stderr +=
-					'Command "pnpm install" did not run successfully. Please run this manually in your project.\n';
+				stderr += `${ui.warn('Command "pnpm install" did not run successfully.')} Please run this manually in your project.\n`;
 				stderr += install.stderr ?? "";
 			} else {
 				stdout += install.stdout ?? "";
 			}
 		}
 
-		stdout += `\nYour Routa app is ready in '${targetDir}'.\n\n`;
+		stdout += `\n${ui.success(`Your Routa app is ready in '${targetDir}'.`)}\n\n`;
 		stdout += "Use the following commands to start your app:\n";
-		stdout += `cd ${targetDir}\n`;
+		stdout += `${ui.command(`cd ${targetDir}`)}\n`;
 
 		if (!argv.includes("--install")) {
-			stdout += "pnpm install\n";
+			stdout += `${ui.command("pnpm install")}\n`;
 		}
 
-		stdout += "pnpm dev\n";
+		stdout += `${ui.command("pnpm dev")}\n`;
 
 		return { code: 0, stdout, stderr: stderr || undefined };
 	} catch (error) {
-		return { code: 1, stderr: `${error instanceof Error ? error.message : String(error)}\n` };
+		return {
+			code: 1,
+			stderr: `${ui.error("Error:")} ${error instanceof Error ? error.message : String(error)}\n`,
+		};
 	}
 }
 
@@ -168,8 +181,8 @@ function runCreateCommand(argv: readonly string[], cwd: string): CommandResult {
  * @param files - The created file paths
  * @returns A summary string listing the created files
  */
-function createSummary(targetDir: string, files: string[]): string {
-	return `Created Routa project '${targetDir}' with ${files.length} file(s).\n${files.join("\n")}\n`;
+function createSummary(targetDir: string, files: string[], ui: Ui): string {
+	return `${ui.success(`Created Routa project '${targetDir}' with ${files.length} file(s).`)}\n${files.join("\n")}\n`;
 }
 
 /**
@@ -178,9 +191,11 @@ function createSummary(targetDir: string, files: string[]): string {
  * @param result - The scaffold result to format
  * @returns The formatted output text
  */
-function formatScaffoldResult(result: ReturnType<typeof scaffoldOpenApi>): string {
+function formatScaffoldResult(result: ReturnType<typeof scaffoldOpenApi>, ui: Ui): string {
 	const lines = [
-		`${result.preview ? "Previewed" : "Scaffolded"} ${result.routes.length} Routa route file(s).`,
+		ui.success(
+			`${result.preview ? "Previewed" : "Scaffolded"} ${result.routes.length} Routa route file(s).`,
+		),
 		...result.files,
 	];
 
@@ -189,7 +204,7 @@ function formatScaffoldResult(result: ReturnType<typeof scaffoldOpenApi>): strin
 
 		for (const change of result.changes) {
 			lines.push(
-				`${previewMarker(change.status)} ${change.path}${change.detail ? ` (${change.detail})` : ""}`,
+				`${previewMarker(change.status, ui)} ${change.path}${change.detail ? ` (${change.detail})` : ""}`,
 			);
 
 			if (change.diff) {
@@ -207,18 +222,18 @@ function formatScaffoldResult(result: ReturnType<typeof scaffoldOpenApi>): strin
  * @param status - The preview change status.
  * @returns The marker string for the given status.
  */
-function previewMarker(status: ScaffoldPreviewChange["status"]): string {
+function previewMarker(status: ScaffoldPreviewChange["status"], ui: Ui): string {
 	switch (status) {
 		case "add":
-			return "+ add";
+			return ui.success("+ add");
 		case "update":
-			return "~ update";
+			return ui.warn("~ update");
 		case "unchanged":
-			return "= unchanged";
+			return ui.muted("= unchanged");
 		case "conflict":
-			return "! conflict";
+			return ui.error("! conflict");
 		case "remove":
-			return "- remove";
+			return ui.warn("- remove");
 	}
 }
 
@@ -228,12 +243,24 @@ function previewMarker(status: ScaffoldPreviewChange["status"]): string {
  * @param argv - Command-line arguments to process
  */
 export function main(argv = process.argv.slice(2)): void {
+	if (argv[0] === "create") {
+		runCreate(argv.slice(1))
+			.then((code) => {
+				process.exitCode = code;
+			})
+			.catch((error) => {
+				process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+				process.exitCode = 1;
+			});
+		return;
+	}
+
 	if (argv[0] === "dev") {
 		runProjectDevProcess(argv.slice(1));
 		return;
 	}
 
-	const result = run(argv);
+	const result = run(argv, { color: shouldUseColor() });
 
 	if (result.stdout) {
 		process.stdout.write(result.stdout);

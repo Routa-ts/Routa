@@ -26,6 +26,11 @@ describe("routa cli", () => {
 		expect(result.stdout).toContain("routa create [dir]");
 	});
 
+	it("prints colored help only when color is enabled", () => {
+		expect(run([]).stdout).not.toContain("\u001b[");
+		expect(run([], { color: true }).stdout).toContain("\u001b[");
+	});
+
 	it("requires an OpenAPI file for scaffold", () => {
 		const result = run(["scaffold"]);
 
@@ -41,6 +46,7 @@ describe("routa cli", () => {
 		expect(result.code).toBe(0);
 		expect(result.stdout).toContain("Your Routa app is ready");
 		expect(result.stdout).toContain("pnpm dev");
+		expect(result.stdout).toContain("Created Routa project");
 		expect(existsSync(join(cwd, "my-api/package.json"))).toBe(true);
 		expect(existsSync(join(cwd, "my-api/src/routes/status/route.ts"))).toBe(true);
 		expect(existsSync(join(cwd, "my-api/openapi.yaml"))).toBe(false);

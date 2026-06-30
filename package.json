@@ -7,17 +7,23 @@
 	"scripts": {
 		"build": "turbo run build",
 		"check": "biome check .",
+		"changeset": "changeset",
 		"format": "biome format --write .",
 		"format:check": "biome format .",
 		"lint": "turbo run lint",
 		"lint:repo": "biome lint .",
+		"pack:check": "node scripts/pack-check.mjs",
 		"quality": "pnpm check && turbo run typecheck test",
+		"release": "pnpm quality && pnpm build && pnpm pack:check && changeset publish",
 		"test": "turbo run test",
-		"typecheck": "turbo run typecheck"
+		"typecheck": "turbo run typecheck",
+		"version": "changeset version"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.1",
+		"@changesets/cli": "^2.31.0",
 		"@types/node": "^24.0.4",
+		"esbuild": "^0.28.1",
 		"turbo": "^2.8.0",
 		"typescript": "^5.8.3",
 		"vitest": "^3.2.4",
