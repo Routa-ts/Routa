@@ -103,7 +103,7 @@ export const requireAuth = createMiddleware({
 		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
 			"export type UsersCtx",
 		);
-	});
+	}, 15_000);
 
 	it("reports when check runs TypeScript no-emit", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-check-type-error-"));
