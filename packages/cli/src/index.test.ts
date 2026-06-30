@@ -44,6 +44,11 @@ describe("routa cli", () => {
 
 			expect(shouldUseColor()).toBe(true);
 
+			Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+			process.env.FORCE_COLOR = "0";
+
+			expect(shouldUseColor()).toBe(false);
+
 			delete process.env.FORCE_COLOR;
 			process.env.NO_COLOR = "";
 

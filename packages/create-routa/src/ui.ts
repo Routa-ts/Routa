@@ -7,8 +7,8 @@ export type Ui = {
 };
 
 export function shouldUseColor(): boolean {
-	if ("FORCE_COLOR" in process.env && process.env.FORCE_COLOR !== "0") {
-		return true;
+	if ("FORCE_COLOR" in process.env) {
+		return process.env.FORCE_COLOR !== "0";
 	}
 
 	if ("NO_COLOR" in process.env || process.env.CI) {
