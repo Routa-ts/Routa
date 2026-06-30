@@ -4,7 +4,7 @@
 	"private": false,
 	"type": "module",
 	"bin": {
-		"create-routa": "./dist/index.js"
+		"create-routa": "./dist/cli.js"
 	},
 	"exports": {
 		".": {
@@ -17,7 +17,7 @@
 		"dist"
 	],
 	"scripts": {
-		"build": "tsc -p tsconfig.json",
+		"build": "node ../../scripts/build-package.mjs create-routa",
 		"typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
 		"lint": "biome lint src",
 		"test": "vitest run"

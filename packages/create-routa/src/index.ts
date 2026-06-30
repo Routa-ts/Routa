@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { fileURLToPath } from "node:url";
 import { createProject } from "./create-project.js";
+import { createUi, shouldUseColor, type Ui } from "./ui.js";
 
 export { createProject } from "./create-project.js";
 
@@ -42,9 +42,10 @@ export async function runCreate(
 	cwd = process.cwd(),
 ): Promise<number> {
 	const config = await resolveCreateConfig(argv, cwd);
+	const ui = createUi(shouldUseColor());
 
 	try {
-		printSummary(config);
+		printSummary(config, ui);
 
 		if (
 			config.interactive
@@ -52,7 +53,7 @@ export async function runCreate(
 			&& !config.yes
 			&& !(await confirm("Continue with these settings?", true))
 		) {
-			process.stdout.write("Creation cancelled.\n");
+			process.stdout.write(`${ui.muted("Creation cancelled.")}\n`);
 			return 0;
 		}
 
@@ -68,9 +69,9 @@ export async function runCreate(
 			});
 
 			if (git.status === 0) {
-				process.stdout.write("Initialized git repository.\n");
+				process.stdout.write(`${ui.success("Initialized git repository.")}\n`);
 			} else {
-				process.stderr.write(`git init failed. ${git.stderr ?? ""}\n`);
+				process.stderr.write(`${ui.error("git init failed.")} ${git.stderr ?? ""}\n`);
 			}
 		}
 
@@ -83,23 +84,27 @@ export async function runCreate(
 
 			if (install.status !== 0) {
 				process.stderr.write(
-					'Command "pnpm install" did not run successfully. Please run this manually in your project.\n',
+					`${ui.error('Command "pnpm install" did not run successfully.')} Please run this manually in your project.\n`,
 				);
 			}
 		}
 
-		process.stdout.write(`\nYour Routa app is ready in '${config.targetDir}'.\n\n`);
+		process.stdout.write(
+			`\n${ui.success(`Your Routa app is ready in '${config.targetDir}'.`)}\n\n`,
+		);
 		process.stdout.write("Use the following commands to start your app:\n");
-		process.stdout.write(`cd ${config.targetDir}\n`);
+		process.stdout.write(`${ui.command(`cd ${config.targetDir}`)}\n`);
 
 		if (!config.install) {
-			process.stdout.write("pnpm install\n");
+			process.stdout.write(`${ui.command("pnpm install")}\n`);
 		}
 
-		process.stdout.write("pnpm dev\n");
+		process.stdout.write(`${ui.command("pnpm dev")}\n`);
 		return 0;
 	} catch (error) {
-		process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+		process.stderr.write(
+			`${ui.error("Error:")} ${error instanceof Error ? error.message : String(error)}\n`,
+		);
 		return 1;
 	}
 }
@@ -280,9 +285,9 @@ async function confirm(label: string, defaultValue: boolean): Promise<boolean> {
  *
  * @param config - The resolved project creation settings
  */
-function printSummary(config: CreateConfig): void {
-	process.stdout.write("Let's configure your Routa API\n\n");
-	process.stdout.write("About to create:\n\n");
+function printSummary(config: CreateConfig, ui: Ui): void {
+	process.stdout.write(`${ui.heading("Let's configure your Routa API")}\n\n`);
+	process.stdout.write(`${ui.muted("About to create:")}\n\n`);
 	process.stdout.write(`  Project:         ${config.targetDir}\n`);
 	process.stdout.write(`  Location:        ${config.cwd}/${config.targetDir}\n`);
 	process.stdout.write("  Package manager: pnpm\n");
@@ -290,32 +295,4 @@ function printSummary(config: CreateConfig): void {
 	process.stdout.write(`  OpenAPI starter: ${config.openApi ? "yes" : "no"}\n`);
 	process.stdout.write(`  Initialize git:  ${config.git ? "yes" : "no"}\n`);
 	process.stdout.write(`  Install deps:    ${config.install ? "yes" : "no"}\n\n`);
-}
-
-if (isCliEntry()) {
-	runCreate()
-		.then((code) => {
-			process.exitCode = code;
-		})
-		.catch((error) => {
-			process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-			process.exitCode = 1;
-		});
-}
-
-/**
- * Determines whether this module is being executed directly.
- *
- * @returns `true` if the current process entry point matches this module, `false` otherwise.
- */
-function isCliEntry(): boolean {
-	if (!process.argv[1]) {
-		return false;
-	}
-
-	try {
-		return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
-	} catch {
-		return false;
-	}
 }

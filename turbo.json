@@ -1,7 +1,13 @@
 {
 	"$schema": "https://turborepo.dev/schema.json",
 	"ui": "stream",
-	"globalDependencies": ["biome.json", ".npmrc", "pnpm-workspace.yaml", "tsconfig.base.json"],
+	"globalDependencies": [
+		"biome.json",
+		".npmrc",
+		"pnpm-workspace.yaml",
+		"scripts/*.mjs",
+		"tsconfig.base.json"
+	],
 	"globalEnv": ["CI"],
 	"tasks": {
 		"build": {

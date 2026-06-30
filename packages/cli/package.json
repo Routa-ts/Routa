@@ -16,7 +16,7 @@
 		"dist"
 	],
 	"scripts": {
-		"build": "tsc -p tsconfig.json",
+		"build": "node ../../scripts/build-package.mjs @routa/cli",
 		"typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
 		"lint": "biome lint src",
 		"test": "vitest run"
@@ -24,9 +24,11 @@
 	"dependencies": {
 		"@hono/node-server": "^2.0.6",
 		"@routa/core": "workspace:*",
-		"create-routa": "workspace:*",
 		"tsx": "^4.22.4",
 		"typescript": "^5.8.3",
 		"yaml": "2.9.0"
+	},
+	"devDependencies": {
+		"create-routa": "workspace:*"
 	}
 }

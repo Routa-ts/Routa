@@ -15,6 +15,7 @@ import { run } from "./index.js";
 import { generateOpenApi } from "./openapi.js";
 import { sourceSnapshot, sourceSnapshotChanged, stubEmptyRouteFiles } from "./project.js";
 import { loadRoutes } from "./runtime.js";
+import { shouldUseColor } from "./ui.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -24,6 +25,41 @@ describe("routa cli", () => {
 
 		expect(result.code).toBe(0);
 		expect(result.stdout).toContain("routa create [dir]");
+	});
+
+	it("prints colored help only when color is enabled", () => {
+		expect(run([]).stdout).not.toContain("\u001b[");
+		expect(run([], { color: true }).stdout).toContain("\u001b[");
+	});
+
+	it("honors explicit color environment overrides", () => {
+		const originalEnv = { ...process.env };
+		const stdoutIsTTY = process.stdout.isTTY;
+
+		try {
+			Object.defineProperty(process.stdout, "isTTY", { value: false, configurable: true });
+			process.env.CI = "true";
+			process.env.FORCE_COLOR = "1";
+			delete process.env.NO_COLOR;
+
+			expect(shouldUseColor()).toBe(true);
+
+			Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+			process.env.FORCE_COLOR = "0";
+
+			expect(shouldUseColor()).toBe(false);
+
+			delete process.env.FORCE_COLOR;
+			process.env.NO_COLOR = "";
+
+			expect(shouldUseColor()).toBe(false);
+		} finally {
+			process.env = originalEnv;
+			Object.defineProperty(process.stdout, "isTTY", {
+				value: stdoutIsTTY,
+				configurable: true,
+			});
+		}
 	});
 
 	it("requires an OpenAPI file for scaffold", () => {
@@ -41,6 +77,7 @@ describe("routa cli", () => {
 		expect(result.code).toBe(0);
 		expect(result.stdout).toContain("Your Routa app is ready");
 		expect(result.stdout).toContain("pnpm dev");
+		expect(result.stdout).toContain("Created Routa project");
 		expect(existsSync(join(cwd, "my-api/package.json"))).toBe(true);
 		expect(existsSync(join(cwd, "my-api/src/routes/status/route.ts"))).toBe(true);
 		expect(existsSync(join(cwd, "my-api/openapi.yaml"))).toBe(false);
