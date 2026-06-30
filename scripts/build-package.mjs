@@ -12,8 +12,7 @@ const configs = {
 	"@routa/cli": {
 		dir: "packages/cli",
 		bundle: {
-			entry: "src/index.ts",
-			outfile: "dist/index.js",
+			entries: [{ entry: "src/index.ts", outfile: "dist/index.js" }],
 			external: ["@hono/node-server", "@routa/core", "@routa/core/*", "tsx", "typescript", "yaml"],
 		},
 	},
@@ -23,8 +22,10 @@ const configs = {
 	"create-routa": {
 		dir: "packages/create-routa",
 		bundle: {
-			entry: "src/index.ts",
-			outfile: "dist/index.js",
+			entries: [
+				{ entry: "src/index.ts", outfile: "dist/index.js" },
+				{ entry: "src/cli.ts", outfile: "dist/cli.js" },
+			],
 			external: [],
 		},
 	},
@@ -38,24 +39,28 @@ if (!config) {
 }
 
 const packageDir = join(root, config.dir);
+const distDir = join(packageDir, "dist");
 
+rmSync(distDir, { recursive: true, force: true });
 run("tsc", ["-p", "tsconfig.json"], packageDir);
-removeMaps(join(packageDir, "dist"));
-removeSourceMapReferences(join(packageDir, "dist"));
+removeMaps(distDir);
+removeSourceMapReferences(distDir);
 
 if (config.bundle) {
-	removeJavaScript(join(packageDir, "dist"));
+	removeJavaScript(distDir);
 
-	await build({
-		entryPoints: [join(packageDir, config.bundle.entry)],
-		outfile: join(packageDir, config.bundle.outfile),
-		bundle: true,
-		format: "esm",
-		platform: "node",
-		target: "node20",
-		sourcemap: false,
-		external: config.bundle.external,
-	});
+	for (const entry of config.bundle.entries) {
+		await build({
+			entryPoints: [join(packageDir, entry.entry)],
+			outfile: join(packageDir, entry.outfile),
+			bundle: true,
+			format: "esm",
+			platform: "node",
+			target: "node20",
+			sourcemap: false,
+			external: config.bundle.external,
+		});
+	}
 }
 
 function run(command, args, cwd) {

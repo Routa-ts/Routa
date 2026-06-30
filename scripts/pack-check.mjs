@@ -40,8 +40,8 @@ for (const packageName of packages) {
 }
 
 run(
-	"node",
-	[join(root, "packages/create-routa/dist/index.js"), appDir, "--no-git", "--no-install", "--yes"],
+	"pnpm",
+	["dlx", `file:${tarballs.get("create-routa")}`, appDir, "--no-git", "--no-install", "--yes"],
 	root,
 );
 

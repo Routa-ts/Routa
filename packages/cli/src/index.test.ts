@@ -15,6 +15,7 @@ import { run } from "./index.js";
 import { generateOpenApi } from "./openapi.js";
 import { sourceSnapshot, sourceSnapshotChanged, stubEmptyRouteFiles } from "./project.js";
 import { loadRoutes } from "./runtime.js";
+import { shouldUseColor } from "./ui.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -29,6 +30,31 @@ describe("routa cli", () => {
 	it("prints colored help only when color is enabled", () => {
 		expect(run([]).stdout).not.toContain("\u001b[");
 		expect(run([], { color: true }).stdout).toContain("\u001b[");
+	});
+
+	it("honors explicit color environment overrides", () => {
+		const originalEnv = { ...process.env };
+		const stdoutIsTTY = process.stdout.isTTY;
+
+		try {
+			Object.defineProperty(process.stdout, "isTTY", { value: false, configurable: true });
+			process.env.CI = "true";
+			process.env.FORCE_COLOR = "1";
+			delete process.env.NO_COLOR;
+
+			expect(shouldUseColor()).toBe(true);
+
+			delete process.env.FORCE_COLOR;
+			process.env.NO_COLOR = "";
+
+			expect(shouldUseColor()).toBe(false);
+		} finally {
+			process.env = originalEnv;
+			Object.defineProperty(process.stdout, "isTTY", {
+				value: stdoutIsTTY,
+				configurable: true,
+			});
+		}
 	});
 
 	it("requires an OpenAPI file for scaffold", () => {

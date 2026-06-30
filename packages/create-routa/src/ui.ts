@@ -7,12 +7,12 @@ export type Ui = {
 };
 
 export function shouldUseColor(): boolean {
-	if (process.env.NO_COLOR || process.env.CI) {
-		return false;
+	if ("FORCE_COLOR" in process.env && process.env.FORCE_COLOR !== "0") {
+		return true;
 	}
 
-	if (process.env.FORCE_COLOR && process.env.FORCE_COLOR !== "0") {
-		return true;
+	if ("NO_COLOR" in process.env || process.env.CI) {
+		return false;
 	}
 
 	return Boolean(process.stdout.isTTY);

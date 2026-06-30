@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { fileURLToPath } from "node:url";
 import { createProject } from "./create-project.js";
 import { createUi, shouldUseColor, type Ui } from "./ui.js";
 
@@ -296,36 +295,4 @@ function printSummary(config: CreateConfig, ui: Ui): void {
 	process.stdout.write(`  OpenAPI starter: ${config.openApi ? "yes" : "no"}\n`);
 	process.stdout.write(`  Initialize git:  ${config.git ? "yes" : "no"}\n`);
 	process.stdout.write(`  Install deps:    ${config.install ? "yes" : "no"}\n\n`);
-}
-
-if (isCliEntry()) {
-	runCreate()
-		.then((code) => {
-			process.exitCode = code;
-		})
-		.catch((error) => {
-			process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-			process.exitCode = 1;
-		});
-}
-
-/**
- * Determines whether this module is being executed directly.
- *
- * @returns `true` if the current process entry point matches this module, `false` otherwise.
- */
-function isCliEntry(): boolean {
-	if (!process.argv[1]) {
-		return false;
-	}
-
-	try {
-		const entry = realpathSync(process.argv[1]);
-		const modulePath = realpathSync(fileURLToPath(import.meta.url));
-		const normalizedEntry = entry.split(sep).join("/");
-
-		return entry === modulePath && normalizedEntry.includes("/create-routa/");
-	} catch {
-		return false;
-	}
 }
