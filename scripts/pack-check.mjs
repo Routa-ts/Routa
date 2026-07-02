@@ -134,7 +134,7 @@ async function smokeTestStart(cwd) {
 				}
 			} catch (error) {
 				if (Date.now() >= deadline) {
-					throw error;
+					throw new Error(`routa start smoke test timed out after 30s.\n${output}`);
 				}
 
 				// When the server isn't up yet, fetch usually throws a TypeError.
