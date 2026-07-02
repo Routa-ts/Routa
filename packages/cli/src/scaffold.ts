@@ -971,31 +971,31 @@ function validateSchema(
 	}
 
 	if (Array.isArray(schema.type)) {
-		// Allow `type: ["string"]` / `type: ["null"]`.
 		if (schema.type.length === 1) {
-			return;
+			// Keep validating nested constructs (e.g. object properties) instead of early-returning.
+			schema = normalizeSingleTypeArray(schema);
+		} else {
+			// Allow OpenAPI 3.1 nullable type arrays like `type: ["string", "null"]`
+			// only when there is exactly one non-null entry.
+			const nonNullTypes = schema.type.filter((entry) => entry !== "null");
+			const isNullableTypeArray = schema.type.includes("null");
+
+			if (isNullableTypeArray && nonNullTypes.length === 1) {
+				schema = { ...schema, type: nonNullTypes[0] };
+			} else {
+				throw new Error(
+					scaffoldError(
+						"ROUTA_OPENAPI_UNSUPPORTED_SCHEMA",
+						`Unsupported multi-type array in ${location}.`,
+						[
+							"Routa v0 scaffold only supports OpenAPI 3.1 type arrays with exactly one entry,",
+							'or a nullable type array with exactly one non-null entry (e.g. type: ["string", "null"]).',
+							"Use anyOf for true multi-type unions.",
+						],
+					),
+				);
+			}
 		}
-
-		// Allow OpenAPI 3.1 nullable type arrays like `type: ["string", "null"]`
-		// only when there is exactly one non-null entry.
-		const nonNullTypes = schema.type.filter((entry) => entry !== "null");
-		const isNullableTypeArray = schema.type.includes("null");
-
-		if (isNullableTypeArray && nonNullTypes.length === 1) {
-			return;
-		}
-
-		throw new Error(
-			scaffoldError(
-				"ROUTA_OPENAPI_UNSUPPORTED_SCHEMA",
-				`Unsupported multi-type array in ${location}.`,
-				[
-					"Routa v0 scaffold only supports OpenAPI 3.1 type arrays with exactly one entry,",
-					'or a nullable type array with exactly one non-null entry (e.g. type: ["string", "null"]).',
-					"Use anyOf for true multi-type unions.",
-				],
-			),
-		);
 	}
 
 	if (schema.nullable) {

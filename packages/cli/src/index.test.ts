@@ -2139,6 +2139,54 @@ export default defineRoute({
           content:
             application/json:
               schema:
+                type: ["object"]
+                properties:
+                  name:
+                    oneOf:
+                      - type: string
+`,
+		);
+
+		const typeArraySingle = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(typeArraySingle.code).toBe(1);
+		expect(typeArraySingle.stderr).toContain("ROUTA_OPENAPI_UNSUPPORTED_SCHEMA");
+		expect(typeArraySingle.stderr).toContain("oneOf and allOf are not supported");
+
+		writeOpenApiPaths(
+			cwd,
+			`  /users:
+    get:
+      operationId: listUsers
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: ["object", "null"]
+                properties:
+                  name:
+                    oneOf:
+                      - type: string
+`,
+		);
+
+		const typeArrayNullable = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(typeArrayNullable.code).toBe(1);
+		expect(typeArrayNullable.stderr).toContain("ROUTA_OPENAPI_UNSUPPORTED_SCHEMA");
+		expect(typeArrayNullable.stderr).toContain("oneOf and allOf are not supported");
+
+		writeOpenApiPaths(
+			cwd,
+			`  /users:
+    get:
+      operationId: listUsers
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
                 $ref: "./schemas.yaml#/User"
 `,
 		);
