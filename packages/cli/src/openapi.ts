@@ -970,6 +970,7 @@ function readBaseline(cwd: string): OpenApiLike | undefined {
 		throw new Error(
 			`ROUTA_OPENAPI_BASELINE_INVALID_JSON: Could not parse .routa/openapi-baseline.json: ${details}\n`
 				+ "Fix the JSON syntax, or recreate the baseline with: routa openapi breaking --update-baseline",
+			{ cause: error },
 		);
 	}
 }
