@@ -2,9 +2,9 @@
 
 Routa uses Changesets with fixed versions for the public packages:
 
-- `@routa/core`
-- `@routa/cli`
-- `create-routa`
+- `@routa-ts/core`
+- `@routa-ts/cli`
+- `create-routa-ts`
 
 ## Normal Flow
 
@@ -26,7 +26,7 @@ pnpm release
 The Release workflow expects:
 
 - `GITHUB_TOKEN` (provided automatically)
-- `NPM_TOKEN` with publish access to `@routa/*` and `create-routa`
+- `NPM_TOKEN` with publish access to `@routa-ts/*` and `create-routa-ts`
 
 ## Local Package Check
 

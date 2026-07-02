@@ -12,7 +12,7 @@ const tmp = mkdtempSync(join(tmpdir(), "routa-pack-check-"));
 const packDir = join(tmp, "packs");
 const appDir = join(tmp, "app");
 
-const packages = ["@routa/core", "create-routa", "@routa/cli"];
+const packages = ["@routa-ts/core", "create-routa-ts", "@routa-ts/cli"];
 const tarballs = new Map();
 
 run("pnpm", ["--filter", "./packages/*", "build"], root);
@@ -41,28 +41,28 @@ for (const packageName of packages) {
 	}
 }
 
-const cliTarballFiles = run("tar", ["-tf", tarballs.get("@routa/cli")], root);
+const cliTarballFiles = run("tar", ["-tf", tarballs.get("@routa-ts/cli")], root);
 
 for (const requiredFile of ["package/dist/index.js", "package/dist/runtime.js"]) {
 	if (!cliTarballFiles.split("\n").includes(requiredFile)) {
-		throw new Error(`@routa/cli tarball is missing ${requiredFile}.`);
+		throw new Error(`@routa-ts/cli tarball is missing ${requiredFile}.`);
 	}
 }
 
 run(
 	"pnpm",
-	["dlx", `file:${tarballs.get("create-routa")}`, appDir, "--no-git", "--no-install", "--yes"],
+	["dlx", `file:${tarballs.get("create-routa-ts")}`, appDir, "--no-git", "--no-install", "--yes"],
 	root,
 );
 
 const manifestPath = join(appDir, "package.json");
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-manifest.dependencies["@routa/core"] = `file:${tarballs.get("@routa/core")}`;
-manifest.dependencies["@routa/cli"] = `file:${tarballs.get("@routa/cli")}`;
+manifest.dependencies["@routa-ts/core"] = `file:${tarballs.get("@routa-ts/core")}`;
+manifest.dependencies["@routa-ts/cli"] = `file:${tarballs.get("@routa-ts/cli")}`;
 writeFileSync(manifestPath, `${JSON.stringify(manifest, null, "\t")}\n`);
 writeFileSync(
 	join(appDir, "pnpm-workspace.yaml"),
-	`overrides:\n  "@routa/cli": "file:${tarballs.get("@routa/cli")}"\n  "@routa/core": "file:${tarballs.get("@routa/core")}"\n  "create-routa": "file:${tarballs.get("create-routa")}"\nallowBuilds:\n  esbuild: true\n`,
+	`overrides:\n  "@routa-ts/cli": "file:${tarballs.get("@routa-ts/cli")}"\n  "@routa-ts/core": "file:${tarballs.get("@routa-ts/core")}"\n  "create-routa-ts": "file:${tarballs.get("create-routa-ts")}"\nallowBuilds:\n  esbuild: true\n`,
 );
 
 run("pnpm", ["install"], appDir);

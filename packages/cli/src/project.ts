@@ -52,7 +52,7 @@ const generatedHeader =
 const routesRoot = join("src", "routes");
 const devPollMs = 300;
 const httpMethods = new Set(["get", "post", "put", "patch", "delete", "head", "options"]);
-const routeStubSource = `import { createRoute, defineRoute } from "@routa/core";
+const routeStubSource = `import { createRoute, defineRoute } from "@routa-ts/core";
 
 export default defineRoute({
 \tget: createRoute({
@@ -840,7 +840,7 @@ function projectStructureDiagnostics(cwd: string): Diagnostic[] {
 			message: `${item.message} Routa commands must run inside a TypeScript Routa project.`,
 			file: item.path,
 			suggestion:
-				"Create a project with pnpm create routa@latest, or run this command at the project root.",
+				"Create a project with pnpm create routa-ts@latest, or run this command at the project root.",
 		}));
 }
 
@@ -2081,7 +2081,7 @@ function writeRoutesMetadata(cwd: string, routes: RouteMetadata[]): void {
 /**
  * Builds TypeScript declarations for route context types and module registration.
  *
- * @returns Generated source text for per-route context types, route-to-method context maps, and the `@routa/core` module augmentation.
+ * @returns Generated source text for per-route context types, route-to-method context maps, and the `@routa-ts/core` module augmentation.
  */
 function routeContextTypes(routes: RouteMetadata[]): string {
 	const ctxTypes = routes
@@ -2101,7 +2101,7 @@ function routeContextTypes(routes: RouteMetadata[]): string {
 		.join("\n")}\n};`;
 	const ctxByKey = `export type RoutaCtxByKey = ${ctxByKeyType(routes)};`;
 
-	return `${ctxTypes}\n\n${ctxMap}\n\n${ctxByKey}\n\ndeclare module "@routa/core" {\n\texport interface Register {\n\t\trouteCtxByPath: RoutaRouteCtxByPath;\n\t\tctxByKey: RoutaCtxByKey;\n\t}\n}`;
+	return `${ctxTypes}\n\n${ctxMap}\n\n${ctxByKey}\n\ndeclare module "@routa-ts/core" {\n\texport interface Register {\n\t\trouteCtxByPath: RoutaRouteCtxByPath;\n\t\tctxByKey: RoutaCtxByKey;\n\t}\n}`;
 }
 
 /**

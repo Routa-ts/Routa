@@ -1,5 +1,5 @@
 {
-	"name": "@routa/cli",
+	"name": "@routa-ts/cli",
 	"version": "0.0.1",
 	"description": "CLI for Routa route checks, scaffolding, and dev server",
 	"private": false,
@@ -29,19 +29,19 @@
 		"dist"
 	],
 	"scripts": {
-		"build": "node ../../scripts/build-package.mjs @routa/cli",
+		"build": "node ../../scripts/build-package.mjs @routa-ts/cli",
 		"typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
 		"lint": "biome lint src",
 		"test": "vitest run"
 	},
 	"dependencies": {
 		"@hono/node-server": "^2.0.6",
-		"@routa/core": "workspace:*",
+		"@routa-ts/core": "workspace:*",
 		"tsx": "^4.22.4",
 		"typescript": "^5.8.3",
 		"yaml": "2.9.0"
 	},
 	"devDependencies": {
-		"create-routa": "workspace:*"
+		"create-routa-ts": "workspace:*"
 	}
 }

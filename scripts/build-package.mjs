@@ -9,7 +9,7 @@ const root = resolve(import.meta.dirname, "..");
 const packageName = process.argv[2];
 
 const configs = {
-	"@routa/cli": {
+	"@routa-ts/cli": {
 		dir: "packages/cli",
 		bundle: {
 			entries: [
@@ -18,15 +18,22 @@ const configs = {
 				// be emitted explicitly; it is never statically imported from index.ts.
 				{ entry: "src/runtime.ts", outfile: "dist/runtime.js" },
 			],
-			external: ["@hono/node-server", "@routa/core", "@routa/core/*", "tsx", "typescript", "yaml"],
+			external: [
+				"@hono/node-server",
+				"@routa-ts/core",
+				"@routa-ts/core/*",
+				"tsx",
+				"typescript",
+				"yaml",
+			],
 			requiredOutputs: ["dist/index.js", "dist/runtime.js"],
 		},
 	},
-	"@routa/core": {
+	"@routa-ts/core": {
 		dir: "packages/core",
 	},
-	"create-routa": {
-		dir: "packages/create-routa",
+	"create-routa-ts": {
+		dir: "packages/create-routa-ts",
 		bundle: {
 			entries: [
 				{ entry: "src/index.ts", outfile: "dist/index.js" },

@@ -278,7 +278,7 @@ export function scaffoldOpenApi(
 		}
 
 		const imports = formatNamedImport(Array.from(routeImports).sort());
-		const routeSource = `${generatedHeader(source)}import { createRoute, defineRoute } from "@routa/core";
+		const routeSource = `${generatedHeader(source)}import { createRoute, defineRoute } from "@routa-ts/core";
 import type { z } from "zod";
 ${imports}
 

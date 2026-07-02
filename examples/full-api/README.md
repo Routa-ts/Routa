@@ -1,6 +1,6 @@
 # examples/full-api
 
-Routa monorepo example app. This package uses workspace-linked `@routa/cli` and `@routa/core` dependencies, so run it from the repository root.
+Routa monorepo example app. This package uses workspace-linked `@routa-ts/cli` and `@routa-ts/core` dependencies, so run it from the repository root.
 
 ## Development
 

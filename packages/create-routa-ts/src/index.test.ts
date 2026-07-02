@@ -6,13 +6,13 @@ import { describe, expect, it } from "vitest";
 import { createProject } from "./create-project.js";
 import { createCommandArgs, resolveRoutaVersion, runCreate } from "./index.js";
 
-describe("create-routa", () => {
+describe("create-routa-ts", () => {
 	it("forwards pnpm create args to routa create", () => {
 		expect(createCommandArgs(["my-api"])).toEqual(["create", "my-api"]);
 	});
 
 	it("creates a Hono-backed Routa starter app", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "create-routa-"));
+		const cwd = await mkdtemp(join(tmpdir(), "create-routa-ts-"));
 		const result = createProject("my-api", cwd);
 
 		expect(result.files).toContain(".gitignore");
@@ -40,7 +40,7 @@ describe("create-routa", () => {
 		expect(packageJson).toContain('"dev": "routa dev"');
 		expect(packageJson).toContain('"start": "routa start"');
 		expect(packageJson).toContain("@biomejs/biome");
-		// hono and zod are peer dependencies of @routa/core, so the app declares them.
+		// hono and zod are peer dependencies of @routa-ts/core, so the app declares them.
 		expect(packageJson).toContain('"hono"');
 		expect(packageJson).toContain('"zod"');
 		expect(readFileSync(join(cwd, "my-api/README.md"), "utf8")).toContain("pnpm dev");
@@ -51,7 +51,7 @@ describe("create-routa", () => {
 	});
 
 	it("uses the target directory basename as the package name", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "create-routa-nested-"));
+		const cwd = await mkdtemp(join(tmpdir(), "create-routa-ts-nested-"));
 		createProject("apps/my-api", cwd);
 
 		expect(readFileSync(join(cwd, "apps/my-api/package.json"), "utf8")).toContain(
@@ -61,7 +61,7 @@ describe("create-routa", () => {
 	});
 
 	it("rejects target basenames that are invalid package names", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "create-routa-invalid-name-"));
+		const cwd = await mkdtemp(join(tmpdir(), "create-routa-ts-invalid-name-"));
 
 		expect(() => createProject("My API", cwd)).toThrow(
 			"Invalid package name from target directory: My API",
@@ -69,7 +69,7 @@ describe("create-routa", () => {
 	});
 
 	it("rejects target basenames reserved by npm package naming rules", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "create-routa-reserved-name-"));
+		const cwd = await mkdtemp(join(tmpdir(), "create-routa-ts-reserved-name-"));
 
 		expect(() => createProject("node_modules", cwd)).toThrow(
 			"Invalid package name from target directory: node_modules",
@@ -80,7 +80,7 @@ describe("create-routa", () => {
 	});
 
 	it("prints a create summary and next steps in non-interactive mode", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "create-routa-run-"));
+		const cwd = await mkdtemp(join(tmpdir(), "create-routa-ts-run-"));
 		const stdout = process.stdout.write;
 		let output = "";
 		process.stdout.write = ((chunk: string) => {
@@ -109,7 +109,7 @@ describe("create-routa", () => {
 	});
 
 	it("does not require final confirmation when all inputs are provided", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "create-routa-yes-"));
+		const cwd = await mkdtemp(join(tmpdir(), "create-routa-ts-yes-"));
 		const stdinIsTTY = process.stdin.isTTY;
 		const stdoutIsTTY = process.stdout.isTTY;
 
@@ -137,7 +137,7 @@ describe("create-routa", () => {
 	});
 
 	it("does not treat short flags as the target directory", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "create-routa-short-flag-"));
+		const cwd = await mkdtemp(join(tmpdir(), "create-routa-ts-short-flag-"));
 		const code = await runCreate(["-y", "--no-openapi", "--no-git", "--no-install"], cwd);
 
 		expect(code).toBe(0);
@@ -146,7 +146,7 @@ describe("create-routa", () => {
 	});
 
 	it("uses workspace packages for examples inside the Routa monorepo", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "create-routa-workspace-"));
+		const cwd = await mkdtemp(join(tmpdir(), "create-routa-ts-workspace-"));
 		writeFileSync(
 			join(cwd, "pnpm-workspace.yaml"),
 			'packages:\n  - "packages/*"\n  - "examples/*"\n',

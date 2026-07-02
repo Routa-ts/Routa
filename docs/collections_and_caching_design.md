@@ -82,7 +82,7 @@ This document records decisions for Group 4 in small parts.
 ### Example
 
 ```ts
-import { Fields, Sort } from "@routa/core/query/helpers";
+import { Fields, Sort } from "@routa-ts/core/query/helpers";
 
 const ListUsersQuery = z
 	.object({

@@ -145,7 +145,7 @@ export type RoutaRouteCtxByPath = {
 
 export type RoutaCtxByKey = ${emptyCtx};
 
-declare module "@routa/core" {
+declare module "@routa-ts/core" {
 \texport interface Register {
 \t\trouteCtxByPath: RoutaRouteCtxByPath;
 \t\tctxByKey: RoutaCtxByKey;
@@ -290,8 +290,8 @@ function packageJson(name: string, routaVersion: string, openApi: boolean): stri
 					: {}),
 			},
 			dependencies: {
-				"@routa/cli": routaVersion,
-				"@routa/core": routaVersion,
+				"@routa-ts/cli": routaVersion,
+				"@routa-ts/core": routaVersion,
 				hono: "^4.12.27",
 				tsx: "^4.22.4",
 				zod: "^4.4.3",
@@ -388,7 +388,7 @@ function vscodeSettings(): string {
 function readme(name: string, openApi: boolean): string {
 	return `# ${name}
 
-Routa API generated with \`pnpm create routa@latest\`.
+Routa API generated with \`pnpm create routa-ts@latest\`.
 
 ## Development
 
@@ -482,7 +482,7 @@ function biomeJson(): string {
  * @returns The generated module string that exports a Routa app configured for port `3000`.
  */
 function routaSource(): string {
-	return `import { createRouta } from "@routa/core";
+	return `import { createRouta } from "@routa-ts/core";
 
 export default createRouta({
 \tport: 3000,
@@ -525,7 +525,7 @@ paths:
  * @returns The TypeScript module text for `src/routes/status/route.ts`.
  */
 function statusRouteSource(): string {
-	return `import { createRoute, defineRoute } from "@routa/core";
+	return `import { createRoute, defineRoute } from "@routa-ts/core";
 import { GetStatusResponse } from "./schemas.js";
 
 export default defineRoute({

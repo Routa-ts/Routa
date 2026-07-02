@@ -85,9 +85,9 @@ Routa's public API should prefer direct, specific imports over one large namespa
 Examples:
 
 ```ts
-import { defineRoute, createRoute } from "@routa/core";
-import { Fields, Sort } from "@routa/core/query/helpers";
-import { requireAuth } from "@routa/core/middleware/auth";
+import { defineRoute, createRoute } from "@routa-ts/core";
+import { Fields, Sort } from "@routa-ts/core/query/helpers";
+import { requireAuth } from "@routa-ts/core/middleware/auth";
 ```
 
 ---

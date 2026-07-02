@@ -1,5 +1,5 @@
 {
-	"name": "create-routa",
+	"name": "create-routa-ts",
 	"version": "0.0.1",
 	"description": "Scaffold a new Routa API project",
 	"private": false,
@@ -8,7 +8,7 @@
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/joseAcevesG/Routa.git",
-		"directory": "packages/create-routa"
+		"directory": "packages/create-routa-ts"
 	},
 	"engines": {
 		"node": ">=20"
@@ -17,7 +17,7 @@
 		"access": "public"
 	},
 	"bin": {
-		"create-routa": "./dist/cli.js"
+		"create-routa-ts": "./dist/cli.js"
 	},
 	"exports": {
 		".": {
@@ -30,7 +30,7 @@
 		"dist"
 	],
 	"scripts": {
-		"build": "node ../../scripts/build-package.mjs create-routa",
+		"build": "node ../../scripts/build-package.mjs create-routa-ts",
 		"typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
 		"lint": "biome lint src",
 		"test": "vitest run"

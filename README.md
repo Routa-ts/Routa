@@ -17,7 +17,7 @@ Routa v0 is intentionally narrow:
 The official project creation command is:
 
 ```sh
-pnpm create routa@latest
+pnpm create routa-ts@latest
 ```
 
 ## Framework Model
@@ -58,9 +58,9 @@ Handlers return named outcomes from the declared response map. Business logic st
 docs/                 Planning, design, and acceptance specs
 docs/specs/v0/        v0 behavior contracts
 docs/specs/v1/        deferred target behavior
-packages/core/        @routa/core framework API
-packages/cli/         @routa/cli routa command
-packages/create-routa/ create-routa package for pnpm create routa
+packages/core/        @routa-ts/core framework API
+packages/cli/         @routa-ts/cli routa command
+packages/create-routa-ts/ create-routa-ts package for pnpm create routa-ts
 examples/basic-api/   End-to-end Routa example app
 examples/full-api/    Middleware, groups, and tenant-scoped example app
 scripts/              Build, packaging, and CI helper scripts
