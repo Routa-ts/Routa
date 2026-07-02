@@ -1676,6 +1676,213 @@ paths:
 		expect(readFileSync(join(projectDir, ".routa/routes.gen.ts"), "utf8")).toBe(created);
 	});
 
+	it("round-trips widened schema shapes through scaffold and drift check", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-widened-"));
+		createTypeScriptProject(cwd);
+		writeOpenApiPaths(
+			cwd,
+			`  /widgets:
+    get:
+      operationId: listWidgets
+      responses:
+        "200":
+          description: Widgets
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                  - labels
+                  - contact
+                  - createdAt
+                properties:
+                  status:
+                    const: active
+                  labels:
+                    type: object
+                    additionalProperties:
+                      type: string
+                  contact:
+                    type: string
+                    format: email
+                  nickname:
+                    type:
+                      - string
+                      - "null"
+                  size:
+                    anyOf:
+                      - type: string
+                      - type: integer
+                  createdAt:
+                    type: string
+                    format: date-time
+`,
+		);
+
+		const scaffold = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(scaffold.code).toBe(0);
+
+		const schemas = readFileSync(join(cwd, "src/routes/widgets/schemas.ts"), "utf8");
+		expect(schemas).toContain('status: z.literal("active")');
+		expect(schemas).toContain("labels: z.record(z.string(), z.string())");
+		expect(schemas).toContain("contact: z.email()");
+		expect(schemas).toContain("nickname: z.string().nullable().optional()");
+		expect(schemas).toContain("size: z.union([z.string(), z.int()]).optional()");
+		expect(schemas).toContain("createdAt: z.iso.datetime()");
+
+		const drift = run(["openapi", "check"], { cwd });
+		expect(drift.code).toBe(0);
+		expect(drift.stdout).toContain("No drift detected");
+	});
+
+	it("keeps drift checks clean when users add zod refinement chains", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-refined-"));
+		createTypeScriptProject(cwd);
+		writeSimpleUsersOpenApi(cwd);
+		run(["scaffold", "openapi.yaml"], { cwd });
+
+		const schemaFile = join(cwd, "src/routes/users/schemas.ts");
+		const schemas = readFileSync(schemaFile, "utf8");
+		writeFileSync(
+			schemaFile,
+			schemas.replace(
+				"name: z.string()",
+				'name: z.string().min(1).max(80).trim().regex(/^[^\\d]/).describe("Display name")',
+			),
+		);
+
+		const drift = run(["openapi", "check"], { cwd });
+		expect(drift.code).toBe(0);
+		expect(drift.stdout).toContain("No drift detected");
+	});
+
+	it("matches golden output for scaffolded route and schema files", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-scaffold-golden-"));
+		createTypeScriptProject(cwd);
+		writeOpenApiPaths(
+			cwd,
+			`  /users/{id}:
+    get:
+      operationId: getUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: verbose
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: A user
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - id
+                properties:
+                  id:
+                    type: string
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+    delete:
+      operationId: deleteUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+`,
+		);
+
+		const result = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(result.code).toBe(0);
+
+		expect(readFileSync(join(cwd, "src/routes/users/$id/route.ts"), "utf8")).toMatchSnapshot(
+			"golden route.ts",
+		);
+		expect(readFileSync(join(cwd, "src/routes/users/$id/schemas.ts"), "utf8")).toMatchSnapshot(
+			"golden schemas.ts",
+		);
+		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toMatchSnapshot(
+			"golden routes.gen.ts",
+		);
+	});
+
+	it("rejects undeclared response variants at compile time in consumer projects", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-consumer-compile-fail-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/status/route.ts"),
+			`import { createRoute, defineRoute } from "@routa/core";
+import { z } from "zod";
+
+export default defineRoute({
+\tget: createRoute({
+\t\tresponses: {
+\t\t\tsuccess: {
+\t\t\t\tstatus: 200,
+\t\t\t\tschema: z.object({ ok: z.boolean() }),
+\t\t\t},
+\t\t},
+\t\trun: () => ({ type: "undeclaredVariant", data: { ok: true } }),
+\t}),
+});
+`,
+		);
+		writeFileSync(
+			join(cwd, "tsconfig.json"),
+			JSON.stringify(
+				{
+					compilerOptions: {
+						target: "ES2022",
+						module: "NodeNext",
+						moduleResolution: "NodeNext",
+						strict: true,
+						skipLibCheck: true,
+						baseUrl: ".",
+						paths: {
+							"@routa/core": [join(repoRoot, "packages/core/src/index.ts")],
+							zod: [join(repoRoot, "packages/core/node_modules/zod/index.d.ts")],
+						},
+					},
+					include: ["src/routes/**/*.ts"],
+				},
+				null,
+				"\t",
+			),
+		);
+
+		const result = spawnSync(
+			"pnpm",
+			["exec", "tsc", "-p", join(cwd, "tsconfig.json"), "--noEmit"],
+			{
+				cwd: repoRoot,
+				encoding: "utf8",
+			},
+		);
+
+		expect(result.status).not.toBe(0);
+		expect(result.stdout).toContain("undeclaredVariant");
+	});
+
 	it("rejects path keys with dot segments that would escape the project", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-traversal-"));
 		createTypeScriptProject(cwd);
@@ -1875,7 +2082,7 @@ paths:
 		const oneOf = run(["scaffold", "openapi.yaml"], { cwd });
 		expect(oneOf.code).toBe(1);
 		expect(oneOf.stderr).toContain("ROUTA_OPENAPI_UNSUPPORTED_SCHEMA");
-		expect(oneOf.stderr).toContain("oneOf, anyOf, and allOf are not supported");
+		expect(oneOf.stderr).toContain("oneOf and allOf are not supported");
 
 		writeOpenApiPaths(
 			cwd,
@@ -1889,6 +2096,9 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  name:
+                    type: string
                 additionalProperties:
                   type: string
 `,
@@ -1896,7 +2106,7 @@ paths:
 
 		const additionalProperties = run(["scaffold", "openapi.yaml"], { cwd });
 		expect(additionalProperties.code).toBe(1);
-		expect(additionalProperties.stderr).toContain("nullable or additionalProperties");
+		expect(additionalProperties.stderr).toContain("additionalProperties is only supported");
 
 		writeOpenApiPaths(
 			cwd,
@@ -1917,6 +2127,54 @@ paths:
 		expect(missingRef.code).toBe(1);
 		expect(missingRef.stderr).toContain("ROUTA_OPENAPI_MISSING_REF");
 		expect(missingRef.stderr).toContain("#/components/schemas/MissingUser");
+
+		writeOpenApiPaths(
+			cwd,
+			`  /users:
+    get:
+      operationId: listUsers
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: ["object"]
+                properties:
+                  name:
+                    oneOf:
+                      - type: string
+`,
+		);
+
+		const typeArraySingle = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(typeArraySingle.code).toBe(1);
+		expect(typeArraySingle.stderr).toContain("ROUTA_OPENAPI_UNSUPPORTED_SCHEMA");
+		expect(typeArraySingle.stderr).toContain("oneOf and allOf are not supported");
+
+		writeOpenApiPaths(
+			cwd,
+			`  /users:
+    get:
+      operationId: listUsers
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: ["object", "null"]
+                properties:
+                  name:
+                    oneOf:
+                      - type: string
+`,
+		);
+
+		const typeArrayNullable = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(typeArrayNullable.code).toBe(1);
+		expect(typeArrayNullable.stderr).toContain("ROUTA_OPENAPI_UNSUPPORTED_SCHEMA");
+		expect(typeArrayNullable.stderr).toContain("oneOf and allOf are not supported");
 
 		writeOpenApiPaths(
 			cwd,
