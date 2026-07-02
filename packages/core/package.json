@@ -1,8 +1,21 @@
 {
 	"name": "@routa/core",
 	"version": "0.0.1",
+	"description": "Schema-first REST framework core for Routa",
 	"private": false,
 	"type": "module",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/joseAcevesG/Routa.git",
+		"directory": "packages/core"
+	},
+	"engines": {
+		"node": ">=20"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
