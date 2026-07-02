@@ -133,6 +133,10 @@ async function smokeTestStart(cwd) {
 					clearTimeout(timeoutId);
 				}
 			} catch (error) {
+				if (error instanceof Error && error.name === "AbortError") {
+					throw new Error(`routa start smoke test timed out after 30s.\n${output}`);
+				}
+
 				if (Date.now() >= deadline) {
 					throw new Error(`routa start smoke test timed out after 30s.\n${output}`);
 				}
