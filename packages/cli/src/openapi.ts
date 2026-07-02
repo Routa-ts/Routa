@@ -1,8 +1,8 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { isBodylessStatus } from "@routa/core/hono";
 import ts from "typescript";
 import { validateProject } from "./project.js";
-import { isBodylessStatus } from "@routa/core/hono";
 
 type OpenApiLike = {
 	openapi?: string;
