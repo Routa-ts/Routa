@@ -92,7 +92,10 @@ export function runOpenApiBreaking(
 	}
 
 	if (diagnostics.length > 0) {
-		return { code: 0, stdout: `${diagnostics.join("\n")}\n` };
+		return {
+			code: 1,
+			stderr: `${diagnostics.join("\n")}\nRun routa openapi breaking --update-baseline to accept the current contract as the new baseline.\n`,
+		};
 	}
 
 	return { code: 0, stdout: "OpenAPI breaking check passed. No removed operations detected.\n" };

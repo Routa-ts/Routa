@@ -16,6 +16,7 @@
 	"dependencies": {
 		"@routa/cli": "workspace:*",
 		"@routa/core": "workspace:*",
+		"hono": "^4.12.27",
 		"tsx": "^4.22.4",
 		"zod": "^4.4.3"
 	},

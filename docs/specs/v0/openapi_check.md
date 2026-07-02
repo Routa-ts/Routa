@@ -53,7 +53,9 @@ action: routa openapi breaking
 expected:
   behavior:
     - command reports removed POST /users
-    - default severity is info unless configured
+    - command tells the developer how to accept the contract with --update-baseline
+failure:
+  mode: non-zero exit so CI can gate on removed operations
 ```
 
 ```yaml
