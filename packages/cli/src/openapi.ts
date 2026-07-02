@@ -418,10 +418,17 @@ class SchemaReader {
 				: {};
 		}
 
-		if (["min", "max", "positive", "nonnegative", "negative", "nonpositive"].includes(call ?? "")) {
+		if (passthroughCalls.has(call ?? "")) {
 			return ts.isPropertyAccessExpression(unwrapped.expression)
 				? this.schemaForExpression(unwrapped.expression.expression, seen)
 				: {};
+		}
+
+		if (call === "nullable" || call === "nullish") {
+			const inner = ts.isPropertyAccessExpression(unwrapped.expression)
+				? this.schemaForExpression(unwrapped.expression.expression, seen)
+				: {};
+			return { anyOf: [inner, { type: "null" }] };
 		}
 
 		if (call === "array") {
@@ -441,6 +448,27 @@ class SchemaReader {
 			return { type: "string", enum: values };
 		}
 
+		if (call === "literal") {
+			const value = literalValue(unwrapped.arguments[0]);
+			return value === undefined ? {} : { type: typeof value, const: value };
+		}
+
+		if (call === "union" && ts.isArrayLiteralExpression(unwrapped.arguments[0])) {
+			return {
+				anyOf: unwrapped.arguments[0].elements.map((element) =>
+					this.schemaForExpression(element as ts.Expression, seen),
+				),
+			};
+		}
+
+		if (call === "record") {
+			const valueSchema = unwrapped.arguments[unwrapped.arguments.length - 1];
+			return {
+				type: "object",
+				additionalProperties: valueSchema ? this.schemaForExpression(valueSchema, seen) : {},
+			};
+		}
+
 		if (call === "int") {
 			return { type: "integer" };
 		}
@@ -451,6 +479,14 @@ class SchemaReader {
 
 		if (call === "boolean" || call === "stringbool") {
 			return { type: "boolean" };
+		}
+
+		if (call === "null") {
+			return { type: "null" };
+		}
+
+		if (call && call in stringFormatCalls) {
+			return { type: "string", format: stringFormatCalls[call] };
 		}
 
 		if (call === "unknown" || call === "any") {
@@ -489,6 +525,88 @@ class SchemaReader {
 			properties,
 		};
 	}
+}
+
+/**
+ * Zod method calls that refine a schema without changing its OpenAPI type.
+ */
+const passthroughCalls = new Set([
+	"min",
+	"max",
+	"positive",
+	"nonnegative",
+	"negative",
+	"nonpositive",
+	"default",
+	"describe",
+	"regex",
+	"trim",
+	"length",
+	"startsWith",
+	"endsWith",
+	"nonempty",
+	"lowercase",
+	"uppercase",
+	"toLowerCase",
+	"toUpperCase",
+	"catch",
+	"readonly",
+	"meta",
+	"brand",
+	"multipleOf",
+]);
+
+/**
+ * Zod string factory calls mapped to their OpenAPI string formats.
+ */
+const stringFormatCalls: Record<string, string> = {
+	email: "email",
+	uuid: "uuid",
+	url: "uri",
+	datetime: "date-time",
+	date: "date",
+};
+
+/**
+ * Reads a literal value from a `z.literal(...)` argument.
+ *
+ * @param expression - The literal argument expression
+ * @returns The literal string, number, or boolean, or `undefined` when unsupported
+ */
+function literalValue(
+	expression: ts.Expression | undefined,
+): string | number | boolean | undefined {
+	if (!expression) {
+		return undefined;
+	}
+
+	const unwrapped = unwrapExpression(expression);
+
+	if (ts.isStringLiteralLike(unwrapped)) {
+		return unwrapped.text;
+	}
+
+	if (ts.isNumericLiteral(unwrapped)) {
+		return Number(unwrapped.text);
+	}
+
+	if (
+		ts.isPrefixUnaryExpression(unwrapped)
+		&& unwrapped.operator === ts.SyntaxKind.MinusToken
+		&& ts.isNumericLiteral(unwrapped.operand)
+	) {
+		return -Number(unwrapped.operand.text);
+	}
+
+	if (unwrapped.kind === ts.SyntaxKind.TrueKeyword) {
+		return true;
+	}
+
+	if (unwrapped.kind === ts.SyntaxKind.FalseKeyword) {
+		return false;
+	}
+
+	return undefined;
 }
 
 /**
@@ -894,7 +1012,7 @@ function normalize(value: unknown): unknown {
 
 	if (typeof value === "object" && value !== null) {
 		return Object.fromEntries(
-			Object.entries(value)
+			Object.entries(canonicalizeSchema(value as Record<string, unknown>))
 				.filter(([, item]) => !isEmptySchemaContainer(item))
 				.filter(([key]) => key !== "description")
 				.sort(([left], [right]) => left.localeCompare(right))
@@ -903,6 +1021,38 @@ function normalize(value: unknown): unknown {
 	}
 
 	return value;
+}
+
+/**
+ * Canonicalizes schema spellings that have several equivalent OpenAPI forms.
+ *
+ * `const` without a `type` gains the inferred type, and 3.1 nullable type
+ * arrays become an `anyOf` with `{ type: "null" }` so that source-derived
+ * schemas compare equal to hand-written baselines.
+ *
+ * @param value - The object entry to canonicalize
+ * @returns The canonical object form used for comparison
+ */
+function canonicalizeSchema(value: Record<string, unknown>): Record<string, unknown> {
+	let result = value;
+
+	if (
+		"const" in result
+		&& !("type" in result)
+		&& ["string", "number", "boolean"].includes(typeof result.const)
+	) {
+		result = { ...result, type: typeof result.const };
+	}
+
+	if (Array.isArray(result.type) && result.type.includes("null")) {
+		const rest = result.type.filter((entry) => entry !== "null");
+		const { type: _type, ...others } = result;
+		return {
+			anyOf: [{ ...others, type: rest.length === 1 ? rest[0] : rest }, { type: "null" }],
+		};
+	}
+
+	return result;
 }
 
 /**

@@ -48,15 +48,16 @@ type OpenApiOperation = {
 type OpenApiContent = Record<string, { schema?: OpenApiSchema }>;
 
 type OpenApiSchema = {
-	type?: string;
+	type?: string | string[];
 	format?: string;
 	enum?: unknown[];
+	const?: unknown;
 	items?: OpenApiSchema;
 	properties?: Record<string, OpenApiSchema>;
 	required?: string[];
 	$ref?: string;
 	oneOf?: unknown[];
-	anyOf?: unknown[];
+	anyOf?: OpenApiSchema[];
 	allOf?: unknown[];
 	nullable?: boolean;
 	additionalProperties?: unknown;
@@ -956,26 +957,57 @@ function validateSchema(
 		return;
 	}
 
-	if (schema.oneOf || schema.anyOf || schema.allOf) {
+	if (schema.oneOf || schema.allOf) {
 		throw new Error(
 			scaffoldError(
 				"ROUTA_OPENAPI_UNSUPPORTED_SCHEMA",
 				`Unsupported composed schema in ${location}.`,
 				[
-					"Routa v0 supports object, array, string, number, integer, boolean, enum, and local component refs.",
-					"oneOf, anyOf, and allOf are not supported by scaffold yet.",
+					"Routa v0 supports object, array, string, number, integer, boolean, enum, const, anyOf unions, and local component refs.",
+					"oneOf and allOf are not supported by scaffold yet. Use anyOf for unions.",
 				],
 			),
 		);
 	}
 
-	if (schema.nullable || schema.additionalProperties !== undefined) {
+	if (schema.nullable) {
 		throw new Error(
 			scaffoldError(
 				"ROUTA_OPENAPI_UNSUPPORTED_SCHEMA",
 				`Unsupported schema option in ${location}.`,
-				["Routa v0 scaffold does not support nullable or additionalProperties yet."],
+				[
+					"The OpenAPI 3.0 nullable flag is not supported.",
+					'Use an OpenAPI 3.1 type array instead, for example type: ["string", "null"].',
+				],
 			),
+		);
+	}
+
+	if (
+		schema.additionalProperties !== undefined
+		&& (typeof schema.additionalProperties !== "object"
+			|| schema.additionalProperties === null
+			|| schema.properties)
+	) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_UNSUPPORTED_SCHEMA",
+				`Unsupported schema option in ${location}.`,
+				[
+					"additionalProperties is only supported as a schema on objects without fixed properties (maps to z.record).",
+				],
+			),
+		);
+	}
+
+	if (
+		schema.const !== undefined
+		&& !["string", "number", "boolean"].includes(typeof schema.const)
+	) {
+		throw new Error(
+			scaffoldError("ROUTA_OPENAPI_UNSUPPORTED_SCHEMA", `Unsupported const value in ${location}.`, [
+				"Only string, number, and boolean const values are supported.",
+			]),
 		);
 	}
 
@@ -996,6 +1028,18 @@ function validateSchema(
 	}
 
 	validateSchema(schema.items, document, `${location} items`);
+
+	for (const [index, entry] of (schema.anyOf ?? []).entries()) {
+		validateSchema(entry, document, `${location} anyOf[${index}]`);
+	}
+
+	if (typeof schema.additionalProperties === "object" && schema.additionalProperties !== null) {
+		validateSchema(
+			schema.additionalProperties as OpenApiSchema,
+			document,
+			`${location} additionalProperties`,
+		);
+	}
 
 	for (const [name, property] of Object.entries(schema.properties ?? {})) {
 		validateSchema(property, document, `${location} property "${name}"`);
@@ -1283,12 +1327,39 @@ function zodForSchema(schema: OpenApiSchema | undefined): string {
 		return refName(schema.$ref);
 	}
 
+	const nonNull = nonNullSchema(schema);
+
+	if (nonNull) {
+		return `${zodForSchema(nonNull)}.nullable()`;
+	}
+
+	if (schema.const !== undefined && ["string", "number", "boolean"].includes(typeof schema.const)) {
+		return `z.literal(${JSON.stringify(schema.const)})`;
+	}
+
+	if (schema.anyOf && schema.anyOf.length > 0) {
+		if (schema.anyOf.length === 1) {
+			return zodForSchema(schema.anyOf[0]);
+		}
+
+		return `z.union([${schema.anyOf.map((entry) => zodForSchema(entry)).join(", ")}])`;
+	}
+
 	if (schema.enum?.every((item) => typeof item === "string")) {
 		return `z.enum([${schema.enum.map((item) => JSON.stringify(item)).join(", ")}])`;
 	}
 
 	if (schema.type === "array") {
 		return `z.array(${zodForSchema(schema.items)})`;
+	}
+
+	if (
+		schema.type === "object"
+		&& !schema.properties
+		&& typeof schema.additionalProperties === "object"
+		&& schema.additionalProperties !== null
+	) {
+		return `z.record(z.string(), ${zodForSchema(schema.additionalProperties as OpenApiSchema)})`;
 	}
 
 	if (schema.type === "object" || schema.properties) {
@@ -1313,7 +1384,52 @@ function zodForSchema(schema: OpenApiSchema | undefined): string {
 		return "z.boolean()";
 	}
 
+	if (schema.type === "null") {
+		return "z.null()";
+	}
+
+	if (schema.type === "string" && schema.format) {
+		const formats: Record<string, string> = {
+			email: "z.email()",
+			uuid: "z.uuid()",
+			uri: "z.url()",
+			"date-time": "z.iso.datetime()",
+			date: "z.iso.date()",
+		};
+		const mapped = formats[schema.format];
+
+		if (mapped) {
+			return mapped;
+		}
+	}
+
 	return "z.string()";
+}
+
+/**
+ * Extracts the non-null variant from a nullable OpenAPI schema.
+ *
+ * Handles both OpenAPI 3.1 spellings of nullability: a `type` array containing
+ * `"null"`, and an `anyOf` pairing one schema with `{ type: "null" }`.
+ *
+ * @param schema - The schema to inspect
+ * @returns The schema without its null variant, or `undefined` when not nullable
+ */
+function nonNullSchema(schema: OpenApiSchema): OpenApiSchema | undefined {
+	if (Array.isArray(schema.type) && schema.type.includes("null")) {
+		const rest = schema.type.filter((entry) => entry !== "null");
+		return { ...schema, type: rest.length === 1 ? rest[0] : rest };
+	}
+
+	if (schema.anyOf?.length === 2) {
+		const nullEntry = schema.anyOf.find((entry) => entry.type === "null" && !entry.properties);
+
+		if (nullEntry) {
+			return schema.anyOf.find((entry) => entry !== nullEntry);
+		}
+	}
+
+	return undefined;
 }
 
 /**
@@ -1335,6 +1451,29 @@ function placeholderForSchema(
 
 		const component = document.components?.schemas?.[name];
 		return placeholderForSchema(component, document, new Set([...seen, name]));
+	}
+
+	if (
+		schema?.const !== undefined
+		&& ["string", "number", "boolean"].includes(typeof schema.const)
+	) {
+		return JSON.stringify(schema.const);
+	}
+
+	if (schema?.enum && schema.enum.length > 0 && typeof schema.enum[0] === "string") {
+		return JSON.stringify(schema.enum[0]);
+	}
+
+	if (schema) {
+		const nonNull = nonNullSchema(schema);
+
+		if (nonNull) {
+			return placeholderForSchema(nonNull, document, seen);
+		}
+	}
+
+	if (schema?.anyOf && schema.anyOf.length > 0) {
+		return placeholderForSchema(schema.anyOf[0], document, seen);
 	}
 
 	if (schema?.type === "array") {

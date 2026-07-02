@@ -14,7 +14,7 @@ Routa v0 is intentionally narrow:
 - Typed route responses
 - Minimal typed middleware context
 
-The official project creation command will be:
+The official project creation command is:
 
 ```sh
 pnpm create routa@latest
@@ -62,6 +62,8 @@ packages/core/        @routa/core framework API
 packages/cli/         @routa/cli routa command
 packages/create-routa/ create-routa package for pnpm create routa
 examples/basic-api/   End-to-end Routa example app
+examples/full-api/    Middleware, groups, and tenant-scoped example app
+scripts/              Build, packaging, and CI helper scripts
 ```
 
 The repo uses pnpm workspaces and Turborepo for package task orchestration.
