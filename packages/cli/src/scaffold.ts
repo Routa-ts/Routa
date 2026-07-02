@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, extname, join, relative, resolve } from "node:path";
+import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import { parse as parseYaml } from "yaml";
 
 const httpMethods = ["get", "post", "put", "patch", "delete", "head", "options"] as const;
@@ -552,6 +552,8 @@ function validateOpenApiDocument(document: OpenApiDocument): void {
 			);
 		}
 
+		validatePathSegments(path);
+
 		if (!isRecord(pathItem)) {
 			throw new Error(
 				scaffoldError("ROUTA_OPENAPI_INVALID_PATH_ITEM", `Invalid path item for ${path}.`, [
@@ -653,6 +655,31 @@ function validateOpenApiDocument(document: OpenApiDocument): void {
 				`Add at least one supported HTTP method under paths: ${httpMethods.join(", ")}.`,
 			]),
 		);
+	}
+}
+
+/**
+ * Rejects OpenAPI path segments that could escape the generated routes directory.
+ *
+ * Path keys come from user-supplied OpenAPI files and are turned into filesystem
+ * directories, so `.`/`..` segments and path separator characters are refused.
+ *
+ * @param path - The OpenAPI path key to check.
+ */
+function validatePathSegments(path: string): void {
+	for (const segment of pathSegments(path)) {
+		if (/^\.+$/.test(segment) || /[\\\0]/.test(segment)) {
+			throw new Error(
+				scaffoldError(
+					"ROUTA_OPENAPI_UNSAFE_PATH_SEGMENT",
+					`Unsafe path segment "${segment}" in ${path}.`,
+					[
+						"Path segments cannot be dot segments or contain path separator characters.",
+						"Routa turns OpenAPI paths into src/routes directories, so segments must stay inside the project.",
+					],
+				),
+			);
+		}
 	}
 }
 
@@ -1428,6 +1455,33 @@ function writeFile(filePath: string, content: string): void {
 }
 
 /**
+ * Resolves a generated file path and refuses paths that escape the project root.
+ *
+ * Both OpenAPI path keys and manifest entries influence generated file paths, so
+ * every write and delete goes through this guard.
+ *
+ * @param cwd - The project root directory
+ * @param path - The generated file path relative to `cwd`
+ * @returns The absolute path inside the project
+ */
+function resolveInsideProject(cwd: string, path: string): string {
+	const projectRoot = resolve(cwd);
+	const absolutePath = resolve(projectRoot, path);
+
+	if (absolutePath !== projectRoot && !absolutePath.startsWith(`${projectRoot}${sep}`)) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_SCAFFOLD_PATH_OUTSIDE_PROJECT",
+				`Refusing to touch ${path} outside the project root.`,
+				["Generated files must stay inside the project directory."],
+			),
+		);
+	}
+
+	return absolutePath;
+}
+
+/**
  * Reads the scaffold manifest from the project root.
  *
  * @param cwd - Project root directory
@@ -1457,7 +1511,7 @@ function writeManagedFile(
 	content: string,
 	previousManifest: Manifest | undefined,
 ): void {
-	const absolutePath = join(cwd, path);
+	const absolutePath = resolveInsideProject(cwd, path);
 
 	if (existsSync(absolutePath)) {
 		const previous = previousManifest?.generated.find((file) => file.path === path);
@@ -1520,7 +1574,7 @@ function removeStaleGeneratedFiles(
 			continue;
 		}
 
-		const absolutePath = join(cwd, previous.path);
+		const absolutePath = resolveInsideProject(cwd, previous.path);
 
 		if (!existsSync(absolutePath)) {
 			continue;

@@ -292,6 +292,7 @@ function packageJson(name: string, routaVersion: string, openApi: boolean): stri
 			dependencies: {
 				"@routa/cli": routaVersion,
 				"@routa/core": routaVersion,
+				hono: "^4.12.27",
 				tsx: "^4.22.4",
 				zod: "^4.4.3",
 			},

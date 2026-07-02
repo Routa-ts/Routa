@@ -34,7 +34,11 @@
 		"lint": "biome lint src",
 		"test": "vitest run"
 	},
-	"dependencies": {
+	"peerDependencies": {
+		"hono": "^4.12.27",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
 		"hono": "^4.12.27",
 		"zod": "^4.4.3"
 	}

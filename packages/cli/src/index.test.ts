@@ -1441,6 +1441,41 @@ paths:
 		expect(typoMethod.stderr).toContain("Allowed methods: get, post, put");
 	});
 
+	it("rejects path keys with dot segments that would escape the project", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-traversal-"));
+		createTypeScriptProject(cwd);
+		writeOpenApiPaths(
+			cwd,
+			`  /../../outside/evil:
+    get:
+      operationId: escapeProject
+      responses:
+        "200":
+          description: Escape
+`,
+		);
+
+		const traversal = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(traversal.code).toBe(1);
+		expect(traversal.stderr).toContain("ROUTA_OPENAPI_UNSAFE_PATH_SEGMENT");
+		expect(existsSync(join(cwd, "..", "outside"))).toBe(false);
+
+		writeOpenApiPaths(
+			cwd,
+			`  "/users/back\\\\slash":
+    get:
+      operationId: backslashSegment
+      responses:
+        "200":
+          description: Backslash
+`,
+		);
+
+		const backslash = run(["scaffold", "openapi.yaml"], { cwd });
+		expect(backslash.code).toBe(1);
+		expect(backslash.stderr).toContain("ROUTA_OPENAPI_UNSAFE_PATH_SEGMENT");
+	});
+
 	it("explains operations and responses that cannot be scaffolded", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-operation-response-"));
 		createTypeScriptProject(cwd);
@@ -2278,9 +2313,10 @@ export default defineRoute({
 
 		const result = run(["openapi", "breaking"], { cwd });
 
-		expect(result.code).toBe(0);
-		expect(result.stdout).toContain("OPENAPI_REMOVED_OPERATION");
-		expect(result.stdout).toContain("POST /users");
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("OPENAPI_REMOVED_OPERATION");
+		expect(result.stderr).toContain("POST /users");
+		expect(result.stderr).toContain("--update-baseline");
 	});
 
 	it("generates body route contracts that typecheck in a consumer project", () => {

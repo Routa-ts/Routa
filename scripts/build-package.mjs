@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { build } from "esbuild";
 
@@ -12,8 +12,14 @@ const configs = {
 	"@routa/cli": {
 		dir: "packages/cli",
 		bundle: {
-			entries: [{ entry: "src/index.ts", outfile: "dist/index.js" }],
+			entries: [
+				{ entry: "src/index.ts", outfile: "dist/index.js" },
+				// runtime.js is spawned by filesystem path from project.ts, so it must
+				// be emitted explicitly; it is never statically imported from index.ts.
+				{ entry: "src/runtime.ts", outfile: "dist/runtime.js" },
+			],
 			external: ["@hono/node-server", "@routa/core", "@routa/core/*", "tsx", "typescript", "yaml"],
+			requiredOutputs: ["dist/index.js", "dist/runtime.js"],
 		},
 	},
 	"@routa/core": {
@@ -60,6 +66,13 @@ if (config.bundle) {
 			sourcemap: false,
 			external: config.bundle.external,
 		});
+	}
+
+	for (const requiredOutput of config.bundle.requiredOutputs ?? []) {
+		if (!existsSync(join(packageDir, requiredOutput))) {
+			process.stderr.write(`${packageName} build did not produce ${requiredOutput}.\n`);
+			process.exit(1);
+		}
 	}
 }
 

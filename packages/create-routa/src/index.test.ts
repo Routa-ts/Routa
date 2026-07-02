@@ -40,7 +40,9 @@ describe("create-routa", () => {
 		expect(packageJson).toContain('"dev": "routa dev"');
 		expect(packageJson).toContain('"start": "routa start"');
 		expect(packageJson).toContain("@biomejs/biome");
-		expect(packageJson).not.toContain('"hono"');
+		// hono and zod are peer dependencies of @routa/core, so the app declares them.
+		expect(packageJson).toContain('"hono"');
+		expect(packageJson).toContain('"zod"');
 		expect(readFileSync(join(cwd, "my-api/README.md"), "utf8")).toContain("pnpm dev");
 		expect(readFileSync(join(cwd, "my-api/src/routa.ts"), "utf8")).toContain("createRouta");
 		expect(readFileSync(join(cwd, "my-api/.vscode/settings.json"), "utf8")).toContain(
