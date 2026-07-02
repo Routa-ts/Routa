@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { builtinModules } from "node:module";
-import { basename, dirname, join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 export type CreateProjectResult = {
 	projectDir: string;
@@ -116,7 +116,7 @@ function generatedHeader(source: string): string {
 function routesMetadataSource(): string {
 	const routes = [
 		{
-			file: ["src", "routes", "status", "route.ts"].join(sep),
+			file: ["src", "routes", "status", "route.ts"].join("/"),
 			path: "/status",
 			methods: ["GET"],
 			responses: { get: [200] },

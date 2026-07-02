@@ -457,7 +457,7 @@ function json(data: unknown, status: number): Response {
 /**
  * Determines whether an HTTP status forbids a response body.
  */
-function isBodylessStatus(status: number): boolean {
+export function isBodylessStatus(status: number): boolean {
 	return status === 204 || status === 205 || status === 304;
 }
 

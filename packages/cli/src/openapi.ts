@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import ts from "typescript";
 import { validateProject } from "./project.js";
+import { isBodylessStatus } from "@routa/core/hono";
 
 type OpenApiLike = {
 	openapi?: string;
@@ -157,10 +158,6 @@ export function generateOpenApi(cwd = process.cwd()): OpenApiLike {
 		paths,
 		...(components ? { components } : {}),
 	};
-}
-
-function isBodylessStatus(status: number): boolean {
-	return status === 204 || status === 205 || status === 304;
 }
 
 /**
@@ -969,8 +966,9 @@ function readBaseline(cwd: string): OpenApiLike | undefined {
 	try {
 		return JSON.parse(readFileSync(file, "utf8")) as OpenApiLike;
 	} catch (error) {
+		const details = error instanceof Error ? error.message : String(error);
 		throw new Error(
-			`Could not parse .routa/openapi-baseline.json: ${error instanceof Error ? error.message : String(error)}\n`
+			`ROUTA_OPENAPI_BASELINE_INVALID_JSON: Could not parse .routa/openapi-baseline.json: ${details}\n`
 				+ "Fix the JSON syntax, or recreate the baseline with: routa openapi breaking --update-baseline",
 		);
 	}
