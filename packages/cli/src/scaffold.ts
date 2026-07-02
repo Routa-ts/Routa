@@ -2,6 +2,11 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import { parse as parseYaml } from "yaml";
+import {
+	type RouteMetadata,
+	type RouteMethodInputMetadata,
+	routesMetadataSource,
+} from "./project.js";
 
 const httpMethods = ["get", "post", "put", "patch", "delete", "head", "options"] as const;
 
@@ -151,6 +156,7 @@ export function scaffoldOpenApi(
 	const paths = document.paths ?? {};
 	const generated = new Set<string>();
 	const routes: ScaffoldResult["routes"] = [];
+	const metadataRoutes: RouteMetadata[] = [];
 	const previousManifest = readManifest(cwd);
 	const generatedContent = new Map<string, string>();
 
@@ -171,6 +177,8 @@ export function scaffoldOpenApi(
 		const routeImports = new Set<string>();
 		const methodBlocks: string[] = [];
 		const operationIds: string[] = [];
+		const responsesByMethod: Record<string, number[]> = {};
+		const inputsByMethod: Record<string, RouteMethodInputMetadata> = {};
 
 		for (const [method, operation] of operations) {
 			const operationWithParameters = mergePathItemParameters(pathItem, operation, {
@@ -189,6 +197,12 @@ export function scaffoldOpenApi(
 			const bodySchema = schemaForRequestBody(operationWithParameters);
 			const responses = schemasForResponses(operationWithParameters, document);
 			const primaryResponse = responses[0];
+			responsesByMethod[method] = responses.map((response) => response.status);
+			inputsByMethod[method] = {
+				params: Boolean(paramsSchema),
+				query: Boolean(querySchema),
+				body: Boolean(bodySchema),
+			};
 
 			if (paramsSchema) {
 				schemaExports.set(names.params, paramsSchema);
@@ -291,42 +305,22 @@ ${Array.from(schemaExports.entries())
 			groups: [],
 			segments: pathSegments(openApiPath),
 		});
+		metadataRoutes.push({
+			file: relative(cwd, routeFile),
+			path: openApiPath.replaceAll(/\{([^}]+)\}/g, ":$1"),
+			methods: operations.map(([method]) => method.toUpperCase()),
+			responses: responsesByMethod,
+			inputs: inputsByMethod,
+			middleware: [],
+			methodMiddleware: Object.fromEntries(operations.map(([method]) => [method, []])),
+			ctx: [],
+			groups: [],
+			segments: routeDirSegments(openApiPath),
+		});
 	}
 
-	generatedContent.set(
-		".routa/routes.gen.ts",
-		`${generatedHeader(source)}export const routaRoutes = ${JSON.stringify(routes, null, "\t")} as const;
-
-export type RoutaRouteCtxByPath = {
-${routes.map((route) => `\t${JSON.stringify(route.path)}: EmptyRouteCtxByMethod;`).join("\n")}
-};
-
-type EmptyRouteCtxByMethod = {
-\tget: EmptyRouteCtx;
-\tpost: EmptyRouteCtx;
-\tput: EmptyRouteCtx;
-\tpatch: EmptyRouteCtx;
-\tdelete: EmptyRouteCtx;
-\thead: EmptyRouteCtx;
-\toptions: EmptyRouteCtx;
-};
-
-type EmptyRouteCtx = {
-\treadonly __empty?: never;
-};
-
-export type RoutaCtxByKey = {
-\treadonly __empty?: never;
-};
-
-declare module "@routa/core" {
-\texport interface Register {
-\t\trouteCtxByPath: RoutaRouteCtxByPath;
-\t\tctxByKey: RoutaCtxByKey;
-\t}
-}
-`,
-	);
+	// Shared with `routa check` so the runtime always loads the same metadata shape.
+	generatedContent.set(".routa/routes.gen.ts", routesMetadataSource(metadataRoutes));
 	generatedContent.set(".routa/openapi-baseline.json", `${JSON.stringify(document, null, "\t")}\n`);
 
 	const manifestGenerated = Array.from(generated)
@@ -639,6 +633,7 @@ function validateOpenApiDocument(document: OpenApiDocument): void {
 			}
 
 			validatePathParameters(path, typedOperation);
+			validateParameterSchemas(typedOperation, method as HttpMethod, path);
 			validateRequestBody(typedOperation, method as HttpMethod, path, document);
 			validateResponses(typedOperation, method as HttpMethod, path, document);
 
@@ -735,6 +730,49 @@ function validatePathParameters(path: string, operation: OpenApiOperation): void
 					"ROUTA_OPENAPI_UNUSED_PATH_PARAMETER",
 					`Path parameter "${name}" is declared but not used in ${path}.`,
 					[`Either add {${name}} to the path or remove the parameter entry.`],
+				),
+			);
+		}
+	}
+}
+
+/**
+ * Validates that operation parameters use scalar schemas.
+ *
+ * Parameters arrive as single strings at runtime, so object, array, and `$ref`
+ * schemas cannot be validated and are rejected at scaffold time.
+ *
+ * @param operation - The OpenAPI operation whose parameters are checked
+ * @param method - The HTTP method for error reporting
+ * @param path - The OpenAPI path for error reporting
+ */
+function validateParameterSchemas(
+	operation: OpenApiOperation,
+	method: HttpMethod,
+	path: string,
+): void {
+	for (const parameter of operation.parameters ?? []) {
+		const schema = parameter.schema;
+
+		if (!schema) {
+			continue;
+		}
+
+		if (
+			schema.$ref
+			|| schema.type === "object"
+			|| schema.type === "array"
+			|| schema.properties
+			|| schema.items
+		) {
+			throw new Error(
+				scaffoldError(
+					"ROUTA_OPENAPI_UNSUPPORTED_PARAMETER_SCHEMA",
+					`Unsupported schema for parameter "${parameter.name ?? "<unknown>"}" in ${method.toUpperCase()} ${path}.`,
+					[
+						"Parameters are single string values at runtime, so schemas must be string, number, integer, boolean, or enum.",
+						"Move structured data into the request body instead.",
+					],
 				),
 			);
 		}
@@ -1012,11 +1050,19 @@ function scaffoldError(code: string, message: string, details: string[] = []): s
  * @returns The route directory path under `src/routes`
  */
 function pathToRouteDir(openApiPath: string): string {
-	const segments = pathSegments(openApiPath).map((segment) =>
+	return join(routesRoot, ...routeDirSegments(openApiPath));
+}
+
+/**
+ * Converts an OpenAPI path into directory-style route segments.
+ *
+ * @param openApiPath - The OpenAPI path template
+ * @returns The path segments with `{param}` converted to `$param`
+ */
+function routeDirSegments(openApiPath: string): string[] {
+	return pathSegments(openApiPath).map((segment) =>
 		segment.startsWith("{") && segment.endsWith("}") ? `$${segment.slice(1, -1)}` : segment,
 	);
-
-	return join(routesRoot, ...segments);
 }
 
 /**
@@ -1093,7 +1139,7 @@ function schemaForPathParams(path: string, operation: OpenApiOperation): string 
 
 	const props = Array.from(names)
 		.sort()
-		.map((name) => `${propertyKey(name)}: ${zodForSchema(parameterSchemas.get(name))}`);
+		.map((name) => `${propertyKey(name)}: ${zodForParameterSchema(parameterSchemas.get(name))}`);
 
 	return formatZodObject(props);
 }
@@ -1115,9 +1161,12 @@ function schemaForParameters(operation: OpenApiOperation, location: string): str
 	}
 
 	const props = parameters.map((parameter) => {
-		const schema = zodForSchema(parameter.schema);
+		const schema = zodForParameterSchema(parameter.schema);
 		const optional = parameter.required ? "" : ".optional()";
-		return `${propertyKey(parameter.name as string)}: ${schema}${optional}`;
+		// The runtime reads headers from the Fetch Headers object, which lowercases names.
+		const name =
+			location === "header" ? (parameter.name as string).toLowerCase() : (parameter.name as string);
+		return `${propertyKey(name)}: ${schema}${optional}`;
 	});
 
 	return formatZodObject(props);
@@ -1188,6 +1237,35 @@ function requestBodySchema(operation: OpenApiOperation): OpenApiSchema | undefin
  */
 function firstJsonContent(content: OpenApiContent | undefined) {
 	return content?.["application/json"] ?? Object.values(content ?? {})[0];
+}
+
+/**
+ * Converts an OpenAPI parameter schema into a Zod expression that coerces wire strings.
+ *
+ * Path, query, header, and cookie values always arrive as strings at runtime, so
+ * numeric and boolean parameter schemas must parse from their string form.
+ *
+ * @param schema - The parameter schema to convert
+ * @returns A Zod expression string that accepts the parameter's wire format
+ */
+function zodForParameterSchema(schema: OpenApiSchema | undefined): string {
+	if (!schema) {
+		return "z.string()";
+	}
+
+	if (schema.type === "integer") {
+		return "z.coerce.number().int()";
+	}
+
+	if (schema.type === "number") {
+		return "z.coerce.number()";
+	}
+
+	if (schema.type === "boolean") {
+		return "z.stringbool()";
+	}
+
+	return zodForSchema(schema);
 }
 
 /**
@@ -1494,7 +1572,20 @@ function readManifest(cwd: string): Manifest | undefined {
 		return undefined;
 	}
 
-	return JSON.parse(readFileSync(file, "utf8")) as Manifest;
+	try {
+		return JSON.parse(readFileSync(file, "utf8")) as Manifest;
+	} catch (error) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_MANIFEST_INVALID",
+				`Could not parse .routa/manifest.json: ${error instanceof Error ? error.message : String(error)}`,
+				[
+					"Fix the JSON syntax, or restore the file from version control.",
+					"Deleting the manifest makes the next scaffold treat all generated files as new.",
+				],
+			),
+		);
+	}
 }
 
 /**

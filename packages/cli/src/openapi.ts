@@ -452,7 +452,7 @@ class SchemaReader {
 			return { type: "number" };
 		}
 
-		if (call === "boolean") {
+		if (call === "boolean" || call === "stringbool") {
 			return { type: "boolean" };
 		}
 
@@ -850,10 +850,24 @@ function comparableOperation(operation: {
 	responses?: Record<string, unknown>;
 }) {
 	return {
-		parameters: normalize(operation.parameters ?? []),
+		parameters: normalize((operation.parameters ?? []).map(comparableParameter)),
 		requestBody: normalizeRequestBody(operation.requestBody),
 		responses: normalize(operation.responses ?? {}),
 	};
+}
+
+/**
+ * Normalizes a parameter for comparison.
+ *
+ * Header names are case-insensitive in HTTP and generated source uses lowercase
+ * names, so header parameters compare by lowercase name.
+ */
+function comparableParameter(parameter: Record<string, unknown>): Record<string, unknown> {
+	if (parameter.in === "header" && typeof parameter.name === "string") {
+		return { ...parameter, name: parameter.name.toLowerCase() };
+	}
+
+	return parameter;
 }
 
 /**
@@ -952,5 +966,12 @@ function readBaseline(cwd: string): OpenApiLike | undefined {
 		return undefined;
 	}
 
-	return JSON.parse(readFileSync(file, "utf8")) as OpenApiLike;
+	try {
+		return JSON.parse(readFileSync(file, "utf8")) as OpenApiLike;
+	} catch (error) {
+		throw new Error(
+			`Could not parse .routa/openapi-baseline.json: ${error instanceof Error ? error.message : String(error)}\n`
+				+ "Fix the JSON syntax, or recreate the baseline with: routa openapi breaking --update-baseline",
+		);
+	}
 }
