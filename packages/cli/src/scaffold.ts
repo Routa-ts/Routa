@@ -668,7 +668,7 @@ function validateOpenApiDocument(document: OpenApiDocument): void {
  */
 function validatePathSegments(path: string): void {
 	for (const segment of pathSegments(path)) {
-		if (/^\.+$/.test(segment) || /[\\:\0]/.test(segment)) {
+		if (/^\.+$/.test(segment) || /[\\\0]/.test(segment)) {
 			throw new Error(
 				scaffoldError(
 					"ROUTA_OPENAPI_UNSAFE_PATH_SEGMENT",

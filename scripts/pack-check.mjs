@@ -106,17 +106,39 @@ async function smokeTestStart(cwd) {
 			}
 
 			try {
-				const response = await fetch(`http://127.0.0.1:${port}/status`);
-				const body = await response.json();
-
-				if (response.status !== 200 || body.ok !== true) {
-					throw new Error(
-						`routa start smoke test got ${response.status} ${JSON.stringify(body)}.\n${output}`,
-					);
+				const remainingMs = deadline - Date.now();
+				if (remainingMs <= 0) {
+					throw new Error(`routa start smoke test timed out after 30s.\n${output}`);
 				}
 
-				return;
+				// Abort fetch + response body parsing so we never hang longer than the
+				// overall smoke-test deadline.
+				const controller = new AbortController();
+				const timeoutId = setTimeout(() => controller.abort(), remainingMs);
+
+				try {
+					const response = await fetch(`http://127.0.0.1:${port}/status`, {
+						signal: controller.signal,
+					});
+					const body = await response.json();
+
+					if (response.status !== 200 || body.ok !== true) {
+						throw new Error(
+							`routa start smoke test got ${response.status} ${JSON.stringify(body)}.\n${output}`,
+						);
+					}
+
+					return;
+				} finally {
+					clearTimeout(timeoutId);
+				}
 			} catch (error) {
+				if (Date.now() >= deadline) {
+					throw error;
+				}
+
+				// When the server isn't up yet, fetch usually throws a TypeError.
+				// Retry while there is time remaining.
 				if (error instanceof TypeError && Date.now() < deadline) {
 					await sleep(250);
 					continue;
