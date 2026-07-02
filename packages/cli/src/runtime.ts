@@ -104,11 +104,13 @@ export async function loadRoutes(cwd: string, runtimeRoot = cwd): Promise<HonoRo
 				contract: {
 					...contract,
 					middleware: [
+						// Metadata is loaded from a generated file, so guard shapes written
+						// by older generators that omitted middleware fields.
 						...(await loadFileMiddleware(
 							cwd,
 							runtimeRoot,
 							route.file,
-							route.methodMiddleware[key] ?? route.middleware,
+							route.methodMiddleware?.[key] ?? route.middleware ?? [],
 						)),
 						...(routeConfig.middleware ?? []),
 						...(contract.middleware ?? []),

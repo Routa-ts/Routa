@@ -101,7 +101,14 @@ export function run(argv: readonly string[], options: RunOptions = {}): CommandR
 	}
 
 	if (command === "openapi" && (subcommand === "check" || subcommand === "breaking")) {
-		return subcommand === "check" ? runOpenApiCheck(cwd) : runOpenApiBreaking(argv.slice(2), cwd);
+		try {
+			return subcommand === "check" ? runOpenApiCheck(cwd) : runOpenApiBreaking(argv.slice(2), cwd);
+		} catch (error) {
+			return {
+				code: 1,
+				stderr: `${ui.error("Error:")} ${error instanceof Error ? error.message : String(error)}\n`,
+			};
+		}
 	}
 
 	return {

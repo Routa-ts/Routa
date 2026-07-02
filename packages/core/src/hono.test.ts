@@ -39,6 +39,33 @@ describe("createHonoApp", () => {
 		await expect(response.json()).resolves.toEqual({ id: "123", includePosts: true });
 	});
 
+	it("returns an empty body for bodyless statuses", async () => {
+		const app = createHonoApp([
+			{
+				method: "delete",
+				path: "/users/:id",
+				contract: createRoute({
+					input: {
+						params: z.object({ id: z.string() }),
+					},
+					responses: {
+						success: {
+							status: 204,
+							schema: z.null(),
+						},
+					},
+					run: async () => ({ type: "success", data: null }),
+				}),
+			},
+		]);
+
+		const response = await app.request("/users/123", { method: "DELETE" });
+
+		expect(response.status).toBe(204);
+		expect(response.headers.get("content-type")).toBeNull();
+		await expect(response.text()).resolves.toBe("");
+	});
+
 	it("returns problem details for validation failures", async () => {
 		const app = createHonoApp([
 			{

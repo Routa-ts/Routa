@@ -6,7 +6,7 @@ import { z } from "zod";
 
 export const ListUserPostsParams = z.object({ userId: z.string() });
 
-export const ListUserPostsQuery = z.object({ published: z.boolean().optional() });
+export const ListUserPostsQuery = z.object({ published: z.stringbool().optional() });
 
 export const Post = z.object({
 	id: z.string(),

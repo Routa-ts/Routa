@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { builtinModules } from "node:module";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 
 export type CreateProjectResult = {
 	projectDir: string;
@@ -108,42 +108,42 @@ function generatedHeader(source: string): string {
 /**
  * Generates the route metadata module for the scaffolded OpenAPI project.
  *
+ * The output mirrors what `routa check` writes through the CLI's shared
+ * metadata serializer so the first check does not rewrite the file.
+ *
  * @returns The generated TypeScript source for route metadata and module augmentation.
  */
 function routesMetadataSource(): string {
-	return `${generatedHeader("openapi.yaml")}export const routaRoutes = [
-\t{
-\t\t"file": "src/routes/status/route.ts",
-\t\t"path": "/status",
-\t\t"methods": ["GET"],
-\t\t"operationIds": ["getStatus"],
-\t\t"middleware": [],
-\t\t"groups": [],
-\t\t"segments": ["status"]
-\t}
-] as const;
+	const routes = [
+		{
+			file: ["src", "routes", "status", "route.ts"].join(sep),
+			path: "/status",
+			methods: ["GET"],
+			responses: { get: [200] },
+			inputs: { get: { params: false, query: false, body: false } },
+			middleware: [],
+			methodMiddleware: { get: [] },
+			ctx: [],
+			groups: [],
+			segments: ["status"],
+		},
+	];
+	const emptyCtx = "{ readonly __empty?: never }";
+	const methodCtxMap = `{\n${["get", "post", "put", "patch", "delete", "head", "options"]
+		.map((method) => `\t\t${method}: ${emptyCtx};`)
+		.join("\n")}\n\t}`;
+
+	return `${generatedHeader("src/routes directory")}export const routaRoutes = ${JSON.stringify(routes, null, "\t")} as const;
+
+export type StatusCtx = {
+\treadonly __empty?: never;
+};
 
 export type RoutaRouteCtxByPath = {
-\t"/status": EmptyRouteCtxByMethod;
+\t"/status": ${methodCtxMap};
 };
 
-type EmptyRouteCtxByMethod = {
-\tget: EmptyRouteCtx;
-\tpost: EmptyRouteCtx;
-\tput: EmptyRouteCtx;
-\tpatch: EmptyRouteCtx;
-\tdelete: EmptyRouteCtx;
-\thead: EmptyRouteCtx;
-\toptions: EmptyRouteCtx;
-};
-
-type EmptyRouteCtx = {
-\treadonly __empty?: never;
-};
-
-export type RoutaCtxByKey = {
-\treadonly __empty?: never;
-};
+export type RoutaCtxByKey = ${emptyCtx};
 
 declare module "@routa/core" {
 \texport interface Register {

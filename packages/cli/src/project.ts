@@ -71,9 +71,11 @@ export default defineRoute({
  * @returns The discovered routes and any validation diagnostics
  */
 export function validateProject(cwd = process.cwd()): ProjectValidationResult {
-	const routes = discoverRoutes(cwd);
+	const discovery = discoverRoutes(cwd);
+	const routes = discovery.routes;
 	const diagnostics = [
 		...projectStructureDiagnostics(cwd),
+		...discovery.diagnostics,
 		...duplicateRouteDiagnostics(routes),
 		...missingSuccessResponseDiagnostics(routes),
 		...duplicateSchemaDiagnostics(cwd),
@@ -518,22 +520,28 @@ export function sourceSnapshotChanged(previous: SourceSnapshot, next: SourceSnap
 	return false;
 }
 
+type RouteDiscovery = {
+	routes: RouteMetadata[];
+	diagnostics: Diagnostic[];
+};
+
 /**
  * Discovers route metadata from a Routa project's route files.
  *
  * @param cwd - Project root directory
- * @returns The discovered route metadata for each `route.ts` file under `src/routes`
+ * @returns The discovered route metadata for each `route.ts` file under `src/routes`, plus discovery diagnostics
  */
-function discoverRoutes(cwd: string): RouteMetadata[] {
+function discoverRoutes(cwd: string): RouteDiscovery {
 	const routesDir = join(cwd, routesRoot);
 
 	if (!existsSync(routesDir)) {
-		return [];
+		return { routes: [], diagnostics: [] };
 	}
 
 	const files = walk(routesDir).filter((file) => file.endsWith(`${sep}route.ts`));
+	const diagnostics: Diagnostic[] = [];
 
-	return files.map((file) => {
+	const routes = files.map((file) => {
 		const relativeFile = relative(cwd, file);
 		const relativeRouteDir = relative(routesDir, dirname(file));
 		const rawSegments = relativeRouteDir === "" ? [] : relativeRouteDir.split(sep);
@@ -564,10 +572,30 @@ function discoverRoutes(cwd: string): RouteMetadata[] {
 				),
 			]),
 		).sort();
+		const path = `/${pathSegments.join("/")}`.replace(/\/$/, "") || "/";
+
+		for (const unresolved of routeFileMiddleware.unresolved) {
+			diagnostics.push({
+				code: "ROUTA_MIDDLEWARE_UNRESOLVED",
+				severity: "error",
+				message: `Middleware ${unresolved} cannot be statically resolved, so it would run without contract checks.`,
+				file: relativeFile,
+				routePath: path,
+				suggestion:
+					"Reference middleware as a direct identifier of a createMiddleware export, and list entries explicitly instead of spreading arrays.",
+			});
+		}
+
+		diagnostics.push(
+			...middlewareRejectsDiagnostics(relativeFile, path, contract, {
+				middleware,
+				methodMiddleware,
+			}),
+		);
 
 		return {
 			file: relativeFile,
-			path: `/${pathSegments.join("/")}`.replace(/\/$/, "") || "/",
+			path,
 			methods: Object.keys(contract).map((method) => method.toUpperCase()),
 			responses: Object.fromEntries(
 				Object.entries(contract).map(([method, metadata]) => [method, metadata.responses]),
@@ -582,6 +610,55 @@ function discoverRoutes(cwd: string): RouteMetadata[] {
 			segments,
 		};
 	});
+
+	return { routes, diagnostics };
+}
+
+/**
+ * Reports middleware rejections that a route method does not declare as a response.
+ *
+ * A middleware rejection becomes the handler result at runtime, so its type key
+ * must exist in the route's response map or the request fails with a 500.
+ *
+ * @param file - The route file for diagnostics
+ * @param path - The resolved route path
+ * @param contract - Parsed method contracts including declared response type keys
+ * @param chains - The resolved route and per-method middleware chains
+ * @returns Diagnostics for each undeclared middleware rejection
+ */
+function middlewareRejectsDiagnostics(
+	file: string,
+	path: string,
+	contract: Record<string, { responseTypes: string[] }>,
+	chains: {
+		middleware: MiddlewareMetadata[];
+		methodMiddleware: Record<string, MiddlewareMetadata[]>;
+	},
+): Diagnostic[] {
+	const diagnostics: Diagnostic[] = [];
+
+	for (const [method, metadata] of Object.entries(contract)) {
+		const chain = chains.methodMiddleware[method] ?? chains.middleware;
+
+		for (const middleware of chain) {
+			for (const reject of middleware.rejects) {
+				if (metadata.responseTypes.includes(reject)) {
+					continue;
+				}
+
+				diagnostics.push({
+					code: "ROUTA_MIDDLEWARE_REJECTS_UNDECLARED",
+					severity: "error",
+					message: `${middleware.name} rejects "${reject}" but ${method.toUpperCase()} ${path} does not declare a "${reject}" response.`,
+					file,
+					routePath: path,
+					suggestion: `Add a "${reject}" entry to the ${method} responses map so the rejection has a declared status and schema.`,
+				});
+			}
+		}
+	}
+
+	return diagnostics;
 }
 
 /**
@@ -592,8 +669,14 @@ function discoverRoutes(cwd: string): RouteMetadata[] {
  */
 function parseRouteContract(
 	file: string,
-): Record<string, { responses: number[]; inputs: RouteMethodInputMetadata }> {
-	const contract: Record<string, { responses: number[]; inputs: RouteMethodInputMetadata }> = {};
+): Record<
+	string,
+	{ responses: number[]; responseTypes: string[]; inputs: RouteMethodInputMetadata }
+> {
+	const contract: Record<
+		string,
+		{ responses: number[]; responseTypes: string[]; inputs: RouteMethodInputMetadata }
+	> = {};
 	const routeConfig = routeConfigObject(parseTypeScriptFile(file));
 
 	if (!routeConfig) {
@@ -615,11 +698,32 @@ function parseRouteContract(
 
 		contract[method] = {
 			responses: responseStatuses(routeContract),
+			responseTypes: responseTypeKeys(routeContract),
 			inputs: routeInputs(routeContract),
 		};
 	}
 
 	return contract;
+}
+
+/**
+ * Collects the declared response type keys from a route contract.
+ *
+ * @param routeContract - The route contract object literal
+ * @returns The property names declared under `responses`
+ */
+function responseTypeKeys(routeContract: ts.ObjectLiteralExpression): string[] {
+	const responses = objectProperty(routeContract, "responses");
+	const responsesObject = responses ? objectLiteral(responses.initializer) : undefined;
+
+	if (!responsesObject) {
+		return [];
+	}
+
+	return objectProperties(responsesObject).flatMap((property) => {
+		const name = propertyName(property.name);
+		return name ? [name] : [];
+	});
 }
 
 /**
@@ -932,12 +1036,16 @@ function resolveImportFile(cwd: string, fromFile: string, specifier: string): st
 function parseRouteFileMiddleware(
 	cwd: string,
 	routeFile: string,
-): { route: MiddlewareMetadata[]; methods: Record<string, MiddlewareMetadata[]> } {
+): {
+	route: MiddlewareMetadata[];
+	methods: Record<string, MiddlewareMetadata[]>;
+	unresolved: string[];
+} {
 	const sourceFile = parseTypeScriptFile(join(cwd, routeFile));
 	const routeConfig = routeConfigObject(sourceFile);
 
 	if (!routeConfig) {
-		return { route: [], methods: {} };
+		return { route: [], methods: {}, unresolved: [] };
 	}
 
 	const middleware = middlewareDeclarations(sourceFile, false);
@@ -945,6 +1053,7 @@ function parseRouteFileMiddleware(
 	const imports = namedImportMap(cwd, routeFile, sourceFile);
 	const route: MiddlewareMetadata[] = [];
 	const methods: Record<string, MiddlewareMetadata[]> = {};
+	const unresolved: string[] = [];
 	const metadataForMiddleware = (expression: ts.Expression): MiddlewareMetadata | undefined => {
 		const metadata = middlewareExpressionMetadata(expression, middlewareByName);
 
@@ -979,11 +1088,16 @@ function parseRouteFileMiddleware(
 
 	for (const property of objectProperties(routeConfig)) {
 		if (propertyName(property.name) === "middleware") {
-			for (const expression of middlewareExpressions(property.initializer)) {
+			const expressions = middlewareExpressions(property.initializer);
+			unresolved.push(...expressions.unresolved);
+
+			for (const expression of expressions.resolved) {
 				const metadata = metadataForMiddleware(expression);
 
 				if (metadata) {
 					route.push(metadata);
+				} else {
+					unresolved.push(expression.getText());
 				}
 			}
 		}
@@ -1009,11 +1123,16 @@ function parseRouteFileMiddleware(
 				continue;
 			}
 
-			for (const expression of middlewareExpressions(routeProperty.initializer)) {
+			const expressions = middlewareExpressions(routeProperty.initializer);
+			unresolved.push(...expressions.unresolved);
+
+			for (const expression of expressions.resolved) {
 				const metadata = metadataForMiddleware(expression);
 
 				if (metadata) {
 					entries.push(metadata);
+				} else {
+					unresolved.push(expression.getText());
 				}
 			}
 		}
@@ -1021,7 +1140,7 @@ function parseRouteFileMiddleware(
 		methods[method] = entries;
 	}
 
-	return { route, methods };
+	return { route, methods, unresolved };
 }
 
 /**
@@ -1273,7 +1392,7 @@ function zodType(expression: ts.Expression): string {
 		return "number";
 	}
 
-	if (call === "boolean") {
+	if (call === "boolean" || call === "stringbool") {
 		return "boolean";
 	}
 
@@ -1667,19 +1786,34 @@ function middlewareExpressionMetadata(
 /**
  * Extracts middleware expressions from an expression or middleware array literal.
  *
+ * Spread elements are reported as unresolved because their contents run at
+ * runtime but cannot be statically analyzed.
+ *
  * @param expression - The expression to inspect
- * @returns The unwrapped expression, or the array elements when the expression is an array literal
+ * @returns The resolvable expressions and descriptions of unresolved entries
  */
-function middlewareExpressions(expression: ts.Expression): ts.Expression[] {
+function middlewareExpressions(expression: ts.Expression): {
+	resolved: ts.Expression[];
+	unresolved: string[];
+} {
 	const unwrapped = unwrapExpression(expression);
 
 	if (ts.isArrayLiteralExpression(unwrapped)) {
-		return unwrapped.elements.flatMap((element) =>
-			ts.isSpreadElement(element) ? [] : [element as ts.Expression],
-		);
+		const resolved: ts.Expression[] = [];
+		const unresolved: string[] = [];
+
+		for (const element of unwrapped.elements) {
+			if (ts.isSpreadElement(element)) {
+				unresolved.push(element.getText());
+			} else {
+				resolved.push(element as ts.Expression);
+			}
+		}
+
+		return { resolved, unresolved };
 	}
 
-	return [unwrapped];
+	return { resolved: [unwrapped], unresolved: [] };
 }
 
 /**
@@ -1910,6 +2044,23 @@ function duplicateRouteDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 }
 
 /**
+ * Serializes route metadata into the `.routa/routes.gen.ts` module source.
+ *
+ * This is the single source of truth for the generated metadata shape; both
+ * `routa check` and `routa scaffold` emit it so the runtime always loads the
+ * same structure.
+ *
+ * @param routes - The route metadata to serialize.
+ * @returns The generated TypeScript source.
+ */
+export function routesMetadataSource(routes: RouteMetadata[]): string {
+	return `${generatedHeader}export const routaRoutes = ${JSON.stringify(routes, null, "\t")} as const;
+
+${routeContextTypes(routes)}
+`;
+}
+
+/**
  * Writes generated route metadata to `.routa/routes.gen.ts`.
  *
  * @param cwd - The project root directory.
@@ -1917,10 +2068,7 @@ function duplicateRouteDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
  */
 function writeRoutesMetadata(cwd: string, routes: RouteMetadata[]): void {
 	const file = join(cwd, ".routa/routes.gen.ts");
-	const source = `${generatedHeader}export const routaRoutes = ${JSON.stringify(routes, null, "\t")} as const;
-
-${routeContextTypes(routes)}
-`;
+	const source = routesMetadataSource(routes);
 
 	if (existsSync(file) && readFileSync(file, "utf8") === source) {
 		return;
