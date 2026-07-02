@@ -434,17 +434,31 @@ function toRecord(value: unknown): Record<string, unknown> {
 /**
  * Creates a JSON response.
  *
+ * Statuses that forbid a body (204, 205, 304) produce an empty response because
+ * the `Response` constructor throws when given a body for those statuses.
+ *
  * @param data - The response body to serialize as JSON
  * @param status - The HTTP status code for the response
  * @returns A `Response` with a JSON body and `application/json; charset=utf-8` content type
  */
 function json(data: unknown, status: number): Response {
+	if (isBodylessStatus(status)) {
+		return new Response(null, { status });
+	}
+
 	return new Response(JSON.stringify(data), {
 		status,
 		headers: {
 			"content-type": "application/json; charset=utf-8",
 		},
 	});
+}
+
+/**
+ * Determines whether an HTTP status forbids a response body.
+ */
+export function isBodylessStatus(status: number): boolean {
+	return status === 204 || status === 205 || status === 304;
 }
 
 /**

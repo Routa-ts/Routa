@@ -8,6 +8,7 @@ import { createProject } from "./create-project.js";
 import { createUi, shouldUseColor, type Ui } from "./ui.js";
 
 export { createProject } from "./create-project.js";
+export { createUi, shouldUseColor, type Ui } from "./ui.js";
 
 type CreateConfig = {
 	targetDir: string;

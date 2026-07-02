@@ -156,9 +156,7 @@ export type AnyRouteContract = {
 };
 
 export type DefineRouteConfig = Partial<Record<HttpMethod, AnyRouteContract>> & {
-	params?: z.ZodTypeAny;
 	middleware?: readonly AnyMiddlewareContract[];
-	methods?: Partial<Record<HttpMethod, AnyRouteContract>>;
 };
 
 export type ContextualRouteContract<TCtx> = RouteContract<
@@ -169,11 +167,7 @@ export type ContextualRouteContract<TCtx> = RouteContract<
 >;
 
 export type DefineRouteConfigForCtx<TCtxByMethod extends Partial<Record<HttpMethod, unknown>>> = {
-	params?: z.ZodTypeAny;
 	middleware?: readonly AnyMiddlewareContract[];
-	methods?: {
-		[K in HttpMethod]?: ContextualRouteContract<CtxForMethod<TCtxByMethod, K>>;
-	};
 } & {
 	[K in HttpMethod]?: ContextualRouteContract<CtxForMethod<TCtxByMethod, K>>;
 };
