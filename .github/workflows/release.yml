@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
+      # Required by changesets/action to open version PRs and publish releases.
       contents: write
       pull-requests: write
     steps:
