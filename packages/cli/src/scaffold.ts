@@ -970,6 +970,34 @@ function validateSchema(
 		);
 	}
 
+	if (Array.isArray(schema.type)) {
+		// Allow `type: ["string"]` / `type: ["null"]`.
+		if (schema.type.length === 1) {
+			return;
+		}
+
+		// Allow OpenAPI 3.1 nullable type arrays like `type: ["string", "null"]`
+		// only when there is exactly one non-null entry.
+		const nonNullTypes = schema.type.filter((entry) => entry !== "null");
+		const isNullableTypeArray = schema.type.includes("null");
+
+		if (isNullableTypeArray && nonNullTypes.length === 1) {
+			return;
+		}
+
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_UNSUPPORTED_SCHEMA",
+				`Unsupported multi-type array in ${location}.`,
+				[
+					"Routa v0 scaffold only supports OpenAPI 3.1 type arrays with exactly one entry,",
+					'or a nullable type array with exactly one non-null entry (e.g. type: ["string", "null"]).',
+					"Use anyOf for true multi-type unions.",
+				],
+			),
+		);
+	}
+
 	if (schema.nullable) {
 		throw new Error(
 			scaffoldError(
@@ -1327,6 +1355,8 @@ function zodForSchema(schema: OpenApiSchema | undefined): string {
 		return refName(schema.$ref);
 	}
 
+	schema = normalizeSingleTypeArray(schema);
+
 	const nonNull = nonNullSchema(schema);
 
 	if (nonNull) {
@@ -1407,6 +1437,21 @@ function zodForSchema(schema: OpenApiSchema | undefined): string {
 }
 
 /**
+ * Normalizes OpenAPI `type` arrays with a single entry into their scalar form.
+ *
+ * Examples:
+ * - `type: ["integer"]` -> `type: "integer"`
+ * - `type: ["null"]` -> `type: "null"`
+ */
+function normalizeSingleTypeArray(schema: OpenApiSchema): OpenApiSchema {
+	if (Array.isArray(schema.type) && schema.type.length === 1) {
+		return { ...schema, type: schema.type[0] };
+	}
+
+	return schema;
+}
+
+/**
  * Extracts the non-null variant from a nullable OpenAPI schema.
  *
  * Handles both OpenAPI 3.1 spellings of nullability: a `type` array containing
@@ -1465,6 +1510,7 @@ function placeholderForSchema(
 	}
 
 	if (schema) {
+		schema = normalizeSingleTypeArray(schema);
 		const nonNull = nonNullSchema(schema);
 
 		if (nonNull) {

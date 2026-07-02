@@ -485,7 +485,19 @@ class SchemaReader {
 			return { type: "null" };
 		}
 
-		if (call && call in stringFormatCalls) {
+		if (call === "date") {
+			// `z.iso.date()` and `z.date()` both resolve to `call === "date"` via `callName`,
+			// so we need to inspect the full call expression to disambiguate.
+			const expr = unwrapped.expression;
+			const isIsoDate =
+				ts.isPropertyAccessExpression(expr)
+				&& ts.isPropertyAccessExpression(expr.expression)
+				&& expr.expression.name.text === "iso";
+
+			return isIsoDate ? { type: "string", format: stringFormatCalls.date } : { type: "string" };
+		}
+
+		if (call && Object.prototype.hasOwnProperty.call(stringFormatCalls, call)) {
 			return { type: "string", format: stringFormatCalls[call] };
 		}
 
@@ -811,7 +823,12 @@ function callName(expression: ts.Expression): string | undefined {
  */
 function isOptionalCall(expression: ts.Expression): boolean {
 	const unwrapped = unwrapExpression(expression);
-	return ts.isCallExpression(unwrapped) && callName(unwrapped.expression) === "optional";
+	if (!ts.isCallExpression(unwrapped)) {
+		return false;
+	}
+
+	const call = callName(unwrapped.expression);
+	return call === "optional" || call === "nullish";
 }
 
 /**
