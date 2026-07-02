@@ -497,7 +497,7 @@ class SchemaReader {
 			return isIsoDate ? { type: "string", format: stringFormatCalls.date } : { type: "string" };
 		}
 
-		if (call && Object.prototype.hasOwnProperty.call(stringFormatCalls, call)) {
+		if (call && Object.hasOwn(stringFormatCalls, call)) {
 			return { type: "string", format: stringFormatCalls[call] };
 		}
 

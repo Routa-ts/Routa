@@ -1,8 +1,21 @@
 {
 	"name": "create-routa",
 	"version": "0.0.1",
+	"description": "Scaffold a new Routa API project",
 	"private": false,
 	"type": "module",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/joseAcevesG/Routa.git",
+		"directory": "packages/create-routa"
+	},
+	"engines": {
+		"node": ">=20"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
 	"bin": {
 		"create-routa": "./dist/cli.js"
 	},

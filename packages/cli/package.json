@@ -1,8 +1,21 @@
 {
 	"name": "@routa/cli",
 	"version": "0.0.1",
+	"description": "CLI for Routa route checks, scaffolding, and dev server",
 	"private": false,
 	"type": "module",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/joseAcevesG/Routa.git",
+		"directory": "packages/cli"
+	},
+	"engines": {
+		"node": ">=20"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
 	"bin": {
 		"routa": "./dist/index.js"
 	},
