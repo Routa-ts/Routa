@@ -13,8 +13,9 @@
 		"lint": "turbo run lint",
 		"lint:repo": "biome lint .",
 		"pack:check": "node scripts/pack-check.mjs",
+		"prepare:local-cli": "pnpm --filter './packages/*' build && node scripts/link-local-cli.mjs",
 		"quality": "pnpm check && turbo run typecheck test",
-		"release": "pnpm quality && pnpm build && pnpm pack:check && changeset publish",
+		"release": "pnpm run prepare:local-cli && pnpm quality && pnpm build && pnpm pack:check && changeset publish",
 		"test": "turbo run test",
 		"typecheck": "turbo run typecheck",
 		"version": "changeset version"
