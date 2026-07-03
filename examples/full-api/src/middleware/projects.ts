@@ -1,4 +1,4 @@
-import { createMiddleware } from "@routa/core";
+import { createMiddleware } from "@routa-ts/core";
 import { z } from "zod";
 
 export const withProjectScope = createMiddleware({

@@ -1,4 +1,4 @@
-# create-routa
+# create-routa-ts
 
 ## 0.0.1
 

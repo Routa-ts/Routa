@@ -1,4 +1,4 @@
-# @routa/core
+# @routa-ts/core
 
 ## 0.0.1
 

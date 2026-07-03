@@ -1248,7 +1248,7 @@ export type RoutaCtxByKey = {
 	};
 };
 
-declare module "@routa/core" {
+declare module "@routa-ts/core" {
 	export interface Register {
 		routeCtxByPath: RoutaRouteCtxByPath;
 		ctxByKey: RoutaCtxByKey;

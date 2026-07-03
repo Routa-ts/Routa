@@ -25,7 +25,7 @@ create_project() {
 {
 	"type": "module",
 	"dependencies": {
-		"@routa/core": "workspace:*",
+		"@routa-ts/core": "workspace:*",
 		"zod": "^4.4.3"
 	},
 	"devDependencies": {
@@ -46,7 +46,7 @@ JSON
 }
 JSON
 	cat > "$dir/src/routa.ts" <<'TS'
-import { createRouta } from "@routa/core";
+import { createRouta } from "@routa-ts/core";
 
 export default createRouta({
 	port: 3000,

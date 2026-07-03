@@ -5,5 +5,5 @@
 ### Patch Changes
 
 - Updated dependencies
-  - @routa/cli@0.0.1
-  - @routa/core@0.0.1
+  - @routa-ts/cli@0.0.1
+  - @routa-ts/core@0.0.1

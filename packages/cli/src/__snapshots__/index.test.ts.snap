@@ -5,7 +5,7 @@ exports[`routa cli > matches golden output for scaffolded route and schema files
 // Safe to edit, but regeneration may update this file after preview.
 // Source: openapi.yaml
 
-import { createRoute, defineRoute } from "@routa/core";
+import { createRoute, defineRoute } from "@routa-ts/core";
 import type { z } from "zod";
 import {
 	DeleteUserParams,
@@ -122,7 +122,7 @@ export type RoutaRouteCtxByPath = {
 
 export type RoutaCtxByKey = { readonly __empty?: never };
 
-declare module "@routa/core" {
+declare module "@routa-ts/core" {
 	export interface Register {
 		routeCtxByPath: RoutaRouteCtxByPath;
 		ctxByKey: RoutaCtxByKey;

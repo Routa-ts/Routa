@@ -1,4 +1,4 @@
-import { createRoute, defineRoute } from "@routa/core";
+import { createRoute, defineRoute } from "@routa-ts/core";
 import { z } from "zod";
 
 export default defineRoute({

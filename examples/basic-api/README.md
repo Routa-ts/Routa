@@ -1,6 +1,6 @@
 # basic-api
 
-Routa API generated with `pnpm create routa@latest`.
+Routa API generated with `pnpm create routa-ts@latest`.
 
 ## Development
 

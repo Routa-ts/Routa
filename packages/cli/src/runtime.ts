@@ -3,8 +3,8 @@
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { serve } from "@hono/node-server";
-import { createHonoApp, type HonoRoute } from "@routa/core/hono";
-import { createLogger } from "@routa/core/logger";
+import { createHonoApp, type HonoRoute } from "@routa-ts/core/hono";
+import { createLogger } from "@routa-ts/core/logger";
 import type { MiddlewareMetadata, RouteMetadata } from "./project.js";
 
 type RoutaConfig = {

@@ -248,7 +248,7 @@ export type RoutaRouteCtxByPath = {
 
 export type RoutaCtxByKey = { readonly __empty?: never };
 
-declare module "@routa/core" {
+declare module "@routa-ts/core" {
 	export interface Register {
 		routeCtxByPath: RoutaRouteCtxByPath;
 		ctxByKey: RoutaCtxByKey;

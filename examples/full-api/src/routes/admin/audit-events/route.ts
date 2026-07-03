@@ -2,7 +2,7 @@
 // Safe to edit, but regeneration may update this file after preview.
 // Source: openapi.yaml
 
-import { createRoute, createRouteRoot } from "@routa/core";
+import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { ListAuditEventsQuery, ListAuditEventsResponse } from "./schemas.js";
 
 const route = createRouteRoot("/admin/audit-events");

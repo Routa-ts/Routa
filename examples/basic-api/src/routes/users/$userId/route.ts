@@ -2,7 +2,7 @@
 // Safe to edit, but regeneration may update this file after preview.
 // Source: openapi.yaml
 
-import { createRoute, defineRoute } from "@routa/core";
+import { createRoute, defineRoute } from "@routa-ts/core";
 import type { z } from "zod";
 import {
 	DeleteUserParams,

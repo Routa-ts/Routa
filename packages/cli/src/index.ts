@@ -3,7 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createProject, resolveRoutaVersion, runCreate } from "create-routa";
+import { createProject, resolveRoutaVersion, runCreate } from "create-routa-ts";
 import { runOpenApiBreaking, runOpenApiCheck } from "./openapi.js";
 import {
 	runProjectBuild,
