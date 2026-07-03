@@ -1,5 +1,13 @@
 # basic-api
 
+## 0.0.3
+
+### Patch Changes
+
+- Updated dependencies [05ea5b0]
+  - @routa-ts/core@0.1.1
+  - @routa-ts/cli@0.1.1
+
 ## 0.0.2
 
 ### Patch Changes
