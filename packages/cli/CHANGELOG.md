@@ -1,5 +1,16 @@
 # @routa-ts/cli
 
+## 0.1.0
+
+### Minor Changes
+
+- 7cb796f: Harden packaging and scaffold for release readiness, close contract gaps between types/scaffold/runtime, and widen schema round-trip coverage with deeper test fixtures.
+
+### Patch Changes
+
+- Updated dependencies [7cb796f]
+  - @routa-ts/core@0.1.0
+
 ## 0.0.1
 
 ### Patch Changes
