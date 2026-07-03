@@ -15,8 +15,8 @@ Routa uses Changesets with fixed versions for the public packages:
 
 ```sh
 pnpm changeset
-pnpm version
-pnpm release
+pnpm run version
+pnpm run release
 ```
 
 `pnpm release` runs the quality gate, builds packages, checks packed tarballs, and publishes through Changesets.
