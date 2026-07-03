@@ -1,6 +1,6 @@
 {
 	"name": "create-routa-ts",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Scaffold a new Routa API project",
 	"private": false,
 	"type": "module",

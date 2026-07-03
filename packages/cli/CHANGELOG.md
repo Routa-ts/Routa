@@ -1,5 +1,13 @@
 # @routa-ts/cli
 
+## 0.1.1
+
+### Patch Changes
+
+- 05ea5b0: Add npm package READMEs and metadata, and prepare releases for npm trusted publishing.
+- Updated dependencies [05ea5b0]
+  - @routa-ts/core@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes
