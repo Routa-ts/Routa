@@ -23,10 +23,17 @@ pnpm run release
 
 ## GitHub Secrets
 
-The Release workflow expects:
+The Release workflow uses npm trusted publishing with GitHub Actions OIDC. Each
+public package must have a trusted publisher configured on npm:
 
-- `GITHUB_TOKEN` (provided automatically)
-- `NPM_TOKEN` with publish access to `@routa-ts/*` and `create-routa-ts`
+- GitHub organization/user: `joseAcevesG`
+- Repository: `Routa`
+- Workflow filename: `release.yml`
+- Allowed action: `npm publish`
+
+The workflow requires `id-token: write` so npm can exchange the GitHub Actions
+OIDC token for a short-lived publish credential. It does not require an
+`NPM_TOKEN` secret for publishing.
 
 ## Local Package Check
 
