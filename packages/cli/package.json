@@ -5,6 +5,18 @@
 	"private": false,
 	"type": "module",
 	"license": "MIT",
+	"keywords": [
+		"routa",
+		"cli",
+		"rest",
+		"typescript",
+		"openapi",
+		"scaffold"
+	],
+	"homepage": "https://github.com/joseAcevesG/Routa#readme",
+	"bugs": {
+		"url": "https://github.com/joseAcevesG/Routa/issues"
+	},
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/joseAcevesG/Routa.git",
@@ -17,7 +29,7 @@
 		"access": "public"
 	},
 	"bin": {
-		"routa": "./dist/index.js"
+		"routa": "dist/index.js"
 	},
 	"exports": {
 		".": {

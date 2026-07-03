@@ -5,6 +5,18 @@
 	"private": false,
 	"type": "module",
 	"license": "MIT",
+	"keywords": [
+		"routa",
+		"rest",
+		"typescript",
+		"hono",
+		"zod",
+		"openapi"
+	],
+	"homepage": "https://github.com/joseAcevesG/Routa#readme",
+	"bugs": {
+		"url": "https://github.com/joseAcevesG/Routa/issues"
+	},
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/joseAcevesG/Routa.git",
