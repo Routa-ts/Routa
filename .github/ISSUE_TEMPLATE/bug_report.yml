@@ -1,0 +1,52 @@
+name: Bug report
+description: Report a Routa bug or regression.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve Routa. Please include a minimal reproduction when possible.
+  - type: input
+    id: package
+    attributes:
+      label: Package
+      description: Which package or area is affected?
+      placeholder: "@routa-ts/core, @routa-ts/cli, create-routa-ts, docs, examples"
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current behavior
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Link to a repo or paste minimal steps.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Routa version
+      placeholder: "0.1.1"
+    validations:
+      required: false
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "Node 24, pnpm 11, macOS/Linux/Windows"
+    validations:
+      required: false

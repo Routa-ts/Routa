@@ -158,14 +158,10 @@ The deeper architecture notes live here:
 - [Middleware system design](./middleware_design.md)
 - [Testing strategy](./testing_strategy.md)
 
-## Naming Notes
+## Community
 
-Routa is the working name.
-
-Reserved fallback name:
-
-- **Weave**: good if the framework leans into composing routes, middleware, contracts, docs, and checks.
-
-possible domains:
-
-- routajs.dev
+- [Contributing](../CONTRIBUTING.md)
+- [Governance](../GOVERNANCE.md)
+- [Security](../SECURITY.md)
+- [Code of Conduct](../CODE_OF_CONDUCT.md)
+- [Trademark policy](../TRADEMARKS.md)

@@ -1,0 +1,27 @@
+name: Docs issue
+description: Report missing, unclear, or incorrect documentation.
+title: "docs: "
+labels:
+  - docs
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Page or file
+      placeholder: "README.md, docs/README.md, package README"
+    validations:
+      required: true
+  - type: textarea
+    id: issue
+    attributes:
+      label: Issue
+      description: What is missing, unclear, or incorrect?
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested fix
+      description: Optional wording or structure.
+    validations:
+      required: false

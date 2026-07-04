@@ -26,8 +26,8 @@ pnpm run release
 The Release workflow uses npm trusted publishing with GitHub Actions OIDC. Each
 public package must have a trusted publisher configured on npm:
 
-- GitHub organization/user: `joseAcevesG`
-- Repository: `Routa`
+- GitHub organization/user: `routa-ts`
+- Repository: `routa`
 - Workflow filename: `release.yml`
 - Allowed action: `npm publish`
 

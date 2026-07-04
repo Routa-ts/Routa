@@ -13,13 +13,13 @@
 		"typescript",
 		"openapi"
 	],
-	"homepage": "https://github.com/joseAcevesG/Routa#readme",
+	"homepage": "https://routa.dev",
 	"bugs": {
-		"url": "https://github.com/joseAcevesG/Routa/issues"
+		"url": "https://github.com/routa-ts/routa/issues"
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/joseAcevesG/Routa.git",
+		"url": "git+https://github.com/routa-ts/routa.git",
 		"directory": "packages/create-routa-ts"
 	},
 	"engines": {

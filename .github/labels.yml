@@ -1,0 +1,30 @@
+- name: bug
+  color: d73a4a
+  description: Something is not working.
+- name: enhancement
+  color: a2eeef
+  description: New feature or improvement.
+- name: docs
+  color: 0075ca
+  description: Documentation changes.
+- name: good first issue
+  color: 7057ff
+  description: Good for first-time contributors.
+- name: help wanted
+  color: 008672
+  description: Maintainers would welcome help.
+- name: question
+  color: d876e3
+  description: Usage or design question.
+- name: breaking change
+  color: b60205
+  description: Requires migration or changes public behavior incompatibly.
+- name: needs reproduction
+  color: fef2c0
+  description: Needs a minimal reproduction before action.
+- name: status: accepted
+  color: 0e8a16
+  description: Accepted for implementation.
+- name: status: blocked
+  color: e99695
+  description: Blocked by missing information or dependency.
