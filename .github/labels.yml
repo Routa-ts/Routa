@@ -22,9 +22,9 @@
 - name: needs reproduction
   color: fef2c0
   description: Needs a minimal reproduction before action.
-- name: status: accepted
+- name: "status: accepted"
   color: 0e8a16
   description: Accepted for implementation.
-- name: status: blocked
+- name: "status: blocked"
   color: e99695
   description: Blocked by missing information or dependency.
