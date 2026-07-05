@@ -1857,7 +1857,6 @@ export default defineRoute({
 						moduleResolution: "NodeNext",
 						strict: true,
 						skipLibCheck: true,
-						baseUrl: ".",
 						paths: {
 							"@routa-ts/core": [join(repoRoot, "packages/core/src/index.ts")],
 							zod: [join(repoRoot, "packages/core/node_modules/zod/index.d.ts")],
@@ -2827,7 +2826,6 @@ export default defineRoute({
 						moduleResolution: "NodeNext",
 						strict: true,
 						skipLibCheck: true,
-						baseUrl: ".",
 						paths: {
 							"@routa-ts/core": [join(repoRoot, "packages/core/src/index.ts")],
 							zod: [join(repoRoot, "packages/core/node_modules/zod/index.d.ts")],
@@ -2896,7 +2894,6 @@ function createTypeScriptProject(cwd: string): void {
 					moduleResolution: "NodeNext",
 					strict: true,
 					skipLibCheck: true,
-					baseUrl: ".",
 					paths: {
 						"@routa-ts/core": [join(repoRoot, "packages/core/src/index.ts")],
 						"@routa-ts/core/hono": [join(repoRoot, "packages/core/src/hono.ts")],
