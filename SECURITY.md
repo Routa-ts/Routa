@@ -8,7 +8,7 @@ Routa is currently pre-1.0. Security fixes are applied to the latest published v
 
 Do not open a public issue for security vulnerabilities.
 
-Report suspected vulnerabilities privately to `security@routa.dev`.
+Report suspected vulnerabilities privately to `security@routa-ts.dev`.
 
 Please include:
 

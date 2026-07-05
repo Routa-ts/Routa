@@ -13,13 +13,13 @@
 		"openapi",
 		"scaffold"
 	],
-	"homepage": "https://routa.dev",
+	"homepage": "https://routa-ts.dev",
 	"bugs": {
-		"url": "https://github.com/joseAcevesG/Routa/issues"
+		"url": "https://github.com/Routa-ts/Routa/issues"
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/joseAcevesG/Routa.git",
+		"url": "git+https://github.com/Routa-ts/Routa.git",
 		"directory": "packages/cli"
 	},
 	"engines": {

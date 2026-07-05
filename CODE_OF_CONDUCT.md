@@ -22,6 +22,6 @@ We pledge to make participation in Routa a respectful and harassment-free experi
 
 Maintainers may remove comments, close threads, restrict participation, or ban contributors when behavior harms the project or community.
 
-Report conduct concerns to `conduct@routa.dev`.
+Report conduct concerns to `hello@routa-ts.dev`.
 
 This code of conduct is adapted from the Contributor Covenant spirit for Routa's current project size.

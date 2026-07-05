@@ -29,5 +29,5 @@ pnpm create routa-ts@latest
 
 ## Links
 
-- Repository: https://github.com/joseAcevesG/Routa
-- Documentation: https://github.com/joseAcevesG/Routa/tree/main/docs
+- Repository: https://github.com/Routa-ts/Routa
+- Documentation: https://routa-ts.dev

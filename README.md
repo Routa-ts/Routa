@@ -96,8 +96,8 @@ pnpm test
 - [Security](./SECURITY.md)
 - [Code of Conduct](./CODE_OF_CONDUCT.md)
 - [Trademark policy](./TRADEMARKS.md)
-- [Issues](https://github.com/joseAcevesG/Routa/issues)
-- [Discussions](https://github.com/joseAcevesG/Routa/discussions)
+- [Issues](https://github.com/Routa-ts/Routa/issues)
+- [Discussions](https://github.com/Routa-ts/Routa/discussions)
 
 ## Development Status
 

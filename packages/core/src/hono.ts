@@ -228,7 +228,7 @@ async function parseBody(request: Request): Promise<unknown> {
 
 	if (!isJsonMediaType(contentType)) {
 		throw problem(
-			"https://routa.dev/problems/unsupported-media-type",
+			"https://routa-ts.dev/problems/unsupported-media-type",
 			"Unsupported Media Type",
 			415,
 		);
@@ -472,15 +472,15 @@ function errorResponse(error: unknown): Response {
 	}
 
 	if (error instanceof InvalidHandlerOutputError) {
-		return problem("https://routa.dev/problems/handler-output", "Invalid handler output", 500);
+		return problem("https://routa-ts.dev/problems/handler-output", "Invalid handler output", 500);
 	}
 
 	if (error instanceof InvalidJsonBodyError) {
-		return problem("https://routa.dev/problems/invalid-json", "Invalid JSON body", 400);
+		return problem("https://routa-ts.dev/problems/invalid-json", "Invalid JSON body", 400);
 	}
 
 	if (error instanceof ZodError) {
-		return problem("https://routa.dev/problems/validation", "Validation failed", 400, {
+		return problem("https://routa-ts.dev/problems/validation", "Validation failed", 400, {
 			issues: error.issues.map((issue) => ({
 				path: issue.path,
 				message: issue.message,
@@ -488,7 +488,7 @@ function errorResponse(error: unknown): Response {
 		});
 	}
 
-	return problem("https://routa.dev/problems/internal", "Internal Server Error", 500);
+	return problem("https://routa-ts.dev/problems/internal", "Internal Server Error", 500);
 }
 
 /**

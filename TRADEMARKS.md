@@ -37,4 +37,4 @@ Do not use the Routa name or logo in a way that suggests official status for:
 
 ## Questions
 
-For trademark questions, contact `hello@routa.dev`.
+For trademark questions, contact `hello@routa-ts.dev`.
