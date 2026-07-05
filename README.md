@@ -89,8 +89,22 @@ pnpm test
 - [Middleware design](./docs/middleware_design.md)
 - [Testing strategy](./docs/testing_strategy.md)
 
+## Community
+
+- [Contributing](./CONTRIBUTING.md)
+- [Governance](./GOVERNANCE.md)
+- [Security](./SECURITY.md)
+- [Code of Conduct](./CODE_OF_CONDUCT.md)
+- [Trademark policy](./TRADEMARKS.md)
+- [Issues](https://github.com/Routa-ts/Routa/issues)
+- [Discussions](https://github.com/Routa-ts/Routa/discussions)
+
 ## Development Status
 
 Routa has a v0 implementation baseline in this repo. The acceptance specs in `docs/specs/v0/` are the behavior contract for keeping v0 honest as the framework evolves.
 
 When implementation behavior conflicts with a spec, either update the spec intentionally or reject the implementation.
+
+## License
+
+Routa is released under the [MIT License](./LICENSE).

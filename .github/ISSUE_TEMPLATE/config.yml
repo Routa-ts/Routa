@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security report
+    url: mailto:security@routa-ts.dev
+    about: Report security vulnerabilities privately.
+  - name: Discussions
+    url: https://github.com/Routa-ts/Routa/discussions
+    about: Ask open-ended questions or discuss large proposals.

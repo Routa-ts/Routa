@@ -1,0 +1,34 @@
+name: Feature request
+description: Propose an improvement or new capability.
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem should Routa solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What API or behavior do you want?
+    validations:
+      required: true
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples
+      description: Show intended usage or comparable framework behavior.
+    validations:
+      required: false
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility
+      description: Any breaking changes, migration risks, or v0 scope concerns?
+    validations:
+      required: false

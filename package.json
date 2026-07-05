@@ -3,6 +3,7 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
+	"license": "MIT",
 	"packageManager": "pnpm@11.9.0",
 	"scripts": {
 		"build": "turbo run build",
