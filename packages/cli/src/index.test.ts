@@ -4,6 +4,7 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	symlinkSync,
 	unlinkSync,
 	writeFileSync,
 } from "node:fs";
@@ -2866,6 +2867,8 @@ function withoutPnpmWarnings(output: string): string {
 
 function createTypeScriptProject(cwd: string): void {
 	mkdirSync(join(cwd, "src"), { recursive: true });
+	mkdirSync(join(cwd, "node_modules/@routa-ts"), { recursive: true });
+	symlinkSync(join(repoRoot, "packages/core"), join(cwd, "node_modules/@routa-ts/core"), "dir");
 	writeFileSync(
 		join(cwd, "package.json"),
 		JSON.stringify(
