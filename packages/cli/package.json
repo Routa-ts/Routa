@@ -15,11 +15,11 @@
 	],
 	"homepage": "https://routa.dev",
 	"bugs": {
-		"url": "https://github.com/routa-ts/routa/issues"
+		"url": "https://github.com/joseAcevesG/Routa/issues"
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/routa-ts/routa.git",
+		"url": "git+https://github.com/joseAcevesG/Routa.git",
 		"directory": "packages/cli"
 	},
 	"engines": {
