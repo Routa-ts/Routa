@@ -1,0 +1,35 @@
+---
+title: v0 Scope & Status
+description: What Routa v0 supports today and what is deferred.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Routa has a v0 implementation baseline. Public docs should describe this baseline clearly and avoid presenting future design notes as shipped behavior.
+
+## Supported in v0
+
+- Hono runtime adapter
+- Zod schemas
+- OpenAPI `.yaml`, `.yml`, and `.json` input
+- OpenAPI-to-source scaffolding
+- generated route metadata in `.routa/routes.gen.ts`
+- manifest and baseline files in `.routa/`
+- `routa check`, `routa build`, `routa dev`, and `routa start`
+- OpenAPI drift and removed-operation checks
+- typed route responses
+- minimal typed middleware context
+
+## Deferred
+
+- Fastify, Express, or other runtime adapters
+- non-Zod schema adapters
+- SDK generation
+- plugin system
+- broad auth provider integrations
+- broad observability, caching, rate limiting, and operations features
+- generated hosted API reference UI
+
+<Aside type="caution" title="Design docs">
+	The repository contains v1 and design-planning documents. Those are useful for contributors, but they are not a promise that the feature exists in v0.
+</Aside>

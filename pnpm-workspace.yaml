@@ -1,6 +1,8 @@
 packages:
+  - "apps/*"
   - "packages/*"
   - "examples/*"
 verifyDepsBeforeRun: false
 allowBuilds:
   esbuild: true
+  sharp: true

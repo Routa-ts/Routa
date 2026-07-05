@@ -1,0 +1,25 @@
+---
+title: Full API
+description: Walkthrough of the full Routa example.
+---
+
+The `examples/full-api` package demonstrates middleware, tenant-scoped routes, admin routes, and a larger route graph.
+
+## Run It
+
+From the repository root:
+
+```sh
+pnpm install
+pnpm --filter full-api dev
+```
+
+## What to Study
+
+- `src/routes/middleware.ts`: root route middleware
+- `src/routes/admin/middleware.ts`: group-level middleware
+- `src/routes/tenants/$tenantId/middleware.ts`: segment-level tenant context
+- `src/middleware/*`: application-owned middleware helpers
+- `src/routes/**/route.ts`: route contracts using the accumulated context
+
+Use this example to understand how middleware context becomes part of the route contract without moving business logic into Routa.

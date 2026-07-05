@@ -1,0 +1,20 @@
+---
+title: Run and Start
+description: Run Routa projects in development and production mode.
+---
+
+Use development mode while editing routes:
+
+```sh
+pnpm exec routa dev
+```
+
+`routa dev` validates routes, writes generated metadata, typechecks, and starts the internal development server. In dev mode, empty route files can be stubbed before validation.
+
+Use start mode for a built or deployable app:
+
+```sh
+pnpm exec routa start
+```
+
+Both commands prepare the project server before launching the runtime. Validation diagnostics stop the server from starting.

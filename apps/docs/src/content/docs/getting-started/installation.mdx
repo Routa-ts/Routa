@@ -1,0 +1,60 @@
+---
+title: Installation
+description: Install Routa packages in an existing TypeScript API.
+---
+
+import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
+
+Use the project scaffolder for new applications:
+
+```sh
+pnpm create routa-ts@latest
+```
+
+For an existing application, install the same runtime set used by generated Routa apps:
+
+```sh
+pnpm add @routa-ts/cli @routa-ts/core hono tsx zod
+pnpm add -D @biomejs/biome @types/node typescript
+```
+
+<Aside type="note" title="CLI dependency">
+	Generated Routa apps currently keep `@routa-ts/cli` in `dependencies` so `routa start` is available in deployed environments. If your deployment provides build/start tooling another way, you can choose a stricter dependency split later.
+</Aside>
+
+## Packages
+
+- `@routa-ts/core`: route definition helpers and runtime primitives.
+- `@routa-ts/cli`: `routa` command for checks, builds, scaffolding, and dev server workflows.
+- `create-routa-ts`: project scaffolder for `pnpm create routa-ts`.
+
+## Scripts
+
+Add scripts that mirror generated Routa apps:
+
+<Tabs>
+	<TabItem label="package.json">
+
+```json
+{
+	"scripts": {
+		"dev": "routa dev",
+		"start": "routa start",
+		"check": "routa check",
+		"build": "routa build",
+		"scaffold": "routa scaffold openapi.yaml",
+		"openapi:check": "routa openapi check"
+	}
+}
+```
+
+	</TabItem>
+</Tabs>
+
+## Requirements
+
+Routa v0 targets new TypeScript APIs using Hono and Zod. Other runtime adapters, schema libraries, SDK generation, and broad operational/security integrations are deferred beyond v0.
+
+## Next Step
+
+Create a starter project with the scaffolder or add route contracts to an existing app.

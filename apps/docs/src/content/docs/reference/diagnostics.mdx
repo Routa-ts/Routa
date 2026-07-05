@@ -1,0 +1,27 @@
+---
+title: Diagnostics
+description: Routa validation errors and checks.
+---
+
+Routa diagnostics are designed to fail before TypeScript emits generic or late errors.
+
+Current validation covers:
+
+- missing project structure
+- duplicate route paths and methods
+- route methods without a `success` response
+- duplicate schema names
+- middleware order problems
+- invalid OpenAPI graph state during OpenAPI checks
+- drift from `.routa/openapi-baseline.json`
+- removed OpenAPI operations
+
+Run:
+
+```sh
+pnpm exec routa check
+pnpm exec routa openapi check
+pnpm exec routa openapi breaking
+```
+
+Use diagnostics to fix source route contracts or intentionally update the OpenAPI baseline when the contract change is accepted.
