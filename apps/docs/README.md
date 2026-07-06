@@ -4,7 +4,7 @@ Public documentation site for Routa, built with Astro, Starlight, and Tailwind.
 
 ## Project Structure
 
-```
+```text
 apps/docs/
   astro.config.mjs
   src/content/docs/

@@ -5,12 +5,12 @@
 	"private": true,
 	"scripts": {
 		"astro": "astro",
-		"build": "ASTRO_TELEMETRY_DISABLED=1 astro build",
-		"check": "ASTRO_TELEMETRY_DISABLED=1 astro check",
-		"dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
+		"build": "node ./scripts/astro.mjs build",
+		"check": "node ./scripts/astro.mjs check",
+		"dev": "node ./scripts/astro.mjs dev",
 		"lint": "biome check .",
-		"preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview",
-		"typecheck": "ASTRO_TELEMETRY_DISABLED=1 astro check"
+		"preview": "node ./scripts/astro.mjs preview",
+		"typecheck": "node ./scripts/astro.mjs check"
 	},
 	"dependencies": {
 		"@astrojs/starlight": "^0.41.3",
