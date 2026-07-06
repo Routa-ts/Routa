@@ -1,0 +1,42 @@
+---
+title: OpenAPI
+description: Routa keeps OpenAPI aligned with route contracts.
+---
+
+Routa supports OpenAPI in both directions:
+
+```txt
+openapi.yaml/json -> schemas -> route files -> handler stubs
+routes -> OpenAPI -> checks
+```
+
+## OpenAPI to Source
+
+Routa v0 accepts OpenAPI `.yaml`, `.yml`, and `.json` files and scaffolds matching source structure for a new API.
+
+Generated source is meant to be reviewed, edited, and committed. Routa does not ask teams to blindly trust generated contracts.
+
+Supported v0 input is intentionally narrow:
+
+- HTTP paths and methods
+- `operationId`
+- path, query, header, and cookie parameters
+- JSON request bodies
+- JSON responses
+- reusable schemas from `components.schemas`
+
+Unsupported OpenAPI features should stay in the source document until Routa can model them safely.
+
+## Source to OpenAPI
+
+The route contract is the documentation model. Inputs, outputs, middleware rejects, and metadata can contribute to the generated OpenAPI spec.
+
+## Check Workflow
+
+Use the CLI to check whether route contracts and OpenAPI are aligned:
+
+```sh
+pnpm exec routa openapi check
+```
+
+Use `routa openapi breaking` to catch removed operations against the saved baseline. Use `--update-baseline` only when you intentionally accept the current contract as the new baseline.

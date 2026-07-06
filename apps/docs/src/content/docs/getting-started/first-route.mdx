@@ -1,0 +1,39 @@
+---
+title: First Route
+description: Define a Routa route contract.
+---
+
+Routa route files map to URL paths. A `route.ts` file owns the HTTP methods for that path.
+
+```txt
+src/routes/users/route.ts
+src/routes/users/$userId/route.ts
+```
+
+Define the route contract before the handler:
+
+```ts
+import { createRoute, defineRoute } from "@routa-ts/core";
+import { z } from "zod";
+
+const UserSchema = z.object({
+	id: z.string(),
+	name: z.string(),
+});
+
+export default defineRoute({
+	get: createRoute({
+		responses: {
+			success: {
+				status: 200,
+				schema: UserSchema,
+			},
+		},
+		run: async () => {
+			return { type: "success", data: { id: "usr_1", name: "Ada" } };
+		},
+	}),
+});
+```
+
+The handler returns a named response from the declared response map. If the handler returns an undeclared response type or incompatible data, TypeScript should catch it.

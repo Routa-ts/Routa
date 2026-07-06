@@ -1,0 +1,56 @@
+---
+title: CLI Reference
+description: Routa command-line workflows.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+The `routa` command checks route contracts, builds generated route metadata, runs the development server, and scaffolds projects from OpenAPI files.
+
+Install it as a development dependency:
+
+```sh
+pnpm add -D @routa-ts/cli
+```
+
+## Commands
+
+```sh
+pnpm exec routa create [dir]
+pnpm exec routa scaffold <openapi.yaml|openapi.yml|openapi.json>
+pnpm exec routa scaffold openapi.yaml --preview
+pnpm exec routa scaffold openapi.yaml --yes
+pnpm exec routa dev
+pnpm exec routa start
+pnpm exec routa check
+pnpm exec routa build
+pnpm exec routa openapi check
+pnpm exec routa openapi breaking
+pnpm exec routa openapi breaking --update-baseline
+```
+
+## Command Behavior
+
+- `routa create [dir]`: creates a new Routa app. Flags include `--install`, `--git`, and `--no-openapi`.
+- `routa scaffold <file>`: generates route and schema files from OpenAPI. Use `--preview` before writing changes and `--yes` to approve scaffold changes.
+- `routa dev`: validates routes, writes metadata, typechecks, and starts the development server.
+- `routa start`: validates routes, typechecks, and starts the runtime server.
+- `routa check`: validates Routa route graph and runs `tsc -p tsconfig.json --noEmit`.
+- `routa build`: validates Routa route graph and runs TypeScript emit.
+- `routa openapi check`: compares generated OpenAPI against `.routa/openapi-baseline.json`.
+- `routa openapi breaking`: fails when operations were removed from the baseline.
+- `routa openapi breaking --update-baseline`: writes the current generated OpenAPI as the new baseline.
+
+<Aside type="caution" title="Baseline updates">
+	Only run `--update-baseline` when the current contract is intentionally accepted. It updates `.routa/openapi-baseline.json`.
+</Aside>
+
+## New Projects
+
+```sh
+pnpm create routa-ts@latest
+```
+
+## Status
+
+The CLI is part of the v0 implementation baseline. Keep generated behavior aligned with the repository acceptance specs as the framework evolves.

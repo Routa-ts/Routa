@@ -1,0 +1,26 @@
+---
+title: Regenerate Safely
+description: Use Routa preview and manifest tracking before accepting generated changes.
+---
+
+Regeneration should be reviewed before writing changes.
+
+```sh
+pnpm exec routa scaffold openapi.yaml --preview
+```
+
+Preview output marks changes as:
+
+- `add`: new generated file
+- `update`: generated file would change
+- `unchanged`: generated file matches current content
+- `conflict`: existing file cannot be safely overwritten
+- `remove`: previously generated file is no longer part of the OpenAPI source
+
+After reviewing, run:
+
+```sh
+pnpm exec routa scaffold openapi.yaml --yes
+```
+
+Routa uses `.routa/manifest.json` and file hashes to avoid blind overwrites. If a generated file has been manually edited, review the preview carefully before accepting regeneration.

@@ -1,0 +1,22 @@
+---
+title: Why Routa
+description: The problem Routa is built to solve.
+---
+
+Backend APIs should not require a maze of controllers, decorators, registries, adapters, and hand-written docs to answer one question:
+
+> What does this route accept, what can it return, and what context is available when it runs?
+
+Routa puts the HTTP contract in source:
+
+```txt
+schemas -> routes -> handlers -> OpenAPI -> docs/checks
+```
+
+When a team starts from an API contract, Routa can also run the first step in reverse:
+
+```txt
+openapi.yaml/json -> schemas -> route files -> handler stubs
+```
+
+Routa is opinionated at the HTTP boundary: routing, validation, context, middleware, responses, and OpenAPI. It does not own your database, services, models, policies, or application architecture.

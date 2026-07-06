@@ -1,0 +1,20 @@
+---
+title: Generated Files
+description: Routa-generated metadata and safety files.
+---
+
+Routa writes generated files into `.routa/`.
+
+## `.routa/routes.gen.ts`
+
+Generated route metadata used by the runtime, CLI checks, and type augmentation.
+
+## `.routa/manifest.json`
+
+Tracks generated files, source operation IDs, file kinds, and hashes. The manifest lets Routa detect whether regeneration would update, preserve, conflict with, or remove files.
+
+## `.routa/openapi-baseline.json`
+
+Stores the OpenAPI contract used for drift checks and removed-operation checks.
+
+Commit these files. They make project behavior reproducible across machines and CI.

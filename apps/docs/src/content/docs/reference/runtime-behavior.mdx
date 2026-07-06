@@ -1,0 +1,28 @@
+---
+title: Runtime Behavior
+description: Current Hono runtime behavior in Routa v0.
+---
+
+Routa v0 runs on Hono.
+
+## Request Handling
+
+- route params, query, headers, cookies, and body are parsed through declared Zod schemas
+- JSON request bodies require a JSON content type
+- invalid JSON bodies produce an error response
+- `GET` routes cannot declare request bodies
+- unsupported `Accept` headers can produce `406 Not Acceptable`
+- unsupported body content type can produce `415 Unsupported Media Type`
+- paths with unsupported methods produce `405 Method Not Allowed` with an `Allow` header
+
+## Responses
+
+Handlers and middleware return named results:
+
+```ts
+return { type: "success", data };
+```
+
+Routa validates that the returned type exists in the route response map and serializes the matching HTTP response.
+
+Bodyless status codes are emitted without JSON response bodies.

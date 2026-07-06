@@ -1,0 +1,20 @@
+@layer base, starlight, theme, components, utilities;
+
+@import "@astrojs/starlight-tailwind";
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@theme {
+	/*
+	Design-system entrypoint. Configure Routa colors and fonts here when the
+	brand system is ready.
+
+	Starlight reads these Tailwind theme tokens:
+	--color-accent-*
+	--color-gray-*
+	--font-sans
+	--font-mono
+
+	https://starlight.astro.build/guides/css-and-tailwind/#styling-starlight-with-tailwind
+	*/
+}

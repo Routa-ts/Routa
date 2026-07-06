@@ -1,0 +1,32 @@
+---
+title: Scaffold from OpenAPI
+description: Generate Routa route files from an OpenAPI document.
+---
+
+Routa can scaffold the first HTTP layer from an OpenAPI document:
+
+```sh
+pnpm exec routa scaffold openapi.yaml --preview
+pnpm exec routa scaffold openapi.yaml --yes
+```
+
+Supported input extensions:
+
+- `.yaml`
+- `.yml`
+- `.json`
+
+## Generated Output
+
+Scaffold creates route files under `src/routes`, schema files near those routes, `.routa/manifest.json`, `.routa/openapi-baseline.json`, and `.routa/routes.gen.ts`.
+
+## Supported v0 Model
+
+- path operations for common HTTP methods
+- `operationId`
+- path, query, header, and cookie parameters
+- JSON request bodies
+- JSON responses
+- schemas from `components.schemas`
+
+Review generated source before committing. Generated handlers are stubs and business logic stays in your app.

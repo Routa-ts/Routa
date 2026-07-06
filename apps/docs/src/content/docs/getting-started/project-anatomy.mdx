@@ -1,0 +1,39 @@
+---
+title: Project Anatomy
+description: Files in a generated Routa project.
+---
+
+import { FileTree } from "@astrojs/starlight/components";
+
+A Routa project separates user-owned source files from Routa-owned generated metadata.
+
+<FileTree>
+- src/
+  - routa.ts
+  - routes/
+    - status/
+      - route.ts
+      - schemas.ts
+- .routa/
+  - manifest.json
+  - openapi-baseline.json
+  - routes.gen.ts
+- openapi.yaml
+- package.json
+- tsconfig.json
+</FileTree>
+
+## User-Owned Files
+
+- `src/routa.ts`: application entry point and Routa config.
+- `src/routes/**/route.ts`: route contracts for filesystem paths.
+- `src/routes/**/schemas.ts`: Zod schemas used by nearby route contracts.
+- `openapi.yaml`: source OpenAPI document when scaffolding from a contract.
+
+## Routa-Owned Files
+
+- `.routa/manifest.json`: tracks generated files and hashes for regeneration safety.
+- `.routa/openapi-baseline.json`: saved OpenAPI contract used for drift and breaking checks.
+- `.routa/routes.gen.ts`: generated route metadata and type augmentation.
+
+Commit `.routa/` files so checks and regeneration safety work across machines.

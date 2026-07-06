@@ -1,0 +1,42 @@
+---
+title: Schemas
+description: Zod schemas define Routa inputs and responses.
+---
+
+Routa v0 uses Zod schemas for route inputs, middleware inputs, provided context, and response payloads.
+
+```ts
+import { z } from "zod";
+
+export const CreateUserSchema = z.object({
+	email: z.string().email(),
+	name: z.string(),
+});
+
+export const UserSchema = z.object({
+	id: z.string(),
+	email: z.string().email(),
+	name: z.string(),
+});
+```
+
+Use schemas in route contracts:
+
+```ts
+createRoute({
+	input: {
+		body: CreateUserSchema,
+	},
+	responses: {
+		success: {
+			status: 201,
+			schema: UserSchema,
+		},
+	},
+	run: async ({ input }) => {
+		return users.create(input.body);
+	},
+});
+```
+
+Scaffolded projects keep route-local schemas near the route by default. Shared component schemas are generated when OpenAPI declares reusable `components.schemas`.
