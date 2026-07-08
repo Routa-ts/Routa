@@ -1,5 +1,13 @@
 # @routa-ts/cli
 
+## 0.1.2
+
+### Patch Changes
+
+- Release package updates after the docs launch.
+- Updated dependencies
+  - @routa-ts/core@0.1.2
+
 ## 0.1.1
 
 ### Patch Changes

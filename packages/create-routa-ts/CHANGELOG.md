@@ -1,5 +1,11 @@
 # create-routa-ts
 
+## 0.1.2
+
+### Patch Changes
+
+- Release package updates after the docs launch.
+
 ## 0.1.1
 
 ### Patch Changes
