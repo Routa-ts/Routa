@@ -3,6 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
+import { emitKeypressEvents } from "node:readline";
 import { createInterface } from "node:readline/promises";
 import { createProject } from "./create-project.js";
 import { createUi, shouldUseColor, type Ui } from "./ui.js";
@@ -264,21 +265,95 @@ async function question(label: string): Promise<string> {
 }
 
 /**
- * Prompts for a yes-or-no response.
+ * Prompts for a yes-or-no response using an arrow-key selector.
  *
  * @param label - The prompt text shown to the user
- * @param defaultValue - The value used when the user submits an empty response
- * @returns `true` if the user answers yes, `false` otherwise
+ * @param defaultValue - The selected value shown before user input
+ * @returns `true` if the user selects yes, `false` otherwise
  */
 async function confirm(label: string, defaultValue: boolean): Promise<boolean> {
-	const suffix = defaultValue ? "Y/n" : "y/N";
-	const answer = (await question(`${label} (${suffix})`)).trim().toLowerCase();
+	let selected = defaultValue;
+	const input = process.stdin;
+	const output = process.stdout;
+	const rawMode = input.isRaw;
+	const color = shouldUseColor();
 
-	if (!answer) {
-		return defaultValue;
+	emitKeypressEvents(input);
+	output.write(`${label}\n`);
+	renderBooleanSelect(selected, color);
+
+	if (typeof input.setRawMode === "function") {
+		input.setRawMode(true);
 	}
 
-	return ["y", "yes"].includes(answer);
+	input.resume();
+
+	return await new Promise<boolean>((resolve, reject) => {
+		const cleanup = () => {
+			input.off("keypress", onKeypress);
+
+			if (typeof input.setRawMode === "function") {
+				input.setRawMode(rawMode ?? false);
+			}
+
+			output.write("\n");
+		};
+		const finish = (value: boolean) => {
+			cleanup();
+			resolve(value);
+		};
+		const onKeypress = (_value: string, key?: { name?: string; ctrl?: boolean }) => {
+			if (key?.ctrl && key.name === "c") {
+				cleanup();
+				reject(new Error("Creation cancelled."));
+				return;
+			}
+
+			if (key?.name === "left" || key?.name === "up") {
+				selected = true;
+				rerenderBooleanSelect(selected, color);
+				return;
+			}
+
+			if (key?.name === "right" || key?.name === "down") {
+				selected = false;
+				rerenderBooleanSelect(selected, color);
+				return;
+			}
+
+			if (key?.name === "tab") {
+				selected = !selected;
+				rerenderBooleanSelect(selected, color);
+				return;
+			}
+
+			if (key?.name === "return" || key?.name === "enter") {
+				finish(selected);
+			}
+		};
+
+		input.on("keypress", onKeypress);
+	});
+}
+
+function renderBooleanSelect(selected: boolean, color: boolean): void {
+	process.stdout.write(`  ${choice("Yes", selected, color)} / ${choice("No", !selected, color)}`);
+}
+
+function rerenderBooleanSelect(selected: boolean, color: boolean): void {
+	process.stdout.write("\r\u001b[2K");
+	renderBooleanSelect(selected, color);
+}
+
+function choice(label: string, selected: boolean, color: boolean): string {
+	const marker = selected ? "●" : "○";
+	const value = `${marker} ${label}`;
+
+	if (!color) {
+		return value;
+	}
+
+	return selected ? `\u001b[92m${value}\u001b[0m` : `\u001b[2m${value}\u001b[0m`;
 }
 
 /**
