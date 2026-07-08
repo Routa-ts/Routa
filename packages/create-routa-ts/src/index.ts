@@ -22,6 +22,12 @@ type CreateConfig = {
 	cwd: string;
 };
 
+class UserCancelledError extends Error {
+	constructor() {
+		super("Creation cancelled.");
+	}
+}
+
 /**
  * Prepends the create subcommand to an argument list.
  *
@@ -104,6 +110,11 @@ export async function runCreate(
 		process.stdout.write(`${ui.command("pnpm dev")}\n`);
 		return 0;
 	} catch (error) {
+		if (error instanceof UserCancelledError) {
+			process.stdout.write(`${ui.muted("Creation cancelled.")}\n`);
+			return 0;
+		}
+
 		process.stderr.write(
 			`${ui.error("Error:")} ${error instanceof Error ? error.message : String(error)}\n`,
 		);
@@ -296,6 +307,7 @@ async function confirm(label: string, defaultValue: boolean): Promise<boolean> {
 				input.setRawMode(rawMode ?? false);
 			}
 
+			input.pause();
 			output.write("\n");
 		};
 		const finish = (value: boolean) => {
@@ -305,7 +317,7 @@ async function confirm(label: string, defaultValue: boolean): Promise<boolean> {
 		const onKeypress = (_value: string, key?: { name?: string; ctrl?: boolean }) => {
 			if (key?.ctrl && key.name === "c") {
 				cleanup();
-				reject(new Error("Creation cancelled."));
+				reject(new UserCancelledError());
 				return;
 			}
 

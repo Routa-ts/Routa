@@ -35,6 +35,12 @@ The workflow requires `id-token: write` so npm can exchange the GitHub Actions
 OIDC token for a short-lived publish credential. It does not require an
 `NPM_TOKEN` secret for publishing.
 
+The `actions/setup-node` `registry-url` setting writes npm registry config that
+uses `NODE_AUTH_TOKEN` when that environment variable is present. Avoid adding
+`NODE_AUTH_TOKEN` or `NPM_TOKEN` to the publish step unless trusted publishing is
+unavailable for the package, because token-based npm auth can interfere with the
+OIDC publish path.
+
 ## Local Package Check
 
 ```sh
