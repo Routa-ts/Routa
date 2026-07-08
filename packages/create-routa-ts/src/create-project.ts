@@ -275,6 +275,9 @@ function packageJson(name: string, routaVersion: string, openApi: boolean): stri
 			version: "0.0.0",
 			private: true,
 			type: "module",
+			engines: {
+				node: ">=24",
+			},
 			scripts: {
 				dev: "routa dev",
 				start: "routa start",
