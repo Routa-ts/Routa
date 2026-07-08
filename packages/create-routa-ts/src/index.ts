@@ -49,10 +49,11 @@ export async function runCreate(
 	argv = process.argv.slice(2),
 	cwd = process.cwd(),
 ): Promise<number> {
-	const config = await resolveCreateConfig(argv, cwd);
 	const ui = createUi(shouldUseColor());
 
 	try {
+		const config = await resolveCreateConfig(argv, cwd);
+
 		printSummary(config, ui);
 
 		if (
@@ -315,7 +316,7 @@ async function confirm(label: string, defaultValue: boolean): Promise<boolean> {
 			resolve(value);
 		};
 		const onKeypress = (_value: string, key?: { name?: string; ctrl?: boolean }) => {
-			if (key?.ctrl && key.name === "c") {
+			if ((key?.ctrl && key.name === "c") || key?.name === "escape") {
 				cleanup();
 				reject(new UserCancelledError());
 				return;
@@ -336,6 +337,16 @@ async function confirm(label: string, defaultValue: boolean): Promise<boolean> {
 			if (key?.name === "tab") {
 				selected = !selected;
 				rerenderBooleanSelect(selected, color);
+				return;
+			}
+
+			if (key?.name === "y") {
+				finish(true);
+				return;
+			}
+
+			if (key?.name === "n") {
+				finish(false);
 				return;
 			}
 
