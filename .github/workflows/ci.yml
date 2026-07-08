@@ -15,217 +15,55 @@ concurrency:
 jobs:
   repo-checks:
     name: Repo checks
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          persist-credentials: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run repository checks
-        run: pnpm check
+    uses: ./.github/workflows/node-pnpm-job.yml
+    with:
+      command: pnpm check
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          persist-credentials: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run lint
-        run: pnpm lint
+    uses: ./.github/workflows/node-pnpm-job.yml
+    with:
+      command: pnpm lint
 
   typecheck:
     name: Typecheck
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          persist-credentials: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run typecheck
-        run: pnpm typecheck
+    uses: ./.github/workflows/node-pnpm-job.yml
+    with:
+      command: pnpm typecheck
 
   test:
     name: Test
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          persist-credentials: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build workspace CLIs
-        run: pnpm --filter './packages/*' build
-
-      - name: Link local Routa CLI
-        run: |
-          mkdir -p node_modules/.bin examples/basic-api/node_modules/.bin examples/full-api/node_modules/.bin
-          printf '%s\n' '#!/usr/bin/env sh' 'exec node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" "$@"' > node_modules/.bin/routa
-          chmod +x node_modules/.bin/routa
-          cp node_modules/.bin/routa examples/basic-api/node_modules/.bin/routa
-          cp node_modules/.bin/routa examples/full-api/node_modules/.bin/routa
-
-      - name: Run tests
-        run: pnpm test
+    uses: ./.github/workflows/node-pnpm-job.yml
+    with:
+      command: |
+        pnpm --filter './packages/*' build
+        scripts/link-ci-routa.sh
+        pnpm test
 
   build:
     name: Build
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          persist-credentials: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build workspace CLIs
-        run: pnpm --filter './packages/*' build
-
-      - name: Link local Routa CLI
-        run: |
-          mkdir -p node_modules/.bin examples/basic-api/node_modules/.bin examples/full-api/node_modules/.bin
-          printf '%s\n' '#!/usr/bin/env sh' 'exec node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" "$@"' > node_modules/.bin/routa
-          chmod +x node_modules/.bin/routa
-          cp node_modules/.bin/routa examples/basic-api/node_modules/.bin/routa
-          cp node_modules/.bin/routa examples/full-api/node_modules/.bin/routa
-
-      - name: Run build
-        run: pnpm build
+    uses: ./.github/workflows/node-pnpm-job.yml
+    with:
+      command: |
+        pnpm --filter './packages/*' build
+        scripts/link-ci-routa.sh
+        pnpm build
 
   cli-validation:
     name: CLI validation
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          persist-credentials: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build workspace CLIs
-        run: pnpm --filter './packages/*' build
-
-      - name: Link local Routa CLI
-        run: |
-          mkdir -p node_modules/.bin examples/basic-api/node_modules/.bin examples/full-api/node_modules/.bin
-          printf '%s\n' '#!/usr/bin/env sh' 'exec node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" "$@"' > node_modules/.bin/routa
-          chmod +x node_modules/.bin/routa
-          cp node_modules/.bin/routa examples/basic-api/node_modules/.bin/routa
-          cp node_modules/.bin/routa examples/full-api/node_modules/.bin/routa
-
-      - name: Build examples
-        run: pnpm build
-
-      - name: Run generated project checks
-        run: pnpm --filter './examples/*' check
-
-      - name: Run OpenAPI checks
-        run: pnpm --filter './examples/*' openapi:check
-
-      - name: Run CLI smoke test
-        run: scripts/scaffold-error-smoke.sh
+    uses: ./.github/workflows/node-pnpm-job.yml
+    with:
+      command: |
+        pnpm --filter './packages/*' build
+        scripts/link-ci-routa.sh
+        pnpm build
+        pnpm --filter './examples/*' check
+        pnpm --filter './examples/*' openapi:check
+        scripts/scaffold-error-smoke.sh
 
   pack-check:
     name: Pack check
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          persist-credentials: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run pack check
-        run: pnpm pack:check
+    uses: ./.github/workflows/node-pnpm-job.yml
+    with:
+      timeout-minutes: 20
+      command: pnpm pack:check
