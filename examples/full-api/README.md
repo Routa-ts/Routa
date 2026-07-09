@@ -21,6 +21,8 @@ pnpm build
 pnpm lint
 pnpm format
 pnpm openapi:check
+pnpm routes
+pnpm routes:json
 ```
 
 ## Routes
@@ -34,3 +36,14 @@ src/routes/status/schemas.ts
 ```
 
 Routa owns generated project metadata in `.routa/`. Commit those files so OpenAPI drift and regeneration safety work across machines.
+
+## Route Reference
+
+This example exercises `routa routes` with global middleware, group middleware, segment middleware, route-file middleware, and method middleware.
+
+```sh
+pnpm routes
+pnpm routes:json
+```
+
+Use the Markdown output for review and the JSON output for tooling checks. The reference includes resolved middleware order, provided `ctx.state` keys, declared inputs, response statuses, and middleware rejects.

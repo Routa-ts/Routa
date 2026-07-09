@@ -38,7 +38,13 @@ export type MiddlewareMetadata = {
 	requires: string[];
 	provides: string[];
 	providesTypes: Record<string, string>;
-	rejects: string[];
+	rejects: MiddlewareRejectMetadata[];
+};
+
+export type MiddlewareRejectMetadata = {
+	type: string;
+	status: number;
+	schema: string;
 };
 
 export type ProjectValidationResult = {
@@ -76,10 +82,12 @@ export function validateProject(cwd = process.cwd()): ProjectValidationResult {
 	const diagnostics = [
 		...projectStructureDiagnostics(cwd),
 		...discovery.diagnostics,
+		...runResultShapeDiagnostics(cwd),
 		...duplicateRouteDiagnostics(routes),
 		...missingSuccessResponseDiagnostics(routes),
 		...duplicateSchemaDiagnostics(cwd),
 		...middlewareOrderDiagnostics(routes),
+		...middlewareRejectStatusDiagnostics(routes),
 	];
 
 	if (diagnostics.length === 0) {
@@ -154,6 +162,44 @@ export function runProjectBuild(cwd = process.cwd()): {
 	}
 
 	return { code: 0, stdout: `Routa build passed for ${validation.routes.length} route file(s).\n` };
+}
+
+/**
+ * Prints a route reference from Routa's validated route metadata.
+ *
+ * @param argv - Command-line arguments for route reference formatting
+ * @param cwd - Project root directory
+ * @returns The formatted route reference or validation/argument diagnostics
+ */
+export function runProjectRoutes(
+	argv: readonly string[] = [],
+	cwd = process.cwd(),
+): { code: number; stdout?: string; stderr?: string } {
+	const format = routeReferenceFormat(argv);
+
+	if (!format) {
+		return {
+			code: 1,
+			stderr: "Invalid routes format. Use --format json or --format markdown.\n",
+		};
+	}
+
+	const validation = validateProject(cwd);
+
+	if (validation.diagnostics.length > 0) {
+		return {
+			code: 1,
+			stderr: formatDiagnostics(validation.diagnostics),
+		};
+	}
+
+	return {
+		code: 0,
+		stdout:
+			format === "json"
+				? `${JSON.stringify(routeReference(validation.routes), null, "\t")}\n`
+				: routeReferenceMarkdown(validation.routes),
+	};
 }
 
 /**
@@ -520,6 +566,184 @@ export function sourceSnapshotChanged(previous: SourceSnapshot, next: SourceSnap
 	return false;
 }
 
+type RouteReferenceFormat = "json" | "markdown";
+
+type RouteReference = {
+	routes: RouteReferenceRoute[];
+};
+
+type RouteReferenceRoute = {
+	path: string;
+	file: string;
+	groups: string[];
+	segments: string[];
+	methods: RouteReferenceMethod[];
+};
+
+type RouteReferenceMethod = {
+	method: string;
+	inputs: RouteMethodInputMetadata;
+	responses: number[];
+	ctx: string[];
+	rejects: MiddlewareRejectMetadata[];
+	middleware: Array<
+		Pick<MiddlewareMetadata, "file" | "name" | "requires" | "provides" | "rejects">
+	>;
+};
+
+/**
+ * Reads the requested route reference output format from CLI arguments.
+ *
+ * @param argv - Command-line arguments after `routes`
+ * @returns The requested format, or `undefined` when the format is invalid
+ */
+function routeReferenceFormat(argv: readonly string[]): RouteReferenceFormat | undefined {
+	const formatArg = argv.find((item) => item.startsWith("--format"));
+
+	if (!formatArg) {
+		return "markdown";
+	}
+
+	const value = formatArg.includes("=")
+		? formatArg.slice(formatArg.indexOf("=") + 1)
+		: argv[argv.indexOf(formatArg) + 1];
+
+	return value === "json" || value === "markdown" ? value : undefined;
+}
+
+/**
+ * Projects route metadata into a public route reference shape.
+ *
+ * @param routes - Validated route metadata
+ * @returns Route reference data suitable for JSON or Markdown rendering
+ */
+function routeReference(routes: readonly RouteMetadata[]): RouteReference {
+	return {
+		routes: [...routes]
+			.sort(
+				(left, right) => left.path.localeCompare(right.path) || left.file.localeCompare(right.file),
+			)
+			.map((route) => ({
+				path: route.path,
+				file: route.file,
+				groups: route.groups,
+				segments: route.segments,
+				methods: [...route.methods]
+					.sort((left, right) => left.localeCompare(right))
+					.map((method) => routeReferenceMethod(route, method)),
+			})),
+	};
+}
+
+/**
+ * Builds a method-level route reference entry.
+ *
+ * @param route - Route metadata that owns the method
+ * @param method - Uppercase HTTP method name
+ * @returns Method metadata with resolved middleware, context, rejects, inputs, and responses
+ */
+function routeReferenceMethod(route: RouteMetadata, method: string): RouteReferenceMethod {
+	const key = method.toLowerCase();
+	const middleware = route.methodMiddleware[key] ?? route.middleware;
+	const ctx = Array.from(new Set(middleware.flatMap((item) => item.provides))).sort();
+	const rejects = uniqueRejects(middleware.flatMap((item) => item.rejects));
+
+	return {
+		method,
+		inputs: route.inputs[key] ?? { params: false, query: false, body: false },
+		responses: [...(route.responses[key] ?? [])].sort((left, right) => left - right),
+		ctx,
+		rejects,
+		middleware: middleware.map((item) => ({
+			file: item.file,
+			name: item.name,
+			requires: item.requires,
+			provides: item.provides,
+			rejects: item.rejects,
+		})),
+	};
+}
+
+/**
+ * Renders validated route metadata as a Markdown route reference.
+ *
+ * @param routes - Validated route metadata
+ * @returns Markdown route reference
+ */
+function routeReferenceMarkdown(routes: readonly RouteMetadata[]): string {
+	const reference = routeReference(routes);
+	const lines = ["# Routa Route Reference", ""];
+
+	if (reference.routes.length === 0) {
+		lines.push("No routes found.", "");
+		return lines.join("\n");
+	}
+
+	for (const route of reference.routes) {
+		lines.push(`## ${route.path}`, "", `File: \`${route.file}\``);
+
+		if (route.groups.length > 0) {
+			lines.push(`Groups: ${route.groups.map((item) => `\`${item}\``).join(", ")}`);
+		}
+
+		if (route.segments.length > 0) {
+			lines.push(`Segments: ${route.segments.map((item) => `\`${item}\``).join(", ")}`);
+		}
+
+		lines.push("");
+
+		for (const method of route.methods) {
+			lines.push(
+				`### ${method.method}`,
+				"",
+				`Inputs: ${inputList(method.inputs).join(", ") || "none"}`,
+				`Responses: ${method.responses.join(", ") || "none"}`,
+				`Context: ${method.ctx.map((item) => `\`ctx.state.${item}\``).join(", ") || "none"}`,
+				`Rejects: ${method.rejects.map((item) => `\`${item.type}\` (${item.status})`).join(", ") || "none"}`,
+				"",
+				"Middleware:",
+			);
+
+			if (method.middleware.length === 0) {
+				lines.push("- none");
+			} else {
+				for (const middleware of method.middleware) {
+					lines.push(
+						`- \`${middleware.name}\` from \`${middleware.file}\``
+							+ `; requires: ${middleware.requires.join(", ") || "none"}`
+							+ `; provides: ${middleware.provides.join(", ") || "none"}`
+							+ `; rejects: ${middleware.rejects.map((item) => `${item.type}:${item.status}`).join(", ") || "none"}`,
+					);
+				}
+			}
+
+			lines.push("");
+		}
+	}
+
+	return `${lines.join("\n")}\n`;
+}
+
+/**
+ * Converts input metadata into a compact list of declared input locations.
+ *
+ * @param inputs - Route method input metadata
+ * @returns Declared input location names
+ */
+function inputList(inputs: RouteMethodInputMetadata): string[] {
+	return (["params", "query", "body"] as const).filter((key) => inputs[key]);
+}
+
+function uniqueRejects(rejects: readonly MiddlewareRejectMetadata[]): MiddlewareRejectMetadata[] {
+	const unique = new Map<string, MiddlewareRejectMetadata>();
+
+	for (const reject of rejects) {
+		unique.set(reject.type, reject);
+	}
+
+	return Array.from(unique.values()).sort((left, right) => left.type.localeCompare(right.type));
+}
+
 type RouteDiscovery = {
 	routes: RouteMetadata[];
 	diagnostics: Diagnostic[];
@@ -586,19 +810,15 @@ function discoverRoutes(cwd: string): RouteDiscovery {
 			});
 		}
 
-		diagnostics.push(
-			...middlewareRejectsDiagnostics(relativeFile, path, contract, {
-				middleware,
-				methodMiddleware,
-			}),
-		);
-
 		return {
 			file: relativeFile,
 			path,
 			methods: Object.keys(contract).map((method) => method.toUpperCase()),
 			responses: Object.fromEntries(
-				Object.entries(contract).map(([method, metadata]) => [method, metadata.responses]),
+				Object.entries(contract).map(([method, metadata]) => [
+					method,
+					methodResponseStatuses(metadata.responses, methodMiddleware[method] ?? middleware),
+				]),
 			),
 			inputs: Object.fromEntries(
 				Object.entries(contract).map(([method, metadata]) => [method, metadata.inputs]),
@@ -612,53 +832,6 @@ function discoverRoutes(cwd: string): RouteDiscovery {
 	});
 
 	return { routes, diagnostics };
-}
-
-/**
- * Reports middleware rejections that a route method does not declare as a response.
- *
- * A middleware rejection becomes the handler result at runtime, so its type key
- * must exist in the route's response map or the request fails with a 500.
- *
- * @param file - The route file for diagnostics
- * @param path - The resolved route path
- * @param contract - Parsed method contracts including declared response type keys
- * @param chains - The resolved route and per-method middleware chains
- * @returns Diagnostics for each undeclared middleware rejection
- */
-function middlewareRejectsDiagnostics(
-	file: string,
-	path: string,
-	contract: Record<string, { responseTypes: string[] }>,
-	chains: {
-		middleware: MiddlewareMetadata[];
-		methodMiddleware: Record<string, MiddlewareMetadata[]>;
-	},
-): Diagnostic[] {
-	const diagnostics: Diagnostic[] = [];
-
-	for (const [method, metadata] of Object.entries(contract)) {
-		const chain = chains.methodMiddleware[method] ?? chains.middleware;
-
-		for (const middleware of chain) {
-			for (const reject of middleware.rejects) {
-				if (metadata.responseTypes.includes(reject)) {
-					continue;
-				}
-
-				diagnostics.push({
-					code: "ROUTA_MIDDLEWARE_REJECTS_UNDECLARED",
-					severity: "error",
-					message: `${middleware.name} rejects "${reject}" but ${method.toUpperCase()} ${path} does not declare a "${reject}" response.`,
-					file,
-					routePath: path,
-					suggestion: `Add a "${reject}" entry to the ${method} responses map so the rejection has a declared status and schema.`,
-				});
-			}
-		}
-	}
-
-	return diagnostics;
 }
 
 /**
@@ -704,6 +877,18 @@ function parseRouteContract(
 	}
 
 	return contract;
+}
+
+function methodResponseStatuses(
+	routeStatuses: readonly number[],
+	middleware: readonly MiddlewareMetadata[],
+): number[] {
+	return Array.from(
+		new Set([
+			...routeStatuses,
+			...middleware.flatMap((item) => item.rejects.map((reject) => reject.status)),
+		]),
+	).sort((left, right) => left - right);
 }
 
 /**
@@ -796,6 +981,164 @@ function duplicateSchemaDiagnostics(cwd: string): Diagnostic[] {
 	}
 
 	return diagnostics;
+}
+
+function runResultShapeDiagnostics(cwd: string): Diagnostic[] {
+	const srcDir = join(cwd, "src");
+
+	if (!existsSync(srcDir)) {
+		return [];
+	}
+
+	return walk(srcDir)
+		.filter((file) => file.endsWith(".ts"))
+		.flatMap((file) => runResultShapeDiagnosticsForFile(cwd, relative(cwd, file), file));
+}
+
+function runResultShapeDiagnosticsForFile(
+	cwd: string,
+	relativeFile: string,
+	file: string,
+): Diagnostic[] {
+	const sourceFile = parseTypeScriptFile(file);
+	const diagnostics: Diagnostic[] = [];
+
+	function visit(node: ts.Node): void {
+		if (
+			ts.isCallExpression(node)
+			&& (callName(node.expression) === "createRoute"
+				|| callName(node.expression) === "createMiddleware")
+			&& ts.isObjectLiteralExpression(node.arguments[0])
+		) {
+			const contract = node.arguments[0];
+			const run = objectProperty(contract, "run");
+			const resultTypes =
+				callName(node.expression) === "createRoute"
+					? contractObjectKeys(contract, "responses")
+					: contractObjectKeys(contract, "rejects");
+
+			if (run) {
+				diagnostics.push(
+					...runReturnObjectDiagnostics(
+						cwd,
+						sourceFile,
+						relativeFile,
+						run.initializer,
+						resultTypes,
+					),
+				);
+			}
+		}
+
+		ts.forEachChild(node, visit);
+	}
+
+	visit(sourceFile);
+	return diagnostics;
+}
+
+function runReturnObjectDiagnostics(
+	cwd: string,
+	sourceFile: ts.SourceFile,
+	file: string,
+	run: ts.Expression,
+	resultTypes: Set<string> | undefined,
+): Diagnostic[] {
+	const diagnostics: Diagnostic[] = [];
+
+	function checkReturn(expression: ts.Expression): void {
+		const object = objectLiteral(expression);
+
+		if (!object) {
+			return;
+		}
+
+		for (const property of objectProperties(object)) {
+			const name = propertyName(property.name);
+
+			if (!name || name === "type" || name === "data") {
+				continue;
+			}
+
+			const position = sourceFile.getLineAndCharacterOfPosition(property.name.getStart(sourceFile));
+			diagnostics.push({
+				code: "ROUTA_RESULT_SHAPE",
+				severity: "error",
+				message: `Run result includes unsupported field "${name}". Route and middleware results may only include "type" and "data".`,
+				file: `${file}:${position.line + 1}:${position.character + 1}`,
+				suggestion: `Remove "${name}" from the returned result object.`,
+			});
+		}
+
+		const typeProperty = objectProperty(object, "type");
+		const typeExpression = typeProperty ? unwrapExpression(typeProperty.initializer) : undefined;
+
+		if (
+			resultTypes
+			&& typeProperty
+			&& typeExpression
+			&& ts.isStringLiteralLike(typeExpression)
+			&& !resultTypes.has(typeExpression.text)
+		) {
+			const position = sourceFile.getLineAndCharacterOfPosition(
+				typeProperty.initializer.getStart(sourceFile),
+			);
+			const options = [...resultTypes].map((type) => `"${type}"`).join(", ");
+			diagnostics.push({
+				code: "ROUTA_RESULT_TYPE",
+				severity: "error",
+				message: `Run result type "${typeExpression.text}" is not declared.`,
+				file: `${file}:${position.line + 1}:${position.character + 1}`,
+				suggestion: options
+					? `Use one of the declared result types: ${options}.`
+					: "Declare this result type before returning it.",
+			});
+		}
+	}
+
+	function visit(node: ts.Node): void {
+		if (ts.isReturnStatement(node) && node.expression) {
+			checkReturn(node.expression);
+		}
+
+		if (
+			(ts.isArrowFunction(run) || ts.isFunctionExpression(run))
+			&& run.body === node
+			&& ts.isExpression(node)
+		) {
+			checkReturn(node);
+		}
+
+		ts.forEachChild(node, visit);
+	}
+
+	if (ts.isArrowFunction(run) || ts.isFunctionExpression(run)) {
+		visit(run.body);
+	}
+
+	return diagnostics.map((diagnostic) => ({
+		...diagnostic,
+		file: diagnostic.file?.startsWith(cwd) ? relative(cwd, diagnostic.file) : diagnostic.file,
+	}));
+}
+
+function contractObjectKeys(
+	contract: ts.ObjectLiteralExpression,
+	name: string,
+): Set<string> | undefined {
+	const property = objectProperty(contract, name);
+	const object = objectLiteral(property?.initializer);
+
+	if (!object) {
+		return;
+	}
+
+	return new Set(
+		objectProperties(object).flatMap((item) => {
+			const key = propertyName(item.name);
+			return key ? [key] : [];
+		}),
+	);
 }
 
 /**
@@ -1187,8 +1530,42 @@ function middlewareMetadata(
 				provides.types[provided] ?? inferred[provided] ?? "unknown",
 			]),
 		),
-		rejects: stringArrayProperty(contract, "rejects"),
+		rejects: middlewareRejects(contract),
 	};
+}
+
+function middlewareRejects(contract: ts.ObjectLiteralExpression): MiddlewareRejectMetadata[] {
+	const item = objectProperty(contract, "rejects");
+	const rejects = item ? objectLiteral(item.initializer) : undefined;
+
+	if (!rejects) {
+		return [];
+	}
+
+	return objectProperties(rejects).flatMap((property) => {
+		const type = propertyName(property.name);
+		const reject = objectLiteral(property.initializer);
+
+		if (!type || !reject) {
+			return [];
+		}
+
+		const statusProperty = objectProperty(reject, "status");
+		const schemaProperty = objectProperty(reject, "schema");
+		const status = statusProperty ? numericValue(statusProperty.initializer) : undefined;
+
+		if (status === undefined || !schemaProperty) {
+			return [];
+		}
+
+		return [
+			{
+				type,
+				status,
+				schema: schemaProperty.initializer.getText(),
+			},
+		];
+	});
 }
 
 /**
@@ -2005,6 +2382,34 @@ function middlewareOrderDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 				for (const providedField of middleware.provides) {
 					provided.add(providedField);
 				}
+			}
+		}
+	}
+
+	return diagnostics;
+}
+
+function middlewareRejectStatusDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
+	const diagnostics: Diagnostic[] = [];
+
+	for (const route of routes) {
+		for (const middleware of [
+			...route.middleware,
+			...Object.values(route.methodMiddleware).flat(),
+		]) {
+			for (const reject of middleware.rejects) {
+				if (reject.status >= 400 && reject.status <= 599) {
+					continue;
+				}
+
+				diagnostics.push({
+					code: "ROUTA_MIDDLEWARE_REJECT_STATUS",
+					severity: "error",
+					message: `${middleware.name} reject "${reject.type}" uses non-error status ${reject.status}.`,
+					file: middleware.file,
+					routePath: route.path,
+					suggestion: "Middleware rejects must use a 4xx or 5xx HTTP status.",
+				});
 			}
 		}
 	}

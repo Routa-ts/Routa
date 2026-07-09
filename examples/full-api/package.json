@@ -10,7 +10,9 @@
 		"lint": "biome check .",
 		"format": "biome check --write .",
 		"scaffold": "routa scaffold openapi.yaml",
-		"openapi:check": "routa openapi check"
+		"openapi:check": "routa openapi check",
+		"routes": "routa routes",
+		"routes:json": "routa routes --format json"
 	},
 	"dependencies": {
 		"@routa-ts/cli": "workspace:*",

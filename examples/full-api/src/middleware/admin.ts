@@ -8,13 +8,33 @@ export const withAdmin = createMiddleware({
 			role: z.enum(["owner"]),
 		}),
 	},
+	rejects: {
+		unauthorized: {
+			status: 401,
+			schema: z.object({ message: z.string() }),
+		},
+		forbidden: {
+			status: 403,
+			schema: z.object({ message: z.string() }),
+		},
+	},
 	run: async ({ ctx, next }) => {
 		if (!ctx.session.authenticated) {
-			throw new Response("Authentication required", { status: 401 });
+			return {
+				type: "unauthorized",
+				data: {
+					message: "Authentication required",
+				},
+			};
 		}
 
 		if (ctx.session.userId !== "admin") {
-			throw new Response("Admin access required", { status: 403 });
+			return {
+				type: "forbidden",
+				data: {
+					message: "Admin access required",
+				},
+			};
 		}
 
 		return next({

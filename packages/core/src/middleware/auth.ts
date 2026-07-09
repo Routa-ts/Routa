@@ -14,7 +14,12 @@ export function requireAuth() {
 				userId: z.string(),
 			}),
 		},
-		rejects: ["unauthorized"],
+		rejects: {
+			unauthorized: {
+				status: 401,
+				schema: z.object({ message: z.string() }),
+			},
+		},
 		run: ({ ctx, next }) => {
 			const session = ctx.session as { authenticated?: boolean; userId?: string };
 

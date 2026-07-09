@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { isBodylessStatus } from "@routa-ts/core/hono";
 import ts from "typescript";
-import { validateProject } from "./project.js";
+import { type MiddlewareMetadata, validateProject } from "./project.js";
 
 type OpenApiLike = {
 	openapi?: string;
@@ -136,16 +136,20 @@ export function generateOpenApi(cwd = process.cwd()): OpenApiLike {
 				const baselineOperation = baseline?.paths?.[openApiPath]?.[method];
 				const input = operationInput(route.path, contracts[method]?.input, baselineOperation);
 
+				const responseSchemas = new Map([
+					...middlewareRejectSchemas(
+						route.methodMiddleware[method] ?? route.middleware,
+						components?.schemas ?? {},
+					),
+					...(contracts[method]?.responses ?? new Map()),
+				]);
+
 				return [
 					method,
 					{
 						...operationMetadataForBaseline(baselineOperation),
 						...input,
-						responses: operationResponses(
-							statuses,
-							contracts[method]?.responses,
-							baselineOperation,
-						),
+						responses: operationResponses(statuses, responseSchemas, baselineOperation),
 					},
 				];
 			}),
@@ -339,6 +343,39 @@ function readRouteContracts(
 	}
 
 	return contracts;
+}
+
+function middlewareRejectSchemas(
+	middleware: readonly MiddlewareMetadata[],
+	components: Record<string, unknown>,
+): Map<number, unknown> {
+	const schemas = new Map<number, unknown>();
+
+	for (const item of middleware) {
+		for (const reject of item.rejects) {
+			schemas.set(reject.status, schemaFromExpressionText(reject.schema, components));
+		}
+	}
+
+	return schemas;
+}
+
+function schemaFromExpressionText(
+	expressionText: string,
+	components: Record<string, unknown>,
+): unknown {
+	const source = ts.createSourceFile(
+		"middleware-reject.ts",
+		`const schema = ${expressionText};`,
+		ts.ScriptTarget.Latest,
+		true,
+	);
+	const declaration = source.statements.find(ts.isVariableStatement)?.declarationList
+		.declarations[0];
+
+	return declaration?.initializer
+		? new SchemaReader("", components).expressionSchema(declaration.initializer)
+		: {};
 }
 
 class SchemaReader {

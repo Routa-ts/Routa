@@ -10,6 +10,7 @@ import {
 	runProjectCheck,
 	runProjectDev,
 	runProjectDevProcess,
+	runProjectRoutes,
 	runProjectStart,
 } from "./project.js";
 import type { ScaffoldPreviewChange } from "./scaffold.js";
@@ -32,6 +33,7 @@ ${ui.muted("Usage:")}
   ${ui.command("routa start")}
   ${ui.command("routa check")}
   ${ui.command("routa build")}
+  ${ui.command("routa routes [--format json|markdown]")}
   ${ui.command("routa openapi check")}
   ${ui.command("routa openapi breaking [--update-baseline]")}
 `;
@@ -90,6 +92,10 @@ export function run(argv: readonly string[], options: RunOptions = {}): CommandR
 
 	if (command === "build") {
 		return runProjectBuild(cwd);
+	}
+
+	if (command === "routes") {
+		return runProjectRoutes(argv.slice(1), cwd);
 	}
 
 	if (command === "dev") {

@@ -11,7 +11,9 @@ export const routaRoutes = [
 		],
 		"responses": {
 			"get": [
-				200
+				200,
+				401,
+				403
 			]
 		},
 		"inputs": {
@@ -60,7 +62,18 @@ export const routaRoutes = [
 				"providesTypes": {
 					"admin": "{\n\treadonly \"role\": \"owner\";\n}"
 				},
-				"rejects": []
+				"rejects": [
+					{
+						"type": "unauthorized",
+						"status": 401,
+						"schema": "z.object({ message: z.string() })"
+					},
+					{
+						"type": "forbidden",
+						"status": 403,
+						"schema": "z.object({ message: z.string() })"
+					}
+				]
 			}
 		],
 		"methodMiddleware": {
@@ -103,7 +116,18 @@ export const routaRoutes = [
 					"providesTypes": {
 						"admin": "{\n\treadonly \"role\": \"owner\";\n}"
 					},
-					"rejects": []
+					"rejects": [
+						{
+							"type": "unauthorized",
+							"status": 401,
+							"schema": "z.object({ message: z.string() })"
+						},
+						{
+							"type": "forbidden",
+							"status": 403,
+							"schema": "z.object({ message: z.string() })"
+						}
+					]
 				}
 			]
 		},

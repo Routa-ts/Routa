@@ -134,7 +134,12 @@ describe("createHonoApp", () => {
 
 	it("stops the request when middleware returns a rejection response", async () => {
 		const requireAuth = createMiddleware({
-			rejects: ["unauthorized"],
+			rejects: {
+				unauthorized: {
+					status: 401,
+					schema: z.object({ message: z.string() }),
+				},
+			},
 			run: () => ({ type: "unauthorized", data: { message: "No token" } }),
 		});
 		const app = createHonoApp([
@@ -147,10 +152,6 @@ describe("createHonoApp", () => {
 						success: {
 							status: 200,
 							schema: z.object({ id: z.string() }),
-						},
-						unauthorized: {
-							status: 401,
-							schema: z.object({ message: z.string() }),
 						},
 					},
 					run: () => ({ type: "success", data: { id: "user_1" } }),

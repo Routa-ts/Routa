@@ -379,7 +379,7 @@ function validateResult(
 		throw new InvalidHandlerOutputError("Handler returned invalid output.");
 	}
 
-	const response = contract.responses[result.type];
+	const response = contract.responses[result.type] ?? middlewareResponses(contract)[result.type];
 
 	if (!response) {
 		throw new InvalidHandlerOutputError(`Handler returned unknown response type "${result.type}".`);
@@ -400,6 +400,12 @@ function validateResult(
 
 		throw error;
 	}
+}
+
+function middlewareResponses(
+	contract: RuntimeRouteContract,
+): Record<string, { status: number; schema: z.ZodTypeAny }> {
+	return Object.assign({}, ...(contract.middleware ?? []).map((item) => item.rejects ?? {}));
 }
 
 /**

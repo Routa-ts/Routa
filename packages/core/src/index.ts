@@ -29,6 +29,30 @@ export type RouteResponses = Record<
 		schema: z.ZodTypeAny;
 	}
 >;
+export type MiddlewareRejectsSpec = RouteResponses;
+
+type MaybePromise<T> = T | Promise<T>;
+
+export type RoutaResult<TResponses extends RouteResponses> = {
+	[K in keyof TResponses & string]: {
+		readonly type: K;
+		readonly data: SchemaOutput<TResponses[K]["schema"]>;
+	};
+}[keyof TResponses & string];
+
+export type RouteRunResult<TResponses extends RouteResponses> = RoutaResult<TResponses>;
+
+type WidenedRouteRunResult<TResponses extends RouteResponses> = {
+	readonly type: string;
+	readonly data: SchemaOutput<TResponses[keyof TResponses & string]["schema"]>;
+};
+
+type RouteRunReturn<TResponses extends RouteResponses> =
+	| RouteRunResult<TResponses>
+	| WidenedRouteRunResult<TResponses>;
+
+export type MiddlewareRejectResult<TRejects extends MiddlewareRejectsSpec> =
+	keyof TRejects extends never ? never : RoutaResult<TRejects>;
 
 export type MiddlewareProvidesSpec = Record<string, z.ZodTypeAny>;
 
@@ -39,47 +63,44 @@ export type MiddlewareProvidedCtx<TProvides extends MiddlewareProvidesSpec> = {
 	[K in keyof TProvides]: SchemaOutput<TProvides[K]>;
 };
 
+export type MiddlewareNext<
+	TProvides extends MiddlewareProvidesSpec,
+	TRejects extends MiddlewareRejectsSpec,
+> = keyof TProvides extends never
+	? (ctx?: MiddlewareProvidedCtx<TProvides>) => Promise<MiddlewareRejectResult<TRejects>>
+	: (ctx: MiddlewareProvidedCtx<TProvides>) => Promise<MiddlewareRejectResult<TRejects>>;
+
+export type MiddlewareRunArgs<
+	TRequires extends readonly RegisteredCtxKey[],
+	TProvides extends MiddlewareProvidesSpec,
+	TRejects extends MiddlewareRejectsSpec,
+	TInput extends RouteInput | undefined,
+> = {
+	input: InferInput<TInput>;
+	ctx: RequiredMiddlewareCtx<TRequires>;
+	next: MiddlewareNext<TProvides, TRejects>;
+};
+
+export type MiddlewareRun<
+	TRequires extends readonly RegisteredCtxKey[],
+	TProvides extends MiddlewareProvidesSpec,
+	TRejects extends MiddlewareRejectsSpec,
+	TInput extends RouteInput | undefined,
+> = (
+	args: MiddlewareRunArgs<TRequires, TProvides, TRejects, TInput>,
+) => MaybePromise<MiddlewareRejectResult<NoInfer<TRejects>>>;
+
 export type MiddlewareContract<
 	TRequires extends readonly RegisteredCtxKey[] = readonly RegisteredCtxKey[],
 	TProvides extends MiddlewareProvidesSpec = Record<never, never>,
-	TRejects extends readonly string[] = readonly never[],
+	TRejects extends MiddlewareRejectsSpec = Record<never, never>,
 	TInput extends RouteInput | undefined = RouteInput | undefined,
 > = {
 	requires?: TRequires;
 	provides?: TProvides;
 	rejects?: TRejects;
 	input?: TInput;
-	run?: (args: {
-		input: InferInput<TInput>;
-		ctx: RequiredMiddlewareCtx<TRequires>;
-		next: keyof TProvides extends never
-			? (ctx?: MiddlewareProvidedCtx<TProvides>) => Promise<
-					| {
-							type: TRejects[number];
-							data: unknown;
-					  }
-					| unknown
-				>
-			: (ctx: MiddlewareProvidedCtx<TProvides>) => Promise<
-					| {
-							type: TRejects[number];
-							data: unknown;
-					  }
-					| unknown
-				>;
-	}) =>
-		| Promise<
-				| {
-						type: TRejects[number];
-						data: unknown;
-				  }
-				| unknown
-		  >
-		| {
-				type: TRejects[number];
-				data: unknown;
-		  }
-		| unknown;
+	run?: MiddlewareRun<TRequires, TProvides, TRejects, TInput>;
 };
 
 export type AnyMiddlewareContract = Omit<MiddlewareContract<any, any, any, any>, "run"> & {
@@ -122,17 +143,18 @@ export type InferInput<TInput extends RouteInput | undefined> = {
 	[K in keyof NonNullable<TInput>]: SchemaOutput<NonNullable<TInput>[K]>;
 };
 
-export type InferResponse<TResponses extends RouteResponses> = {
-	[K in keyof TResponses]: {
-		type: K;
-		data: SchemaOutput<TResponses[K]["schema"]>;
-	};
-}[keyof TResponses];
+export type InferResponse<TResponses extends RouteResponses> = RouteRunResult<TResponses>;
 
 export type RouteHandlerArgs<TInput extends RouteInput | undefined, TCtx> = {
 	input: InferInput<TInput>;
 	ctx: TCtx;
 };
+
+export type RouteRun<
+	TInput extends RouteInput | undefined,
+	TResponses extends RouteResponses,
+	TCtx,
+> = (args: RouteHandlerArgs<TInput, TCtx>) => MaybePromise<RouteRunReturn<NoInfer<TResponses>>>;
 
 export type RouteContract<
 	TInput extends RouteInput | undefined,
@@ -143,9 +165,7 @@ export type RouteContract<
 	input?: TInput;
 	responses: TResponses;
 	middleware?: TMiddleware;
-	run: (
-		args: RouteHandlerArgs<TInput, TCtx>,
-	) => InferResponse<TResponses> | Promise<InferResponse<TResponses>>;
+	run: RouteRun<TInput, TResponses, TCtx>;
 };
 
 export type AnyRouteContract = {
@@ -274,7 +294,7 @@ export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPa
 export function createMiddleware<
 	const TRequires extends readonly RegisteredCtxKey[] = readonly RegisteredCtxKey[],
 	const TProvides extends MiddlewareProvidesSpec = Record<never, never>,
-	const TRejects extends readonly string[] = readonly never[],
+	const TRejects extends MiddlewareRejectsSpec = Record<never, never>,
 	const TInput extends RouteInput | undefined = undefined,
 >(
 	contract: MiddlewareContract<TRequires, TProvides, TRejects, TInput>,

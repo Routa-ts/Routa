@@ -45,6 +45,49 @@ describe("route contracts", () => {
 
 		expect(app.port).toBe(3001);
 	});
+
+	it("typechecks middleware rejection tags and data", () => {
+		createMiddleware({
+			rejects: {
+				unauthorized: {
+					status: 401,
+					schema: z.object({ message: z.string() }),
+				},
+			},
+			run: () => ({
+				type: "unauthorized",
+				data: { message: "No token" },
+			}),
+		});
+
+		createMiddleware({
+			rejects: {
+				unauthorized: {
+					status: 401,
+					schema: z.object({ message: z.string() }),
+				},
+			},
+			run: () => ({
+				// @ts-expect-error Middleware may only return declared reject types.
+				type: "notDeclared",
+				data: { message: "No token" },
+			}),
+		});
+
+		createMiddleware({
+			rejects: {
+				unauthorized: {
+					status: 401,
+					schema: z.object({ message: z.string() }),
+				},
+			},
+			run: () => ({
+				type: "unauthorized",
+				// @ts-expect-error Reject data must match the selected reject schema.
+				data: { message: 401 },
+			}),
+		});
+	});
 });
 
 function expectType<T>(_value: T): void {}
