@@ -405,9 +405,8 @@ code,
 	*,
 	*::before,
 	*::after {
-		animation-duration: 0.01ms !important;
-		animation-iteration-count: 1 !important;
-		transition-duration: 0.01ms !important;
+		animation: none;
+		transition: none;
 	}
 }
 
@@ -511,7 +510,11 @@ code,
 	position: absolute;
 	inset: 0;
 	background:
-		radial-gradient(ellipse 70% 50% at 85% 20%, color-mix(in oklab, var(--edge) 16%, transparent), transparent 60%),
+		radial-gradient(
+			ellipse 70% 50% at 85% 20%,
+			color-mix(in oklab, var(--edge) 16%, transparent),
+			transparent 60%
+		),
 		linear-gradient(180deg, transparent 60%, var(--bg)),
 		repeating-linear-gradient(
 			90deg,
@@ -622,8 +625,16 @@ code,
 	position: absolute;
 	inset: 0;
 	background:
-		radial-gradient(circle at 20% 80%, color-mix(in oklab, var(--edge) 12%, transparent), transparent 45%),
-		radial-gradient(circle at 80% 30%, color-mix(in oklab, var(--node) 8%, transparent), transparent 40%);
+		radial-gradient(
+			circle at 20% 80%,
+			color-mix(in oklab, var(--edge) 12%, transparent),
+			transparent 45%
+		),
+		radial-gradient(
+			circle at 80% 30%,
+			color-mix(in oklab, var(--node) 8%, transparent),
+			transparent 40%
+		);
 	pointer-events: none;
 }
 
@@ -1111,7 +1122,12 @@ code,
 	flex-direction: column;
 	gap: 1.15rem;
 	padding: 1.5rem 0 0;
-	background: linear-gradient(180deg, transparent, color-mix(in oklab, var(--bg) 92%, transparent) 18%, var(--bg));
+	background: linear-gradient(
+		180deg,
+		transparent,
+		color-mix(in oklab, var(--bg) 92%, transparent) 18%,
+		var(--bg)
+	);
 }
 
 .lp-schematic .compare {

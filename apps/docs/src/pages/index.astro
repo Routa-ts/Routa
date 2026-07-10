@@ -9,20 +9,20 @@ import "../styles/landing.css";
 <!doctype html>
 <html lang="en">
 	<head>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<title>Routa — Schema-first REST for TypeScript</title>
 		<meta
 			name="description"
 			content="Filesystem routes with Zod contracts and OpenAPI in lockstep. Schema-first REST for new TypeScript APIs."
-		/>
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="preconnect" href="https://fonts.googleapis.com" />
-		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		>
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 		<link
 			href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
 			rel="stylesheet"
-		/>
+		>
 	</head>
 	<body>
 		<a class="skip" href="#main">Skip to content</a>
@@ -56,15 +56,14 @@ import "../styles/landing.css";
 
 				<div class="hero-copy">
 					<div class="brand-mark">
-						<img src="/favicon.svg" alt="" width="40" height="40" />
+						<img src="/favicon.svg" alt="" width="40" height="40">
 						Routa
 						<span class="dot" aria-hidden="true"></span>
 					</div>
 					<h1 class="headline">Filesystem routes with contracts, not vibes</h1>
 					<p class="lede">
-						A schematic of the API: routes as edges, schemas as nodes, OpenAPI as
-						projection. Schema-first REST for TypeScript — Zod contracts on a Hono
-						runtime.
+						A schematic of the API: routes as edges, schemas as nodes, OpenAPI as projection.
+						Schema-first REST for TypeScript — Zod contracts on a Hono runtime.
 					</p>
 					<div class="cta-row">
 						<a class="btn btn-primary" href="/docs/">Get started</a>
@@ -82,15 +81,16 @@ import "../styles/landing.css";
 					<p class="section-kicker">Side by side</p>
 					<h2 class="section-title">Untyped handler vs contracted route</h2>
 					<p class="section-lede">
-						Same job. One hopes the status codes match the docs. The other declares the
-						contract in source.
+						Same job. One hopes the status codes match the docs. The other declares the contract in
+						source.
 					</p>
 					<div class="compare">
 						<div class="code-panel">
 							<div class="code-panel__bar">
 								<span>without Routa</span><span>vibes</span>
 							</div>
-							<pre><code>app.post(<span class="str">"/users"</span>, <span class="kw">async</span> (c) => {"{"}
+							<pre
+							><code>app.post(<span class="str">"/users"</span>, <span class="kw">async</span> (c) => {"{"}
   <span class="kw">const</span> body = <span class="kw">await</span> c.req.json();
   <span class="cm">// validate… somewhere?</span>
   <span class="kw">const</span> user = <span class="kw">await</span> create(body);
@@ -101,7 +101,8 @@ import "../styles/landing.css";
 							<div class="code-panel__bar">
 								<span>with Routa</span><span>contract</span>
 							</div>
-							<pre><code><span class="kw">export default</span> <span class="fn">defineRoute</span>({"{"}
+							<pre
+							><code><span class="kw">export default</span> <span class="fn">defineRoute</span>({"{"}
   post: <span class="fn">createRoute</span>({"{"}
     input: {"{"} body: CreateUserSchema {"}"},
     responses: {"{"}
@@ -138,8 +139,8 @@ import "../styles/landing.css";
 						<li>TypeScript</li>
 					</ul>
 					<p class="v0-note">
-						<strong>v0</strong> — intentionally narrow. Schema-first REST, not a fullstack
-						meta-framework.
+						<strong>v0</strong>
+						— intentionally narrow. Schema-first REST, not a fullstack meta-framework.
 					</p>
 				</div>
 			</section>
@@ -158,22 +159,22 @@ import "../styles/landing.css";
 			</section>
 		</main>
 		<script>
-			document.querySelectorAll(".cli[data-cmd]").forEach((el) => {
-				const btn = el.querySelector("button");
-				const cmd = el.getAttribute("data-cmd");
-				btn?.addEventListener("click", async () => {
-					if (!cmd) return;
-					try {
-						await navigator.clipboard.writeText(cmd);
-						btn.textContent = "Copied";
-						setTimeout(() => {
-							btn.textContent = "Copy";
-						}, 1400);
-					} catch {
-						btn.textContent = "Fail";
-					}
-				});
+		document.querySelectorAll(".cli[data-cmd]").forEach((el) => {
+			const btn = el.querySelector("button");
+			const cmd = el.getAttribute("data-cmd");
+			btn?.addEventListener("click", async () => {
+				if (!cmd) return;
+				try {
+					await navigator.clipboard.writeText(cmd);
+					btn.textContent = "Copied";
+					setTimeout(() => {
+						btn.textContent = "Copy";
+					}, 1400);
+				} catch {
+					btn.textContent = "Fail";
+				}
 			});
+		});
 		</script>
 	</body>
 </html>

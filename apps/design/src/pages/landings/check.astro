@@ -12,15 +12,16 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 			<div class="hero-inner">
 				<div class="hero-copy">
 					<div class="brand-mark">
-						<img src="/favicon.svg" alt="" width="40" height="40" />
+						<img src="/favicon.svg" alt="" width="40" height="40">
 						Routa
 						<span class="dot" aria-hidden="true"></span>
 					</div>
 					<h1 class="headline">Check the API before you ship it</h1>
 					<p class="lede">
-						Contracts drift. Specs lie. <code class="mono">routa check</code> fails loud,
-						then passes clean — so <code class="mono">build</code> and
-						<code class="mono">start</code> mean something.
+						Contracts drift. Specs lie. <code class="mono">routa check</code> fails loud, then
+						passes clean — so <code class="mono">build</code> and
+						<code class="mono">start</code>
+						mean something.
 					</p>
 					<div class="cta-row">
 						<a class="btn btn-primary" href="https://routa-ts.dev/docs/">Get started</a>
@@ -37,10 +38,12 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 						<span></span><span></span><span></span>
 					</div>
 					<div class="terminal__body">
-						<div class="line"><span class="prompt">$</span> <span class="cmd">routa check</span></div>
+						<div class="line">
+							<span class="prompt">$</span> <span class="cmd">routa check</span>
+						</div>
 						<div class="line fail">✗ OpenAPI drift · POST /users responses.success</div>
-						<div class="line dim">  source schema ≠ openapi.yaml#/paths/~1users/post</div>
-						<div class="line dim">  exit 1</div>
+						<div class="line dim">source schema ≠ openapi.yaml#/paths/~1users/post</div>
+						<div class="line dim">exit 1</div>
 						<div class="line" style="margin-top: 0.85rem">
 							<span class="prompt">$</span> <span class="cmd">routa check</span>
 							<span class="dim"> · after fix</span>
@@ -58,8 +61,8 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 				<p class="section-kicker">Lifecycle</p>
 				<h2 class="section-title">check → build → start</h2>
 				<p class="section-lede">
-					The CLI is part of the product story — not an afterthought. Validate the lattice,
-					generate what you need, then run on Hono.
+					The CLI is part of the product story — not an afterthought. Validate the lattice, generate
+					what you need, then run on Hono.
 				</p>
 				<div class="lifecycle">
 					<div>
@@ -120,4 +123,3 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 		</section>
 	</main>
 </LandingLayout>
-

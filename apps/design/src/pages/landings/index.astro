@@ -43,19 +43,18 @@ const options = [
 	<main id="main" class="hub">
 		<div class="hub-inner">
 			<div class="brand-mark">
-				<img src="/favicon.svg" alt="" width="36" height="36" />
+				<img src="/favicon.svg" alt="" width="36" height="36">
 				Routa
 				<span class="dot" aria-hidden="true"></span>
 			</div>
 			<h1>Five landing compositions</h1>
 			<p>
-				Same Lattice system (teal / graphite / Space Grotesk + Space Mono). Different
-				metaphor and first-viewport composition each. Pick a winner before shipping to
+				Same Lattice system (teal / graphite / Space Grotesk + Space Mono). Different metaphor and
+				first-viewport composition each. Pick a winner before shipping to
 				<code class="mono" style="color: var(--node)">apps/docs</code>.
 			</p>
 			<ol class="hub-list">
-				{
-					options.map((o) => (
+				{options.map((o) => (
 						<li>
 							<a href={`/landings/${o.slug}/`}>
 								<span class="idx">{o.idx}</span>
@@ -66,14 +65,13 @@ const options = [
 								<span class="go">Open →</span>
 							</a>
 						</li>
-					))
-				}
+					))}
 			</ol>
 			<p class="v0-note" style="margin-top: 2rem">
-				<strong>v0</strong> · Review only · Not production ·
+				<strong>v0</strong>
+				· Review only · Not production ·
 				<a href="/" style="color: var(--node)">Design lab home</a>
 			</p>
 		</div>
 	</main>
 </LandingLayout>
-

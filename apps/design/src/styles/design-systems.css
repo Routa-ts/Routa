@@ -129,7 +129,11 @@ html[data-theme="light"]:has(.ds-compass) {
 .ds-compass .ds-mark {
 	border-color: color-mix(in oklab, var(--sl-color-accent) 35%, transparent);
 	background:
-		radial-gradient(circle at 0% 0%, color-mix(in oklab, var(--sl-color-accent) 18%, transparent), transparent 55%),
+		radial-gradient(
+			circle at 0% 0%,
+			color-mix(in oklab, var(--sl-color-accent) 18%, transparent),
+			transparent 55%
+		),
 		var(--sl-color-bg-nav);
 }
 
@@ -298,7 +302,11 @@ html[data-theme="light"]:has(.ds-atlas) {
 .ds-atlas .ds-mark {
 	border-radius: 1.25rem;
 	background:
-		linear-gradient(135deg, color-mix(in oklab, var(--sl-color-accent) 12%, transparent), transparent 60%),
+		linear-gradient(
+			135deg,
+			color-mix(in oklab, var(--sl-color-accent) 12%, transparent),
+			transparent 60%
+		),
 		var(--sl-color-bg-nav);
 }
 
@@ -349,8 +357,15 @@ html[data-theme="light"]:has(.ds-lattice) {
 	border-radius: 0;
 	border-width: 2px;
 	background-image:
-		linear-gradient(color-mix(in oklab, var(--sl-color-accent) 18%, transparent) 1px, transparent 1px),
-		linear-gradient(90deg, color-mix(in oklab, var(--sl-color-accent) 18%, transparent) 1px, transparent 1px);
+		linear-gradient(
+			color-mix(in oklab, var(--sl-color-accent) 18%, transparent) 1px,
+			transparent 1px
+		),
+		linear-gradient(
+			90deg,
+			color-mix(in oklab, var(--sl-color-accent) 18%, transparent) 1px,
+			transparent 1px
+		);
 	background-size: 12px 12px;
 	background-color: var(--sl-color-bg-nav);
 }

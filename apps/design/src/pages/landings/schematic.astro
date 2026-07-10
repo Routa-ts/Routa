@@ -9,7 +9,12 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 >
 	<main id="main" class="lp-schematic">
 		<section class="hero" aria-label="Hero">
-			<svg class="map" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+			<svg
+				class="map"
+				viewBox="0 0 1200 700"
+				preserveAspectRatio="xMidYMid slice"
+				aria-hidden="true"
+			>
 				<path class="edge" d="M180 420 L420 280 L660 360" />
 				<path class="edge" d="M420 280 L520 140 L780 180" />
 				<path class="edge" d="M660 360 L820 480 L980 320" />
@@ -32,14 +37,14 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 
 			<div class="hero-copy">
 				<div class="brand-mark">
-					<img src="/favicon.svg" alt="" width="40" height="40" />
+					<img src="/favicon.svg" alt="" width="40" height="40">
 					Routa
 					<span class="dot" aria-hidden="true"></span>
 				</div>
 				<h1 class="headline">Filesystem routes with contracts, not vibes</h1>
 				<p class="lede">
-					A schematic of the API: routes as edges, schemas as nodes, OpenAPI as projection.
-					Category claim first — then the proof below.
+					A schematic of the API: routes as edges, schemas as nodes, OpenAPI as projection. Category
+					claim first — then the proof below.
 				</p>
 				<div class="cta-row">
 					<a class="btn btn-primary" href="https://routa-ts.dev/docs/">Get started</a>
@@ -57,13 +62,14 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 				<p class="section-kicker">Side by side</p>
 				<h2 class="section-title">Untyped handler vs contracted route</h2>
 				<p class="section-lede">
-					Same job. One hopes the status codes match the docs. The other declares the
-					contract in source.
+					Same job. One hopes the status codes match the docs. The other declares the contract in
+					source.
 				</p>
 				<div class="compare">
 					<div class="code-panel">
 						<div class="code-panel__bar"><span>without Routa</span><span>vibes</span></div>
-						<pre><code>app.post(<span class="str">"/users"</span>, <span class="kw">async</span> (c) => {"{"}
+						<pre
+						><code>app.post(<span class="str">"/users"</span>, <span class="kw">async</span> (c) => {"{"}
   <span class="kw">const</span> body = <span class="kw">await</span> c.req.json();
   <span class="cm">// validate… somewhere?</span>
   <span class="kw">const</span> user = <span class="kw">await</span> create(body);
@@ -72,7 +78,8 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 					</div>
 					<div class="code-panel">
 						<div class="code-panel__bar"><span>with Routa</span><span>contract</span></div>
-						<pre><code><span class="kw">export default</span> <span class="fn">defineRoute</span>({"{"}
+						<pre
+						><code><span class="kw">export default</span> <span class="fn">defineRoute</span>({"{"}
   post: <span class="fn">createRoute</span>({"{"}
     input: {"{"} body: CreateUserSchema {"}"},
     responses: {"{"}
@@ -119,11 +126,12 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 					<p>From first route to OpenAPI lockstep.</p>
 				</div>
 				<div class="cta-row">
-					<a class="btn btn-primary" href="https://routa-ts.dev/docs/start/quickstart/">Quickstart</a>
+					<a class="btn btn-primary" href="https://routa-ts.dev/docs/start/quickstart/"
+						>Quickstart</a
+					>
 					<a class="btn btn-ghost" href="/landings/">All options</a>
 				</div>
 			</div>
 		</section>
 	</main>
 </LandingLayout>
-

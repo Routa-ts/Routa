@@ -13,14 +13,14 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 			<div class="hero-inner">
 				<div class="hero-top">
 					<div class="brand-mark">
-						<img src="/favicon.svg" alt="" width="40" height="40" />
+						<img src="/favicon.svg" alt="" width="40" height="40">
 						Routa
 						<span class="dot" aria-hidden="true"></span>
 					</div>
 					<h1 class="headline">The lattice between route, schema, and runtime</h1>
 					<p class="lede">
-						Every request walks a typed graph: middleware, validation, handler, named
-						outcome. No hidden framework magic — the path is the product.
+						Every request walks a typed graph: middleware, validation, handler, named outcome. No
+						hidden framework magic — the path is the product.
 					</p>
 					<div class="cta-row">
 						<a class="btn btn-primary" href="https://routa-ts.dev/docs/">Get started</a>
@@ -36,17 +36,26 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 						<li class="active">
 							<span class="n">01 · middleware</span>
 							<strong>Context enters the lattice</strong>
-							<p>Typed middleware composes auth, tenants, and deps into <code class="mono">ctx</code>.</p>
+							<p>
+								Typed middleware composes auth, tenants, and deps into
+								<code class="mono">ctx</code>.
+							</p>
 						</li>
 						<li class="active">
 							<span class="n">02 · validate</span>
 							<strong>Zod owns the edge</strong>
-							<p>Params, query, and body are checked against the route contract before the handler runs.</p>
+							<p>
+								Params, query, and body are checked against the route contract before the handler
+								runs.
+							</p>
 						</li>
 						<li class="active">
 							<span class="n">03 · handler</span>
 							<strong>Your code, named outcomes</strong>
-							<p>Return <code class="mono">{"{ type, data }"}</code> from the declared response map — not raw status codes.</p>
+							<p>
+								Return <code class="mono">{"{ type, data }"}</code> from the declared response map —
+								not raw status codes.
+							</p>
 						</li>
 						<li class="active">
 							<span class="n">04 · response</span>
@@ -64,11 +73,13 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 				<p class="section-kicker">How it fits</p>
 				<h2 class="section-title">Route = contract</h2>
 				<p class="section-lede">
-					The filesystem path is the API surface. Schemas interlock into the lattice; Hono
-					runs underneath.
+					The filesystem path is the API surface. Schemas interlock into the lattice; Hono runs
+					underneath.
 				</p>
 				<div class="code-panel" style="margin-bottom: 2rem">
-					<div class="code-panel__bar"><span>request → lattice → response</span><span>trace</span></div>
+					<div class="code-panel__bar">
+						<span>request → lattice → response</span><span>trace</span>
+					</div>
 					<pre><code><span class="cm">// Named outcome — not res.status(201)</span>
 <span class="kw">return</span> {"{"}
   type: <span class="str">"success"</span>,
@@ -99,7 +110,10 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 					<li>OpenAPI</li>
 					<li>TypeScript</li>
 				</ul>
-				<p class="v0-note"><strong>v0</strong> — RC-honest. Schema-first REST, not a fullstack meta-framework.</p>
+				<p class="v0-note">
+					<strong>v0</strong>
+					— RC-honest. Schema-first REST, not a fullstack meta-framework.
+				</p>
 			</div>
 		</section>
 
@@ -117,4 +131,3 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 		</section>
 	</main>
 </LandingLayout>
-

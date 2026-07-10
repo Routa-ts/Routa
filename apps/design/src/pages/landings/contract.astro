@@ -12,14 +12,14 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 			<div class="hero-grid">
 				<div class="hero-copy">
 					<div class="brand-mark">
-						<img src="/favicon.svg" alt="" width="40" height="40" />
+						<img src="/favicon.svg" alt="" width="40" height="40">
 						Routa
 						<span class="dot" aria-hidden="true"></span>
 					</div>
 					<h1 class="headline">Schema-first REST for TypeScript</h1>
 					<p class="lede">
-						Filesystem routes with Zod contracts — not vibes. The route file is the API
-						surface; OpenAPI stays in lockstep.
+						Filesystem routes with Zod contracts — not vibes. The route file is the API surface;
+						OpenAPI stays in lockstep.
 					</p>
 					<div class="cta-row">
 						<a class="btn btn-primary" href="https://routa-ts.dev/docs/">Get started</a>
@@ -31,11 +31,14 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 					</div>
 				</div>
 
-				<div class="stack" aria-label="Contract flow">
+				<div class="stack">
 					<div class="flow-label">One route · one contract</div>
 					<div class="code-panel">
-						<div class="code-panel__bar"><span>src/routes/users/route.ts</span><span>filesystem</span></div>
-						<pre><code><span class="kw">export default</span> <span class="fn">defineRoute</span>({"{"}
+						<div class="code-panel__bar">
+							<span>src/routes/users/route.ts</span><span>filesystem</span>
+						</div>
+						<pre
+						><code><span class="kw">export default</span> <span class="fn">defineRoute</span>({"{"}
   post: <span class="fn">createRoute</span>({"{"}
     input: {"{"} body: CreateUserSchema {"}"},
     responses: {"{"}
@@ -93,7 +96,10 @@ paths:
 					</li>
 					<li>
 						<strong>CLI lifecycle</strong>
-						<p><code class="mono">check</code> → <code class="mono">build</code> → <code class="mono">start</code> before you ship.</p>
+						<p>
+							<code class="mono">check</code>
+							→ <code class="mono">build</code> → <code class="mono">start</code> before you ship.
+						</p>
 					</li>
 					<li>
 						<strong>Hono runtime</strong>
@@ -106,7 +112,10 @@ paths:
 					<li>OpenAPI</li>
 					<li>TypeScript</li>
 				</ul>
-				<p class="v0-note"><strong>v0</strong> — intentionally narrow. No enterprise logo wall. No cloud funnel.</p>
+				<p class="v0-note">
+					<strong>v0</strong>
+					— intentionally narrow. No enterprise logo wall. No cloud funnel.
+				</p>
 			</div>
 		</section>
 
@@ -117,11 +126,12 @@ paths:
 					<p>Quickstart, route anatomy, and OpenAPI workflow under /docs/.</p>
 				</div>
 				<div class="cta-row">
-					<a class="btn btn-primary" href="https://routa-ts.dev/docs/start/quickstart/">Quickstart</a>
+					<a class="btn btn-primary" href="https://routa-ts.dev/docs/start/quickstart/"
+						>Quickstart</a
+					>
 					<a class="btn btn-ghost" href="/landings/">All options</a>
 				</div>
 			</div>
 		</section>
 	</main>
 </LandingLayout>
-
