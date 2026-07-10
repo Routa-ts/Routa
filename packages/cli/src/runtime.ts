@@ -140,6 +140,10 @@ async function loadFileMiddleware(
 	const middleware: Array<NonNullable<HonoRoute["contract"]["middleware"]>[number]> = [];
 
 	for (const item of metadata) {
+		// Invariant: route-local middleware is already applied via
+		// `routeConfig.middleware` / `contract.middleware` in `loadRoutes`.
+		// Skip `item.file === routeFile` so those contracts are not imported
+		// and stacked a second time.
 		if (item.file === routeFile) {
 			continue;
 		}

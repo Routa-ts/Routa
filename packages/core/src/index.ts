@@ -139,6 +139,12 @@ export type InferMiddlewareCtx<TMiddleware extends readonly AnyMiddlewareContrac
 			: unknown
 	>;
 
+/**
+ * Parsed route input after Zod validation.
+ *
+ * Each field uses {@link SchemaOutput} (Zod's output / parsed type), not
+ * {@link SchemaInput}, because handlers and middleware receive validated values.
+ */
 export type InferInput<TInput extends RouteInput | undefined> = {
 	[K in keyof NonNullable<TInput>]: SchemaOutput<NonNullable<TInput>[K]>;
 };
@@ -253,7 +259,13 @@ export function defineRoute<const TConfig extends DefineRouteConfig>(config: TCo
 }
 
 /**
- * Creates a route definition factory that binds route configs to per-path context types.
+ * Creates a route definition factory that binds route configs to an explicit
+ * per-path context map.
+ *
+ * Prefer {@link createRouteRoot} in app code: it reads context types from the
+ * generated `Register` augmentation in `.routa/routes.gen.ts`. Use this factory
+ * when you need the same path-bound helper against a custom `TCtxByPath` map
+ * (for example in tests, libraries, or tooling that does not rely on `Register`).
  *
  * @returns A function that accepts a route path and returns a config helper for that path.
  */

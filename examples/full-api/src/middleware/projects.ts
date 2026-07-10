@@ -2,7 +2,7 @@ import { createMiddleware } from "@routa-ts/core";
 import { z } from "zod";
 
 export const withProjectScope = createMiddleware({
-	requires: ["tenant", "session"],
+	requires: ["tenant", "auth"],
 	provides: {
 		projectScope: z.object({
 			tenantId: z.string(),
@@ -10,7 +10,7 @@ export const withProjectScope = createMiddleware({
 		}),
 	},
 	run: async ({ ctx, next }) => {
-		const canWrite = ctx.session.authenticated && ctx.session.userId === `${ctx.tenant.id}:writer`;
+		const canWrite = ctx.auth.userId === `${ctx.tenant.id}:writer`;
 
 		return next({
 			projectScope: {
@@ -54,11 +54,26 @@ export const withProjectPermissions = createMiddleware({
 			canWrite: z.boolean(),
 		}),
 	},
+	rejects: {
+		forbidden: {
+			status: 403,
+			schema: z.object({ message: z.string() }),
+		},
+	},
 	run: async ({ ctx, next }) => {
+		if (!ctx.projectScope.canWrite) {
+			return {
+				type: "forbidden",
+				data: {
+					message: "Write access required for this tenant",
+				},
+			};
+		}
+
 		return next({
 			projectPermissions: {
 				canRead: true,
-				canWrite: ctx.projectScope.canWrite,
+				canWrite: true,
 			},
 		});
 	},

@@ -12,9 +12,34 @@ Middleware in Routa is part of the route contract. Auth, permissions, tenant loa
 Middleware declares what context it requires and what context it provides. Route handlers receive typed `ctx` from the middleware chain.
 
 ```ts
+import { createMiddleware, createRoute, defineRoute } from "@routa-ts/core";
+import { z } from "zod";
+
+const withAuth = createMiddleware({
+	requires: ["session"],
+	provides: {
+		auth: z.object({
+			userId: z.string(),
+		}),
+	},
+	rejects: {
+		unauthorized: {
+			status: 401,
+			schema: z.object({ message: z.string() }),
+		},
+	},
+	run: ({ ctx, next }) => {
+		if (!ctx.session.authenticated || !ctx.session.userId) {
+			return { type: "unauthorized", data: { message: "Authentication required" } };
+		}
+
+		return next({ auth: { userId: ctx.session.userId } });
+	},
+});
+
 export default defineRoute({
 	get: createRoute({
-		middleware: [requireAuth()],
+		middleware: [withAuth],
 		responses: {
 			success: {
 				status: 200,
@@ -22,7 +47,10 @@ export default defineRoute({
 			},
 		},
 		run: async ({ ctx }) => {
-			return users.getCurrentUser(ctx.state.auth.principal.id);
+			return {
+				type: "success",
+				data: await users.getCurrentUser(ctx.auth.userId),
+			};
 		},
 	}),
 });

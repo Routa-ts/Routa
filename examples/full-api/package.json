@@ -12,7 +12,8 @@
 		"scaffold": "routa scaffold openapi.yaml",
 		"openapi:check": "routa openapi check",
 		"routes": "routa routes",
-		"routes:json": "routa routes --format json"
+		"routes:json": "routa routes --format json",
+		"mint-session": "node scripts/mint-session.mjs"
 	},
 	"dependencies": {
 		"@routa-ts/cli": "workspace:*",

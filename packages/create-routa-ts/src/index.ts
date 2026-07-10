@@ -43,7 +43,7 @@ export function createCommandArgs(argv: readonly string[]): string[] {
  *
  * @param argv - Command-line arguments to parse
  * @param cwd - Current working directory used to resolve paths
- * @returns `0` on success or cancellation, `1` if project creation fails
+ * @returns `0` on success or cancellation, `1` if project creation, git init, or install fails
  */
 export async function runCreate(
 	argv = process.argv.slice(2),
@@ -71,6 +71,8 @@ export async function runCreate(
 			routaVersion: resolveRoutaVersion(config.cwd, config.targetDir),
 		});
 
+		let postCreateFailed = false;
+
 		if (config.git) {
 			const git = spawnSync("git", ["init"], {
 				cwd: result.projectDir,
@@ -80,6 +82,7 @@ export async function runCreate(
 			if (git.status === 0) {
 				process.stdout.write(`${ui.success("Initialized git repository.")}\n`);
 			} else {
+				postCreateFailed = true;
 				process.stderr.write(`${ui.error("git init failed.")} ${git.stderr ?? ""}\n`);
 			}
 		}
@@ -92,6 +95,7 @@ export async function runCreate(
 			});
 
 			if (install.status !== 0) {
+				postCreateFailed = true;
 				process.stderr.write(
 					`${ui.error('Command "pnpm install" did not run successfully.')} Please run this manually in your project.\n`,
 				);
@@ -109,7 +113,7 @@ export async function runCreate(
 		}
 
 		process.stdout.write(`${ui.command("pnpm dev")}\n`);
-		return 0;
+		return postCreateFailed ? 1 : 0;
 	} catch (error) {
 		if (error instanceof UserCancelledError) {
 			process.stdout.write(`${ui.muted("Creation cancelled.")}\n`);

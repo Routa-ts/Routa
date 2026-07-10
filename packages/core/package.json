@@ -44,10 +44,6 @@
 		"./logger": {
 			"types": "./dist/logger.d.ts",
 			"import": "./dist/logger.js"
-		},
-		"./middleware/auth": {
-			"types": "./dist/middleware/auth.d.ts",
-			"import": "./dist/middleware/auth.js"
 		}
 	},
 	"files": [

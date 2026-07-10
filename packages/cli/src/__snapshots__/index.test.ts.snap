@@ -82,11 +82,15 @@ export const routaRoutes = [
 			"get": {
 				"params": true,
 				"query": true,
+				"headers": false,
+				"cookies": false,
 				"body": false
 			},
 			"delete": {
 				"params": true,
 				"query": false,
+				"headers": false,
+				"cookies": false,
 				"body": false
 			}
 		},

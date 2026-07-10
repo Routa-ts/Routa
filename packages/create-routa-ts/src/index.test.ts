@@ -2,11 +2,23 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createProject } from "./create-project.js";
 import { createCommandArgs, resolveRoutaVersion, runCreate } from "./index.js";
 
+const { spawnSyncMock } = vi.hoisted(() => ({
+	spawnSyncMock: vi.fn(),
+}));
+
+vi.mock("node:child_process", () => ({
+	spawnSync: spawnSyncMock,
+}));
+
 describe("create-routa-ts", () => {
+	afterEach(() => {
+		spawnSyncMock.mockReset();
+	});
+
 	it("forwards pnpm create args to routa create", () => {
 		expect(createCommandArgs(["my-api"])).toEqual(["create", "my-api"]);
 	});
@@ -58,6 +70,14 @@ describe("create-routa-ts", () => {
 			'"name": "my-api"',
 		);
 		expect(readFileSync(join(cwd, "apps/my-api/README.md"), "utf8")).toContain("# my-api");
+	});
+
+	it("rejects target directories that escape the working directory", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "create-routa-ts-escape-"));
+
+		expect(() => createProject("../outside-api", cwd)).toThrow(
+			"Target directory must stay under the current working directory",
+		);
 	});
 
 	it("rejects target basenames that are invalid package names", async () => {
@@ -143,6 +163,64 @@ describe("create-routa-ts", () => {
 		expect(code).toBe(0);
 		expect(existsSync(join(cwd, "routa-app/package.json"))).toBe(true);
 		expect(existsSync(join(cwd, "-y/package.json"))).toBe(false);
+	});
+
+	it("exits non-zero when git init fails", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "create-routa-ts-git-fail-"));
+		spawnSyncMock.mockReturnValue({ status: 1, stderr: "fatal: not a git repository" });
+		const stdout = process.stdout.write;
+		const stderr = process.stderr.write;
+		let errorOutput = "";
+		process.stdout.write = (() => true) as typeof process.stdout.write;
+		process.stderr.write = ((chunk: string) => {
+			errorOutput += chunk;
+			return true;
+		}) as typeof process.stderr.write;
+
+		try {
+			const code = await runCreate(["my-api", "--no-openapi", "--git", "--no-install"], cwd);
+
+			expect(code).toBe(1);
+			expect(errorOutput).toContain("git init failed.");
+			expect(existsSync(join(cwd, "my-api/package.json"))).toBe(true);
+			expect(spawnSyncMock).toHaveBeenCalledWith(
+				"git",
+				["init"],
+				expect.objectContaining({ cwd: join(cwd, "my-api") }),
+			);
+		} finally {
+			process.stdout.write = stdout;
+			process.stderr.write = stderr;
+		}
+	});
+
+	it("exits non-zero when pnpm install fails", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "create-routa-ts-install-fail-"));
+		spawnSyncMock.mockReturnValue({ status: 1, stderr: "ERR_PNPM_NO_MATCHING_VERSION" });
+		const stdout = process.stdout.write;
+		const stderr = process.stderr.write;
+		let errorOutput = "";
+		process.stdout.write = (() => true) as typeof process.stdout.write;
+		process.stderr.write = ((chunk: string) => {
+			errorOutput += chunk;
+			return true;
+		}) as typeof process.stderr.write;
+
+		try {
+			const code = await runCreate(["my-api", "--no-openapi", "--no-git", "--install"], cwd);
+
+			expect(code).toBe(1);
+			expect(errorOutput).toContain('Command "pnpm install" did not run successfully.');
+			expect(existsSync(join(cwd, "my-api/package.json"))).toBe(true);
+			expect(spawnSyncMock).toHaveBeenCalledWith(
+				"pnpm",
+				["install"],
+				expect.objectContaining({ cwd: join(cwd, "my-api") }),
+			);
+		} finally {
+			process.stdout.write = stdout;
+			process.stderr.write = stderr;
+		}
 	});
 
 	it("uses workspace packages for examples inside the Routa monorepo", async () => {

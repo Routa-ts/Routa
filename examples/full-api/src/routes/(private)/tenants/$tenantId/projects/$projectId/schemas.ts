@@ -31,3 +31,8 @@ export const UpdateProjectInput = z.object({
 export const UpdateProjectBody = UpdateProjectInput;
 
 export const UpdateProjectResponse = Project;
+
+export const DeleteProjectParams = z.object({
+	projectId: z.string(),
+	tenantId: z.string(),
+});

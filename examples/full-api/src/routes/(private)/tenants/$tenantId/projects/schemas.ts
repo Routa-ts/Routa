@@ -2,12 +2,15 @@
 // Safe to edit, but regeneration may update this file after preview.
 // Source: openapi.yaml
 
+import { Fields, Sort } from "@routa-ts/core/query/helpers";
 import { z } from "zod";
 
 export const ListProjectsParams = z.object({ tenantId: z.string() });
 
 export const ListProjectsQuery = z.object({
 	status: z.enum(["active", "archived"]).optional(),
+	sort: Sort(["name", "status"] as const).optional(),
+	fields: Fields(["id", "name", "status"] as const).optional(),
 });
 
 export const ListProjectsHeaders = z.object({
@@ -21,7 +24,10 @@ export const Project = z.object({
 	status: z.string(),
 });
 
-export const ListProjectsResponse = z.object({ projects: z.array(Project) });
+export const ListProjectsResponse = z.object({
+	projects: z.array(Project),
+	selectedFields: z.array(z.enum(["id", "name", "status"])),
+});
 
 export const CreateProjectParams = z.object({ tenantId: z.string() });
 

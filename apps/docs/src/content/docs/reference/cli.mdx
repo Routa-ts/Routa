@@ -7,10 +7,10 @@ import { Aside } from "@astrojs/starlight/components";
 
 The `routa` command checks route contracts, builds generated route metadata, runs the development server, and scaffolds projects from OpenAPI files.
 
-Install it as a development dependency:
+Install it as a dependency (generated apps keep the CLI in `dependencies` so `routa start` is available at runtime):
 
 ```sh
-pnpm add -D @routa-ts/cli
+pnpm add @routa-ts/cli
 ```
 
 ## Commands
@@ -24,6 +24,7 @@ pnpm exec routa dev
 pnpm exec routa start
 pnpm exec routa check
 pnpm exec routa build
+pnpm exec routa routes [--format json|markdown]
 pnpm exec routa openapi check
 pnpm exec routa openapi breaking
 pnpm exec routa openapi breaking --update-baseline
@@ -31,8 +32,13 @@ pnpm exec routa openapi breaking --update-baseline
 
 ## Command Behavior
 
-- `routa create [dir]`: creates a new Routa app. Flags include `--install`, `--git`, and `--no-openapi`.
+- `routa create [dir]`: creates a new Routa app. Flags:
+  - `--yes` / `-y`: skip the final confirmation prompt when settings were chosen interactively
+  - `--openapi` / `--no-openapi`: include or omit the starter OpenAPI file (default: include)
+  - `--git` / `--no-git`: initialize or skip a git repository
+  - `--install` / `--no-install`: run or skip `pnpm install` after scaffolding
 - `routa scaffold <file>`: generates route and schema files from OpenAPI. Use `--preview` before writing changes and `--yes` to approve scaffold changes.
+- `routa routes [--format json|markdown]`: prints a route reference for the project. Defaults to markdown when `--format` is omitted.
 - `routa dev`: validates routes, writes metadata, typechecks, and starts the development server.
 - `routa start`: validates routes, typechecks, and starts the runtime server.
 - `routa check`: validates Routa route graph and runs `tsc -p tsconfig.json --noEmit`.
@@ -50,6 +56,8 @@ pnpm exec routa openapi breaking --update-baseline
 ```sh
 pnpm create routa-ts@latest
 ```
+
+`create-routa-ts` accepts the same create flags as `routa create` (`--yes` / `-y`, `--openapi` / `--no-openapi`, `--git` / `--no-git`, `--install` / `--no-install`).
 
 ## Status
 

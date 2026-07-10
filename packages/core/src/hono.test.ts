@@ -3,7 +3,6 @@ import { z } from "zod";
 import { createHonoApp } from "./hono.js";
 import { createMiddleware, createRoute } from "./index.js";
 import { createLogger, type RoutaLogEvent } from "./logger.js";
-import { requireAuth } from "./middleware/auth.js";
 
 describe("createHonoApp", () => {
 	it("runs route contracts through Hono and maps response status", async () => {
@@ -246,6 +245,39 @@ describe("createHonoApp", () => {
 		expect(response.status).toBe(415);
 	});
 
+	it("accepts application/*+json request body content types", async () => {
+		const app = createHonoApp([
+			{
+				method: "post",
+				path: "/users",
+				contract: createRoute({
+					input: {
+						body: z.object({ name: z.string() }),
+					},
+					responses: {
+						success: {
+							status: 201,
+							schema: z.object({ id: z.string(), name: z.string() }),
+						},
+					},
+					run: async ({ input }) => ({
+						type: "success",
+						data: { id: "user_1", name: input.body.name },
+					}),
+				}),
+			},
+		]);
+
+		const response = await app.request("/users", {
+			method: "POST",
+			body: JSON.stringify({ name: "Jane" }),
+			headers: { "content-type": "application/vnd.api+json" },
+		});
+
+		expect(response.status).toBe(201);
+		await expect(response.json()).resolves.toEqual({ id: "user_1", name: "Jane" });
+	});
+
 	it("rejects invalid request body media type tokens", async () => {
 		const app = createHonoApp([
 			{
@@ -394,7 +426,7 @@ describe("createHonoApp", () => {
 		});
 	});
 
-	it("keeps percent-encoded cookie values raw", async () => {
+	it("decodes cookie values and keeps malformed percent-encoding raw", async () => {
 		const app = createHonoApp([
 			{
 				method: "get",
@@ -414,12 +446,17 @@ describe("createHonoApp", () => {
 			},
 		]);
 
-		const response = await app.request("/session", {
+		const decoded = await app.request("/session", {
+			headers: { cookie: "session=hello%20world" },
+		});
+		expect(decoded.status).toBe(200);
+		await expect(decoded.json()).resolves.toEqual({ session: "hello world" });
+
+		const malformed = await app.request("/session", {
 			headers: { cookie: "session=%E0%A4%A" },
 		});
-
-		expect(response.status).toBe(200);
-		await expect(response.json()).resolves.toEqual({ session: "%E0%A4%A" });
+		expect(malformed.status).toBe(200);
+		await expect(malformed.json()).resolves.toEqual({ session: "%E0%A4%A" });
 	});
 
 	it("rejects unsupported response accept headers", async () => {
@@ -494,7 +531,7 @@ describe("createHonoApp", () => {
 		expect(response.status).toBe(406);
 	});
 
-	it("rejects json suffix accept headers without a wildcard", async () => {
+	it("accepts application/*+json accept headers", async () => {
 		const app = createHonoApp([
 			{
 				method: "get",
@@ -515,22 +552,242 @@ describe("createHonoApp", () => {
 			headers: { accept: "application/problem+json" },
 		});
 
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual({ ok: true });
+	});
+
+	it("honors a more specific +json rejection over accept wildcards", async () => {
+		const app = createHonoApp([
+			{
+				method: "get",
+				path: "/status",
+				contract: createRoute({
+					responses: {
+						success: {
+							status: 200,
+							schema: z.object({ ok: z.boolean() }),
+						},
+					},
+					run: async () => ({ type: "success", data: { ok: true } }),
+				}),
+			},
+		]);
+
+		const response = await app.request("/status", {
+			headers: { accept: "application/*;q=1, application/problem+json;q=0" },
+		});
+
 		expect(response.status).toBe(406);
 	});
 
-	it("enforces requireAuth middleware at runtime", async () => {
+	it("rejects duplicate route registrations", () => {
+		expect(() =>
+			createHonoApp([
+				{
+					method: "get",
+					path: "/status",
+					contract: createRoute({
+						responses: {
+							success: {
+								status: 200,
+								schema: z.object({ ok: z.boolean() }),
+							},
+						},
+						run: async () => ({ type: "success", data: { ok: true } }),
+					}),
+				},
+				{
+					method: "get",
+					path: "/status",
+					contract: createRoute({
+						responses: {
+							success: {
+								status: 200,
+								schema: z.object({ ok: z.boolean() }),
+							},
+						},
+						run: async () => ({ type: "success", data: { ok: true } }),
+					}),
+				},
+			]),
+		).toThrow("Duplicate route registration: GET /status");
+	});
+
+	it("rejects duplicate middleware reject keys at construction", () => {
+		const first = createMiddleware({
+			rejects: {
+				unauthorized: {
+					status: 401,
+					schema: z.object({ message: z.string() }),
+				},
+			},
+			run: ({ next }) => next(),
+		});
+		const second = createMiddleware({
+			rejects: {
+				unauthorized: {
+					status: 403,
+					schema: z.object({ message: z.string() }),
+				},
+			},
+			run: ({ next }) => next(),
+		});
+
+		expect(() =>
+			createHonoApp([
+				{
+					method: "get",
+					path: "/me",
+					contract: createRoute({
+						middleware: [first, second],
+						responses: {
+							success: {
+								status: 200,
+								schema: z.object({ ok: z.boolean() }),
+							},
+						},
+						run: async () => ({ type: "success", data: { ok: true } }),
+					}),
+				},
+			]),
+		).toThrow('Duplicate middleware reject key "unauthorized" on GET /me');
+	});
+
+	it("returns problem details when createContext returns a non-object", async () => {
+		const app = createHonoApp([
+			{
+				method: "get",
+				path: "/status",
+				contract: createRoute({
+					responses: {
+						success: {
+							status: 200,
+							schema: z.object({ ok: z.boolean() }),
+						},
+					},
+					run: async () => ({ type: "success", data: { ok: true } }),
+				}),
+				createContext: () => "not-an-object" as never,
+			},
+		]);
+
+		const response = await app.request("/status");
+
+		expect(response.status).toBe(500);
+		await expect(response.json()).resolves.toMatchObject({
+			title: "Invalid handler output",
+			status: 500,
+		});
+	});
+
+	it("returns problem details when createContext returns null", async () => {
+		const events: RoutaLogEvent[] = [];
+		const app = createHonoApp(
+			[
+				{
+					method: "get",
+					path: "/status",
+					contract: createRoute({
+						responses: {
+							success: {
+								status: 200,
+								schema: z.object({ ok: z.boolean() }),
+							},
+						},
+						run: async () => ({ type: "success", data: { ok: true } }),
+					}),
+					createContext: () => null as never,
+				},
+			],
+			{
+				logger: createLogger({
+					sink: (event) => events.push(event),
+				}),
+			},
+		);
+
+		const response = await app.request("/status");
+
+		expect(response.status).toBe(500);
+		await expect(response.json()).resolves.toMatchObject({
+			title: "Invalid handler output",
+			status: 500,
+		});
+		expect(events).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					level: "error",
+					data: expect.objectContaining({
+						error: "createContext() must return a plain object, received null.",
+					}),
+				}),
+			]),
+		);
+	});
+
+	it("returns problem details when response JSON serialization fails", async () => {
+		const app = createHonoApp([
+			{
+				method: "get",
+				path: "/status",
+				contract: createRoute({
+					responses: {
+						success: {
+							status: 200,
+							schema: z.any(),
+						},
+					},
+					run: async () => ({ type: "success", data: { value: 1n } }),
+				}),
+			},
+		]);
+
+		const response = await app.request("/status");
+
+		expect(response.status).toBe(500);
+		await expect(response.json()).resolves.toMatchObject({
+			title: "Invalid handler output",
+			status: 500,
+		});
+	});
+
+	it("returns middleware reject when auth guard finds unauthenticated session", async () => {
 		const withSession = createMiddleware({
 			provides: {
 				session: z.object({ authenticated: z.boolean(), userId: z.string().optional() }),
 			},
 			run: ({ next }) => next({ session: { authenticated: false } }),
 		});
+		const requireAuth = createMiddleware({
+			requires: ["session"],
+			provides: {
+				auth: z.object({ userId: z.string() }),
+			},
+			rejects: {
+				unauthorized: {
+					status: 401,
+					schema: z.object({ message: z.string() }),
+				},
+			},
+			run: ({ ctx, next }) => {
+				const session = ctx.session as
+					| { authenticated?: boolean; userId?: string }
+					| null
+					| undefined;
+
+				if (!session?.authenticated || !session.userId) {
+					return { type: "unauthorized", data: { message: "Authentication required" } };
+				}
+
+				return next({ auth: { userId: session.userId } });
+			},
+		});
 		const app = createHonoApp([
 			{
 				method: "get",
 				path: "/me",
 				contract: createRoute({
-					middleware: [withSession, requireAuth()],
+					middleware: [withSession, requireAuth],
 					responses: {
 						success: {
 							status: 200,
@@ -550,6 +807,146 @@ describe("createHonoApp", () => {
 
 		expect(response.status).toBe(401);
 		await expect(response.json()).resolves.toEqual({ message: "Authentication required" });
+	});
+
+	it("returns middleware reject when auth guard session is null", async () => {
+		const withNullSession = createMiddleware({
+			provides: {
+				session: z.unknown(),
+			},
+			run: ({ next }) => next({ session: null }),
+		});
+		const requireAuth = createMiddleware({
+			requires: ["session"],
+			provides: {
+				auth: z.object({ userId: z.string() }),
+			},
+			rejects: {
+				unauthorized: {
+					status: 401,
+					schema: z.object({ message: z.string() }),
+				},
+			},
+			run: ({ ctx, next }) => {
+				const session = ctx.session as
+					| { authenticated?: boolean; userId?: string }
+					| null
+					| undefined;
+
+				if (!session?.authenticated || !session.userId) {
+					return { type: "unauthorized", data: { message: "Authentication required" } };
+				}
+
+				return next({ auth: { userId: session.userId } });
+			},
+		});
+		const app = createHonoApp([
+			{
+				method: "get",
+				path: "/me",
+				contract: createRoute({
+					middleware: [withNullSession, requireAuth],
+					responses: {
+						success: {
+							status: 200,
+							schema: z.object({ id: z.string() }),
+						},
+						unauthorized: {
+							status: 401,
+							schema: z.object({ message: z.string() }),
+						},
+					},
+					run: ({ ctx }) => ({ type: "success", data: { id: ctx.auth.userId } }),
+				}),
+			},
+		]);
+
+		const response = await app.request("/me");
+
+		expect(response.status).toBe(401);
+		await expect(response.json()).resolves.toEqual({ message: "Authentication required" });
+	});
+
+	it("rejects requests when middleware required context is missing", async () => {
+		const events: RoutaLogEvent[] = [];
+		const needsUser = createMiddleware({
+			requires: ["user"],
+			run: ({ next }) => next(),
+		});
+		const app = createHonoApp(
+			[
+				{
+					method: "get",
+					path: "/secure",
+					contract: createRoute({
+						middleware: [needsUser],
+						responses: {
+							success: {
+								status: 200,
+								schema: z.object({ ok: z.boolean() }),
+							},
+						},
+						run: () => ({ type: "success", data: { ok: true } }),
+					}),
+				},
+			],
+			{
+				logger: createLogger({
+					sink: (event) => events.push(event),
+				}),
+			},
+		);
+
+		const response = await app.request("/secure");
+
+		expect(response.status).toBe(500);
+		await expect(response.json()).resolves.toMatchObject({
+			title: "Internal Server Error",
+			status: 500,
+		});
+		expect(events).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					level: "error",
+					data: expect.objectContaining({
+						error: "Middleware requires ctx.user, but it was not provided.",
+					}),
+				}),
+			]),
+		);
+	});
+
+	it("rejects middleware provides that fail schema validation", async () => {
+		const badProvides = createMiddleware({
+			provides: {
+				user: z.object({ id: z.string() }),
+			},
+			run: ({ next }) => next({ user: { id: 123 } }),
+		});
+		const app = createHonoApp([
+			{
+				method: "get",
+				path: "/me",
+				contract: createRoute({
+					middleware: [badProvides],
+					responses: {
+						success: {
+							status: 200,
+							schema: z.object({ id: z.string() }),
+						},
+					},
+					run: ({ ctx }) => ({ type: "success", data: { id: ctx.user.id } }),
+				}),
+			},
+		]);
+
+		const response = await app.request("/me");
+
+		expect(response.status).toBe(500);
+		await expect(response.json()).resolves.toMatchObject({
+			title: "Invalid handler output",
+			status: 500,
+		});
 	});
 
 	it("returns 405 for unsupported methods on known paths", async () => {
@@ -664,26 +1061,28 @@ describe("createHonoApp", () => {
 		);
 	});
 
-	it("rejects GET route contracts with request bodies", () => {
-		expect(() =>
-			createHonoApp([
-				{
-					method: "get",
-					path: "/users",
-					contract: createRoute({
-						input: {
-							body: z.object({ name: z.string() }),
-						},
-						responses: {
-							success: {
-								status: 200,
-								schema: z.object({ ok: z.boolean() }),
+	it("rejects GET and HEAD route contracts with request bodies", () => {
+		for (const method of ["get", "head"] as const) {
+			expect(() =>
+				createHonoApp([
+					{
+						method,
+						path: "/users",
+						contract: createRoute({
+							input: {
+								body: z.object({ name: z.string() }),
 							},
-						},
-						run: async () => ({ type: "success", data: { ok: true } }),
-					}),
-				},
-			]),
-		).toThrow("cannot declare a request body");
+							responses: {
+								success: {
+									status: 200,
+									schema: z.object({ ok: z.boolean() }),
+								},
+							},
+							run: async () => ({ type: "success", data: { ok: true } }),
+						}),
+					},
+				]),
+			).toThrow("cannot declare a request body");
+		}
 	});
 });

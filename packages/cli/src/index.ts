@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { createProject, resolveRoutaVersion, runCreate } from "create-routa-ts";
+import { runCreate } from "create-routa-ts";
 import { runOpenApiBreaking, runOpenApiCheck } from "./openapi.js";
 import {
 	runProjectBuild,
@@ -47,11 +46,18 @@ export type RunOptions = {
 /**
  * Dispatches a Routa CLI command.
  *
+ * `create` is async and shares `runCreate` with `main()` so project side-effects match.
+ * `dev` stays on the sync `runProjectDev` path for programmatic callers and tests
+ * (for example `--print`); the real CLI entrypoint uses `runProjectDevProcess` instead.
+ *
  * @param argv - Command-line arguments after the executable name
  * @param options - Command options
  * @returns The command result, including an exit code and optional output
  */
-export function run(argv: readonly string[], options: RunOptions = {}): CommandResult {
+export function run(
+	argv: readonly string[],
+	options: RunOptions = {},
+): CommandResult | Promise<CommandResult> {
 	const [command, subcommand] = argv;
 	const cwd = options.cwd ?? process.cwd();
 	const ui = createUi(options.color ?? false);
@@ -61,16 +67,18 @@ export function run(argv: readonly string[], options: RunOptions = {}): CommandR
 	}
 
 	if (command === "create") {
-		return runCreateCommand(argv.slice(1), cwd, ui);
+		return runCreateCommand(argv.slice(1), cwd);
 	}
 
 	if (command === "scaffold") {
-		if (!subcommand) {
+		const inputFile = argv.slice(1).find((item) => !item.startsWith("-"));
+
+		if (!inputFile) {
 			return { code: 1, stderr: `${ui.error("Error:")} Missing OpenAPI input file.\n` };
 		}
 
 		try {
-			const result = scaffoldOpenApi(subcommand, cwd, {
+			const result = scaffoldOpenApi(inputFile, cwd, {
 				preview: argv.includes("--preview"),
 				yes: argv.includes("--yes"),
 			});
@@ -99,6 +107,7 @@ export function run(argv: readonly string[], options: RunOptions = {}): CommandR
 	}
 
 	if (command === "dev") {
+		// Programmatic/sync path for tests (`--print`, etc.). `main()` uses runProjectDevProcess.
 		return runProjectDev(argv.slice(1), cwd);
 	}
 
@@ -124,78 +133,41 @@ export function run(argv: readonly string[], options: RunOptions = {}): CommandR
 }
 
 /**
- * Creates a Routa project in the target directory and formats the CLI result.
+ * Creates a Routa project through the shared `runCreate` entrypoint used by `main()`.
+ *
+ * Captures process output so programmatic callers still receive a `CommandResult`.
  *
  * @param argv - Command-line arguments after `create`
  * @param cwd - Base working directory for project creation
- * @returns The command exit code and any output or error text
+ * @returns The command exit code and captured output
  */
-function runCreateCommand(argv: readonly string[], cwd: string, ui: Ui): CommandResult {
-	const targetDir = argv.find((item) => !item.startsWith("-")) ?? "routa-app";
+async function runCreateCommand(argv: readonly string[], cwd: string): Promise<CommandResult> {
+	let stdout = "";
+	let stderr = "";
+	const originalStdoutWrite = process.stdout.write;
+	const originalStderrWrite = process.stderr.write;
+
+	process.stdout.write = ((chunk: string | Uint8Array) => {
+		stdout += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+		return true;
+	}) as typeof process.stdout.write;
+
+	process.stderr.write = ((chunk: string | Uint8Array) => {
+		stderr += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+		return true;
+	}) as typeof process.stderr.write;
 
 	try {
-		const result = createProject(targetDir, cwd, {
-			openApi: !argv.includes("--no-openapi"),
-			routaVersion: resolveRoutaVersion(cwd, targetDir),
-		});
-		let stdout = createSummary(targetDir, result.files, ui);
-		let stderr = "";
-
-		if (argv.includes("--git")) {
-			const git = spawnSync("git", ["init"], {
-				cwd: result.projectDir,
-				encoding: "utf8",
-			});
-
-			if (git.status === 0) {
-				stdout += `${ui.success("Initialized git repository.")}\n`;
-			} else {
-				stderr += `${ui.error("git init failed.")} ${git.stderr ?? ""}\n`;
-			}
-		}
-
-		if (argv.includes("--install")) {
-			const install = spawnSync("pnpm", ["install"], {
-				cwd: result.projectDir,
-				encoding: "utf8",
-			});
-
-			if (install.status !== 0) {
-				stderr += `${ui.warn('Command "pnpm install" did not run successfully.')} Please run this manually in your project.\n`;
-				stderr += install.stderr ?? "";
-			} else {
-				stdout += install.stdout ?? "";
-			}
-		}
-
-		stdout += `\n${ui.success(`Your Routa app is ready in '${targetDir}'.`)}\n\n`;
-		stdout += "Use the following commands to start your app:\n";
-		stdout += `${ui.command(`cd ${targetDir}`)}\n`;
-
-		if (!argv.includes("--install")) {
-			stdout += `${ui.command("pnpm install")}\n`;
-		}
-
-		stdout += `${ui.command("pnpm dev")}\n`;
-
-		return { code: 0, stdout, stderr: stderr || undefined };
-	} catch (error) {
+		const code = await runCreate([...argv], cwd);
 		return {
-			code: 1,
-			stderr: `${ui.error("Error:")} ${error instanceof Error ? error.message : String(error)}\n`,
+			code,
+			stdout: stdout || undefined,
+			stderr: stderr || undefined,
 		};
+	} finally {
+		process.stdout.write = originalStdoutWrite;
+		process.stderr.write = originalStderrWrite;
 	}
-}
-
-/**
- * Formats a summary of the created project files.
- *
- * @param targetDir - The project directory name
- * @param files - The created file paths
- * @returns A summary string listing the created files
- */
-function createSummary(targetDir: string, files: string[], ui: Ui): string {
-	return `${ui.success(`Created Routa project '${targetDir}' with ${files.length} file(s).`)}\n${files.join("\n")}\n`;
 }
 
 /**
@@ -275,6 +247,22 @@ export function main(argv = process.argv.slice(2)): void {
 
 	const result = run(argv, { color: shouldUseColor() });
 
+	if (result instanceof Promise) {
+		result
+			.then((resolved) => {
+				writeCommandResult(resolved);
+			})
+			.catch((error) => {
+				process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+				process.exitCode = 1;
+			});
+		return;
+	}
+
+	writeCommandResult(result);
+}
+
+function writeCommandResult(result: CommandResult): void {
 	if (result.stdout) {
 		process.stdout.write(result.stdout);
 	}

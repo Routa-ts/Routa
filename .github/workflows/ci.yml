@@ -49,6 +49,12 @@ jobs:
         scripts/link-ci-routa.sh
         pnpm build
 
+  docs:
+    name: Docs
+    uses: ./.github/workflows/node-pnpm-job.yml
+    with:
+      command: pnpm --filter @routa-ts/docs build
+
   cli-validation:
     name: CLI validation
     uses: ./.github/workflows/node-pnpm-job.yml

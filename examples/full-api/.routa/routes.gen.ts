@@ -4,7 +4,7 @@
 
 export const routaRoutes = [
 	{
-		"file": "src/routes/admin/audit-events/route.ts",
+		"file": "src/routes/(private)/admin/audit-events/route.ts",
 		"path": "/admin/audit-events",
 		"methods": [
 			"GET"
@@ -20,6 +20,8 @@ export const routaRoutes = [
 			"get": {
 				"params": false,
 				"query": true,
+				"headers": false,
+				"cookies": false,
 				"body": false
 			}
 		},
@@ -51,10 +53,30 @@ export const routaRoutes = [
 				"rejects": []
 			},
 			{
+				"file": "src/middleware/auth.ts",
+				"name": "requireAuth",
+				"requires": [
+					"session"
+				],
+				"provides": [
+					"auth"
+				],
+				"providesTypes": {
+					"auth": "{\n\treadonly \"userId\": string;\n}"
+				},
+				"rejects": [
+					{
+						"type": "unauthorized",
+						"status": 401,
+						"schema": "z.object({ message: z.string() })"
+					}
+				]
+			},
+			{
 				"file": "src/middleware/admin.ts",
 				"name": "withAdmin",
 				"requires": [
-					"session"
+					"auth"
 				],
 				"provides": [
 					"admin"
@@ -63,11 +85,6 @@ export const routaRoutes = [
 					"admin": "{\n\treadonly \"role\": \"owner\";\n}"
 				},
 				"rejects": [
-					{
-						"type": "unauthorized",
-						"status": 401,
-						"schema": "z.object({ message: z.string() })"
-					},
 					{
 						"type": "forbidden",
 						"status": 403,
@@ -105,10 +122,30 @@ export const routaRoutes = [
 					"rejects": []
 				},
 				{
+					"file": "src/middleware/auth.ts",
+					"name": "requireAuth",
+					"requires": [
+						"session"
+					],
+					"provides": [
+						"auth"
+					],
+					"providesTypes": {
+						"auth": "{\n\treadonly \"userId\": string;\n}"
+					},
+					"rejects": [
+						{
+							"type": "unauthorized",
+							"status": 401,
+							"schema": "z.object({ message: z.string() })"
+						}
+					]
+				},
+				{
 					"file": "src/middleware/admin.ts",
 					"name": "withAdmin",
 					"requires": [
-						"session"
+						"auth"
 					],
 					"provides": [
 						"admin"
@@ -117,11 +154,6 @@ export const routaRoutes = [
 						"admin": "{\n\treadonly \"role\": \"owner\";\n}"
 					},
 					"rejects": [
-						{
-							"type": "unauthorized",
-							"status": 401,
-							"schema": "z.object({ message: z.string() })"
-						},
 						{
 							"type": "forbidden",
 							"status": 403,
@@ -133,13 +165,757 @@ export const routaRoutes = [
 		},
 		"ctx": [
 			"admin",
+			"auth",
 			"requestId",
 			"session"
 		],
-		"groups": [],
+		"groups": [
+			"(private)"
+		],
 		"segments": [
 			"admin",
 			"audit-events"
+		]
+	},
+	{
+		"file": "src/routes/(private)/tenants/$tenantId/projects/$projectId/route.ts",
+		"path": "/tenants/:tenantId/projects/:projectId",
+		"methods": [
+			"GET",
+			"PATCH",
+			"DELETE"
+		],
+		"responses": {
+			"get": [
+				200,
+				401
+			],
+			"patch": [
+				200,
+				401,
+				403
+			],
+			"delete": [
+				204,
+				401,
+				403
+			]
+		},
+		"inputs": {
+			"get": {
+				"params": true,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": false
+			},
+			"patch": {
+				"params": true,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": true
+			},
+			"delete": {
+				"params": true,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": false
+			}
+		},
+		"middleware": [
+			{
+				"file": "src/middleware/context.ts",
+				"name": "withRequest",
+				"requires": [],
+				"provides": [
+					"requestId"
+				],
+				"providesTypes": {
+					"requestId": "string"
+				},
+				"rejects": []
+			},
+			{
+				"file": "src/middleware/context.ts",
+				"name": "withSession",
+				"requires": [
+					"requestId"
+				],
+				"provides": [
+					"session"
+				],
+				"providesTypes": {
+					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+				},
+				"rejects": []
+			},
+			{
+				"file": "src/middleware/auth.ts",
+				"name": "requireAuth",
+				"requires": [
+					"session"
+				],
+				"provides": [
+					"auth"
+				],
+				"providesTypes": {
+					"auth": "{\n\treadonly \"userId\": string;\n}"
+				},
+				"rejects": [
+					{
+						"type": "unauthorized",
+						"status": 401,
+						"schema": "z.object({ message: z.string() })"
+					}
+				]
+			},
+			{
+				"file": "src/middleware/tenant.ts",
+				"name": "withTenant",
+				"requires": [
+					"auth",
+					"session"
+				],
+				"provides": [
+					"tenant"
+				],
+				"providesTypes": {
+					"tenant": "{\n\treadonly \"id\": string;\n\treadonly \"name\": string;\n}"
+				},
+				"rejects": []
+			},
+			{
+				"file": "src/routes/(private)/tenants/$tenantId/projects/$projectId/route.ts",
+				"name": "withProjectScope",
+				"requires": [
+					"tenant",
+					"auth"
+				],
+				"provides": [
+					"projectScope"
+				],
+				"providesTypes": {
+					"projectScope": "{\n\treadonly \"tenantId\": string;\n\treadonly \"canWrite\": boolean;\n}"
+				},
+				"rejects": []
+			}
+		],
+		"methodMiddleware": {
+			"get": [
+				{
+					"file": "src/middleware/context.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": []
+				},
+				{
+					"file": "src/middleware/context.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": []
+				},
+				{
+					"file": "src/middleware/auth.ts",
+					"name": "requireAuth",
+					"requires": [
+						"session"
+					],
+					"provides": [
+						"auth"
+					],
+					"providesTypes": {
+						"auth": "{\n\treadonly \"userId\": string;\n}"
+					},
+					"rejects": [
+						{
+							"type": "unauthorized",
+							"status": 401,
+							"schema": "z.object({ message: z.string() })"
+						}
+					]
+				},
+				{
+					"file": "src/middleware/tenant.ts",
+					"name": "withTenant",
+					"requires": [
+						"auth",
+						"session"
+					],
+					"provides": [
+						"tenant"
+					],
+					"providesTypes": {
+						"tenant": "{\n\treadonly \"id\": string;\n\treadonly \"name\": string;\n}"
+					},
+					"rejects": []
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/projects/$projectId/route.ts",
+					"name": "withProjectScope",
+					"requires": [
+						"tenant",
+						"auth"
+					],
+					"provides": [
+						"projectScope"
+					],
+					"providesTypes": {
+						"projectScope": "{\n\treadonly \"tenantId\": string;\n\treadonly \"canWrite\": boolean;\n}"
+					},
+					"rejects": []
+				}
+			],
+			"patch": [
+				{
+					"file": "src/middleware/context.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": []
+				},
+				{
+					"file": "src/middleware/context.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": []
+				},
+				{
+					"file": "src/middleware/auth.ts",
+					"name": "requireAuth",
+					"requires": [
+						"session"
+					],
+					"provides": [
+						"auth"
+					],
+					"providesTypes": {
+						"auth": "{\n\treadonly \"userId\": string;\n}"
+					},
+					"rejects": [
+						{
+							"type": "unauthorized",
+							"status": 401,
+							"schema": "z.object({ message: z.string() })"
+						}
+					]
+				},
+				{
+					"file": "src/middleware/tenant.ts",
+					"name": "withTenant",
+					"requires": [
+						"auth",
+						"session"
+					],
+					"provides": [
+						"tenant"
+					],
+					"providesTypes": {
+						"tenant": "{\n\treadonly \"id\": string;\n\treadonly \"name\": string;\n}"
+					},
+					"rejects": []
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/projects/$projectId/route.ts",
+					"name": "withProjectScope",
+					"requires": [
+						"tenant",
+						"auth"
+					],
+					"provides": [
+						"projectScope"
+					],
+					"providesTypes": {
+						"projectScope": "{\n\treadonly \"tenantId\": string;\n\treadonly \"canWrite\": boolean;\n}"
+					},
+					"rejects": []
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/projects/$projectId/route.ts",
+					"name": "withProjectPermissions",
+					"requires": [
+						"projectScope"
+					],
+					"provides": [
+						"projectPermissions"
+					],
+					"providesTypes": {
+						"projectPermissions": "{\n\treadonly \"canRead\": boolean;\n\treadonly \"canWrite\": boolean;\n}"
+					},
+					"rejects": [
+						{
+							"type": "forbidden",
+							"status": 403,
+							"schema": "z.object({ message: z.string() })"
+						}
+					]
+				}
+			],
+			"delete": [
+				{
+					"file": "src/middleware/context.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": []
+				},
+				{
+					"file": "src/middleware/context.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": []
+				},
+				{
+					"file": "src/middleware/auth.ts",
+					"name": "requireAuth",
+					"requires": [
+						"session"
+					],
+					"provides": [
+						"auth"
+					],
+					"providesTypes": {
+						"auth": "{\n\treadonly \"userId\": string;\n}"
+					},
+					"rejects": [
+						{
+							"type": "unauthorized",
+							"status": 401,
+							"schema": "z.object({ message: z.string() })"
+						}
+					]
+				},
+				{
+					"file": "src/middleware/tenant.ts",
+					"name": "withTenant",
+					"requires": [
+						"auth",
+						"session"
+					],
+					"provides": [
+						"tenant"
+					],
+					"providesTypes": {
+						"tenant": "{\n\treadonly \"id\": string;\n\treadonly \"name\": string;\n}"
+					},
+					"rejects": []
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/projects/$projectId/route.ts",
+					"name": "withProjectScope",
+					"requires": [
+						"tenant",
+						"auth"
+					],
+					"provides": [
+						"projectScope"
+					],
+					"providesTypes": {
+						"projectScope": "{\n\treadonly \"tenantId\": string;\n\treadonly \"canWrite\": boolean;\n}"
+					},
+					"rejects": []
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/projects/$projectId/route.ts",
+					"name": "withProjectPermissions",
+					"requires": [
+						"projectScope"
+					],
+					"provides": [
+						"projectPermissions"
+					],
+					"providesTypes": {
+						"projectPermissions": "{\n\treadonly \"canRead\": boolean;\n\treadonly \"canWrite\": boolean;\n}"
+					},
+					"rejects": [
+						{
+							"type": "forbidden",
+							"status": 403,
+							"schema": "z.object({ message: z.string() })"
+						}
+					]
+				}
+			]
+		},
+		"ctx": [
+			"auth",
+			"projectPermissions",
+			"projectScope",
+			"requestId",
+			"session",
+			"tenant"
+		],
+		"groups": [
+			"(private)"
+		],
+		"segments": [
+			"tenants",
+			"$tenantId",
+			"projects",
+			"$projectId"
+		]
+	},
+	{
+		"file": "src/routes/(private)/tenants/$tenantId/projects/route.ts",
+		"path": "/tenants/:tenantId/projects",
+		"methods": [
+			"GET",
+			"POST"
+		],
+		"responses": {
+			"get": [
+				200,
+				401
+			],
+			"post": [
+				201,
+				401,
+				403
+			]
+		},
+		"inputs": {
+			"get": {
+				"params": true,
+				"query": true,
+				"headers": true,
+				"cookies": false,
+				"body": false
+			},
+			"post": {
+				"params": true,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": true
+			}
+		},
+		"middleware": [
+			{
+				"file": "src/middleware/context.ts",
+				"name": "withRequest",
+				"requires": [],
+				"provides": [
+					"requestId"
+				],
+				"providesTypes": {
+					"requestId": "string"
+				},
+				"rejects": []
+			},
+			{
+				"file": "src/middleware/context.ts",
+				"name": "withSession",
+				"requires": [
+					"requestId"
+				],
+				"provides": [
+					"session"
+				],
+				"providesTypes": {
+					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+				},
+				"rejects": []
+			},
+			{
+				"file": "src/middleware/auth.ts",
+				"name": "requireAuth",
+				"requires": [
+					"session"
+				],
+				"provides": [
+					"auth"
+				],
+				"providesTypes": {
+					"auth": "{\n\treadonly \"userId\": string;\n}"
+				},
+				"rejects": [
+					{
+						"type": "unauthorized",
+						"status": 401,
+						"schema": "z.object({ message: z.string() })"
+					}
+				]
+			},
+			{
+				"file": "src/middleware/tenant.ts",
+				"name": "withTenant",
+				"requires": [
+					"auth",
+					"session"
+				],
+				"provides": [
+					"tenant"
+				],
+				"providesTypes": {
+					"tenant": "{\n\treadonly \"id\": string;\n\treadonly \"name\": string;\n}"
+				},
+				"rejects": []
+			},
+			{
+				"file": "src/routes/(private)/tenants/$tenantId/projects/route.ts",
+				"name": "withProjectScope",
+				"requires": [
+					"tenant",
+					"auth"
+				],
+				"provides": [
+					"projectScope"
+				],
+				"providesTypes": {
+					"projectScope": "{\n\treadonly \"tenantId\": string;\n\treadonly \"canWrite\": boolean;\n}"
+				},
+				"rejects": []
+			}
+		],
+		"methodMiddleware": {
+			"get": [
+				{
+					"file": "src/middleware/context.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": []
+				},
+				{
+					"file": "src/middleware/context.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": []
+				},
+				{
+					"file": "src/middleware/auth.ts",
+					"name": "requireAuth",
+					"requires": [
+						"session"
+					],
+					"provides": [
+						"auth"
+					],
+					"providesTypes": {
+						"auth": "{\n\treadonly \"userId\": string;\n}"
+					},
+					"rejects": [
+						{
+							"type": "unauthorized",
+							"status": 401,
+							"schema": "z.object({ message: z.string() })"
+						}
+					]
+				},
+				{
+					"file": "src/middleware/tenant.ts",
+					"name": "withTenant",
+					"requires": [
+						"auth",
+						"session"
+					],
+					"provides": [
+						"tenant"
+					],
+					"providesTypes": {
+						"tenant": "{\n\treadonly \"id\": string;\n\treadonly \"name\": string;\n}"
+					},
+					"rejects": []
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/projects/route.ts",
+					"name": "withProjectScope",
+					"requires": [
+						"tenant",
+						"auth"
+					],
+					"provides": [
+						"projectScope"
+					],
+					"providesTypes": {
+						"projectScope": "{\n\treadonly \"tenantId\": string;\n\treadonly \"canWrite\": boolean;\n}"
+					},
+					"rejects": []
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/projects/route.ts",
+					"name": "withProjectListMode",
+					"requires": [
+						"projectScope"
+					],
+					"provides": [
+						"projectListMode"
+					],
+					"providesTypes": {
+						"projectListMode": "{\n\treadonly \"status\": \"active\" | \"archived\";\n\treadonly \"label\": string;\n}"
+					},
+					"rejects": []
+				}
+			],
+			"post": [
+				{
+					"file": "src/middleware/context.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": []
+				},
+				{
+					"file": "src/middleware/context.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": []
+				},
+				{
+					"file": "src/middleware/auth.ts",
+					"name": "requireAuth",
+					"requires": [
+						"session"
+					],
+					"provides": [
+						"auth"
+					],
+					"providesTypes": {
+						"auth": "{\n\treadonly \"userId\": string;\n}"
+					},
+					"rejects": [
+						{
+							"type": "unauthorized",
+							"status": 401,
+							"schema": "z.object({ message: z.string() })"
+						}
+					]
+				},
+				{
+					"file": "src/middleware/tenant.ts",
+					"name": "withTenant",
+					"requires": [
+						"auth",
+						"session"
+					],
+					"provides": [
+						"tenant"
+					],
+					"providesTypes": {
+						"tenant": "{\n\treadonly \"id\": string;\n\treadonly \"name\": string;\n}"
+					},
+					"rejects": []
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/projects/route.ts",
+					"name": "withProjectScope",
+					"requires": [
+						"tenant",
+						"auth"
+					],
+					"provides": [
+						"projectScope"
+					],
+					"providesTypes": {
+						"projectScope": "{\n\treadonly \"tenantId\": string;\n\treadonly \"canWrite\": boolean;\n}"
+					},
+					"rejects": []
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/projects/route.ts",
+					"name": "withProjectPermissions",
+					"requires": [
+						"projectScope"
+					],
+					"provides": [
+						"projectPermissions"
+					],
+					"providesTypes": {
+						"projectPermissions": "{\n\treadonly \"canRead\": boolean;\n\treadonly \"canWrite\": boolean;\n}"
+					},
+					"rejects": [
+						{
+							"type": "forbidden",
+							"status": 403,
+							"schema": "z.object({ message: z.string() })"
+						}
+					]
+				}
+			]
+		},
+		"ctx": [
+			"auth",
+			"projectListMode",
+			"projectPermissions",
+			"projectScope",
+			"requestId",
+			"session",
+			"tenant"
+		],
+		"groups": [
+			"(private)"
+		],
+		"segments": [
+			"tenants",
+			"$tenantId",
+			"projects"
 		]
 	},
 	{
@@ -157,6 +933,8 @@ export const routaRoutes = [
 			"get": {
 				"params": false,
 				"query": false,
+				"headers": false,
+				"cookies": true,
 				"body": false
 			}
 		},
@@ -243,6 +1021,8 @@ export const routaRoutes = [
 			"get": {
 				"params": false,
 				"query": false,
+				"headers": false,
+				"cookies": false,
 				"body": false
 			}
 		},
@@ -328,6 +1108,8 @@ export const routaRoutes = [
 			"get": {
 				"params": false,
 				"query": false,
+				"headers": false,
+				"cookies": false,
 				"body": false
 			}
 		},
@@ -397,409 +1179,33 @@ export const routaRoutes = [
 		"segments": [
 			"status"
 		]
-	},
-	{
-		"file": "src/routes/tenants/$tenantId/projects/$projectId/route.ts",
-		"path": "/tenants/:tenantId/projects/:projectId",
-		"methods": [
-			"GET",
-			"PATCH"
-		],
-		"responses": {
-			"get": [
-				200
-			],
-			"patch": [
-				200
-			]
-		},
-		"inputs": {
-			"get": {
-				"params": true,
-				"query": false,
-				"body": false
-			},
-			"patch": {
-				"params": true,
-				"query": false,
-				"body": true
-			}
-		},
-		"middleware": [
-			{
-				"file": "src/middleware/context.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": []
-			},
-			{
-				"file": "src/middleware/context.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": []
-			},
-			{
-				"file": "src/middleware/tenant.ts",
-				"name": "withTenant",
-				"requires": [
-					"session"
-				],
-				"provides": [
-					"tenant"
-				],
-				"providesTypes": {
-					"tenant": "{\n\treadonly \"id\": string;\n\treadonly \"name\": string;\n}"
-				},
-				"rejects": []
-			}
-		],
-		"methodMiddleware": {
-			"get": [
-				{
-					"file": "src/middleware/context.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": []
-				},
-				{
-					"file": "src/middleware/context.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": []
-				},
-				{
-					"file": "src/middleware/tenant.ts",
-					"name": "withTenant",
-					"requires": [
-						"session"
-					],
-					"provides": [
-						"tenant"
-					],
-					"providesTypes": {
-						"tenant": "{\n\treadonly \"id\": string;\n\treadonly \"name\": string;\n}"
-					},
-					"rejects": []
-				}
-			],
-			"patch": [
-				{
-					"file": "src/middleware/context.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": []
-				},
-				{
-					"file": "src/middleware/context.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": []
-				},
-				{
-					"file": "src/middleware/tenant.ts",
-					"name": "withTenant",
-					"requires": [
-						"session"
-					],
-					"provides": [
-						"tenant"
-					],
-					"providesTypes": {
-						"tenant": "{\n\treadonly \"id\": string;\n\treadonly \"name\": string;\n}"
-					},
-					"rejects": []
-				}
-			]
-		},
-		"ctx": [
-			"requestId",
-			"session",
-			"tenant"
-		],
-		"groups": [],
-		"segments": [
-			"tenants",
-			"$tenantId",
-			"projects",
-			"$projectId"
-		]
-	},
-	{
-		"file": "src/routes/tenants/$tenantId/projects/route.ts",
-		"path": "/tenants/:tenantId/projects",
-		"methods": [
-			"GET",
-			"POST"
-		],
-		"responses": {
-			"get": [
-				200
-			],
-			"post": [
-				201
-			]
-		},
-		"inputs": {
-			"get": {
-				"params": true,
-				"query": true,
-				"body": false
-			},
-			"post": {
-				"params": true,
-				"query": false,
-				"body": true
-			}
-		},
-		"middleware": [
-			{
-				"file": "src/middleware/context.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": []
-			},
-			{
-				"file": "src/middleware/context.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": []
-			},
-			{
-				"file": "src/middleware/tenant.ts",
-				"name": "withTenant",
-				"requires": [
-					"session"
-				],
-				"provides": [
-					"tenant"
-				],
-				"providesTypes": {
-					"tenant": "{\n\treadonly \"id\": string;\n\treadonly \"name\": string;\n}"
-				},
-				"rejects": []
-			},
-			{
-				"file": "src/routes/tenants/$tenantId/projects/route.ts",
-				"name": "withProjectScope",
-				"requires": [
-					"tenant",
-					"session"
-				],
-				"provides": [
-					"projectScope"
-				],
-				"providesTypes": {
-					"projectScope": "{\n\treadonly \"tenantId\": string;\n\treadonly \"canWrite\": boolean;\n}"
-				},
-				"rejects": []
-			}
-		],
-		"methodMiddleware": {
-			"get": [
-				{
-					"file": "src/middleware/context.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": []
-				},
-				{
-					"file": "src/middleware/context.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": []
-				},
-				{
-					"file": "src/middleware/tenant.ts",
-					"name": "withTenant",
-					"requires": [
-						"session"
-					],
-					"provides": [
-						"tenant"
-					],
-					"providesTypes": {
-						"tenant": "{\n\treadonly \"id\": string;\n\treadonly \"name\": string;\n}"
-					},
-					"rejects": []
-				},
-				{
-					"file": "src/routes/tenants/$tenantId/projects/route.ts",
-					"name": "withProjectScope",
-					"requires": [
-						"tenant",
-						"session"
-					],
-					"provides": [
-						"projectScope"
-					],
-					"providesTypes": {
-						"projectScope": "{\n\treadonly \"tenantId\": string;\n\treadonly \"canWrite\": boolean;\n}"
-					},
-					"rejects": []
-				},
-				{
-					"file": "src/routes/tenants/$tenantId/projects/route.ts",
-					"name": "withProjectListMode",
-					"requires": [
-						"projectScope"
-					],
-					"provides": [
-						"projectListMode"
-					],
-					"providesTypes": {
-						"projectListMode": "{\n\treadonly \"status\": \"active\" | \"archived\";\n\treadonly \"label\": string;\n}"
-					},
-					"rejects": []
-				}
-			],
-			"post": [
-				{
-					"file": "src/middleware/context.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": []
-				},
-				{
-					"file": "src/middleware/context.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": []
-				},
-				{
-					"file": "src/middleware/tenant.ts",
-					"name": "withTenant",
-					"requires": [
-						"session"
-					],
-					"provides": [
-						"tenant"
-					],
-					"providesTypes": {
-						"tenant": "{\n\treadonly \"id\": string;\n\treadonly \"name\": string;\n}"
-					},
-					"rejects": []
-				},
-				{
-					"file": "src/routes/tenants/$tenantId/projects/route.ts",
-					"name": "withProjectScope",
-					"requires": [
-						"tenant",
-						"session"
-					],
-					"provides": [
-						"projectScope"
-					],
-					"providesTypes": {
-						"projectScope": "{\n\treadonly \"tenantId\": string;\n\treadonly \"canWrite\": boolean;\n}"
-					},
-					"rejects": []
-				}
-			]
-		},
-		"ctx": [
-			"projectListMode",
-			"projectScope",
-			"requestId",
-			"session",
-			"tenant"
-		],
-		"groups": [],
-		"segments": [
-			"tenants",
-			"$tenantId",
-			"projects"
-		]
 	}
 ] as const;
 
 export type AdminAuditEventsCtx = {
 	"admin": unknown;
+	"auth": unknown;
 	"requestId": unknown;
 	"session": unknown;
+};
+
+export type TenantsTenantIdProjectsProjectIdCtx = {
+	"auth": unknown;
+	"projectPermissions": unknown;
+	"projectScope": unknown;
+	"requestId": unknown;
+	"session": unknown;
+	"tenant": unknown;
+};
+
+export type TenantsTenantIdProjectsCtx = {
+	"auth": unknown;
+	"projectListMode": unknown;
+	"projectPermissions": unknown;
+	"projectScope": unknown;
+	"requestId": unknown;
+	"session": unknown;
+	"tenant": unknown;
 };
 
 export type AuthSessionCtx = {
@@ -817,25 +1223,14 @@ export type StatusCtx = {
 	"session": unknown;
 };
 
-export type TenantsTenantIdProjectsProjectIdCtx = {
-	"requestId": unknown;
-	"session": unknown;
-	"tenant": unknown;
-};
-
-export type TenantsTenantIdProjectsCtx = {
-	"projectListMode": unknown;
-	"projectScope": unknown;
-	"requestId": unknown;
-	"session": unknown;
-	"tenant": unknown;
-};
-
 export type RoutaRouteCtxByPath = {
 	"/admin/audit-events": {
 		get: {
 			"admin": {
 				readonly "role": "owner";
+			};
+			"auth": {
+				readonly "userId": string;
 			};
 			"requestId": string;
 			"session": {
@@ -847,6 +1242,9 @@ export type RoutaRouteCtxByPath = {
 			"admin": {
 				readonly "role": "owner";
 			};
+			"auth": {
+				readonly "userId": string;
+			};
 			"requestId": string;
 			"session": {
 				readonly "authenticated": boolean;
@@ -856,6 +1254,9 @@ export type RoutaRouteCtxByPath = {
 		put: {
 			"admin": {
 				readonly "role": "owner";
+			};
+			"auth": {
+				readonly "userId": string;
 			};
 			"requestId": string;
 			"session": {
@@ -867,6 +1268,9 @@ export type RoutaRouteCtxByPath = {
 			"admin": {
 				readonly "role": "owner";
 			};
+			"auth": {
+				readonly "userId": string;
+			};
 			"requestId": string;
 			"session": {
 				readonly "authenticated": boolean;
@@ -876,6 +1280,9 @@ export type RoutaRouteCtxByPath = {
 		delete: {
 			"admin": {
 				readonly "role": "owner";
+			};
+			"auth": {
+				readonly "userId": string;
 			};
 			"requestId": string;
 			"session": {
@@ -887,6 +1294,9 @@ export type RoutaRouteCtxByPath = {
 			"admin": {
 				readonly "role": "owner";
 			};
+			"auth": {
+				readonly "userId": string;
+			};
 			"requestId": string;
 			"session": {
 				readonly "authenticated": boolean;
@@ -897,10 +1307,285 @@ export type RoutaRouteCtxByPath = {
 			"admin": {
 				readonly "role": "owner";
 			};
+			"auth": {
+				readonly "userId": string;
+			};
 			"requestId": string;
 			"session": {
 				readonly "authenticated": boolean;
 				readonly "userId"?: string | undefined;
+			};
+		};
+	};
+	"/tenants/:tenantId/projects/:projectId": {
+		get: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		post: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		put: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		patch: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectPermissions": {
+				readonly "canRead": boolean;
+				readonly "canWrite": boolean;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		delete: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectPermissions": {
+				readonly "canRead": boolean;
+				readonly "canWrite": boolean;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		head: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		options: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+	};
+	"/tenants/:tenantId/projects": {
+		get: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectListMode": {
+				readonly "status": "active" | "archived";
+				readonly "label": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		post: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectPermissions": {
+				readonly "canRead": boolean;
+				readonly "canWrite": boolean;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		put: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		patch: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		delete: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		head: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		options: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
 			};
 		};
 	};
@@ -1057,205 +1742,22 @@ export type RoutaRouteCtxByPath = {
 			};
 		};
 	};
-	"/tenants/:tenantId/projects/:projectId": {
-		get: {
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		post: {
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		put: {
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		patch: {
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		delete: {
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		head: {
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		options: {
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-	};
-	"/tenants/:tenantId/projects": {
-		get: {
-			"projectListMode": {
-				readonly "status": "active" | "archived";
-				readonly "label": string;
-			};
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		post: {
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		put: {
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		patch: {
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		delete: {
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		head: {
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		options: {
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-	};
 };
 
 export type RoutaCtxByKey = {
 	"admin": {
 		readonly "role": "owner";
 	};
+	"auth": {
+		readonly "userId": string;
+	};
 	"projectListMode": {
 		readonly "status": "active" | "archived";
 		readonly "label": string;
+	};
+	"projectPermissions": {
+		readonly "canRead": boolean;
+		readonly "canWrite": boolean;
 	};
 	"projectScope": {
 		readonly "tenantId": string;

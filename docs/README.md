@@ -72,7 +72,7 @@ The handler lives at the route boundary. The service, use case, module, domain m
 ```ts
 export default defineRoute({
 	post: createRoute({
-		middleware: [requireAuth()],
+		middleware: [requireAuth],
 
 		input: {
 			body: CreateUserSchema,

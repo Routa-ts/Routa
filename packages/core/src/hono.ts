@@ -64,18 +64,30 @@ export function createHonoApp(
 		});
 	}
 
+	const registeredRoutes = new Set<string>();
+
 	for (const route of routes) {
 		const contract = route.contract as RuntimeRouteContract;
+		const method = route.method.toUpperCase();
+		const routeKey = `${method} ${route.path}`;
 
-		if (route.method === "get" && contract.input?.body) {
-			throw new Error(`GET ${route.path} cannot declare a request body.`);
+		if (registeredRoutes.has(routeKey)) {
+			throw new Error(`Duplicate route registration: ${routeKey}`);
 		}
 
+		registeredRoutes.add(routeKey);
+
+		if ((route.method === "get" || route.method === "head") && contract.input?.body) {
+			throw new Error(`${route.method.toUpperCase()} ${route.path} cannot declare a request body.`);
+		}
+
+		assertUniqueMiddlewareRejects(contract, route.path, method);
+
 		const methods = methodsByPath.get(route.path) ?? new Set<string>();
-		methods.add(route.method.toUpperCase());
+		methods.add(method);
 		methodsByPath.set(route.path, methods);
 
-		app.on(route.method.toUpperCase(), route.path, async (context) => {
+		app.on(method, route.path, async (context) => {
 			try {
 				if (!acceptsJson(context.req.raw)) {
 					return new Response("Not Acceptable", { status: 406 });
@@ -147,18 +159,25 @@ async function runWithMiddleware(
 			return await dispatch(index + 1);
 		}
 
+		assertMiddlewareRequires(item.requires, ctx);
+
 		let nextCalled = false;
 		const input = await inputReader.parse(item.input);
 		const result = await item.run({
 			input,
 			ctx,
+			/**
+			 * Continues the middleware chain. Callers must `await next(...)` (or return its
+			 * promise). Fire-and-forget `next()` without awaiting drops the downstream result
+			 * and can leave the request hanging or returning invalid middleware output.
+			 */
 			next: async (providedCtx = {}) => {
 				if (nextCalled) {
 					throw new Error("Middleware next() called multiple times.");
 				}
 
 				nextCalled = true;
-				Object.assign(ctx, providedCtx);
+				Object.assign(ctx, parseMiddlewareProvides(item.provides, providedCtx));
 				return await dispatch(index + 1);
 			},
 		});
@@ -253,7 +272,61 @@ function parseSchema(schema: z.ZodTypeAny, value: unknown): unknown {
 }
 
 /**
+ * Ensures middleware required context keys are present before the middleware runs.
+ *
+ * @param requires - Context keys declared by the middleware
+ * @param ctx - Shared request context
+ */
+function assertMiddlewareRequires(
+	requires: readonly string[] | undefined,
+	ctx: Record<string, unknown>,
+): void {
+	for (const key of requires ?? []) {
+		if (!(key in ctx)) {
+			throw new Error(`Middleware requires ctx.${key}, but it was not provided.`);
+		}
+	}
+}
+
+/**
+ * Validates context values provided by middleware against declared Zod schemas.
+ *
+ * @param provides - Middleware `provides` schemas
+ * @param providedCtx - Context values passed to `next()`
+ * @returns The provided context with schema-validated `provides` values
+ */
+function parseMiddlewareProvides(
+	provides: Record<string, z.ZodTypeAny> | undefined,
+	providedCtx: Record<string, unknown>,
+): Record<string, unknown> {
+	if (!provides) {
+		return providedCtx;
+	}
+
+	const validated: Record<string, unknown> = { ...providedCtx };
+
+	try {
+		for (const [key, schema] of Object.entries(provides)) {
+			validated[key] = parseSchema(schema, providedCtx[key]);
+		}
+	} catch (error) {
+		if (error instanceof ZodError) {
+			throw new InvalidHandlerOutputError(
+				"Middleware provided context that does not match schema.",
+			);
+		}
+
+		throw error;
+	}
+
+	return validated;
+}
+
+/**
  * Parses cookies from the request header.
+ *
+ * Values are `decodeURIComponent`'d when possible; malformed percent-encoding is
+ * kept as the raw cookie value so parsing never throws.
  *
  * @param request - The request containing the `cookie` header
  * @returns A record of cookie names to decoded values
@@ -279,9 +352,21 @@ function parseCookies(request: Request): Record<string, string> {
 				return [];
 			}
 
-			return [[key, item.slice(index + 1).trim()]];
+			return [[key, decodeCookieValue(item.slice(index + 1).trim())]];
 		}),
 	);
+}
+
+/**
+ * Decodes a cookie value with `decodeURIComponent`, falling back to the raw
+ * string when the value contains malformed percent-encoding.
+ */
+function decodeCookieValue(value: string): string {
+	try {
+		return decodeURIComponent(value);
+	} catch {
+		return value;
+	}
 }
 
 function parseMediaRanges(header: string): Array<{ type: string; subtype: string; q: number }> {
@@ -322,14 +407,7 @@ function acceptsJson(request: Request): boolean {
 		.map((range, index) => ({
 			...range,
 			index,
-			specificity:
-				range.type === "application" && range.subtype === "json"
-					? 2
-					: range.type === "application" && range.subtype === "*"
-						? 1
-						: range.type === "*" && range.subtype === "*"
-							? 0
-							: -1,
+			specificity: jsonAcceptSpecificity(range.type, range.subtype),
 		}))
 		.filter((range) => range.specificity >= 0)
 		.sort((left, right) => {
@@ -345,6 +423,32 @@ function acceptsJson(request: Request): boolean {
 		});
 
 	return (matches[0]?.q ?? 0) > 0;
+}
+
+/**
+ * Scores how specifically an Accept media range matches JSON responses.
+ *
+ * Higher scores win during negotiation. `application/json` is most specific,
+ * then `application/` + `*+json`, then `application/` + `*`, then `*` + `/` + `*`.
+ */
+function jsonAcceptSpecificity(type: string, subtype: string): number {
+	if (type === "application" && subtype === "json") {
+		return 3;
+	}
+
+	if (type === "application" && subtype.endsWith("+json")) {
+		return 2;
+	}
+
+	if (type === "application" && subtype === "*") {
+		return 1;
+	}
+
+	if (type === "*" && subtype === "*") {
+		return 0;
+	}
+
+	return -1;
 }
 
 function problem(
@@ -405,7 +509,48 @@ function validateResult(
 function middlewareResponses(
 	contract: RuntimeRouteContract,
 ): Record<string, { status: number; schema: z.ZodTypeAny }> {
-	return Object.assign({}, ...(contract.middleware ?? []).map((item) => item.rejects ?? {}));
+	const responses: Record<string, { status: number; schema: z.ZodTypeAny }> = {};
+
+	for (const item of contract.middleware ?? []) {
+		for (const [type, response] of Object.entries(item.rejects ?? {}) as Array<
+			[string, { status: number; schema: z.ZodTypeAny }]
+		>) {
+			responses[type] = response;
+		}
+	}
+
+	return responses;
+}
+
+/**
+ * Ensures middleware reject keys are unique across a route's middleware chain.
+ *
+ * @param contract - The route contract whose middleware rejects are checked
+ * @param path - The route path, used in the error message
+ * @param method - The HTTP method, used in the error message
+ */
+function assertUniqueMiddlewareRejects(
+	contract: RuntimeRouteContract,
+	path: string,
+	method: string,
+): void {
+	const seen = new Map<string, string>();
+
+	for (const [index, item] of (contract.middleware ?? []).entries()) {
+		const label = `middleware[${index}]`;
+
+		for (const type of Object.keys(item.rejects ?? {})) {
+			const previous = seen.get(type);
+
+			if (previous) {
+				throw new Error(
+					`Duplicate middleware reject key "${type}" on ${method} ${path} (${previous} and ${label}).`,
+				);
+			}
+
+			seen.set(type, label);
+		}
+	}
 }
 
 /**
@@ -427,14 +572,17 @@ function isRuntimeResult(value: unknown): value is RuntimeResult {
 /**
  * Converts an object-like value to a plain record.
  *
- * @returns The value as a record when it is a non-array object, or an empty object otherwise.
+ * @returns The value as a record when it is a non-array object
+ * @throws {InvalidHandlerOutputError} When the value is not a plain object
  */
 function toRecord(value: unknown): Record<string, unknown> {
 	if (typeof value === "object" && value !== null && !Array.isArray(value)) {
 		return value as Record<string, unknown>;
 	}
 
-	return {};
+	throw new InvalidHandlerOutputError(
+		`createContext() must return a plain object, received ${value === null ? "null" : Array.isArray(value) ? "array" : typeof value}.`,
+	);
 }
 
 /**
@@ -452,7 +600,17 @@ function json(data: unknown, status: number): Response {
 		return new Response(null, { status });
 	}
 
-	return new Response(JSON.stringify(data), {
+	let body: string;
+
+	try {
+		body = JSON.stringify(data);
+	} catch (error) {
+		throw new InvalidHandlerOutputError(
+			`Failed to serialize response as JSON: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+
+	return new Response(body, {
 		status,
 		headers: {
 			"content-type": "application/json; charset=utf-8",

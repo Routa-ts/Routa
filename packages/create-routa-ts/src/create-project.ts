@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { builtinModules } from "node:module";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 export type CreateProjectResult = {
 	projectDir: string;
@@ -28,6 +28,12 @@ export function createProject(
 	options: CreateProjectOptions = {},
 ): CreateProjectResult {
 	const projectDir = resolve(cwd, targetDir);
+	const relativeProjectDir = relative(cwd, projectDir);
+
+	if (relativeProjectDir.startsWith("..") || isAbsolute(relativeProjectDir)) {
+		throw new Error(`Target directory must stay under the current working directory: ${targetDir}`);
+	}
+
 	const projectName = basename(projectDir);
 
 	if (existsSync(projectDir)) {
@@ -120,7 +126,9 @@ function routesMetadataSource(): string {
 			path: "/status",
 			methods: ["GET"],
 			responses: { get: [200] },
-			inputs: { get: { params: false, query: false, body: false } },
+			inputs: {
+				get: { params: false, query: false, headers: false, cookies: false, body: false },
+			},
 			middleware: [],
 			methodMiddleware: { get: [] },
 			ctx: [],
@@ -296,13 +304,13 @@ function packageJson(name: string, routaVersion: string, openApi: boolean): stri
 				"@routa-ts/cli": routaVersion,
 				"@routa-ts/core": routaVersion,
 				hono: "^4.12.27",
-				tsx: "^4.22.4",
+				tsx: "^4.23.0",
 				zod: "^4.4.3",
 			},
 			devDependencies: {
-				"@biomejs/biome": "^2.5.1",
-				"@types/node": "^24.0.4",
-				typescript: "^5.8.3",
+				"@biomejs/biome": "^2.5.2",
+				"@types/node": "^26.1.0",
+				typescript: "^6.0.3",
 			},
 		},
 		null,

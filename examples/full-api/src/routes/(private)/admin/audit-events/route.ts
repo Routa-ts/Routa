@@ -26,7 +26,7 @@ export default route({
 				data: {
 					events: Array.from({ length: limit }, (_, index) => ({
 						id: `audit_${index + 1}`,
-						actorId: ctx.admin.role,
+						actorId: ctx.auth.userId,
 						action: "project.read",
 					})),
 				},

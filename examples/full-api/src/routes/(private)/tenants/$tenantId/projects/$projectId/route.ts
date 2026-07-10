@@ -3,7 +3,10 @@
 // Source: openapi.yaml
 
 import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+import { withProjectPermissions, withProjectScope } from "../../../../../../middleware/projects.js";
 import {
+	DeleteProjectParams,
 	GetProjectParams,
 	GetProjectResponse,
 	UpdateProjectBody,
@@ -14,6 +17,7 @@ import {
 const route = createRouteRoot("/tenants/:tenantId/projects/:projectId");
 
 export default route({
+	middleware: [withProjectScope],
 	get: createRoute({
 		input: {
 			params: GetProjectParams,
@@ -37,6 +41,7 @@ export default route({
 		},
 	}),
 	patch: createRoute({
+		middleware: [withProjectPermissions],
 		input: {
 			params: UpdateProjectParams,
 			body: UpdateProjectBody,
@@ -56,6 +61,24 @@ export default route({
 					name: input.body.name ?? "Control Plane",
 					status: input.body.status ?? "active",
 				},
+			};
+		},
+	}),
+	delete: createRoute({
+		middleware: [withProjectPermissions],
+		input: {
+			params: DeleteProjectParams,
+		},
+		responses: {
+			success: {
+				status: 204,
+				schema: z.null(),
+			},
+		},
+		run: () => {
+			return {
+				type: "success",
+				data: null,
 			};
 		},
 	}),

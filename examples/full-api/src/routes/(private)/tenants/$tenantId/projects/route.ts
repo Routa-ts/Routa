@@ -3,7 +3,11 @@
 // Source: openapi.yaml
 
 import { createRoute, createRouteRoot } from "@routa-ts/core";
-import { withProjectListMode, withProjectScope } from "../../../../middleware/projects.js";
+import {
+	withProjectListMode,
+	withProjectPermissions,
+	withProjectScope,
+} from "../../../../../middleware/projects.js";
 import {
 	CreateProjectBody,
 	CreateProjectParams,
@@ -31,7 +35,7 @@ export default route({
 				schema: ListProjectsResponse,
 			},
 		},
-		run: ({ ctx }) => {
+		run: ({ ctx, input }) => {
 			const status = ctx.projectListMode.status;
 			const projects = [
 				{
@@ -40,17 +44,40 @@ export default route({
 					name: `${ctx.tenant.name} ${ctx.projectListMode.label} Portal`,
 					status,
 				},
-			];
+				{
+					id: "project_2",
+					tenantId: ctx.projectScope.tenantId,
+					name: `${ctx.tenant.name} Archive`,
+					status: "archived" as const,
+				},
+			].filter((project) => project.status === status);
+
+			const sorted = [...projects].sort((left, right) => {
+				const sort = input.query.sort;
+				if (!sort) {
+					return 0;
+				}
+
+				const leftValue = left[sort.field];
+				const rightValue = right[sort.field];
+				const compared = String(leftValue).localeCompare(String(rightValue));
+				return sort.direction === "desc" ? -compared : compared;
+			});
+
+			// `Fields()` trims whitespace (`id, name` → ["id","name"]) before enum checks.
+			const selectedFields = input.query.fields ?? (["id", "name", "status"] as const);
 
 			return {
 				type: "success",
 				data: {
-					projects,
+					projects: sorted,
+					selectedFields: [...selectedFields],
 				},
 			};
 		},
 	}),
 	post: createRoute({
+		middleware: [withProjectPermissions],
 		input: {
 			params: CreateProjectParams,
 			body: CreateProjectBody,
@@ -62,10 +89,6 @@ export default route({
 			},
 		},
 		run: ({ ctx, input }) => {
-			if (!ctx.projectScope.canWrite) {
-				throw new Response("Forbidden", { status: 403 });
-			}
-
 			return {
 				type: "success",
 				data: {
