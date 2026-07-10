@@ -2,7 +2,13 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { isBodylessStatus } from "@routa-ts/core/hono";
 import ts from "typescript";
-import { callName, localInitializer, propertyName, unwrapExpression } from "./ast.js";
+import {
+	callName,
+	localInitializer,
+	objectLiteral,
+	propertyName,
+	unwrapExpression,
+} from "./ast.js";
 import { type MiddlewareMetadata, validateProject } from "./project.js";
 
 type OpenApiLike = {
@@ -14,6 +20,7 @@ type OpenApiLike = {
 			string,
 			{
 				operationId?: string;
+				security?: unknown;
 				parameters?: Array<Record<string, unknown>>;
 				requestBody?: Record<string, unknown>;
 				responses?: Record<string, unknown>;
@@ -83,7 +90,7 @@ export function runOpenApiBreaking(
 		return { code: 1, stderr: `${invalidGraph.join("\n")}\n` };
 	}
 
-	const diagnostics = removedOperationDiagnostics(baseline, current);
+	const diagnostics = breakingChangeDiagnostics(baseline, current);
 
 	if (argv.includes("--update-baseline")) {
 		writeFileSync(
@@ -100,7 +107,7 @@ export function runOpenApiBreaking(
 		};
 	}
 
-	return { code: 0, stdout: "OpenAPI breaking check passed. No removed operations detected.\n" };
+	return { code: 0, stdout: "OpenAPI breaking check passed. No breaking changes detected.\n" };
 }
 
 /**
@@ -138,12 +145,10 @@ export function generateOpenApi(cwd = process.cwd()): OpenApiLike {
 			Object.entries(route.responses).map(([method, statuses]) => {
 				const baselineOperation = baseline?.paths?.[openApiPath]?.[method];
 				const input = operationInput(route.path, contracts[method]?.input, baselineOperation);
+				const middleware = route.methodMiddleware[method] ?? route.middleware;
 
 				const responseSchemas = new Map([
-					...middlewareRejectSchemas(
-						route.methodMiddleware[method] ?? route.middleware,
-						components?.schemas ?? {},
-					),
+					...middlewareRejectSchemas(middleware, components?.schemas ?? {}),
 					...(contracts[method]?.responses ?? new Map()),
 				]);
 
@@ -151,6 +156,8 @@ export function generateOpenApi(cwd = process.cwd()): OpenApiLike {
 					method,
 					{
 						...operationMetadataForBaseline(baselineOperation),
+						...middlewareOpenApiMetadata(middleware),
+						...deprecationMetadata(contracts[method]?.deprecation),
 						...input,
 						responses: operationResponses(statuses, responseSchemas, baselineOperation),
 					},
@@ -172,6 +179,26 @@ export function generateOpenApi(cwd = process.cwd()): OpenApiLike {
 					})),
 				}
 			: {}),
+	};
+}
+
+function middlewareOpenApiMetadata(
+	middleware: readonly MiddlewareMetadata[],
+): Record<string, unknown> {
+	const security = middleware.flatMap((item) => item.security);
+	const permissions = Array.from(new Set(middleware.flatMap((item) => item.permissions))).sort();
+	return {
+		...(security.length > 0 ? { security } : {}),
+		...(permissions.length > 0 ? { "x-routa-authz": permissions } : {}),
+	};
+}
+
+function deprecationMetadata(deprecation: ParsedContract["deprecation"]): Record<string, unknown> {
+	if (!deprecation) return {};
+	return {
+		deprecated: true,
+		...(deprecation.sunset ? { "x-routa-sunset": deprecation.sunset } : {}),
+		...(deprecation.replacement ? { "x-routa-replacement": deprecation.replacement } : {}),
 	};
 }
 
@@ -251,6 +278,7 @@ function invalidGraphDiagnostics(document: OpenApiLike): string[] {
 type ParsedContract = {
 	input: Partial<Record<"params" | "query" | "headers" | "cookies" | "body", unknown>>;
 	responses: Map<number, unknown>;
+	deprecation?: { sunset?: string; replacement?: string };
 };
 
 /**
@@ -350,10 +378,25 @@ function readRouteContracts(
 		contracts[method] = {
 			input: readInputSchemas(createRouteArg, schemas),
 			responses: readResponseSchemas(createRouteArg, schemas),
+			deprecation: readDeprecation(createRouteArg),
 		};
 	}
 
 	return { contracts, warnings: schemas.warnings };
+}
+
+function readDeprecation(contract: ts.ObjectLiteralExpression): ParsedContract["deprecation"] {
+	const property = objectProperty(contract, "deprecation");
+	const value = objectLiteral(property);
+	if (!value) return undefined;
+	const string = (name: string) => {
+		const item = objectProperty(value, name);
+		const expression = item && unwrapExpression(item);
+		return expression && ts.isStringLiteralLike(expression) ? expression.text : undefined;
+	};
+	const sunset = string("sunset");
+	const replacement = string("replacement");
+	return sunset || replacement ? { sunset, replacement } : undefined;
 }
 
 function middlewareRejectSchemas(
@@ -1197,22 +1240,92 @@ function isEmptySchemaContainer(value: unknown): boolean {
 }
 
 /**
- * Reports operations that exist in the baseline but are missing from the current OpenAPI document.
+ * Reports compatibility changes between the baseline and the current OpenAPI document.
  *
- * @returns Diagnostic strings for each removed operation.
+ * @returns Diagnostic strings for every detected breaking change.
  */
-function removedOperationDiagnostics(baseline: OpenApiLike, current: OpenApiLike): string[] {
+function breakingChangeDiagnostics(baseline: OpenApiLike, current: OpenApiLike): string[] {
 	const diagnostics: string[] = [];
 
 	for (const [path, methods] of Object.entries(baseline.paths ?? {})) {
-		for (const method of Object.keys(methods)) {
-			if (!current.paths?.[path]?.[method]) {
+		for (const [method, baselineOperation] of Object.entries(methods)) {
+			const currentOperation = current.paths?.[path]?.[method];
+
+			if (!currentOperation) {
 				diagnostics.push(`OPENAPI_REMOVED_OPERATION: ${method.toUpperCase()} ${path}`);
+				continue;
 			}
+
+			diagnostics.push(
+				...requiredInputDiagnostics(path, method, baselineOperation, currentOperation),
+			);
 		}
 	}
 
 	return diagnostics;
+}
+
+/**
+ * Reports inputs that became mandatory, because callers which omit them would
+ * no longer be compatible with the current operation.
+ */
+function requiredInputDiagnostics(
+	path: string,
+	method: string,
+	baseline: NonNullable<OpenApiLike["paths"]>[string][string],
+	current: NonNullable<OpenApiLike["paths"]>[string][string],
+): string[] {
+	const diagnostics: string[] = [];
+	const previous = new Map(
+		(baseline.parameters ?? []).flatMap((parameter) => {
+			const key = parameterKey(parameter);
+			return key ? [[key, parameter] as const] : [];
+		}),
+	);
+
+	for (const parameter of current.parameters ?? []) {
+		const key = parameterKey(parameter);
+
+		if (!key || parameter.required !== true) {
+			continue;
+		}
+
+		const before = previous.get(key);
+		if (before?.required !== true) {
+			const name = typeof parameter.name === "string" ? parameter.name : "unknown";
+			const location = typeof parameter.in === "string" ? parameter.in : "parameter";
+			diagnostics.push(
+				`OPENAPI_REQUIRED_INPUT: ${method.toUpperCase()} ${path} ${location} parameter "${name}" became required`,
+			);
+		}
+	}
+
+	if (current.requestBody?.required === true && baseline.requestBody?.required !== true) {
+		diagnostics.push(
+			`OPENAPI_REQUIRED_INPUT: ${method.toUpperCase()} ${path} request body became required`,
+		);
+	}
+
+	if (hasSecurity(current.security) && !hasSecurity(baseline.security)) {
+		diagnostics.push(
+			`OPENAPI_TIGHTER_AUTH: ${method.toUpperCase()} ${path} now requires authentication`,
+		);
+	}
+
+	return diagnostics;
+}
+
+function hasSecurity(security: unknown): boolean {
+	return Array.isArray(security) && security.length > 0;
+}
+
+function parameterKey(parameter: Record<string, unknown>): string | undefined {
+	if (typeof parameter.name !== "string" || typeof parameter.in !== "string") {
+		return undefined;
+	}
+
+	const name = parameter.in === "header" ? parameter.name.toLowerCase() : parameter.name;
+	return `${parameter.in}:${name}`;
 }
 
 /**

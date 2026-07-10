@@ -33,6 +33,7 @@ export type HonoRoute<TCtx = unknown> = {
 
 export type CreateHonoAppOptions = {
 	logger?: RoutaLogger;
+	lifecycleHeaders?: boolean;
 };
 
 /**
@@ -99,7 +100,7 @@ export function createHonoApp(
 				const result = await runWithMiddleware(contract, input, ctx, inputReader);
 				const response = validateResult(contract, result);
 
-				return json(response.data, response.status);
+				return json(response.data, response.status, lifecycleHeaders(contract, options));
 			} catch (error) {
 				const response = errorResponse(error);
 				logRequestError(options.logger, context, error, response);
@@ -595,9 +596,9 @@ function toRecord(value: unknown): Record<string, unknown> {
  * @param status - The HTTP status code for the response
  * @returns A `Response` with a JSON body and `application/json; charset=utf-8` content type
  */
-function json(data: unknown, status: number): Response {
+function json(data: unknown, status: number, headers: HeadersInit = {}): Response {
 	if (isBodylessStatus(status)) {
-		return new Response(null, { status });
+		return new Response(null, { status, headers });
 	}
 
 	let body: string;
@@ -614,8 +615,23 @@ function json(data: unknown, status: number): Response {
 		status,
 		headers: {
 			"content-type": "application/json; charset=utf-8",
+			...headers,
 		},
 	});
+}
+
+function lifecycleHeaders(
+	contract: RuntimeRouteContract,
+	options: CreateHonoAppOptions,
+): HeadersInit {
+	if (!options.lifecycleHeaders || !contract.deprecation) return {};
+	return {
+		Deprecation: "true",
+		...(contract.deprecation.sunset ? { Sunset: contract.deprecation.sunset } : {}),
+		...(contract.deprecation.replacement
+			? { Link: `<${contract.deprecation.replacement}>; rel="successor-version"` }
+			: {}),
+	};
 }
 
 /**

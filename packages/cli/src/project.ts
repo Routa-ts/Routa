@@ -8,7 +8,7 @@ import {
 	statSync,
 	writeFileSync,
 } from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
+import { basename, dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as ts from "typescript";
 import {
@@ -39,6 +39,7 @@ export type RouteMetadata = {
 	inputs: Record<string, RouteMethodInputMetadata>;
 	middleware: MiddlewareMetadata[];
 	methodMiddleware: Record<string, MiddlewareMetadata[]>;
+	deprecations?: Record<string, RouteDeprecationMetadata | undefined>;
 	ctx: string[];
 	groups: string[];
 	segments: string[];
@@ -59,12 +60,18 @@ export type MiddlewareMetadata = {
 	provides: string[];
 	providesTypes: Record<string, string>;
 	rejects: MiddlewareRejectMetadata[];
+	security: Array<Record<string, string[]>>;
+	permissions: string[];
 };
 
 export type MiddlewareRejectMetadata = {
 	type: string;
 	status: number;
 	schema: string;
+};
+
+export type RouteDeprecationMetadata = {
+	replacement?: string;
 };
 
 export type ProjectValidationResult = {
@@ -118,6 +125,7 @@ export function validateProject(
 		...discovery.diagnostics,
 		...runResultShapeDiagnostics(cwd),
 		...duplicateRouteDiagnostics(routes),
+		...deprecationReplacementDiagnostics(routes),
 		...missingSuccessResponseDiagnostics(routes),
 		...duplicateSchemaDiagnostics(cwd),
 		...middlewareOrderDiagnostics(routes),
@@ -619,7 +627,7 @@ export function stubEmptyRouteFiles(cwd = process.cwd()): string[] {
 		return [];
 	}
 
-	const files = walk(routesDir).filter((file) => file.endsWith(`${sep}route.ts`));
+	const files = walk(routesDir).filter(isRouteFile);
 	const written: string[] = [];
 
 	for (const file of files) {
@@ -872,13 +880,17 @@ function discoverRoutes(cwd: string): RouteDiscovery {
 		return { routes: [], diagnostics: [] };
 	}
 
-	const files = walk(routesDir).filter((file) => file.endsWith(`${sep}route.ts`));
+	const files = walk(routesDir).filter(isRouteFile);
 	const diagnostics: Diagnostic[] = [];
 
 	const routes = files.flatMap((file) => {
 		const relativeFile = relative(cwd, file);
 		const relativeRouteDir = relative(routesDir, dirname(file));
-		const rawSegments = relativeRouteDir === "" ? [] : relativeRouteDir.split(sep);
+		const directorySegments = relativeRouteDir === "" ? [] : relativeRouteDir.split(sep);
+		const rawSegments = [
+			...directorySegments,
+			...(basename(file) === "route.ts" ? [] : flatRouteSegments(basename(file))),
+		];
 		const groups = rawSegments.filter(
 			(segment) => segment.startsWith("(") && segment.endsWith(")"),
 		);
@@ -949,6 +961,15 @@ function discoverRoutes(cwd: string): RouteDiscovery {
 				inputs: Object.fromEntries(
 					Object.entries(contract).map(([method, metadata]) => [method, metadata.inputs]),
 				),
+				...(Object.values(contract).some((metadata) => metadata.deprecation)
+					? {
+							deprecations: Object.fromEntries(
+								Object.entries(contract).flatMap(([method, metadata]) =>
+									metadata.deprecation ? [[method, metadata.deprecation]] : [],
+								),
+							),
+						}
+					: {}),
 				middleware,
 				methodMiddleware,
 				ctx,
@@ -961,6 +982,21 @@ function discoverRoutes(cwd: string): RouteDiscovery {
 	return { routes, diagnostics };
 }
 
+function isRouteFile(file: string): boolean {
+	const name = basename(file);
+	return (
+		name === "route.ts"
+		|| (name.endsWith(".ts")
+			&& name !== "middleware.ts"
+			&& name !== "schemas.ts"
+			&& !name.endsWith(".test.ts"))
+	);
+}
+
+function flatRouteSegments(file: string): string[] {
+	return file.slice(0, -".ts".length).split(".");
+}
+
 /**
  * Extracts route method contract metadata from a route file.
  *
@@ -971,12 +1007,22 @@ function parseRouteContract(file: string): {
 	configFound: boolean;
 	contract: Record<
 		string,
-		{ responses: number[]; responseTypes: string[]; inputs: RouteMethodInputMetadata }
+		{
+			responses: number[];
+			responseTypes: string[];
+			inputs: RouteMethodInputMetadata;
+			deprecation?: RouteDeprecationMetadata;
+		}
 	>;
 } {
 	const contract: Record<
 		string,
-		{ responses: number[]; responseTypes: string[]; inputs: RouteMethodInputMetadata }
+		{
+			responses: number[];
+			responseTypes: string[];
+			inputs: RouteMethodInputMetadata;
+			deprecation?: RouteDeprecationMetadata;
+		}
 	> = {};
 	const sourceFile = parseTypeScriptFile(file);
 	const routeConfig = routeConfigObject(sourceFile);
@@ -1002,10 +1048,23 @@ function parseRouteContract(file: string): {
 			responses: responseStatuses(routeContract),
 			responseTypes: responseTypeKeys(routeContract),
 			inputs: routeInputs(routeContract),
+			deprecation: routeDeprecation(routeContract),
 		};
 	}
 
 	return { configFound: true, contract };
+}
+
+function routeDeprecation(
+	routeContract: ts.ObjectLiteralExpression,
+): RouteDeprecationMetadata | undefined {
+	const property = objectProperty(routeContract, "deprecation");
+	const deprecation = property ? objectLiteral(property.initializer) : undefined;
+	const replacement = deprecation && objectProperty(deprecation, "replacement");
+	const expression = replacement && unwrapExpression(replacement.initializer);
+	return expression && ts.isStringLiteralLike(expression)
+		? { replacement: expression.text }
+		: undefined;
 }
 
 function methodResponseStatuses(
@@ -1679,7 +1738,50 @@ function middlewareMetadata(
 			]),
 		),
 		rejects: middlewareRejects(contract),
+		security: middlewareSecurity(contract),
+		permissions: middlewarePermissions(contract),
 	};
+}
+
+function middlewareOpenApi(
+	contract: ts.ObjectLiteralExpression,
+): ts.ObjectLiteralExpression | undefined {
+	const property = objectProperty(contract, "openapi");
+	return property ? objectLiteral(property.initializer) : undefined;
+}
+
+function middlewarePermissions(contract: ts.ObjectLiteralExpression): string[] {
+	const openapi = middlewareOpenApi(contract);
+	return openapi ? stringArrayProperty(openapi, "permissions") : [];
+}
+
+function middlewareSecurity(contract: ts.ObjectLiteralExpression): Array<Record<string, string[]>> {
+	const openapi = middlewareOpenApi(contract);
+	const property = openapi && objectProperty(openapi, "security");
+	const expression = property && unwrapExpression(property.initializer);
+	if (!expression || !ts.isArrayLiteralExpression(expression)) return [];
+	return expression.elements.flatMap((element) => {
+		const object = objectLiteral(element);
+		if (!object) return [];
+		return [
+			Object.fromEntries(
+				objectProperties(object).flatMap((item) => {
+					const name = propertyName(item.name);
+					const value = unwrapExpression(item.initializer);
+					return name && ts.isArrayLiteralExpression(value)
+						? [
+								[
+									name,
+									value.elements.flatMap((entry) =>
+										ts.isStringLiteralLike(entry) ? [entry.text] : [],
+									),
+								],
+							]
+						: [];
+				}),
+			),
+		];
+	});
 }
 
 function middlewareRejects(contract: ts.ObjectLiteralExpression): MiddlewareRejectMetadata[] {
@@ -2529,6 +2631,57 @@ function duplicateRouteDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 	}
 
 	return diagnostics;
+}
+
+function deprecationReplacementDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
+	const paths = new Set(routes.map((route) => route.path));
+	const diagnostics: Diagnostic[] = [];
+
+	for (const route of routes) {
+		for (const [method, deprecation] of Object.entries(route.deprecations ?? {})) {
+			if (!deprecation) continue;
+			const replacement = deprecation.replacement;
+			if (!replacement) continue;
+
+			if (replacement.startsWith("/")) {
+				if (!paths.has(replacement)) {
+					diagnostics.push({
+						code: "ROUTA_DEPRECATION_REPLACEMENT_ROUTE_NOT_FOUND",
+						severity: "error",
+						message: `${method.toUpperCase()} ${route.path} deprecation replacement ${replacement} is not a Routa route.`,
+						file: route.file,
+						routePath: route.path,
+						suggestion:
+							"Use an existing local path beginning with /, or an absolute http(s) URL for another API.",
+					});
+				}
+				continue;
+			}
+
+			if (!isExternalApiUrl(replacement)) {
+				diagnostics.push({
+					code: "ROUTA_DEPRECATION_REPLACEMENT_URL_INVALID",
+					severity: "error",
+					message: `${method.toUpperCase()} ${route.path} deprecation replacement must be an existing local path or absolute http(s) URL.`,
+					file: route.file,
+					routePath: route.path,
+					suggestion:
+						"Use /new-route for this API, or https://api.example.com/new-route for another API.",
+				});
+			}
+		}
+	}
+
+	return diagnostics;
+}
+
+function isExternalApiUrl(value: string): boolean {
+	try {
+		const url = new URL(value);
+		return url.protocol === "http:" || url.protocol === "https:";
+	} catch {
+		return false;
+	}
 }
 
 /**

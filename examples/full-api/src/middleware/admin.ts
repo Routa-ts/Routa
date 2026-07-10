@@ -2,6 +2,9 @@ import { createMiddleware } from "@routa-ts/core";
 import { z } from "zod";
 
 export const withAdmin = createMiddleware({
+	openapi: {
+		permissions: ["audit.read"],
+	},
 	requires: ["auth"],
 	provides: {
 		admin: z.object({

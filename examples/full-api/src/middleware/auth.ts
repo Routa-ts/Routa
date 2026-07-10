@@ -9,6 +9,9 @@ import { z } from "zod";
  * clear extension story. Missing/unauthenticated session → typed 401.
  */
 export const requireAuth = createMiddleware({
+	openapi: {
+		security: [{ sessionCookie: [] }],
+	},
 	requires: ["session"],
 	provides: {
 		auth: z.object({

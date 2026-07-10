@@ -11,6 +11,7 @@ type RoutaConfig = {
 	host?: string;
 	port?: number;
 	logger?: ReturnType<typeof createLogger> | false;
+	lifecycleHeaders?: boolean;
 };
 
 /**
@@ -22,7 +23,7 @@ export async function startRuntime(cwd: string, runtimeRoot = cwd): Promise<void
 	const routes = await loadRoutes(cwd, runtimeRoot);
 	const routa = await loadRoutaConfig(cwd, runtimeRoot);
 	const logger = routa.logger === false ? undefined : (routa.logger ?? createLogger());
-	const app = createHonoApp(routes, { logger });
+	const app = createHonoApp(routes, { logger, lifecycleHeaders: routa.lifecycleHeaders });
 	const hostname = process.env.HOST ?? routa.host ?? "127.0.0.1";
 	const port = Number(process.env.PORT ?? routa.port ?? 3000);
 	const server = serve({ fetch: app.fetch, hostname, port }, () => {

@@ -3280,6 +3280,154 @@ export default defineRoute({
 		expect(result.stderr).toContain("--update-baseline");
 	});
 
+	it("discovers flat collection and dynamic route files", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-flat-routes-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/users.ts"),
+			`import { createRoute, defineRoute } from "@routa-ts/core";
+export default defineRoute({ get: createRoute({ responses: {}, run: () => ({ type: "success", data: null }) }) });
+`,
+		);
+		writeFileSync(
+			join(cwd, "src/routes/tasks.$id.ts"),
+			`import { createRoute, defineRoute } from "@routa-ts/core";
+export default defineRoute({ get: createRoute({ responses: {}, run: () => ({ type: "success", data: null }) }) });
+`,
+		);
+
+		const result = validateProject(cwd, { write: false });
+
+		expect(result.routes.map((route) => route.path).sort()).toEqual(["/tasks/:id", "/users"]);
+	});
+
+	it("reports query parameters that become required in openapi breaking checks", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-required-input-"));
+		createTypeScriptProject(cwd);
+		writeFileSync(
+			join(cwd, "openapi.yaml"),
+			`openapi: 3.1.0
+info:
+  title: Users API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      operationId: listUsers
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+`,
+		);
+		run(["scaffold", "openapi.yaml"], { cwd });
+		const schemas = join(cwd, "src/routes/users/schemas.ts");
+		writeFileSync(
+			schemas,
+			readFileSync(schemas, "utf8").replace("z.string().optional()", "z.string()"),
+		);
+
+		const result = run(["openapi", "breaking"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("OPENAPI_REQUIRED_INPUT");
+		expect(result.stderr).toContain('GET /users query parameter "status" became required');
+	});
+
+	it("reports newly declared middleware security as a breaking change", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-auth-breaking-"));
+		createTypeScriptProject(cwd);
+		writeSimpleUsersOpenApi(cwd);
+		run(["scaffold", "openapi.yaml"], { cwd });
+		const route = join(cwd, "src/routes/users/route.ts");
+		writeFileSync(
+			route,
+			readFileSync(route, "utf8")
+				.replace(
+					'import { createRoute, defineRoute } from "@routa-ts/core";',
+					'import { createMiddleware, createRoute, defineRoute } from "@routa-ts/core";\n\nconst requireAuth = createMiddleware({ openapi: { security: [{ bearerAuth: [] }], permissions: ["users.read"] } });',
+				)
+				.replace("get: createRoute({", "get: createRoute({\n\t\tmiddleware: [requireAuth],"),
+		);
+
+		const result = run(["openapi", "breaking"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("OPENAPI_TIGHTER_AUTH: GET /users now requires authentication");
+	});
+
+	it("emits route deprecation metadata into OpenAPI", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-deprecation-"));
+		createTypeScriptProject(cwd);
+		writeSimpleUsersOpenApi(cwd);
+		run(["scaffold", "openapi.yaml"], { cwd });
+		const route = join(cwd, "src/routes/users/route.ts");
+		writeFileSync(
+			route,
+			readFileSync(route, "utf8").replace(
+				"get: createRoute({",
+				'get: createRoute({\n\t\tdeprecation: { sunset: "2027-01-01", replacement: "https://v2.example.com/users" },',
+			),
+		);
+
+		const operation = generateOpenApi(cwd).paths?.["/users"]?.get;
+
+		expect(operation?.deprecated).toBe(true);
+		expect(operation?.["x-routa-sunset"]).toBe("2027-01-01");
+	});
+
+	it("validates local and external deprecation replacements", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-deprecation-replacements-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/status.ts"),
+			`import { createRoute, defineRoute } from "@routa-ts/core";
+export default defineRoute({ get: createRoute({ responses: {}, run: () => ({ type: "success", data: null }) }) });
+`,
+		);
+		writeFileSync(
+			join(cwd, "src/routes/legacy.ts"),
+			`import { createRoute, defineRoute } from "@routa-ts/core";
+export default defineRoute({ get: createRoute({ deprecation: { replacement: "/missing" }, responses: {}, run: () => ({ type: "success", data: null }) }) });
+`,
+		);
+
+		const missing = run(["check"], { cwd });
+		expect(missing.code).toBe(1);
+		expect(missing.stderr).toContain("ROUTA_DEPRECATION_REPLACEMENT_ROUTE_NOT_FOUND");
+
+		writeFileSync(
+			join(cwd, "src/routes/legacy.ts"),
+			readFileSync(join(cwd, "src/routes/legacy.ts"), "utf8").replace('"/missing"', '"next-api"'),
+		);
+		const invalidUrl = run(["check"], { cwd });
+		expect(invalidUrl.code).toBe(1);
+		expect(invalidUrl.stderr).toContain("ROUTA_DEPRECATION_REPLACEMENT_URL_INVALID");
+
+		writeFileSync(
+			join(cwd, "src/routes/legacy.ts"),
+			readFileSync(join(cwd, "src/routes/legacy.ts"), "utf8").replace('"next-api"', '"/status"'),
+		);
+		expect(
+			validateProject(cwd, { write: false }).diagnostics.some((diagnostic) =>
+				diagnostic.code.startsWith("ROUTA_DEPRECATION_"),
+			),
+		).toBe(false);
+	});
+
 	it("generates body route contracts that typecheck in a consumer project", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-consumer-typecheck-"));
 		createTypeScriptProject(cwd);

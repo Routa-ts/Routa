@@ -78,6 +78,7 @@ export default defineConfig({
 						{ label: "Testing", slug: "docs/guides/testing" },
 						{ label: "Run and start", slug: "docs/guides/run-start" },
 						{ label: "Deploy", slug: "docs/guides/deploy" },
+						{ label: "API evolution", slug: "docs/guides/api-evolution" },
 					],
 				},
 				{

@@ -30,6 +30,10 @@ pnpm dev
 | Headers + cookies inputs                                                    | `x-request-id`, `session` cookie                                |
 | Hand-written `defineRoute` + Accept `*+json`                                | `GET /demo`                                                     |
 | OpenAPI scaffold + baseline drift check                                     | `openapi.yaml`, `pnpm openapi:check`                            |
+| Breaking-change checks for required inputs and tighter auth                 | `pnpm openapi:breaking`                                         |
+| OpenAPI security + permission visibility                                    | `requireAuth`, `withAdmin`, `withProjectPermissions` middleware |
+| Flat and dynamic flat routes                                                 | `legacy.ts`, `legacy.$id.ts`                                    |
+| Deprecation metadata + lifecycle headers                                    | `GET /legacy`, `src/routa.ts`                                   |
 
 ## Route layout
 
@@ -39,11 +43,14 @@ src/routes/
   status/route.ts                        # GET /status
   auth/session/route.ts                  # GET /auth/session
   demo/route.ts                          # GET /demo (hand-written)
+  legacy.ts                              # GET /legacy (flat, deprecated)
+  legacy.$id.ts                          # GET /legacy/:id (flat dynamic)
   (private)/
     middleware.ts                        # requireAuth (typed 401)
     admin/
       middleware.ts                      # withAdmin
       audit-events/route.ts              # GET /admin/audit-events
+      reports.ts                          # GET /admin/reports (nested flat route)
     tenants/$tenantId/
       middleware.ts                      # withTenant
       projects/route.ts                  # GET, POST /tenants/:tenantId/projects
@@ -61,6 +68,7 @@ pnpm lint
 pnpm format
 pnpm scaffold              # routa scaffold openapi.yaml
 pnpm openapi:check
+pnpm openapi:breaking
 pnpm routes
 pnpm routes:json
 ```
@@ -104,6 +112,15 @@ curl -s -i -X DELETE -H "Cookie: session=$WRITER" \
 # Admin audit feed
 curl -s -H "Cookie: session=$SESSION" \
   'http://127.0.0.1:3000/admin/audit-events?limit=2'
+
+# Nested flat route: receives `(private)` auth and `admin` middleware context.
+curl -s -H "Cookie: session=$SESSION" http://127.0.0.1:3000/admin/reports
+
+# Deprecated flat route: generated lifecycle headers identify the successor.
+curl -s -i http://127.0.0.1:3000/legacy
+
+# Dynamic flat route
+curl -s http://127.0.0.1:3000/legacy/old-project
 ```
 
 ## OpenAPI
@@ -114,4 +131,12 @@ curl -s -H "Cookie: session=$SESSION" \
 
 ```sh
 pnpm openapi:check
+
+# Fails for removed operations, newly-required input, or public → authenticated changes.
+pnpm openapi:breaking
 ```
+
+The current baseline intentionally includes the private-route security metadata.
+To see the auth compatibility guard, remove `openapi.security` from
+`src/middleware/auth.ts`, update the baseline, then restore it and run
+`pnpm openapi:breaking`.

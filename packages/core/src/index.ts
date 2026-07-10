@@ -29,6 +29,13 @@ export type RouteResponses = Record<
 		schema: z.ZodTypeAny;
 	}
 >;
+export type ExternalApiUrl = `http://${string}` | `https://${string}`;
+export type RegisteredRoutePath = keyof RegisteredRouteCtxByPath & `/${string}`;
+export type RouteDeprecationReplacement = RegisteredRoutePath | ExternalApiUrl;
+export type RouteDeprecation = {
+	sunset?: string;
+	replacement?: RouteDeprecationReplacement;
+};
 export type MiddlewareRejectsSpec = RouteResponses;
 
 type MaybePromise<T> = T | Promise<T>;
@@ -55,6 +62,10 @@ export type MiddlewareRejectResult<TRejects extends MiddlewareRejectsSpec> =
 	keyof TRejects extends never ? never : RoutaResult<TRejects>;
 
 export type MiddlewareProvidesSpec = Record<string, z.ZodTypeAny>;
+export type MiddlewareOpenApi = {
+	security?: readonly Record<string, readonly string[]>[];
+	permissions?: readonly string[];
+};
 
 export type MiddlewareProvidesKeys<TProvides extends MiddlewareProvidesSpec> = keyof TProvides &
 	string;
@@ -100,6 +111,7 @@ export type MiddlewareContract<
 	provides?: TProvides;
 	rejects?: TRejects;
 	input?: TInput;
+	openapi?: MiddlewareOpenApi;
 	run?: MiddlewareRun<TRequires, TProvides, TRejects, TInput>;
 };
 
@@ -171,6 +183,7 @@ export type RouteContract<
 	input?: TInput;
 	responses: TResponses;
 	middleware?: TMiddleware;
+	deprecation?: RouteDeprecation;
 	run: RouteRun<TInput, TResponses, TCtx>;
 };
 
@@ -178,6 +191,7 @@ export type AnyRouteContract = {
 	input?: RouteInput;
 	responses: RouteResponses;
 	middleware?: readonly AnyMiddlewareContract[];
+	deprecation?: RouteDeprecation;
 	run: (args: any) => unknown;
 };
 
@@ -217,6 +231,7 @@ export type RoutaConfig = {
 	host?: string;
 	port?: number;
 	logger?: RoutaLogger | false;
+	lifecycleHeaders?: boolean;
 };
 
 /**

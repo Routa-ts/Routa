@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { createMiddleware, createRouta, createRoute, defineRoute } from "./index.js";
 
+declare module "./index.js" {
+	interface Register {
+		routeCtxByPath: {
+			"/status": { get: Record<never, never> };
+		};
+	}
+}
+
 describe("route contracts", () => {
 	it("preserves route method declarations", () => {
 		const requireAuth = createMiddleware({
@@ -44,6 +52,39 @@ describe("route contracts", () => {
 		});
 
 		expect(app.port).toBe(3001);
+	});
+
+	it("typechecks local and external deprecation replacements", () => {
+		const responses = {
+			success: { status: 200, schema: z.object({ ok: z.boolean() }) },
+		};
+
+		createRoute({
+			deprecation: { replacement: "/status" },
+			responses,
+			run: () => ({ type: "success", data: { ok: true } }),
+		});
+		createRoute({
+			deprecation: { replacement: "https://api.example.com/v2/status" },
+			responses,
+			run: () => ({ type: "success", data: { ok: true } }),
+		});
+		createRoute({
+			deprecation: {
+				// @ts-expect-error Local replacements must be registered route paths.
+				replacement: "/missing",
+			},
+			responses,
+			run: () => ({ type: "success", data: { ok: true } }),
+		});
+		createRoute({
+			deprecation: {
+				// @ts-expect-error External replacements must be absolute HTTP(S) URLs.
+				replacement: "api.example.com/v2/status",
+			},
+			responses,
+			run: () => ({ type: "success", data: { ok: true } }),
+		});
 	});
 
 	it("typechecks middleware rejection tags and data", () => {

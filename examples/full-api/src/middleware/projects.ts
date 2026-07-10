@@ -47,6 +47,9 @@ export const withProjectListMode = createMiddleware({
 });
 
 export const withProjectPermissions = createMiddleware({
+	openapi: {
+		permissions: ["projects.write"],
+	},
 	requires: ["projectScope"],
 	provides: {
 		projectPermissions: z.object({

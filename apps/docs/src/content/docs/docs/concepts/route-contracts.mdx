@@ -9,6 +9,8 @@ Routa is built around one source of truth:
 schemas -> routes -> handlers -> OpenAPI -> docs/checks
 ```
 
+Route files may use either directory style (`routes/users/route.ts`) or flat style (`routes/users.ts`). Dynamic flat files use `$`, for example `routes/users.$id.ts` maps to `/users/:id`; both styles can be mixed in one project.
+
 Route files define what each HTTP method accepts, what it can return, which middleware applies, and where the handler boundary begins.
 
 ## File-Based APIs
