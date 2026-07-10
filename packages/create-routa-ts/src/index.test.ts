@@ -28,7 +28,7 @@ describe("create-routa-ts", () => {
 		const result = createProject("my-api", cwd);
 
 		expect(result.files).toContain(".gitignore");
-		expect(result.files).toContain(".node-version");
+		expect(result.files).toContain(".nvmrc");
 		expect(result.files).toContain(".vscode/settings.json");
 		expect(result.files).toContain("README.md");
 		expect(result.files).toContain("biome.json");

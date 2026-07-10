@@ -37,7 +37,7 @@ jobs:
     with:
       command: |
         pnpm --filter './packages/*' build
-        scripts/link-ci-routa.sh
+        node scripts/link-local-cli.mjs --root "$GITHUB_WORKSPACE"
         pnpm test
 
   build:
@@ -46,7 +46,7 @@ jobs:
     with:
       command: |
         pnpm --filter './packages/*' build
-        scripts/link-ci-routa.sh
+        node scripts/link-local-cli.mjs --root "$GITHUB_WORKSPACE"
         pnpm build
 
   docs:
@@ -61,7 +61,7 @@ jobs:
     with:
       command: |
         pnpm --filter './packages/*' build
-        scripts/link-ci-routa.sh
+        node scripts/link-local-cli.mjs --root "$GITHUB_WORKSPACE"
         pnpm build
         pnpm --filter './examples/*' check
         pnpm --filter './examples/*' openapi:check

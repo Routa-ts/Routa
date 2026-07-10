@@ -11,6 +11,16 @@ import {
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as ts from "typescript";
+import {
+	callName,
+	localInitializer,
+	objectLiteral,
+	objectProperties,
+	objectProperty,
+	propertyName,
+	unwrapExpression,
+} from "./ast.js";
+import { runTypeScript } from "./typescript-runner.js";
 
 export type Diagnostic = {
 	code: string;
@@ -2197,24 +2207,6 @@ function resolveExportedExpression(
 /**
  * Finds the initializer for a local `const`/`let`/`var` binding in a source file.
  */
-function localInitializer(sourceFile: ts.SourceFile, name: string): ts.Expression | undefined {
-	for (const statement of sourceFile.statements) {
-		if (!ts.isVariableStatement(statement)) {
-			continue;
-		}
-
-		for (const declaration of statement.declarationList.declarations) {
-			if (
-				ts.isIdentifier(declaration.name)
-				&& declaration.name.text === name
-				&& declaration.initializer
-			) {
-				return declaration.initializer;
-			}
-		}
-	}
-}
-
 /**
  * Extracts the route definition object from a `defineRoute(...)` call.
  *
@@ -2435,98 +2427,6 @@ function numericValue(expression: ts.Expression): number | undefined {
 	if (ts.isNumericLiteral(unwrapped)) {
 		return Number(unwrapped.text);
 	}
-}
-
-/**
- * Finds a property assignment with the given name in an object literal.
- *
- * @param object - The object literal to search.
- * @param name - The property name to match.
- * @returns The matching property assignment, or `undefined` if none is found.
- */
-function objectProperty(
-	object: ts.ObjectLiteralExpression,
-	name: string,
-): ts.PropertyAssignment | undefined {
-	return objectProperties(object).find((property) => propertyName(property.name) === name);
-}
-
-/**
- * Gets the property assignments declared in an object literal.
- *
- * @param object - The object literal to inspect
- * @returns The property assignments contained in `object`
- */
-function objectProperties(object: ts.ObjectLiteralExpression): ts.PropertyAssignment[] {
-	return object.properties.filter(ts.isPropertyAssignment);
-}
-
-/**
- * Gets an object literal expression from a node.
- *
- * @param node - The node to inspect
- * @returns The object literal expression if the node resolves to one, `undefined` otherwise
- */
-function objectLiteral(node: ts.Node | undefined): ts.ObjectLiteralExpression | undefined {
-	if (!node || !ts.isExpression(node)) {
-		return;
-	}
-
-	const unwrapped = unwrapExpression(node);
-	return ts.isObjectLiteralExpression(unwrapped) ? unwrapped : undefined;
-}
-
-/**
- * Gets the name of a called function or property access.
- *
- * @returns The identifier or property name used by the expression, or `undefined` when it cannot be determined.
- */
-function callName(expression: ts.Expression): string | undefined {
-	const callee = ts.isCallExpression(expression)
-		? unwrapExpression(expression.expression)
-		: unwrapExpression(expression);
-
-	if (ts.isIdentifier(callee)) {
-		return callee.text;
-	}
-
-	if (ts.isPropertyAccessExpression(callee)) {
-		return callee.name.text;
-	}
-}
-
-/**
- * Gets the text name of a property declaration.
- *
- * @param name - The property name node
- * @returns The property name text, or `undefined` for computed names
- */
-function propertyName(name: ts.PropertyName): string | undefined {
-	if (ts.isIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)) {
-		return name.text;
-	}
-}
-
-/**
- * Removes common TypeScript wrapper expressions from an expression.
- *
- * @param expression - The expression to unwrap.
- * @returns The innermost expression after removing wrappers.
- */
-function unwrapExpression(expression: ts.Expression): ts.Expression {
-	let current = expression;
-
-	while (
-		ts.isParenthesizedExpression(current)
-		|| ts.isAsExpression(current)
-		|| ts.isSatisfiesExpression(current)
-		|| ts.isTypeAssertionExpression(current)
-		|| ts.isNonNullExpression(current)
-	) {
-		current = current.expression;
-	}
-
-	return current;
 }
 
 /**
@@ -2806,42 +2706,6 @@ function pascalCase(value: string): string {
 		.split(/\s+/)
 		.map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
 		.join("");
-}
-
-/**
- * Runs the TypeScript compiler for a project.
- *
- * Prefers a local `node_modules/.bin/tsc` when present, then falls back to `pnpm exec tsc`.
- *
- * @param cwd - Project root directory
- * @param args - Arguments passed to `tsc`
- * @returns The compiler result, or `{ code: 0 }` when `tsconfig.json` is missing
- */
-function runTypeScript(
-	cwd: string,
-	args: string[],
-): { code: number; stdout?: string; stderr?: string } {
-	if (!existsSync(join(cwd, "tsconfig.json"))) {
-		return { code: 0 };
-	}
-
-	const localTsc = join(cwd, "node_modules", ".bin", "tsc");
-	const result = existsSync(localTsc)
-		? spawnSync(localTsc, args, {
-				cwd,
-				encoding: "utf8",
-				shell: process.platform === "win32",
-			})
-		: spawnSync("pnpm", ["exec", "tsc", ...args], {
-				cwd,
-				encoding: "utf8",
-			});
-
-	return {
-		code: result.status ?? 1,
-		stdout: result.stdout,
-		stderr: result.stderr || result.error?.message,
-	};
 }
 
 /**

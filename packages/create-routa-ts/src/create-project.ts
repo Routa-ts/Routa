@@ -57,7 +57,7 @@ export function createProject(
 	});
 	const files = new Map<string, string>([
 		[".gitignore", gitignore()],
-		[".node-version", "24\n"],
+		[".nvmrc", "24\n"],
 		[".vscode/settings.json", vscodeSettings()],
 		["README.md", readme(projectName, options.openApi ?? true)],
 		["biome.json", biomeJson()],
@@ -408,7 +408,7 @@ Routa API generated with \`<package-manager> create routa-ts@latest\`.
 
 ## Development
 
-Requires Node.js 24+. The included \`.node-version\` file helps version managers select the supported runtime.
+Requires Node.js 24+. The included \`.nvmrc\` file helps version managers select the supported runtime.
 
 \`\`\`sh
 # Use npm, pnpm, Yarn, Bun, or another compatible package manager.

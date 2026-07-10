@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { isBodylessStatus } from "@routa-ts/core/hono";
 import ts from "typescript";
+import { callName, localInitializer, propertyName, unwrapExpression } from "./ast.js";
 import { type MiddlewareMetadata, validateProject } from "./project.js";
 
 type OpenApiLike = {
@@ -789,24 +790,6 @@ function defineRouteProperties(ast: ts.SourceFile): ts.PropertyAssignment[] {
 /**
  * Finds the initializer for a top-level `const`/`let`/`var` binding.
  */
-function localInitializer(sourceFile: ts.SourceFile, name: string): ts.Expression | undefined {
-	for (const statement of sourceFile.statements) {
-		if (!ts.isVariableStatement(statement)) {
-			continue;
-		}
-
-		for (const declaration of statement.declarationList.declarations) {
-			if (
-				ts.isIdentifier(declaration.name)
-				&& declaration.name.text === name
-				&& declaration.initializer
-			) {
-				return declaration.initializer;
-			}
-		}
-	}
-}
-
 /**
  * Extracts the route configuration object from a `createRoute` call.
  *
@@ -934,33 +917,11 @@ function numericProperty(object: ts.ObjectLiteralExpression, name: string): numb
  * @param name - The property name node to read.
  * @returns The property name text, or `undefined` for unsupported name nodes.
  */
-function propertyName(name: ts.PropertyName): string | undefined {
-	if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
-		return name.text;
-	}
-
-	return undefined;
-}
-
 /**
  * Gets the name of a callable expression.
  *
  * @returns The identifier or property name for the expression, or `undefined` if no name can be resolved.
  */
-function callName(expression: ts.Expression): string | undefined {
-	const unwrapped = unwrapExpression(expression);
-
-	if (ts.isIdentifier(unwrapped)) {
-		return unwrapped.text;
-	}
-
-	if (ts.isPropertyAccessExpression(unwrapped)) {
-		return unwrapped.name.text;
-	}
-
-	return undefined;
-}
-
 /**
  * Determines whether an expression calls `optional`.
  *
@@ -993,22 +954,6 @@ function isHttpMethod(value: string): boolean {
  * @param expression - The expression to unwrap
  * @returns The innermost expression after removing wrapper syntax
  */
-function unwrapExpression(expression: ts.Expression): ts.Expression {
-	let current = expression;
-
-	while (
-		ts.isParenthesizedExpression(current)
-		|| ts.isAsExpression(current)
-		|| ts.isSatisfiesExpression(current)
-		|| ts.isTypeAssertionExpression(current)
-		|| ts.isNonNullExpression(current)
-	) {
-		current = current.expression;
-	}
-
-	return current;
-}
-
 /**
  * Builds OpenAPI parameter definitions from an object schema.
  *

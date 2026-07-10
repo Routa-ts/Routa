@@ -71,7 +71,7 @@ The repo uses pnpm workspaces and Turborepo for package task orchestration.
 ## Development
 
 Developing Routa requires Node.js 24+ and pnpm 11.9.0. The repository includes
-`.node-version` and pins pnpm in `package.json`.
+`.nvmrc` and pins pnpm in `package.json`.
 
 ```sh
 pnpm install --frozen-lockfile
