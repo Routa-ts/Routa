@@ -1,0 +1,130 @@
+---
+import LandingLayout from "../../layouts/LandingLayout.astro";
+---
+
+<LandingLayout
+	title="Peer"
+	description="OpenAPI that stays true to the code — bidirectional scaffold and emit."
+	slug="peer"
+>
+	<main id="main" class="lp-peer">
+		<section class="hero" aria-label="Hero">
+			<div class="hero-inner">
+				<div class="hero-copy">
+					<div class="brand-mark">
+						<img src="/favicon.svg" alt="" width="40" height="40" />
+						Routa
+						<span class="dot" aria-hidden="true"></span>
+					</div>
+					<h1 class="headline">OpenAPI that stays true to the code</h1>
+					<p class="lede">
+						Edit the Zod contract or the OpenAPI peer. Regenerate the other. Spec and source
+						are equals — not a one-way export.
+					</p>
+					<div class="cta-row">
+						<a class="btn btn-primary" href="https://routa-ts.dev/docs/">Get started</a>
+						<a class="btn btn-ghost" href="https://github.com/Routa-ts/Routa">GitHub</a>
+					</div>
+					<div class="cli" data-cmd="pnpm create routa-ts@latest">
+						<span>$ pnpm create routa-ts@latest</span>
+						<button type="button">Copy</button>
+					</div>
+				</div>
+
+				<div class="dual" aria-label="Bidirectional OpenAPI">
+					<div class="code-panel">
+						<div class="code-panel__bar"><span>CreateUserSchema</span><span>zod →</span></div>
+						<pre><code><span class="kw">export const</span> CreateUserSchema = z.object({"{"}
+  email: z.string().email(),
+  name: z.string().min(<span class="str">1</span>),
+{"}"});
+
+<span class="cm">// createRoute input.body</span>
+<span class="cm">// responses.success → UserSchema</span></code></pre>
+					</div>
+
+					<div class="bridge" aria-hidden="true">
+						<svg viewBox="0 0 40 40" aria-hidden="true">
+							<path d="M8 12 H28 M28 12 L22 8 M28 12 L22 16" />
+							<path class="reverse" d="M32 28 H12 M12 28 L18 24 M12 28 L18 32" />
+						</svg>
+						<span>bidirectional</span>
+					</div>
+
+					<div class="code-panel">
+						<div class="code-panel__bar"><span>openapi.yaml</span><span>← spec</span></div>
+						<pre><code>paths:
+  /users:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: <span class="str">"#/components/..."</span>
+      responses:
+        <span class="str">"201"</span>:
+          description: success</code></pre>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<section class="section">
+			<div class="section-inner">
+				<p class="section-kicker">Either direction</p>
+				<h2 class="section-title">Scaffold or emit — then check</h2>
+				<p class="section-lede">
+					Start from an OpenAPI file and scaffold routes, or write contracts first and emit
+					the spec. <code class="mono">routa check</code> keeps them honest.
+				</p>
+				<ul class="pillars">
+					<li>
+						<strong>Scaffold from OpenAPI</strong>
+						<p>Bootstrap route files and schemas from <code class="mono">.yaml</code> / <code class="mono">.json</code>.</p>
+					</li>
+					<li>
+						<strong>Emit from source</strong>
+						<p>Contracts project to OpenAPI without a separate hand-maintained doc.</p>
+					</li>
+					<li>
+						<strong>Drift fails</strong>
+						<p>CI-friendly check: source and peer must agree.</p>
+					</li>
+					<li>
+						<strong>Filesystem routes</strong>
+						<p>The scaffold lands where the URL lives — folders as segments.</p>
+					</li>
+					<li>
+						<strong>Typed middleware</strong>
+						<p>Lattice context stays in the graph either way.</p>
+					</li>
+					<li>
+						<strong>Hono + Zod</strong>
+						<p>Runtime and schemas you already trust.</p>
+					</li>
+				</ul>
+				<ul class="built-on" style="margin-top: 2rem">
+					<li>Hono</li>
+					<li>Zod</li>
+					<li>OpenAPI</li>
+					<li>TypeScript</li>
+				</ul>
+				<p class="v0-note"><strong>v0</strong> — bidirectional is a peer relationship, not a marketing export button.</p>
+			</div>
+		</section>
+
+		<section class="close">
+			<div class="close-inner">
+				<div>
+					<h2>OpenAPI workflow</h2>
+					<p>Scaffold, emit, and keep the peer in lockstep.</p>
+				</div>
+				<div class="cta-row">
+					<a class="btn btn-primary" href="https://routa-ts.dev/docs/">Documentation</a>
+					<a class="btn btn-ghost" href="/landings/">All options</a>
+				</div>
+			</div>
+		</section>
+	</main>
+</LandingLayout>
+

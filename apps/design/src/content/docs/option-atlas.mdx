@@ -1,0 +1,228 @@
+---
+title: "Option D · Atlas"
+description: Cartographic identity — trail ochre on slate mist, Outfit + Fira Code, filesystem as terrain.
+sidebar:
+  badge:
+    text: D
+    variant: caution
+---
+
+import {
+	Aside,
+	Badge,
+	Card,
+	CardGrid,
+	FileTree,
+	LinkButton,
+	LinkCard,
+	Steps,
+	TabItem,
+	Tabs,
+} from "@astrojs/starlight/components";
+
+<div class="ds-atlas">
+
+Routa as an **atlas**: the filesystem is the map. Folders are trails, `$params` are waypoints, and ochre marks the path across cool slate mist.
+
+<div class="ds-mark">
+	<img src="/favicon.svg" alt="Routa star mark" width="56" height="56" />
+	<div>
+		<div class="ds-mark__word">Routa</div>
+		<p class="ds-mark__tag">Chart the API by walking the tree</p>
+	</div>
+</div>
+
+<div class="ds-cta-row">
+	<LinkButton href="https://routa-ts.dev/getting-started/project-anatomy/" variant="primary" icon="information">
+		Read the map
+	</LinkButton>
+	<LinkButton href="/" variant="secondary" icon="right-arrow" iconPlacement="end">
+		All options
+	</LinkButton>
+</div>
+
+## Palette
+
+Trail ochre for wayfinding; slate mist for atmosphere; soft frost for readable labels.
+
+<div class="ds-swatch-row">
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#d97706" />
+		<div class="ds-swatch__meta"><strong>Trail</strong>#d97706 · accent</div>
+	</div>
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#fbbf24" />
+		<div class="ds-swatch__meta"><strong>Marker</strong>#fbbf24 · accent-high</div>
+	</div>
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#12161c" />
+		<div class="ds-swatch__meta"><strong>Mist</strong>#12161c · bg</div>
+	</div>
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#e6edf5" />
+		<div class="ds-swatch__meta"><strong>Legend</strong>#e6edf5 · text</div>
+	</div>
+</div>
+
+| Token | Role | Feeling |
+| --- | --- | --- |
+| Ochre | Links, CTAs, trail marks | Warm wayfinding |
+| Slate | Chrome + panels | Cool elevation |
+| Outfit | UI + headings | Friendly cartography |
+| Fira Code | Paths & schemas | Trail markers in mono |
+
+## Legend badges
+
+<div class="ds-gallery">
+	<Badge text="trailhead" variant="success" />
+	<Badge text="waypoint" variant="note" />
+	<Badge text="detour" variant="caution" />
+	<Badge text="closed" variant="danger" />
+	<Badge text="v0" variant="tip" size="small" />
+	<Badge text="$param" variant="default" size="large" />
+</div>
+
+## Field notes · Asides
+
+<Aside type="note" title="Note · Contour line">
+	`src/routes/users/$userId/posts/route.ts` is the trail to `POST /users/:userId/posts`.
+</Aside>
+
+<Aside type="tip" title="Tip · Pack light">
+	Keep handlers thin — business logic lives off the trail in app modules.
+</Aside>
+
+<Aside type="caution" title="Caution · Unmarked fork">
+	Route groups like `(private)` change middleware, not the public path. Label them clearly.
+</Aside>
+
+<Aside type="danger" title="Danger · Off-trail edit">
+	Hand-patching generated OpenAPI erases the map on the next regenerate.
+</Aside>
+
+## Regions · Cards
+
+<CardGrid stagger>
+	<Card title="First route" icon="rocket">
+		Plant the first trailhead and walk it locally.
+	</Card>
+	<Card title="Middleware" icon="puzzle">
+		Gates and context that apply to a whole region of the map.
+	</Card>
+	<Card title="Deploy" icon="cloud-download">
+		Carry the same chart from laptop to production.
+	</Card>
+	<Card title="Full API example" icon="open-book">
+		A multi-tenant atlas with nested terrain.
+	</Card>
+</CardGrid>
+
+<CardGrid>
+	<LinkCard
+		title="Basic API"
+		href="https://routa-ts.dev/examples/basic-api/"
+		description="A small map — users, posts, status."
+	/>
+	<LinkCard
+		title="Full API"
+		href="https://routa-ts.dev/examples/full-api/"
+		description="Tenants, projects, admin ranges."
+	/>
+</CardGrid>
+
+## Expedition steps
+
+<Steps>
+
+1. Stake the trailhead.
+
+	```sh
+	pnpm create routa-ts@latest
+	```
+
+2. Cut a new path under `src/routes`.
+
+	```ts
+	// src/routes/users/$userId/route.ts
+	export default defineRoute({
+		get: createRoute({
+			input: { params: UserParams },
+			responses: {
+				success: { status: 200, schema: UserSchema },
+				notFound: { status: 404, schema: ErrorSchema },
+			},
+			run: async ({ input }) => users.get(input.params.userId),
+		}),
+	});
+	```
+
+3. Survey, then hike.
+
+	```sh
+	pnpm routa check
+	pnpm routa start
+	```
+
+</Steps>
+
+## Topography · File tree
+
+<FileTree>
+
+- src/routes/
+	- status/
+		- route.ts
+	- users/
+		- route.ts
+		- $userId/
+			- route.ts
+			- posts/
+				- route.ts
+	- (private)/
+		- tenants/
+			- $tenantId/
+				- projects/
+					- $projectId/
+						- route.ts
+
+</FileTree>
+
+## Kit tabs
+
+<Tabs syncKey="package-manager">
+	<TabItem label="pnpm" icon="pnpm">
+		```sh
+		pnpm create routa-ts@latest trail-api
+		```
+	</TabItem>
+	<TabItem label="npm" icon="npm">
+		```sh
+		npm create routa-ts@latest trail-api
+		```
+	</TabItem>
+	<TabItem label="bun" icon="bun">
+		```sh
+		bun create routa-ts@latest trail-api
+		```
+	</TabItem>
+</Tabs>
+
+## Waypoint contract
+
+```ts
+export default defineRoute({
+	get: createRoute({
+		input: { params: ProjectParams },
+		responses: {
+			success: { status: 200, schema: ProjectSchema },
+		},
+		run: async ({ input, ctx }) => {
+			return projects.get(input.params.projectId, ctx);
+		},
+	}),
+});
+```
+
+> Atlas identity: **the tree is the map.** Warm trail marks on cool mist — docs should feel like a field guide.
+
+</div>

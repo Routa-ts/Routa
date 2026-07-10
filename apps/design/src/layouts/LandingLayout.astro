@@ -1,0 +1,64 @@
+---
+import "../styles/landings.css";
+
+interface Props {
+	title: string;
+	description: string;
+	slug: string;
+}
+
+const { title, description, slug } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en" data-landing={slug}>
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>{title} · Routa Design Lab</title>
+		<meta name="description" content={description} />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
+			rel="stylesheet"
+		/>
+	</head>
+	<body>
+		<a class="skip" href="#main">Skip to content</a>
+		<header class="lab-bar">
+			<a class="lab-bar__brand" href="/landings/">
+				<img src="/favicon.svg" alt="" width="18" height="18" />
+				<span>Routa Design Lab</span>
+			</a>
+			<nav class="lab-bar__nav" aria-label="Landing options">
+				<a href="/landings/">All</a>
+				<a href="/landings/contract/" class:list={[{ active: slug === "contract" }]}>Contract</a>
+				<a href="/landings/walk/" class:list={[{ active: slug === "walk" }]}>Walk</a>
+				<a href="/landings/check/" class:list={[{ active: slug === "check" }]}>Check</a>
+				<a href="/landings/peer/" class:list={[{ active: slug === "peer" }]}>Peer</a>
+				<a href="/landings/schematic/" class:list={[{ active: slug === "schematic" }]}>Schematic</a>
+			</nav>
+		</header>
+		<slot />
+		<script>
+			document.querySelectorAll(".cli[data-cmd]").forEach((el) => {
+				const btn = el.querySelector("button");
+				const cmd = el.getAttribute("data-cmd");
+				btn?.addEventListener("click", async () => {
+					if (!cmd) return;
+					try {
+						await navigator.clipboard.writeText(cmd);
+						btn.textContent = "Copied";
+						setTimeout(() => {
+							btn.textContent = "Copy";
+						}, 1400);
+					} catch {
+						btn.textContent = "Fail";
+					}
+				});
+			});
+		</script>
+	</body>
+</html>

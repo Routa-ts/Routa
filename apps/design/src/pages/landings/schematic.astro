@@ -1,0 +1,129 @@
+---
+import LandingLayout from "../../layouts/LandingLayout.astro";
+---
+
+<LandingLayout
+	title="Schematic"
+	description="Filesystem routes with contracts, not vibes — lattice map and contracted code."
+	slug="schematic"
+>
+	<main id="main" class="lp-schematic">
+		<section class="hero" aria-label="Hero">
+			<svg class="map" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+				<path class="edge" d="M180 420 L420 280 L660 360" />
+				<path class="edge" d="M420 280 L520 140 L780 180" />
+				<path class="edge" d="M660 360 L820 480 L980 320" />
+				<path class="edge" d="M520 140 L660 360 L820 480" />
+				<circle class="node" cx="180" cy="420" r="8" />
+				<circle class="node lit" cx="420" cy="280" r="9" />
+				<circle class="node" cx="520" cy="140" r="8" />
+				<circle class="node lit" cx="660" cy="360" r="9" />
+				<circle class="node" cx="820" cy="480" r="8" />
+				<circle class="node" cx="780" cy="180" r="7" />
+				<circle class="node lit" cx="980" cy="320" r="8" />
+				<text x="150" y="455">route</text>
+				<text x="390" y="255">schema</text>
+				<text x="500" y="120">middleware</text>
+				<text x="640" y="395">handler</text>
+				<text x="800" y="515">response</text>
+				<text x="760" y="160">openapi</text>
+				<text x="960" y="300">check</text>
+			</svg>
+
+			<div class="hero-copy">
+				<div class="brand-mark">
+					<img src="/favicon.svg" alt="" width="40" height="40" />
+					Routa
+					<span class="dot" aria-hidden="true"></span>
+				</div>
+				<h1 class="headline">Filesystem routes with contracts, not vibes</h1>
+				<p class="lede">
+					A schematic of the API: routes as edges, schemas as nodes, OpenAPI as projection.
+					Category claim first — then the proof below.
+				</p>
+				<div class="cta-row">
+					<a class="btn btn-primary" href="https://routa-ts.dev/docs/">Get started</a>
+					<a class="btn btn-ghost" href="https://github.com/Routa-ts/Routa">GitHub</a>
+				</div>
+				<div class="cli" data-cmd="pnpm create routa-ts@latest">
+					<span>$ pnpm create routa-ts@latest</span>
+					<button type="button">Copy</button>
+				</div>
+			</div>
+		</section>
+
+		<section class="section">
+			<div class="section-inner">
+				<p class="section-kicker">Side by side</p>
+				<h2 class="section-title">Untyped handler vs contracted route</h2>
+				<p class="section-lede">
+					Same job. One hopes the status codes match the docs. The other declares the
+					contract in source.
+				</p>
+				<div class="compare">
+					<div class="code-panel">
+						<div class="code-panel__bar"><span>without Routa</span><span>vibes</span></div>
+						<pre><code>app.post(<span class="str">"/users"</span>, <span class="kw">async</span> (c) => {"{"}
+  <span class="kw">const</span> body = <span class="kw">await</span> c.req.json();
+  <span class="cm">// validate… somewhere?</span>
+  <span class="kw">const</span> user = <span class="kw">await</span> create(body);
+  <span class="kw">return</span> c.json(user, <span class="str">201</span>);
+{"}"});</code></pre>
+					</div>
+					<div class="code-panel">
+						<div class="code-panel__bar"><span>with Routa</span><span>contract</span></div>
+						<pre><code><span class="kw">export default</span> <span class="fn">defineRoute</span>({"{"}
+  post: <span class="fn">createRoute</span>({"{"}
+    input: {"{"} body: CreateUserSchema {"}"},
+    responses: {"{"}
+      success: {"{"} status: <span class="str">201</span>, schema: UserSchema {"}"},
+    {"}"},
+    run: <span class="kw">async</span> ({"{"} input, ctx {"}"}) =>
+      users.createUser(input.body, ctx),
+  {"}"}),
+{"}"});</code></pre>
+					</div>
+				</div>
+				<ul class="pillars" style="margin-top: 2.5rem">
+					<li>
+						<strong>Route = contract</strong>
+						<p>Path, methods, I/O, and outcomes in one file.</p>
+					</li>
+					<li>
+						<strong>Lattice composition</strong>
+						<p>Middleware and schemas form a typed graph you can check.</p>
+					</li>
+					<li>
+						<strong>OpenAPI peer</strong>
+						<p>Projection of the same lattice — scaffold or emit.</p>
+					</li>
+					<li>
+						<strong>CLI lifecycle</strong>
+						<p>check, build, start — in that order.</p>
+					</li>
+				</ul>
+				<ul class="built-on" style="margin-top: 2rem">
+					<li>Hono</li>
+					<li>Zod</li>
+					<li>OpenAPI</li>
+					<li>TypeScript</li>
+				</ul>
+				<p class="v0-note"><strong>v0</strong> — diagrammatic, not cosmic. No fake logos.</p>
+			</div>
+		</section>
+
+		<section class="close">
+			<div class="close-inner">
+				<div>
+					<h2>Map the docs</h2>
+					<p>From first route to OpenAPI lockstep.</p>
+				</div>
+				<div class="cta-row">
+					<a class="btn btn-primary" href="https://routa-ts.dev/docs/start/quickstart/">Quickstart</a>
+					<a class="btn btn-ghost" href="/landings/">All options</a>
+				</div>
+			</div>
+		</section>
+	</main>
+</LandingLayout>
+

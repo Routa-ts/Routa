@@ -1,0 +1,26 @@
+{
+	"name": "@routa-ts/design",
+	"type": "module",
+	"version": "0.0.0",
+	"private": true,
+	"scripts": {
+		"astro": "astro",
+		"build": "node ./scripts/astro.mjs build",
+		"check": "node ./scripts/astro.mjs check",
+		"dev": "node ./scripts/astro.mjs dev",
+		"lint": "biome check .",
+		"preview": "node ./scripts/astro.mjs preview",
+		"typecheck": "node ./scripts/astro.mjs check"
+	},
+	"dependencies": {
+		"@astrojs/starlight": "^0.41.3",
+		"@astrojs/starlight-tailwind": "^5.0.0",
+		"@tailwindcss/vite": "^4.2.4",
+		"astro": "^7.0.2",
+		"sharp": "^0.34.5",
+		"tailwindcss": "^4.2.4"
+	},
+	"devDependencies": {
+		"@astrojs/check": "^0.9.5"
+	}
+}

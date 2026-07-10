@@ -1,0 +1,228 @@
+---
+title: "Option E · Lattice"
+description: Structural identity — electric teal on graphite, Space Grotesk + Space Mono, schema as grid.
+sidebar:
+  badge:
+    text: E
+    variant: tip
+---
+
+import {
+	Aside,
+	Badge,
+	Card,
+	CardGrid,
+	FileTree,
+	LinkButton,
+	LinkCard,
+	Steps,
+	TabItem,
+	Tabs,
+} from "@astrojs/starlight/components";
+
+<div class="ds-lattice">
+
+Routa as a **lattice**: schemas interlock into a typed grid. Electric teal edges on graphite, geometric sans, and mono that treats structure as the aesthetic.
+
+<div class="ds-mark">
+	<img src="/favicon.svg" alt="Routa star mark" width="56" height="56" />
+	<div>
+		<div class="ds-mark__word">Routa</div>
+		<p class="ds-mark__tag">Typed edges. Named outcomes.</p>
+	</div>
+</div>
+
+<div class="ds-cta-row">
+	<LinkButton href="https://routa-ts.dev/concepts/schemas/" variant="primary" icon="puzzle">
+		Inspect the grid
+	</LinkButton>
+	<LinkButton href="/" variant="minimal" icon="right-arrow" iconPlacement="end">
+		All options
+	</LinkButton>
+</div>
+
+## Palette
+
+Teal for structural accent; graphite for the chassis; bright mint for high-signal text on dark.
+
+<div class="ds-swatch-row">
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#0d9488" />
+		<div class="ds-swatch__meta"><strong>Edge</strong>#0d9488 · accent</div>
+	</div>
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#5eead4" />
+		<div class="ds-swatch__meta"><strong>Node</strong>#5eead4 · accent-high</div>
+	</div>
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#0f1115" />
+		<div class="ds-swatch__meta"><strong>Graphite</strong>#0f1115 · bg</div>
+	</div>
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#eceff4" />
+		<div class="ds-swatch__meta"><strong>Cell</strong>#eceff4 · text</div>
+	</div>
+</div>
+
+| Token | Role | Feeling |
+| --- | --- | --- |
+| Teal | Links, focus, structure | Engineered precision |
+| Graphite | Surfaces | Dense, technical |
+| Space Grotesk | UI + titles | Geometric, modern |
+| Space Mono | Code + labels | Lattice labels |
+
+## Cell badges
+
+<div class="ds-gallery">
+	<Badge text="typed" variant="success" />
+	<Badge text="input" variant="note" />
+	<Badge text="partial" variant="caution" />
+	<Badge text="invalid" variant="danger" />
+	<Badge text="zod" variant="tip" size="small" />
+	<Badge text="response map" variant="default" size="large" />
+</div>
+
+## Structural asides
+
+<Aside type="note" title="Note · Cell bound">
+	Every success path is a named key in `responses` — not a free-form status code.
+</Aside>
+
+<Aside type="tip" title="Tip · Share schemas">
+	Colocate `schemas.ts` beside `route.ts` so the lattice stays local and reviewable.
+</Aside>
+
+<Aside type="caution" title="Caution · Loose node">
+	Optional fields without defaults can widen the OpenAPI surface unexpectedly.
+</Aside>
+
+<Aside type="danger" title="Danger · Broken edge">
+	Returning an undeclared outcome bypasses the type lattice and fails the check.
+</Aside>
+
+## Module grid
+
+<CardGrid stagger>
+	<Card title="Route contracts" icon="document">
+		The unit cell: input, responses, middleware, run.
+	</Card>
+	<Card title="Schemas" icon="list-format">
+		Zod nodes that validate and document the same shape.
+	</Card>
+	<Card title="Core" icon="setting">
+		`defineRoute`, `createRoute`, and runtime primitives.
+	</Card>
+	<Card title="OpenAPI" icon="open-book">
+		The lattice projected into a portable document.
+	</Card>
+</CardGrid>
+
+<CardGrid>
+	<LinkCard
+		title="Core reference"
+		href="https://routa-ts.dev/reference/core/"
+		description="Helpers that assemble the grid."
+	/>
+	<LinkCard
+		title="Check and build"
+		href="https://routa-ts.dev/guides/check-build/"
+		description="Prove the lattice before ship."
+	/>
+</CardGrid>
+
+## Assembly steps
+
+<Steps>
+
+1. Initialize the chassis.
+
+	```sh
+	pnpm create routa-ts@latest
+	```
+
+2. Define a typed cell.
+
+	```ts
+	const CreateUserSchema = z.object({
+		email: z.string().email(),
+		name: z.string().min(1),
+	});
+
+	export default defineRoute({
+		post: createRoute({
+			input: { body: CreateUserSchema },
+			responses: {
+				success: { status: 201, schema: UserSchema },
+			},
+			run: async ({ input, ctx }) => users.createUser(input.body, ctx),
+		}),
+	});
+	```
+
+3. Verify edges, then serve.
+
+	```sh
+	pnpm routa check
+	pnpm routa start
+	```
+
+</Steps>
+
+## Lattice · File tree
+
+<FileTree>
+
+- src/
+	- routes/
+		- users/
+			- route.ts
+			- schemas.ts
+			- $userId/
+				- route.ts
+				- schemas.ts
+	- middleware/
+		- context.ts
+- .routa/
+	- routes.gen.ts
+
+</FileTree>
+
+## Toolchain tabs
+
+<Tabs syncKey="package-manager">
+	<TabItem label="pnpm" icon="pnpm">
+		```sh
+		pnpm add zod hono @routa-ts/core @routa-ts/cli
+		```
+	</TabItem>
+	<TabItem label="npm" icon="npm">
+		```sh
+		npm add zod hono @routa-ts/core @routa-ts/cli
+		```
+	</TabItem>
+	<TabItem label="bun" icon="bun">
+		```sh
+		bun add zod hono @routa-ts/core @routa-ts/cli
+		```
+	</TabItem>
+</Tabs>
+
+## Response map
+
+```ts
+responses: {
+	success: { status: 200, schema: UserSchema },
+	notFound: { status: 404, schema: ErrorSchema },
+	conflict: { status: 409, schema: ErrorSchema },
+},
+```
+
+| Outcome key | Status | Schema |
+| --- | --- | --- |
+| `success` | 200 | `UserSchema` |
+| `notFound` | 404 | `ErrorSchema` |
+| `conflict` | 409 | `ErrorSchema` |
+
+> Lattice identity: **structure is the brand.** Sharp corners, teal edges, mono labels — docs should feel engineered.
+
+</div>

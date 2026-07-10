@@ -55,6 +55,12 @@ jobs:
     with:
       command: pnpm --filter @routa-ts/docs build
 
+  design:
+    name: Design lab
+    uses: ./.github/workflows/node-pnpm-job.yml
+    with:
+      command: pnpm --filter @routa-ts/design build
+
   cli-validation:
     name: CLI validation
     uses: ./.github/workflows/node-pnpm-job.yml

@@ -1,0 +1,13 @@
+@layer base, starlight, theme, components, utilities;
+
+@import "@astrojs/starlight-tailwind";
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "./design-systems.css";
+
+@theme {
+	/*
+	Identity prototypes live in design-systems.css via :has(.ds-*).
+	When a direction is chosen, promote tokens here (and into apps/docs).
+	*/
+}

@@ -1,0 +1,67 @@
+---
+title: System design
+description: Lattice identity locked. Schematic landing shipped to apps/docs.
+banner:
+  content: |
+    Lattice locked · Schematic shipped to apps/docs `/` · archive landings remain for reference.
+---
+
+import { Aside, Badge, CardGrid, LinkCard, LinkButton } from "@astrojs/starlight/components";
+
+<div class="ds-hub">
+
+**Lattice** is the chosen identity for Routa (teal / graphite / Space Grotesk + Space Mono). The **Schematic** marketing landing is live on the docs site at `/`; Starlight docs remain under `/docs/`.
+
+<Aside type="tip" title="Shipped">
+	Schematic won the landing review and is production `/` in `apps/docs`. Other compositions stay here for reference.
+</Aside>
+
+## Landing options
+
+| # | Composition | Status |
+| --- | --- | --- |
+| [01](/landings/contract/) | Contract | Archive |
+| [02](/landings/walk/) | Walk | Archive |
+| [03](/landings/check/) | Check | Archive |
+| [04](/landings/peer/) | Peer | Archive |
+| [05](/landings/schematic/) | Schematic | **Shipped → docs `/`** |
+
+<div class="ds-gallery">
+	<Badge text="selected · Lattice" variant="success" />
+	<Badge text="landing · Schematic" variant="success" />
+	<Badge text="docs · /docs/" variant="note" />
+</div>
+
+<CardGrid>
+	<LinkCard
+		title="Schematic (lab)"
+		href="/landings/schematic/"
+		description="Winning composition as reviewed in the design lab."
+	/>
+	<LinkCard
+		title="Landings hub"
+		href="/landings/"
+		description="All five Lattice compositions."
+	/>
+	<LinkCard
+		title="Lattice component gallery"
+		href="/option-lattice/"
+		description="Docs primitives under the locked identity."
+	/>
+</CardGrid>
+
+<LinkButton href="/landings/schematic/" variant="primary" icon="right-arrow" iconPlacement="end">
+	Open Schematic
+</LinkButton>
+
+## Identity archive
+
+| Option | Metaphor | Accent | Type |
+| --- | --- | --- | --- |
+| [Compass](/option-compass/) | True north | Signal cyan | Sora + IBM Plex Mono |
+| [Ledger](/option-ledger/) | Signed contracts | Copper | Newsreader + IBM Plex Mono |
+| [Trace](/option-trace/) | CLI stdout | Phosphor green | JetBrains Mono |
+| [Atlas](/option-atlas/) | Filesystem map | Trail ochre | Outfit + Fira Code |
+| [Lattice](/option-lattice/) ✓ | Schema grid | Electric teal | Space Grotesk + Space Mono |
+
+</div>
