@@ -18,6 +18,8 @@ export const routaRoutes = [
 			"get": {
 				"params": false,
 				"query": false,
+				"headers": false,
+				"cookies": false,
 				"body": false
 			}
 		},
@@ -46,6 +48,8 @@ export const routaRoutes = [
 			"get": {
 				"params": false,
 				"query": false,
+				"headers": false,
+				"cookies": false,
 				"body": false
 			}
 		},
@@ -74,6 +78,8 @@ export const routaRoutes = [
 			"get": {
 				"params": true,
 				"query": true,
+				"headers": false,
+				"cookies": false,
 				"body": false
 			}
 		},
@@ -112,16 +118,22 @@ export const routaRoutes = [
 			"get": {
 				"params": true,
 				"query": false,
+				"headers": false,
+				"cookies": false,
 				"body": false
 			},
 			"patch": {
 				"params": true,
 				"query": false,
+				"headers": false,
+				"cookies": false,
 				"body": true
 			},
 			"delete": {
 				"params": true,
 				"query": false,
+				"headers": false,
+				"cookies": false,
 				"body": false
 			}
 		},
@@ -157,11 +169,15 @@ export const routaRoutes = [
 			"get": {
 				"params": false,
 				"query": true,
+				"headers": false,
+				"cookies": false,
 				"body": false
 			},
 			"post": {
 				"params": false,
 				"query": false,
+				"headers": false,
+				"cookies": false,
 				"body": true
 			}
 		},

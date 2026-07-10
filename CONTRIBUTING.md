@@ -10,15 +10,17 @@ Routa is an MIT-licensed project. By contributing, you agree that your contribut
 
 ## Local Setup
 
+Routa development requires Node.js 24+ and pnpm 11.9.0. The repository includes
+`.node-version` and pins pnpm in `package.json`.
+
 ```sh
-pnpm install
-pnpm check
-pnpm typecheck
-pnpm test
-pnpm build
+pnpm install --frozen-lockfile
+pnpm verify
 ```
 
-Use `pnpm pack:check` before changes that affect package publishing, CLI behavior, or generated project behavior.
+`pnpm verify` is the complete pre-PR check: formatting, types, unit tests, generated
+metadata, example contracts, scaffold diagnostics, and packed-package validation. Use
+`pnpm quality` for faster formatting, typecheck, and unit-test feedback while iterating.
 
 ## Pull Requests
 

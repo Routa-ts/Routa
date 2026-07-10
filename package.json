@@ -4,6 +4,9 @@
 	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"engines": {
+		"node": ">=24"
+	},
 	"packageManager": "pnpm@11.9.0",
 	"scripts": {
 		"build": "turbo run build",
@@ -11,6 +14,7 @@
 		"changeset": "changeset",
 		"format": "biome format --write .",
 		"format:check": "biome format .",
+		"generated:check": "pnpm run prepare:local-cli && pnpm --filter './examples/*' build && node scripts/check-generated.mjs",
 		"lint": "turbo run lint",
 		"lint:repo": "biome lint .",
 		"pack:check": "node scripts/pack-check.mjs",
@@ -19,6 +23,7 @@
 		"release": "pnpm run prepare:local-cli && pnpm quality && pnpm build && pnpm pack:check && changeset publish",
 		"test": "turbo run test",
 		"typecheck": "turbo run typecheck",
+		"verify": "pnpm check && pnpm typecheck && pnpm test && pnpm generated:check && pnpm --filter './examples/*' check && pnpm --filter './examples/*' openapi:check && scripts/scaffold-error-smoke.sh && pnpm pack:check",
 		"version": "changeset version"
 	},
 	"devDependencies": {

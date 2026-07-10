@@ -65,6 +65,7 @@ jobs:
         pnpm build
         pnpm --filter './examples/*' check
         pnpm --filter './examples/*' openapi:check
+        node scripts/check-generated.mjs
         scripts/scaffold-error-smoke.sh
 
   pack-check:
