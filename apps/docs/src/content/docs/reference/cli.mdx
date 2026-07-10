@@ -23,6 +23,7 @@ pnpm exec routa scaffold openapi.yaml --yes
 pnpm exec routa dev
 pnpm exec routa start
 pnpm exec routa check
+pnpm exec routa generate
 pnpm exec routa build
 pnpm exec routa routes [--format json|markdown]
 pnpm exec routa openapi check
@@ -36,12 +37,13 @@ pnpm exec routa openapi breaking --update-baseline
   - `--yes` / `-y`: skip the final confirmation prompt when settings were chosen interactively
   - `--openapi` / `--no-openapi`: include or omit the starter OpenAPI file (default: include)
   - `--git` / `--no-git`: initialize or skip a git repository
-  - `--install` / `--no-install`: run or skip `pnpm install` after scaffolding
+	- `--install` / `--no-install`: run or skip installation with the package manager that invoked the scaffolder
 - `routa scaffold <file>`: generates route and schema files from OpenAPI. Use `--preview` before writing changes and `--yes` to approve scaffold changes.
 - `routa routes [--format json|markdown]`: prints a route reference for the project. Defaults to markdown when `--format` is omitted.
 - `routa dev`: validates routes, writes metadata, typechecks, and starts the development server.
-- `routa start`: validates routes, typechecks, and starts the runtime server.
+- `routa start`: validates routes and starts the previously built runtime. It does not typecheck or compile.
 - `routa check`: validates Routa route graph and runs `tsc -p tsconfig.json --noEmit`.
+- `routa generate`: validates the route graph and writes `.routa/routes.gen.ts`.
 - `routa build`: validates Routa route graph and runs TypeScript emit.
 - `routa openapi check`: compares generated OpenAPI against `.routa/openapi-baseline.json`.
 - `routa openapi breaking`: fails when operations were removed from the baseline.

@@ -161,6 +161,31 @@ export function runProjectCheck(cwd = process.cwd()): {
 }
 
 /**
+ * Validates a Routa project and writes its generated route metadata.
+ *
+ * @returns A result object containing the exit code and any generation output.
+ */
+export function runProjectGenerate(cwd = process.cwd()): {
+	code: number;
+	stdout?: string;
+	stderr?: string;
+} {
+	const validation = validateProject(cwd);
+
+	if (validation.diagnostics.length > 0) {
+		return {
+			code: 1,
+			stderr: formatDiagnostics(validation.diagnostics),
+		};
+	}
+
+	return {
+		code: 0,
+		stdout: `Generated .routa/routes.gen.ts for ${validation.routes.length} route file(s).\n`,
+	};
+}
+
+/**
  * Builds a Routa project after validating its routes.
  *
  * @returns Build output. On success, `stdout` reports how many route files passed validation and build.

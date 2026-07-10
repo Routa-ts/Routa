@@ -18,3 +18,11 @@ Tracks generated files, source operation IDs, file kinds, and hashes. The manife
 Stores the OpenAPI contract used for drift checks and removed-operation checks.
 
 Commit these files. They make project behavior reproducible across machines and CI.
+
+## Workflow
+
+Use `<package-manager> run generate` after changing route files, route methods, or
+middleware layout. Review and commit the resulting `.routa/` diff with the source change.
+`<package-manager> run check`, `<package-manager> run build`, and
+`<package-manager> run dev` also synchronize metadata after successful validation, so they
+can legitimately change the working tree.

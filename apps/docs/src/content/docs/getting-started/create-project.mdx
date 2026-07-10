@@ -8,7 +8,7 @@ import { FileTree, Steps } from "@astrojs/starlight/components";
 Run the official project creation command:
 
 ```sh
-pnpm create routa-ts@latest
+<package-manager> create routa-ts@latest
 ```
 
 By default, the scaffolder creates a TypeScript Routa app with route examples, Biome configuration, OpenAPI baseline files, and scripts for checking, building, and running the API.
@@ -17,6 +17,7 @@ By default, the scaffolder creates a TypeScript Routa app with route examples, B
 
 - TypeScript app structure
 - Routa route examples
+- Vitest setup and a starter route test
 - Biome configuration
 - Scripts for checking and building the API
 - OpenAPI baseline and generated metadata files
@@ -33,13 +34,13 @@ By default, the scaffolder creates a TypeScript Routa app with route examples, B
 2. Install dependencies if you did not pass `--install`.
 
 	```sh
-	pnpm install
+	<package-manager> install
 	```
 
 3. Run the development server.
 
 	```sh
-	pnpm dev
+	<package-manager> run dev
 	```
 
 </Steps>
@@ -60,7 +61,9 @@ Generated apps follow this shape:
   - routes.gen.ts
 - openapi.yaml
 - package.json
+- .node-version
 - tsconfig.json
 </FileTree>
 
-Use the generated routes as the starting point for your HTTP contract.
+Replace `<package-manager>` with npm, pnpm, Yarn, Bun, or another compatible package
+manager. Use the generated routes as the starting point for your HTTP contract.

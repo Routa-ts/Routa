@@ -1,0 +1,36 @@
+---
+title: Deploy
+description: Build and run a Routa API in production.
+---
+
+Build before starting the production server:
+
+```sh
+<package-manager> run build
+<package-manager> run start
+```
+
+Replace `<package-manager>` with npm, pnpm, Yarn, Bun, or another compatible package
+manager.
+
+`routa start` runs the JavaScript in `dist/`. It checks that the compiled output is
+present and newer than the source; if not, it reports the file that needs rebuilding.
+Keep `src/`, `.routa/`, `dist/`, and production dependencies in the runtime image.
+
+## Host and Port
+
+Routa listens on `127.0.0.1:3000` by default for safe local development. Most Docker
+and hosted environments require listening on all interfaces. Set `HOST=0.0.0.0` and let
+the platform provide `PORT` when applicable:
+
+```sh
+HOST=0.0.0.0 PORT=3000 <package-manager> run start
+```
+
+Environment variables take precedence over `host` and `port` in `src/routa.ts`.
+
+## Container Shape
+
+Use a build stage to run your package manager's `run build`, then copy the source,
+generated metadata, `dist/`, and production dependencies into the runtime stage. Run its
+`run start` command; do not use the development command in production.

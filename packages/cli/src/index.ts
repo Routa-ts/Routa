@@ -9,6 +9,7 @@ import {
 	runProjectCheck,
 	runProjectDev,
 	runProjectDevProcess,
+	runProjectGenerate,
 	runProjectRoutes,
 	runProjectStart,
 } from "./project.js";
@@ -31,6 +32,7 @@ ${ui.muted("Usage:")}
   ${ui.command("routa dev")}
   ${ui.command("routa start")}
   ${ui.command("routa check")}
+  ${ui.command("routa generate")}
   ${ui.command("routa build")}
   ${ui.command("routa routes [--format json|markdown]")}
   ${ui.command("routa openapi check")}
@@ -96,6 +98,10 @@ export function run(
 
 	if (command === "check") {
 		return runProjectCheck(cwd);
+	}
+
+	if (command === "generate") {
+		return runProjectGenerate(cwd);
 	}
 
 	if (command === "build") {

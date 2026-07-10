@@ -28,11 +28,13 @@ describe("create-routa-ts", () => {
 		const result = createProject("my-api", cwd);
 
 		expect(result.files).toContain(".gitignore");
+		expect(result.files).toContain(".node-version");
 		expect(result.files).toContain(".vscode/settings.json");
 		expect(result.files).toContain("README.md");
 		expect(result.files).toContain("biome.json");
 		expect(result.files).toContain("package.json");
 		expect(result.files).toContain("src/routa.ts");
+		expect(result.files).toContain("src/routes/status/route.test.ts");
 		expect(result.files).toContain("tsconfig.json");
 		expect(result.files).toContain(".routa/manifest.json");
 		expect(result.files).toContain(".routa/openapi-baseline.json");
@@ -51,11 +53,17 @@ describe("create-routa-ts", () => {
 		const packageJson = readFileSync(join(cwd, "my-api/package.json"), "utf8");
 		expect(packageJson).toContain('"dev": "routa dev"');
 		expect(packageJson).toContain('"start": "routa start"');
+		expect(packageJson).toContain('"generate": "routa generate"');
+		expect(packageJson).toContain('"test": "vitest run"');
+		expect(packageJson).not.toContain('"packageManager"');
+		expect(packageJson).toContain('"vitest"');
 		expect(packageJson).toContain("@biomejs/biome");
 		// hono and zod are peer dependencies of @routa-ts/core, so the app declares them.
 		expect(packageJson).toContain('"hono"');
 		expect(packageJson).toContain('"zod"');
-		expect(readFileSync(join(cwd, "my-api/README.md"), "utf8")).toContain("pnpm dev");
+		expect(readFileSync(join(cwd, "my-api/README.md"), "utf8")).toContain(
+			"<package-manager> run dev",
+		);
 		expect(readFileSync(join(cwd, "my-api/src/routa.ts"), "utf8")).toContain("createRouta");
 		expect(readFileSync(join(cwd, "my-api/.vscode/settings.json"), "utf8")).toContain(
 			"files.readonlyInclude",
@@ -115,13 +123,13 @@ describe("create-routa-ts", () => {
 			expect(output).toContain("Let's configure your Routa API");
 			expect(output).toContain("About to create:");
 			expect(output).toContain("OpenAPI starter: no");
-			expect(output).toContain("pnpm install");
-			expect(output).toContain("pnpm dev");
+			expect(output).toMatch(/(?:npm|pnpm|yarn|bun) install/);
+			expect(output).toMatch(/(?:npm run|pnpm|yarn|bun run) dev/);
 			expect(existsSync(join(cwd, "my-api/openapi.yaml"))).toBe(false);
 			expect(existsSync(join(cwd, "my-api/.routa/manifest.json"))).toBe(false);
 			expect(readFileSync(join(cwd, "my-api/package.json"), "utf8")).not.toContain("openapi:check");
 			expect(readFileSync(join(cwd, "my-api/README.md"), "utf8")).not.toContain(
-				"pnpm openapi:check",
+				"<package-manager> run openapi:check",
 			);
 		} finally {
 			process.stdout.write = stdout;

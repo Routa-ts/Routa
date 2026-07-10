@@ -59,8 +59,8 @@ for (const requiredFile of ["package/dist/cli.js", "package/dist/index.js"]) {
 
 run(
 	"pnpm",
-	["dlx", `file:${tarballs.get("create-routa-ts")}`, appDir, "--no-git", "--no-install", "--yes"],
-	root,
+	["dlx", `file:${tarballs.get("create-routa-ts")}`, "app", "--no-git", "--no-install", "--yes"],
+	tmp,
 );
 
 const manifestPath = join(appDir, "package.json");
@@ -76,6 +76,7 @@ writeFileSync(
 run("pnpm", ["install"], appDir);
 run("pnpm", ["exec", "routa", "check"], appDir);
 run("pnpm", ["exec", "routa", "build"], appDir);
+run("pnpm", ["test"], appDir);
 run("pnpm", ["exec", "routa", "openapi", "check"], appDir);
 await smokeTestStart(appDir);
 
@@ -85,13 +86,13 @@ run(
 	[
 		"dlx",
 		`file:${tarballs.get("create-routa-ts")}`,
-		noOpenApiDir,
+		"app-no-openapi",
 		"--no-openapi",
 		"--no-git",
 		"--no-install",
 		"--yes",
 	],
-	root,
+	tmp,
 );
 const noOpenApiManifestPath = join(noOpenApiDir, "package.json");
 const noOpenApiManifest = JSON.parse(readFileSync(noOpenApiManifestPath, "utf8"));
@@ -105,6 +106,7 @@ writeFileSync(
 run("pnpm", ["install"], noOpenApiDir);
 run("pnpm", ["exec", "routa", "check"], noOpenApiDir);
 run("pnpm", ["exec", "routa", "build"], noOpenApiDir);
+run("pnpm", ["test"], noOpenApiDir);
 
 process.stdout.write(`Pack check passed in ${basename(tmp)}.\n`);
 

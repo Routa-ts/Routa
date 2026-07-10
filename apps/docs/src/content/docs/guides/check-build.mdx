@@ -20,6 +20,13 @@ pnpm exec routa check
 - writes generated route metadata when validation passes
 - runs `tsc -p tsconfig.json --noEmit`
 
+Use `routa generate` when you want to deliberately refresh committed metadata after a
+route-structure change:
+
+```sh
+pnpm exec routa generate
+```
+
 Use `routa build` to validate and compile:
 
 ```sh

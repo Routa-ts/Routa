@@ -49,7 +49,9 @@ export default defineConfig({
 						{ label: "Scaffold from OpenAPI", slug: "guides/openapi-scaffold" },
 						{ label: "Regenerate safely", slug: "guides/regeneration" },
 						{ label: "Check and build", slug: "guides/check-build" },
+						{ label: "Testing", slug: "guides/testing" },
 						{ label: "Run and start", slug: "guides/run-start" },
+						{ label: "Deploy", slug: "guides/deploy" },
 					],
 				},
 				{

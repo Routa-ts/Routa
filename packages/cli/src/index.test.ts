@@ -103,7 +103,7 @@ describe("routa cli", () => {
 		expect(existsSync(join(cwd, "src/routes/users/route.ts"))).toBe(false);
 	});
 
-	it("checks a route graph and writes routes metadata", () => {
+	it("generates route metadata after validating a route graph", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-check-"));
 		createTypeScriptProject(cwd);
 		mkdirSync(join(cwd, "src/routes/(private)/users"), { recursive: true });
@@ -143,12 +143,10 @@ export const requireAuth = createMiddleware({
 		);
 		writeFileSync(join(cwd, "src/routes/(private)/users/route.ts"), "export default {};\n");
 
-		const result = run(["check"], { cwd });
+		const result = run(["generate"], { cwd });
 
 		expect(result.code).toBe(0);
-		expect(result.stdout).toContain("Routa validation passed for 1 route file(s).");
-		expect(result.stdout).toContain("Running TypeScript check: tsc -p tsconfig.json --noEmit");
-		expect(result.stdout).toContain("TypeScript check passed.");
+		expect(result.stdout).toContain("Generated .routa/routes.gen.ts for 1 route file(s).");
 		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain('"/users"');
 		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
 			"src/routes/(private)/middleware.ts",

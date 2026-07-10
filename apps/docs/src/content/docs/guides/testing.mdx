@@ -1,0 +1,33 @@
+---
+title: Testing
+description: Test Routa route contracts and application logic.
+---
+
+New Routa projects include Vitest, a `test` script, and a nearby starter test for
+the status route.
+
+Replace `<package-manager>` with npm, pnpm, Yarn, Bun, or another compatible package
+manager.
+
+```sh
+<package-manager> run test
+```
+
+Keep business logic in application-owned services and test it independently. For route
+contracts, test the schemas and handler outcomes that form the HTTP boundary:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { GetStatusResponse } from "./schemas.js";
+
+describe("GET /status", () => {
+	it("accepts the documented success response", () => {
+		expect(GetStatusResponse.safeParse({ ok: true }).success).toBe(true);
+	});
+});
+```
+
+Use `<package-manager> run check` to catch contract and TypeScript errors, and
+`<package-manager> run openapi:check` to
+detect OpenAPI drift. Add endpoint-level tests with your preferred HTTP test client when
+you need to exercise middleware, validation, and serialization together.

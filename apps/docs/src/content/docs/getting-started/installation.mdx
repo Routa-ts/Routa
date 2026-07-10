@@ -8,14 +8,26 @@ import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
 Use the project scaffolder for new applications:
 
 ```sh
-pnpm create routa-ts@latest
+<package-manager> create routa-ts@latest
 ```
+
+## Requirements
+
+Routa v0 requires Node.js 24 or later. New projects include `.node-version` to help
+version managers select the supported runtime.
+
+```sh
+node --version
+```
+
+Use npm, pnpm, Yarn, Bun, or another compatible package manager. Routa does not write a
+lockfile or package-manager field, so your project stays under your team's control.
 
 For an existing application, install the same runtime set used by generated Routa apps:
 
 ```sh
-pnpm add @routa-ts/cli @routa-ts/core hono zod
-pnpm add -D @biomejs/biome @types/node tsx typescript
+<package-manager> add @routa-ts/cli @routa-ts/core hono zod
+<package-manager> add --dev @biomejs/biome @types/node tsx typescript vitest
 ```
 
 <Aside type="note" title="CLI dependency">
@@ -26,7 +38,7 @@ pnpm add -D @biomejs/biome @types/node tsx typescript
 
 - `@routa-ts/core`: route definition helpers and runtime primitives.
 - `@routa-ts/cli`: `routa` command for checks, builds, scaffolding, and dev server workflows.
-- `create-routa-ts`: project scaffolder for `pnpm create routa-ts`.
+- `create-routa-ts`: project scaffolder for your package manager's `create` command.
 
 ## Scripts
 
@@ -40,8 +52,10 @@ Add scripts that mirror generated Routa apps:
 	"scripts": {
 		"dev": "routa dev",
 		"start": "routa start",
+		"generate": "routa generate",
 		"check": "routa check",
 		"build": "routa build",
+		"test": "vitest run",
 		"scaffold": "routa scaffold openapi.yaml",
 		"openapi:check": "routa openapi check"
 	}
@@ -51,9 +65,21 @@ Add scripts that mirror generated Routa apps:
 	</TabItem>
 </Tabs>
 
-## Requirements
+## Existing Hono Apps
 
-Routa v0 targets new TypeScript APIs using Hono and Zod. Other runtime adapters, schema libraries, SDK generation, and broad operational/security integrations are deferred beyond v0.
+Routa owns the HTTP route tree and server lifecycle. Start by adding `src/routa.ts`,
+then move one endpoint into `src/routes/` and keep services, persistence, and domain
+logic in your existing application modules.
+
+```ts
+import { createRouta } from "@routa-ts/core";
+
+export default createRouta({
+	port: 3000,
+});
+```
+
+See [First route](/getting-started/first-route/) for the smallest route contract.
 
 ## Next Step
 
