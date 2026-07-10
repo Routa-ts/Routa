@@ -1,0 +1,226 @@
+---
+title: "Option B · Ledger"
+description: Editorial contract identity — copper seals on cool stone, Newsreader + IBM Plex Mono.
+sidebar:
+  badge:
+    text: B
+    variant: caution
+---
+
+import {
+	Aside,
+	Badge,
+	Card,
+	CardGrid,
+	FileTree,
+	LinkButton,
+	LinkCard,
+	Steps,
+	TabItem,
+	Tabs,
+} from "@astrojs/starlight/components";
+
+<div class="ds-ledger">
+
+Routa as a **ledger**: every route is a signed entry. Cool stone paper, copper seals, and a literary serif that treats contracts as documents worth reading — not just scanning.
+
+<div class="ds-mark">
+	<img src="/favicon.svg" alt="Routa star mark" width="56" height="56" />
+	<div>
+		<div class="ds-mark__word">Routa</div>
+		<p class="ds-mark__tag">Contracts you can countersign</p>
+	</div>
+</div>
+
+<div class="ds-cta-row">
+	<LinkButton href="https://routa-ts.dev/concepts/route-contracts/" variant="primary" icon="document">
+		Read the contract
+	</LinkButton>
+	<LinkButton href="/" variant="secondary" icon="right-arrow" iconPlacement="end">
+		All options
+	</LinkButton>
+</div>
+
+## Palette
+
+Copper for seals and emphasis; cool gray stone for the page; warm ink for body copy.
+
+<div class="ds-swatch-row">
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#b45309" />
+		<div class="ds-swatch__meta"><strong>Seal</strong>#b45309 · accent</div>
+	</div>
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#fdba74" />
+		<div class="ds-swatch__meta"><strong>Wax</strong>#fdba74 · accent-high</div>
+	</div>
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#14161c" />
+		<div class="ds-swatch__meta"><strong>Ink well</strong>#14161c · bg</div>
+	</div>
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#ece8e1" />
+		<div class="ds-swatch__meta"><strong>Vellum</strong>#ece8e1 · text</div>
+	</div>
+</div>
+
+| Token | Role | Feeling |
+| --- | --- | --- |
+| Copper | CTAs, links, seals | Authority without neon |
+| Stone ground | Page chrome | Quiet archive |
+| Newsreader | Headings + prose | Editorial, signed |
+| IBM Plex Mono | Schemas & CLI | Clerk’s hand |
+
+## Status seals
+
+<div class="ds-gallery">
+	<Badge text="signed" variant="success" />
+	<Badge text="draft" variant="note" />
+	<Badge text="amended" variant="caution" />
+	<Badge text="void" variant="danger" />
+	<Badge text="v0" variant="tip" size="small" />
+	<Badge text="OpenAPI" variant="default" size="large" />
+</div>
+
+## Marginalia · Asides
+
+<Aside type="note" title="Note · Entry recorded">
+	A `route.ts` file owns the methods for its path. Treat it as the ledger line for that URL.
+</Aside>
+
+<Aside type="tip" title="Tip · Prefer the source deed">
+	When OpenAPI and source disagree, regenerate from the contract you intend to keep.
+</Aside>
+
+<Aside type="caution" title="Caution · Unsealed change">
+	Editing `.routa/` by hand breaks the chain of custody between source and generated types.
+</Aside>
+
+<Aside type="danger" title="Danger · Broken seal">
+	Deploying without a passing `routa check` ships an unsigned boundary.
+</Aside>
+
+## Chapters · Cards
+
+<CardGrid stagger>
+	<Card title="Why Routa" icon="star">
+		Schema-first boundaries so handlers stay thin and documents stay honest.
+	</Card>
+	<Card title="Schemas" icon="approve-check">
+		Zod shapes that validate at the edge and appear in OpenAPI.
+	</Card>
+	<Card title="Generated files" icon="setting">
+		What Routa writes, what you must not rewrite.
+	</Card>
+	<Card title="Testing" icon="list-format">
+		Prove the contract before the seal is set.
+	</Card>
+</CardGrid>
+
+<CardGrid>
+	<LinkCard
+		title="Scaffold from OpenAPI"
+		href="https://routa-ts.dev/guides/openapi-scaffold/"
+		description="Import an existing deed and mint the first source pages."
+	/>
+	<LinkCard
+		title="Regenerate safely"
+		href="https://routa-ts.dev/guides/regeneration/"
+		description="Amend without voiding prior work."
+	/>
+</CardGrid>
+
+## Filing steps
+
+<Steps>
+
+1. Open a new ledger (project).
+
+	```sh
+	pnpm create routa-ts@latest
+	```
+
+2. Enter the first line item — a route contract.
+
+	```ts
+	export default defineRoute({
+		get: createRoute({
+			responses: {
+				success: { status: 200, schema: UserSchema },
+			},
+			run: async ({ ctx }) => users.list(ctx),
+		}),
+	});
+	```
+
+3. Countersign with check, then serve.
+
+	```sh
+	pnpm routa check && pnpm routa start
+	```
+
+</Steps>
+
+## Docket · Tree
+
+<FileTree>
+
+- src/
+	- routes/
+		- auth/
+			- session/
+				- route.ts
+				- schemas.ts
+		- (private)/
+			- tenants/
+				- $tenantId/
+					- route.ts
+	- middleware/
+		- auth.ts
+- openapi.yaml
+
+</FileTree>
+
+## Package clerks
+
+<Tabs syncKey="package-manager">
+	<TabItem label="pnpm" icon="pnpm">
+		```sh
+		pnpm add @routa-ts/cli @routa-ts/core hono zod
+		```
+	</TabItem>
+	<TabItem label="npm" icon="npm">
+		```sh
+		npm add @routa-ts/cli @routa-ts/core hono zod
+		```
+	</TabItem>
+	<TabItem label="yarn" icon="node">
+		```sh
+		yarn add @routa-ts/cli @routa-ts/core hono zod
+		```
+	</TabItem>
+</Tabs>
+
+## Sample deed
+
+```ts
+export default defineRoute({
+	put: createRoute({
+		input: {
+			params: TenantParams,
+			body: UpdateTenantSchema,
+		},
+		responses: {
+			success: { status: 200, schema: TenantSchema },
+			notFound: { status: 404, schema: ErrorSchema },
+		},
+		run: async ({ input, ctx }) => {
+			return tenants.update(input.params.tenantId, input.body, ctx);
+		},
+	}),
+});
+```
+
+> Ledger identity: **write it once, seal it, keep it true.** Docs should feel like a well-kept archive — copper, stone, and ink.
+
+</div>

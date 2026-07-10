@@ -1,0 +1,63 @@
+---
+title: Route Contracts
+description: Routa route files define the HTTP contract in source.
+---
+
+Routa is built around one source of truth:
+
+```txt
+schemas -> routes -> handlers -> OpenAPI -> docs/checks
+```
+
+Route files may use either directory style (`routes/users/route.ts`) or flat style (`routes/users.ts`). Dynamic flat files use `$`, for example `routes/users.$id.ts` maps to `/users/:id`; both styles can be mixed in one project.
+
+Route files define what each HTTP method accepts, what it can return, which middleware applies, and where the handler boundary begins.
+
+## File-Based APIs
+
+Folders map to URL segments:
+
+```txt
+src/routes/users/route.ts
+src/routes/users/$userId/route.ts
+src/routes/users/$userId/posts/route.ts
+```
+
+Each `route.ts` file owns the methods for one path. Keeping all verbs for one path together makes shared params, middleware, schemas, and metadata easier to maintain.
+
+## Contract Before Handler
+
+```ts
+export default defineRoute({
+	post: createRoute({
+		input: {
+			body: CreateUserSchema,
+		},
+		responses: {
+			success: {
+				status: 201,
+				schema: UserSchema,
+			},
+			emailConflict: {
+				status: 409,
+				schema: EmailConflictSchema,
+			},
+		},
+		run: async ({ input, ctx }) => {
+			return {
+				type: "success",
+				data: await users.createUser({
+					body: input.body,
+					actorId: ctx.auth.userId,
+				}),
+			};
+		},
+	}),
+});
+```
+
+Handlers return named outcomes from the declared response map. If a route did not declare an outcome, TypeScript should reject it.
+
+## HTTP Boundary Only
+
+Routa owns routing, validation, middleware context, typed responses, and OpenAPI. Your application owns services, use cases, domain models, persistence, and business logic.

@@ -9,7 +9,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { run } from "./index.js";
@@ -75,21 +75,35 @@ describe("routa cli", () => {
 		expect(result.stderr).toContain("Missing OpenAPI input file");
 	});
 
-	it("creates a starter project from the advertised CLI command", () => {
+	it("creates a starter project from the advertised CLI command", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-cli-create-"));
 
-		const result = run(["create", "my-api", "--no-openapi"], { cwd });
+		const result = await run(["create", "my-api", "--no-openapi", "--no-git", "--no-install"], {
+			cwd,
+		});
 
 		expect(result.code).toBe(0);
 		expect(result.stdout).toContain("Your Routa app is ready");
 		expect(result.stdout).toContain("pnpm dev");
-		expect(result.stdout).toContain("Created Routa project");
+		expect(result.stdout).toContain("Let's configure your Routa API");
 		expect(existsSync(join(cwd, "my-api/package.json"))).toBe(true);
 		expect(existsSync(join(cwd, "my-api/src/routes/status/route.ts"))).toBe(true);
 		expect(existsSync(join(cwd, "my-api/openapi.yaml"))).toBe(false);
 	});
 
-	it("checks a route graph and writes routes metadata", () => {
+	it("accepts scaffold flags before the OpenAPI input file", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-scaffold-flags-before-"));
+		createTypeScriptProject(cwd);
+		writeSimpleUsersOpenApi(cwd);
+
+		const result = run(["scaffold", "--preview", "openapi.yaml"], { cwd });
+
+		expect(result.code).toBe(0);
+		expect(result.stdout).toContain("Previewed");
+		expect(existsSync(join(cwd, "src/routes/users/route.ts"))).toBe(false);
+	});
+
+	it("generates route metadata after validating a route graph", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-check-"));
 		createTypeScriptProject(cwd);
 		mkdirSync(join(cwd, "src/routes/(private)/users"), { recursive: true });
@@ -129,12 +143,10 @@ export const requireAuth = createMiddleware({
 		);
 		writeFileSync(join(cwd, "src/routes/(private)/users/route.ts"), "export default {};\n");
 
-		const result = run(["check"], { cwd });
+		const result = run(["generate"], { cwd });
 
 		expect(result.code).toBe(0);
-		expect(result.stdout).toContain("Routa validation passed for 1 route file(s).");
-		expect(result.stdout).toContain("Running TypeScript check: tsc -p tsconfig.json --noEmit");
-		expect(result.stdout).toContain("TypeScript check passed.");
+		expect(result.stdout).toContain("Generated .routa/routes.gen.ts for 1 route file(s).");
 		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain('"/users"');
 		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
 			"src/routes/(private)/middleware.ts",
@@ -292,7 +304,7 @@ export default defineRoute({
 		expect(result.stderr).toContain("...commonMiddleware");
 	});
 
-	it("reports middleware rejections that a route does not declare", () => {
+	it("injects middleware rejection responses into route metadata", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-middleware-rejects-"));
 		createTypeScriptProject(cwd);
 		mkdirSync(join(cwd, "src/routes/users"), { recursive: true });
@@ -305,40 +317,12 @@ const requireAuth = createMiddleware({
 \tprovides: {
 \t\tuser: z.unknown(),
 \t},
-\trejects: ["unauthorized"],
-});
-
-export default defineRoute({
-\tmiddleware: [requireAuth],
-\tget: createRoute({
-\t\tresponses: {
-\t\t\tsuccess: {
-\t\t\t\tstatus: 200,
-\t\t\t\tschema: z.unknown(),
-\t\t\t},
+\trejects: {
+\t\tunauthorized: {
+\t\t\tstatus: 401,
+\t\t\tschema: z.object({ message: z.string() }),
 \t\t},
-\t\trun: () => ({ type: "success", data: null }),
-\t}),
-});
-`,
-		);
-
-		const missing = run(["check"], { cwd });
-
-		expect(missing.code).toBe(1);
-		expect(missing.stderr).toContain("ROUTA_MIDDLEWARE_REJECTS_UNDECLARED");
-		expect(missing.stderr).toContain('"unauthorized"');
-
-		writeFileSync(
-			join(cwd, "src/routes/users/route.ts"),
-			`import { createMiddleware, createRoute, defineRoute } from "@routa-ts/core";
-import { z } from "zod";
-
-const requireAuth = createMiddleware({
-\tprovides: {
-\t\tuser: z.unknown(),
 \t},
-\trejects: ["unauthorized"],
 });
 
 export default defineRoute({
@@ -348,10 +332,6 @@ export default defineRoute({
 \t\t\tsuccess: {
 \t\t\t\tstatus: 200,
 \t\t\t\tschema: z.unknown(),
-\t\t\t},
-\t\t\tunauthorized: {
-\t\t\t\tstatus: 401,
-\t\t\t\tschema: z.object({ message: z.string() }),
 \t\t\t},
 \t\t},
 \t\trun: () => ({ type: "success", data: null }),
@@ -363,6 +343,19 @@ export default defineRoute({
 		const declared = run(["check"], { cwd });
 
 		expect(declared.code).toBe(0);
+		const metadata = JSON.parse(
+			readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8").match(
+				/export const routaRoutes = ([\s\S]*?) as const;/,
+			)?.[1] ?? "[]",
+		);
+		expect(metadata[0].responses.get).toEqual([200, 401]);
+		expect(metadata[0].middleware[0].rejects).toEqual([
+			{
+				type: "unauthorized",
+				status: 401,
+				schema: "z.object({ message: z.string() })",
+			},
+		]);
 	});
 
 	it("applies route-file middleware before method middleware", () => {
@@ -607,6 +600,122 @@ export default route({
 		expect(postRoute?.contract.middleware).toHaveLength(1);
 	});
 
+	it("prints a JSON route reference from resolved route metadata", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-routes-json-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/(private)/users"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/(private)/middleware.ts"),
+			`import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+
+export const withSession = createMiddleware({
+\tprovides: {
+\t\tsession: z.object({ authenticated: z.boolean() }),
+\t},
+});
+`,
+		);
+		writeFileSync(
+			join(cwd, "src/routes/(private)/users/route.ts"),
+			`import { createMiddleware, createRoute, defineRoute } from "@routa-ts/core";
+import { z } from "zod";
+
+const requireAuth = createMiddleware({
+\trequires: ["session"],
+\tprovides: {
+\t\tauth: z.object({ userId: z.string() }),
+\t},
+\trejects: {
+\t\tunauthorized: {
+\t\t\tstatus: 401,
+\t\t\tschema: z.object({ message: z.string() }),
+\t\t},
+\t},
+});
+
+export default defineRoute({
+\tget: createRoute({
+\t\tmiddleware: [requireAuth],
+\t\tinput: {
+\t\t\tquery: z.object({ limit: z.coerce.number().optional() }),
+\t\t},
+\t\tresponses: {
+\t\t\tsuccess: {
+\t\t\t\tstatus: 200,
+\t\t\t\tschema: z.unknown(),
+\t\t\t},
+\t\t},
+\t\trun: () => ({ type: "success", data: null }),
+\t}),
+});
+`,
+		);
+
+		const result = run(["routes", "--format", "json"], { cwd });
+
+		expect(result.code).toBe(0);
+		const reference = JSON.parse(result.stdout ?? "{}");
+		expect(reference.routes).toHaveLength(1);
+		expect(reference.routes[0].path).toBe("/users");
+		expect(reference.routes[0].groups).toEqual(["(private)"]);
+		expect(reference.routes[0].methods[0]).toMatchObject({
+			method: "GET",
+			inputs: { query: true },
+			responses: [200, 401],
+			ctx: ["auth", "session"],
+			rejects: [
+				{
+					type: "unauthorized",
+					status: 401,
+					schema: "z.object({ message: z.string() })",
+				},
+			],
+		});
+		expect(
+			reference.routes[0].methods[0].middleware.map((item: { name: string }) => item.name),
+		).toEqual(["withSession", "requireAuth"]);
+	});
+
+	it("prints a Markdown route reference by default", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-routes-markdown-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/status/route.ts"),
+			`import { createRoute, defineRoute } from "@routa-ts/core";
+import { z } from "zod";
+
+export default defineRoute({
+\tget: createRoute({
+\t\tresponses: {
+\t\t\tsuccess: {
+\t\t\t\tstatus: 200,
+\t\t\t\tschema: z.unknown(),
+\t\t\t},
+\t\t},
+\t\trun: () => ({ type: "success", data: null }),
+\t}),
+});
+`,
+		);
+
+		const result = run(["routes"], { cwd });
+
+		expect(result.code).toBe(0);
+		expect(result.stdout).toContain("# Routa Route Reference");
+		expect(result.stdout).toContain("## /status");
+		expect(result.stdout).toContain("### GET");
+		expect(result.stdout).toContain("Middleware:");
+	});
+
+	it("rejects invalid route reference formats", () => {
+		const result = run(["routes", "--format", "yaml"], { cwd: repoRoot });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("Invalid routes format");
+	});
+
 	it("rejects malformed generated middleware exports at runtime", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-malformed-middleware-"));
 		createTypeScriptProject(cwd);
@@ -642,7 +751,7 @@ export default defineRoute({
 \t\tpath: "/users",
 \t\tmethods: ["GET"],
 \t\tresponses: { get: [200] },
-\t\tinputs: { get: { params: false, query: false, body: false } },
+\t\tinputs: { get: { params: false, query: false, headers: false, cookies: false, body: false } },
 \t\tmiddleware: [],
 \t\tmethodMiddleware: {
 \t\t\tget: [
@@ -1065,6 +1174,233 @@ export default defineRoute({
 		expect(result.code).toBe(1);
 		expect(result.stderr).toContain("ROUTA_MISSING_SUCCESS_RESPONSE");
 		expect(result.stderr).toContain("GET /users");
+	});
+
+	it("requires DELETE routes to declare a 2xx success response", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-missing-delete-success-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/users"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/users/route.ts"),
+			`import { createRoute, defineRoute } from "@routa-ts/core";
+
+export default defineRoute({
+\tdelete: createRoute({
+\t\tresponses: {},
+\t\trun: async () => ({ type: "success", data: null }),
+\t}),
+});
+`,
+		);
+
+		const result = run(["check"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("ROUTA_MISSING_SUCCESS_RESPONSE");
+		expect(result.stderr).toContain("DELETE /users");
+	});
+
+	it("accepts DELETE routes that declare a 204 success response", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-delete-204-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/users"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/users/route.ts"),
+			`import { createRoute, defineRoute } from "@routa-ts/core";
+import { z } from "zod";
+
+export default defineRoute({
+\tdelete: createRoute({
+\t\tresponses: {
+\t\t\tsuccess: {
+\t\t\t\tstatus: 204,
+\t\t\t\tschema: z.unknown(),
+\t\t\t},
+\t\t},
+\t\trun: async () => ({ type: "success", data: null }),
+\t}),
+});
+`,
+		);
+
+		const result = run(["check"], { cwd });
+
+		expect(result.code).toBe(0);
+		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
+			'"delete": [\n\t\t\t\t204',
+		);
+	});
+
+	it("records headers and cookies in generated route metadata", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-input-headers-cookies-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/users"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/users/route.ts"),
+			`import { createRoute, defineRoute } from "@routa-ts/core";
+import { z } from "zod";
+
+export default defineRoute({
+\tget: createRoute({
+\t\tinput: {
+\t\t\theaders: z.object({ authorization: z.string() }),
+\t\t\tcookies: z.object({ session: z.string() }),
+\t\t},
+\t\tresponses: {
+\t\t\tsuccess: {
+\t\t\t\tstatus: 200,
+\t\t\t\tschema: z.object({ ok: z.boolean() }),
+\t\t\t},
+\t\t},
+\t\trun: async () => ({ type: "success", data: { ok: true } }),
+\t}),
+});
+`,
+		);
+
+		const result = run(["check"], { cwd });
+
+		expect(result.code).toBe(0);
+		const metadata = readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8");
+		expect(metadata).toContain('"headers": true');
+		expect(metadata).toContain('"cookies": true');
+	});
+
+	it("can validate without writing routes.gen.ts", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-validate-no-write-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/status/route.ts"),
+			`import { createRoute, defineRoute } from "@routa-ts/core";
+import { z } from "zod";
+
+export default defineRoute({
+\tget: createRoute({
+\t\tresponses: {
+\t\t\tsuccess: {
+\t\t\t\tstatus: 200,
+\t\t\t\tschema: z.object({ ok: z.boolean() }),
+\t\t\t},
+\t\t},
+\t\trun: async () => ({ type: "success", data: { ok: true } }),
+\t}),
+});
+`,
+		);
+
+		const validation = validateProject(cwd, { write: false });
+
+		expect(validation.diagnostics).toEqual([]);
+		expect(existsSync(join(cwd, ".routa/routes.gen.ts"))).toBe(false);
+	});
+
+	it("generates OpenAPI without writing routes.gen.ts", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-no-write-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/status/route.ts"),
+			`import { createRoute, defineRoute } from "@routa-ts/core";
+import { z } from "zod";
+
+export default defineRoute({
+\tget: createRoute({
+\t\tresponses: {
+\t\t\tsuccess: {
+\t\t\t\tstatus: 200,
+\t\t\t\tschema: z.object({ ok: z.boolean() }),
+\t\t\t},
+\t\t},
+\t\trun: async () => ({ type: "success", data: { ok: true } }),
+\t}),
+});
+`,
+		);
+
+		const openapi = generateOpenApi(cwd);
+
+		expect(openapi.paths?.["/status"]?.get).toBeDefined();
+		expect(existsSync(join(cwd, ".routa/routes.gen.ts"))).toBe(false);
+	});
+
+	it("skips symlink cycles while snapshotting source files", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-symlink-cycle-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/status/route.ts"),
+			`import { createRoute, defineRoute } from "@routa-ts/core";
+import { z } from "zod";
+
+export default defineRoute({
+\tget: createRoute({
+\t\tresponses: {
+\t\t\tsuccess: {
+\t\t\t\tstatus: 200,
+\t\t\t\tschema: z.object({ ok: z.boolean() }),
+\t\t\t},
+\t\t},
+\t\trun: async () => ({ type: "success", data: { ok: true } }),
+\t}),
+});
+`,
+		);
+		symlinkSync(join(cwd, "src"), join(cwd, "src/loop"), "dir");
+
+		const snapshot = sourceSnapshot(cwd);
+
+		expect(snapshot.has("src/routes/status/route.ts")).toBe(true);
+		expect(snapshot.has("src/routa.ts")).toBe(true);
+		expect([...snapshot.keys()].some((file) => file.includes(`${sep}loop${sep}`))).toBe(false);
+	});
+
+	it("resolves export default identifiers to route configs", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-route-config-ident-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/status/route.ts"),
+			`import { createRoute, defineRoute } from "@routa-ts/core";
+import { z } from "zod";
+
+const route = defineRoute({
+\tget: createRoute({
+\t\tresponses: {
+\t\t\tsuccess: {
+\t\t\t\tstatus: 200,
+\t\t\t\tschema: z.object({ ok: z.boolean() }),
+\t\t\t},
+\t\t},
+\t\trun: async () => ({ type: "success", data: { ok: true } }),
+\t}),
+});
+
+export default route;
+`,
+		);
+
+		const result = run(["check"], { cwd });
+
+		expect(result.code).toBe(0);
+		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain('"/status"');
+	});
+
+	it("reports unresolved route configs", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-route-config-unresolved-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/status/route.ts"),
+			`const route = missingFactory();
+export default route;
+`,
+		);
+
+		const result = run(["check"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("ROUTA_ROUTE_CONFIG_UNRESOLVED");
 	});
 
 	it("reports duplicate schema exports with Routa diagnostics", () => {
@@ -1663,10 +1999,10 @@ paths:
 		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toBe(scaffolded);
 	});
 
-	it("creates starter metadata that routa check reproduces byte-for-byte", () => {
+	it("creates starter metadata that routa check reproduces byte-for-byte", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-create-metadata-stable-"));
 
-		const result = run(["create", "my-api"], { cwd });
+		const result = await run(["create", "my-api", "--no-git", "--no-install"], { cwd });
 		expect(result.code).toBe(0);
 
 		const projectDir = join(cwd, "my-api");
@@ -1826,7 +2162,7 @@ paths:
 		);
 	});
 
-	it("rejects undeclared response variants at compile time in consumer projects", () => {
+	it("reports undeclared response variants in consumer projects", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-consumer-compile-fail-"));
 		createTypeScriptProject(cwd);
 		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
@@ -1848,39 +2184,115 @@ export default defineRoute({
 });
 `,
 		);
+
+		const result = run(["check"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("ROUTA_RESULT_TYPE");
+		expect(result.stderr).toContain("undeclaredVariant");
+	});
+
+	it("reports extra fields in route run results", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-result-shape-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
 		writeFileSync(
-			join(cwd, "tsconfig.json"),
-			JSON.stringify(
-				{
-					compilerOptions: {
-						target: "ES2022",
-						module: "NodeNext",
-						moduleResolution: "NodeNext",
-						strict: true,
-						skipLibCheck: true,
-						paths: {
-							"@routa-ts/core": [join(repoRoot, "packages/core/src/index.ts")],
-							zod: [join(repoRoot, "packages/core/node_modules/zod/index.d.ts")],
-						},
-					},
-					include: ["src/routes/**/*.ts"],
-				},
-				null,
-				"\t",
-			),
+			join(cwd, "src/routes/status/route.ts"),
+			`import { createRoute, defineRoute } from "@routa-ts/core";
+import { z } from "zod";
+
+export default defineRoute({
+\tget: createRoute({
+\t\tresponses: {
+\t\t\tsuccess: {
+\t\t\t\tstatus: 200,
+\t\t\t\tschema: z.object({ ok: z.boolean() }),
+\t\t\t},
+\t\t},
+\t\trun: () => {
+\t\t\treturn {
+\t\t\t\ttype: "success",
+\t\t\t\ttimestamp: new Date().toISOString(),
+\t\t\t\tdata: { ok: true },
+\t\t\t};
+\t\t},
+\t}),
+});
+`,
 		);
 
-		const result = spawnSync(
-			"pnpm",
-			["exec", "tsc", "-p", join(cwd, "tsconfig.json"), "--noEmit"],
-			{
-				cwd: repoRoot,
-				encoding: "utf8",
-			},
+		const result = run(["check"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("ROUTA_RESULT_SHAPE");
+		expect(result.stderr).toContain('unsupported field "timestamp"');
+		expect(result.stderr).toContain("src/routes/status/route.ts");
+	});
+
+	it("reports undeclared route run result types", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-result-type-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/status/route.ts"),
+			`import { createRoute, defineRoute } from "@routa-ts/core";
+import { z } from "zod";
+
+export default defineRoute({
+\tget: createRoute({
+\t\tresponses: {
+\t\t\tsuccess: {
+\t\t\t\tstatus: 200,
+\t\t\t\tschema: z.object({ ok: z.boolean() }),
+\t\t\t},
+\t\t},
+\t\trun: () => ({
+\t\t\ttype: "succes",
+\t\t\tdata: { ok: true },
+\t\t}),
+\t}),
+});
+`,
 		);
 
-		expect(result.status).not.toBe(0);
-		expect(result.stdout).toContain("undeclaredVariant");
+		const result = run(["check"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("ROUTA_RESULT_TYPE");
+		expect(result.stderr).toContain('Run result type "succes" is not declared');
+		expect(result.stderr).toContain('Use one of the declared result types: "success"');
+	});
+
+	it("reports undeclared middleware run result types", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-middleware-result-type-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/middleware.ts"),
+			`import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+
+export const requireAuth = createMiddleware({
+\trejects: {
+\t\tunauthorized: {
+\t\t\tstatus: 401,
+\t\t\tschema: z.object({ message: z.string() }),
+\t\t},
+\t},
+\trun: () => ({
+\t\ttype: "unauthorize",
+\t\tdata: { message: "Missing session" },
+\t}),
+});
+`,
+		);
+
+		const result = run(["check"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("ROUTA_RESULT_TYPE");
+		expect(result.stderr).toContain('Run result type "unauthorize" is not declared');
+		expect(result.stderr).toContain('Use one of the declared result types: "unauthorized"');
 	});
 
 	it("rejects path keys with dot segments that would escape the project", () => {
@@ -2632,6 +3044,62 @@ export default defineRoute({
 		expect(result.stderr).toContain("POST /users removed");
 	});
 
+	it("reports openapi drift when a route method is added", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-method-added-"));
+		createTypeScriptProject(cwd);
+		writeSimpleUsersOpenApi(cwd);
+		run(["scaffold", "openapi.yaml"], { cwd });
+		writeFileSync(
+			join(cwd, "src/routes/users/route.ts"),
+			`import { createRoute, defineRoute } from "@routa-ts/core";
+import { z } from "zod";
+import { CreateUserBody, CreateUserResponse, ListUsersResponse } from "./schemas.js";
+
+export default defineRoute({
+\tget: createRoute({
+\t\tresponses: {
+\t\t\tsuccess: {
+\t\t\t\tstatus: 200,
+\t\t\t\tschema: ListUsersResponse,
+\t\t\t},
+\t\t},
+\t\trun: async () => ({ type: "success", data: [] as z.output<typeof ListUsersResponse> }),
+\t}),
+\tpost: createRoute({
+\t\tinput: {
+\t\t\tbody: CreateUserBody,
+\t\t},
+\t\tresponses: {
+\t\t\tsuccess: {
+\t\t\t\tstatus: 201,
+\t\t\t\tschema: CreateUserResponse,
+\t\t\t},
+\t\t},
+\t\trun: async ({ input }) => ({
+\t\t\ttype: "success",
+\t\t\tdata: { id: "usr_1", name: input.body.name } as z.output<typeof CreateUserResponse>,
+\t\t}),
+\t}),
+\tdelete: createRoute({
+\t\tresponses: {
+\t\t\tsuccess: {
+\t\t\t\tstatus: 204,
+\t\t\t\tschema: z.unknown(),
+\t\t\t},
+\t\t},
+\t\trun: async () => ({ type: "success", data: null }),
+\t}),
+});
+`,
+		);
+
+		const result = run(["openapi", "check"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("OPENAPI_DRIFT");
+		expect(result.stderr).toContain("DELETE /users added");
+	});
+
 	it("fails openapi check when the route graph has diagnostics", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-invalid-graph-"));
 		createTypeScriptProject(cwd);
@@ -2810,6 +3278,154 @@ export default defineRoute({
 		expect(result.stderr).toContain("OPENAPI_REMOVED_OPERATION");
 		expect(result.stderr).toContain("POST /users");
 		expect(result.stderr).toContain("--update-baseline");
+	});
+
+	it("discovers flat collection and dynamic route files", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-flat-routes-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/users.ts"),
+			`import { createRoute, defineRoute } from "@routa-ts/core";
+export default defineRoute({ get: createRoute({ responses: {}, run: () => ({ type: "success", data: null }) }) });
+`,
+		);
+		writeFileSync(
+			join(cwd, "src/routes/tasks.$id.ts"),
+			`import { createRoute, defineRoute } from "@routa-ts/core";
+export default defineRoute({ get: createRoute({ responses: {}, run: () => ({ type: "success", data: null }) }) });
+`,
+		);
+
+		const result = validateProject(cwd, { write: false });
+
+		expect(result.routes.map((route) => route.path).sort()).toEqual(["/tasks/:id", "/users"]);
+	});
+
+	it("reports query parameters that become required in openapi breaking checks", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-required-input-"));
+		createTypeScriptProject(cwd);
+		writeFileSync(
+			join(cwd, "openapi.yaml"),
+			`openapi: 3.1.0
+info:
+  title: Users API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      operationId: listUsers
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+`,
+		);
+		run(["scaffold", "openapi.yaml"], { cwd });
+		const schemas = join(cwd, "src/routes/users/schemas.ts");
+		writeFileSync(
+			schemas,
+			readFileSync(schemas, "utf8").replace("z.string().optional()", "z.string()"),
+		);
+
+		const result = run(["openapi", "breaking"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("OPENAPI_REQUIRED_INPUT");
+		expect(result.stderr).toContain('GET /users query parameter "status" became required');
+	});
+
+	it("reports newly declared middleware security as a breaking change", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-auth-breaking-"));
+		createTypeScriptProject(cwd);
+		writeSimpleUsersOpenApi(cwd);
+		run(["scaffold", "openapi.yaml"], { cwd });
+		const route = join(cwd, "src/routes/users/route.ts");
+		writeFileSync(
+			route,
+			readFileSync(route, "utf8")
+				.replace(
+					'import { createRoute, defineRoute } from "@routa-ts/core";',
+					'import { createMiddleware, createRoute, defineRoute } from "@routa-ts/core";\n\nconst requireAuth = createMiddleware({ openapi: { security: [{ bearerAuth: [] }], permissions: ["users.read"] } });',
+				)
+				.replace("get: createRoute({", "get: createRoute({\n\t\tmiddleware: [requireAuth],"),
+		);
+
+		const result = run(["openapi", "breaking"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("OPENAPI_TIGHTER_AUTH: GET /users now requires authentication");
+	});
+
+	it("emits route deprecation metadata into OpenAPI", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-deprecation-"));
+		createTypeScriptProject(cwd);
+		writeSimpleUsersOpenApi(cwd);
+		run(["scaffold", "openapi.yaml"], { cwd });
+		const route = join(cwd, "src/routes/users/route.ts");
+		writeFileSync(
+			route,
+			readFileSync(route, "utf8").replace(
+				"get: createRoute({",
+				'get: createRoute({\n\t\tdeprecation: { sunset: "2027-01-01", replacement: "https://v2.example.com/users" },',
+			),
+		);
+
+		const operation = generateOpenApi(cwd).paths?.["/users"]?.get;
+
+		expect(operation?.deprecated).toBe(true);
+		expect(operation?.["x-routa-sunset"]).toBe("2027-01-01");
+	});
+
+	it("validates local and external deprecation replacements", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-deprecation-replacements-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/status.ts"),
+			`import { createRoute, defineRoute } from "@routa-ts/core";
+export default defineRoute({ get: createRoute({ responses: {}, run: () => ({ type: "success", data: null }) }) });
+`,
+		);
+		writeFileSync(
+			join(cwd, "src/routes/legacy.ts"),
+			`import { createRoute, defineRoute } from "@routa-ts/core";
+export default defineRoute({ get: createRoute({ deprecation: { replacement: "/missing" }, responses: {}, run: () => ({ type: "success", data: null }) }) });
+`,
+		);
+
+		const missing = run(["check"], { cwd });
+		expect(missing.code).toBe(1);
+		expect(missing.stderr).toContain("ROUTA_DEPRECATION_REPLACEMENT_ROUTE_NOT_FOUND");
+
+		writeFileSync(
+			join(cwd, "src/routes/legacy.ts"),
+			readFileSync(join(cwd, "src/routes/legacy.ts"), "utf8").replace('"/missing"', '"next-api"'),
+		);
+		const invalidUrl = run(["check"], { cwd });
+		expect(invalidUrl.code).toBe(1);
+		expect(invalidUrl.stderr).toContain("ROUTA_DEPRECATION_REPLACEMENT_URL_INVALID");
+
+		writeFileSync(
+			join(cwd, "src/routes/legacy.ts"),
+			readFileSync(join(cwd, "src/routes/legacy.ts"), "utf8").replace('"next-api"', '"/status"'),
+		);
+		expect(
+			validateProject(cwd, { write: false }).diagnostics.some((diagnostic) =>
+				diagnostic.code.startsWith("ROUTA_DEPRECATION_"),
+			),
+		).toBe(false);
 	});
 
 	it("generates body route contracts that typecheck in a consumer project", () => {

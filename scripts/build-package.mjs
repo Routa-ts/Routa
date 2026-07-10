@@ -69,7 +69,7 @@ if (config.bundle) {
 			bundle: true,
 			format: "esm",
 			platform: "node",
-			target: "node20",
+			target: "node24",
 			sourcemap: false,
 			external: config.bundle.external,
 		});

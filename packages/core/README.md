@@ -7,23 +7,25 @@ Routa route contracts keep HTTP behavior explicit in source: inputs, responses, 
 ## Install
 
 ```sh
-pnpm add @routa-ts/core@0.1.0 hono@^4.12.27 zod@^4.4.3
+pnpm add @routa-ts/core@0.1.2 hono@^4.12.27 zod@^4.4.3
 ```
 
 ## Usage
 
 ```ts
 import { createRoute, defineRoute } from "@routa-ts/core";
+import { z } from "zod";
 
 export default defineRoute({
 	get: createRoute({
 		responses: {
 			success: {
 				status: 200,
+				schema: z.object({ ok: z.boolean() }),
 			},
 		},
 		run: async () => {
-			return { ok: true };
+			return { type: "success", data: { ok: true } };
 		},
 	}),
 });

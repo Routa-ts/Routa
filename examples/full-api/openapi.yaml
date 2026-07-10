@@ -53,6 +53,18 @@ paths:
             enum:
               - active
               - archived
+        - name: sort
+          in: query
+          required: false
+          description: Sort helper — use `name`, `-name`, `status`, or `-status`
+          schema:
+            type: string
+        - name: fields
+          in: query
+          required: false
+          description: Fields helper — comma-separated, whitespace trimmed (`id, name`)
+          schema:
+            type: string
       responses:
         "200":
           description: Tenant projects
@@ -62,11 +74,20 @@ paths:
                 type: object
                 required:
                   - projects
+                  - selectedFields
                 properties:
                   projects:
                     type: array
                     items:
                       $ref: "#/components/schemas/Project"
+                  selectedFields:
+                    type: array
+                    items:
+                      type: string
+                      enum:
+                        - id
+                        - name
+                        - status
         "401":
           description: Authentication required
         "403":
@@ -153,6 +174,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Project"
+        "401":
+          description: Authentication required
+        "403":
+          description: Forbidden
+    delete:
+      operationId: deleteProject
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Project deleted (bodyless success)
         "401":
           description: Authentication required
         "403":

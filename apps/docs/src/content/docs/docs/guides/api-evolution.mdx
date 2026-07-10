@@ -1,0 +1,58 @@
+---
+title: API evolution
+description: Keep Routa API contracts compatible as they change.
+---
+
+Routa keeps a committed OpenAPI baseline in `.routa/openapi-baseline.json`.
+
+## Check compatibility
+
+```sh
+routa openapi breaking
+```
+
+The command fails for removed operations and for inputs that become required: query, header, cookie, path, or request body. Use it in CI before accepting a contract change.
+
+When a change is intentional, review it and then update the baseline explicitly:
+
+```sh
+routa openapi breaking --update-baseline
+```
+
+## Security visibility
+
+Middleware may describe its API-facing security without implementing authentication for your app:
+
+```ts
+createMiddleware({
+	openapi: {
+		security: [{ bearerAuth: [] }],
+		permissions: ["users.read"],
+	},
+	// Application-owned credential and permission logic.
+});
+```
+
+Routa emits this as OpenAPI `security` and `x-routa-authz`. A public operation becoming authenticated is reported by `routa openapi breaking`.
+
+## Deprecate an operation
+
+```ts
+createRoute({
+	deprecation: {
+		sunset: "2027-01-01",
+		replacement: "/users",
+	},
+	// ...
+});
+```
+
+The generated OpenAPI marks the operation as deprecated. Set `lifecycleHeaders: true` in `createRouta()` to add `Deprecation`, `Sunset`, and `Link` headers at runtime.
+
+For a replacement in the same API, use a leading `/`; Routa checks that the
+target route exists. Otherwise, provide an absolute `http:` or `https:` URL to
+another API, such as `https://api.example.com/v2/users`.
+
+The generated route registry also exposes local paths to TypeScript, so invalid
+literal replacements appear in the IDE. `routa check` remains the authoritative
+validation when generated metadata is stale or a value is constructed dynamically.

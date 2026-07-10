@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { builtinModules } from "node:module";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 export type CreateProjectResult = {
 	projectDir: string;
@@ -28,6 +28,12 @@ export function createProject(
 	options: CreateProjectOptions = {},
 ): CreateProjectResult {
 	const projectDir = resolve(cwd, targetDir);
+	const relativeProjectDir = relative(cwd, projectDir);
+
+	if (relativeProjectDir.startsWith("..") || isAbsolute(relativeProjectDir)) {
+		throw new Error(`Target directory must stay under the current working directory: ${targetDir}`);
+	}
+
 	const projectName = basename(projectDir);
 
 	if (existsSync(projectDir)) {
@@ -51,6 +57,7 @@ export function createProject(
 	});
 	const files = new Map<string, string>([
 		[".gitignore", gitignore()],
+		[".nvmrc", "24\n"],
 		[".vscode/settings.json", vscodeSettings()],
 		["README.md", readme(projectName, options.openApi ?? true)],
 		["biome.json", biomeJson()],
@@ -62,6 +69,7 @@ export function createProject(
 		["tsconfig.json", tsconfigJson()],
 		["src/routes/status/route.ts", statusRoute],
 		["src/routes/status/schemas.ts", statusSchemas],
+		["src/routes/status/route.test.ts", statusRouteTestSource()],
 	]);
 
 	if (options.openApi ?? true) {
@@ -120,7 +128,9 @@ function routesMetadataSource(): string {
 			path: "/status",
 			methods: ["GET"],
 			responses: { get: [200] },
-			inputs: { get: { params: false, query: false, body: false } },
+			inputs: {
+				get: { params: false, query: false, headers: false, cookies: false, body: false },
+			},
 			middleware: [],
 			methodMiddleware: { get: [] },
 			ctx: [],
@@ -282,7 +292,9 @@ function packageJson(name: string, routaVersion: string, openApi: boolean): stri
 				dev: "routa dev",
 				start: "routa start",
 				check: "routa check",
+				generate: "routa generate",
 				build: "routa build",
+				test: "vitest run",
 				lint: "biome check .",
 				format: "biome check --write .",
 				...(openApi
@@ -296,13 +308,14 @@ function packageJson(name: string, routaVersion: string, openApi: boolean): stri
 				"@routa-ts/cli": routaVersion,
 				"@routa-ts/core": routaVersion,
 				hono: "^4.12.27",
-				tsx: "^4.22.4",
 				zod: "^4.4.3",
 			},
 			devDependencies: {
-				"@biomejs/biome": "^2.5.1",
-				"@types/node": "^24.0.4",
-				typescript: "^5.8.3",
+				"@biomejs/biome": "^2.5.2",
+				"@types/node": "^26.1.0",
+				typescript: "^6.0.3",
+				tsx: "^4.23.0",
+				vitest: "^4.1.9",
 			},
 		},
 		null,
@@ -391,40 +404,46 @@ function vscodeSettings(): string {
 function readme(name: string, openApi: boolean): string {
 	return `# ${name}
 
-Routa API generated with \`pnpm create routa-ts@latest\`.
+Routa API generated with \`<package-manager> create routa-ts@latest\`.
 
 ## Development
 
+Requires Node.js 24+. The included \`.nvmrc\` file helps version managers select the supported runtime.
+
 \`\`\`sh
-pnpm install
-pnpm dev
+# Use npm, pnpm, Yarn, Bun, or another compatible package manager.
+<package-manager> install
+<package-manager> run dev
 \`\`\`
 
-\`pnpm dev\` runs \`routa dev\`, which validates the route graph, generates Routa metadata, typechecks, and starts the internal development server.
+\`<package-manager> run dev\` runs \`routa dev\`, which validates the route graph, generates Routa metadata, typechecks, and starts the internal development server.
 
 ## Scripts
 
 \`\`\`sh
-pnpm dev
-pnpm start
-pnpm check
-pnpm build
-pnpm lint
-pnpm format
-${openApi ? "pnpm openapi:check\n" : ""}\
+<package-manager> run dev
+<package-manager> run start
+<package-manager> run generate
+<package-manager> run check
+<package-manager> run build
+<package-manager> run test
+<package-manager> run lint
+<package-manager> run format
+${openApi ? "<package-manager> run openapi:check\n" : ""}\
 \`\`\`
 
 ## Routes
 
-\`src/routa.ts\` is the user-owned Routa entry point. Routes live in \`src/routes\`.
+\`src/routa.ts\` is the user-owned Routa entry point. Routes live in \`src/routes\`; each route can keep a nearby \`*.test.ts\` test.
 
 \`\`\`txt
 src/routa.ts
 src/routes/status/route.ts
 src/routes/status/schemas.ts
+src/routes/status/route.test.ts
 \`\`\`
 
-${openApi ? "Routa owns generated project metadata in `.routa/`. Commit those files so OpenAPI drift and regeneration safety work across machines." : "This starter was created without OpenAPI files. Add `openapi.yaml` later and run `routa scaffold openapi.yaml` if you want generated route metadata."}
+${openApi ? "Run `<package-manager> run generate` after changing route structure, review the `.routa/` diff, and commit it with the route change. `<package-manager> run check`, `<package-manager> run build`, and `<package-manager> run dev` also synchronize metadata when validation passes." : "This starter was created without OpenAPI files. Add `openapi.yaml` later and run `routa scaffold openapi.yaml` if you want generated route metadata."}
 `;
 }
 
@@ -555,6 +574,23 @@ function statusSchemasSource(): string {
 
 export const GetStatusResponse = z.object({
 \tok: z.boolean(),
+});
+`;
+}
+
+/**
+ * Returns a small, executable test that demonstrates the generated testing setup.
+ *
+ * @returns The status-route schema test source.
+ */
+function statusRouteTestSource(): string {
+	return `import { describe, expect, it } from "vitest";
+import { GetStatusResponse } from "./schemas.js";
+
+describe("GET /status", () => {
+	it("accepts the documented success response", () => {
+		expect(GetStatusResponse.safeParse({ ok: true }).success).toBe(true);
+	});
 });
 `;
 }

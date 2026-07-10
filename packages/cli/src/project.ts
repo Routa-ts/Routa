@@ -1,8 +1,26 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
+import {
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	realpathSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
+import { basename, dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as ts from "typescript";
+import {
+	callName,
+	localInitializer,
+	objectLiteral,
+	objectProperties,
+	objectProperty,
+	propertyName,
+	unwrapExpression,
+} from "./ast.js";
+import { runTypeScript } from "./typescript-runner.js";
 
 export type Diagnostic = {
 	code: string;
@@ -21,6 +39,7 @@ export type RouteMetadata = {
 	inputs: Record<string, RouteMethodInputMetadata>;
 	middleware: MiddlewareMetadata[];
 	methodMiddleware: Record<string, MiddlewareMetadata[]>;
+	deprecations?: Record<string, RouteDeprecationMetadata | undefined>;
 	ctx: string[];
 	groups: string[];
 	segments: string[];
@@ -29,6 +48,8 @@ export type RouteMetadata = {
 export type RouteMethodInputMetadata = {
 	params: boolean;
 	query: boolean;
+	headers: boolean;
+	cookies: boolean;
 	body: boolean;
 };
 
@@ -38,7 +59,19 @@ export type MiddlewareMetadata = {
 	requires: string[];
 	provides: string[];
 	providesTypes: Record<string, string>;
-	rejects: string[];
+	rejects: MiddlewareRejectMetadata[];
+	security: Array<Record<string, string[]>>;
+	permissions: string[];
+};
+
+export type MiddlewareRejectMetadata = {
+	type: string;
+	status: number;
+	schema: string;
+};
+
+export type RouteDeprecationMetadata = {
+	replacement?: string;
 };
 
 export type ProjectValidationResult = {
@@ -51,7 +84,15 @@ const generatedHeader =
 
 const routesRoot = join("src", "routes");
 const devPollMs = 300;
+const devRestartDebounceMs = 150;
 const httpMethods = new Set(["get", "post", "put", "patch", "delete", "head", "options"]);
+const emptyRouteInputs: RouteMethodInputMetadata = {
+	params: false,
+	query: false,
+	headers: false,
+	cookies: false,
+	body: false,
+};
 const routeStubSource = `import { createRoute, defineRoute } from "@routa-ts/core";
 
 export default defineRoute({
@@ -65,24 +106,33 @@ export default defineRoute({
 `;
 
 /**
- * Validates a Routa project and generates route metadata when validation succeeds.
+ * Validates a Routa project and optionally generates route metadata when validation succeeds.
  *
  * @param cwd - The project root directory
+ * @param options - Validation options
+ * @param options.write - When `true` (default), write `.routa/routes.gen.ts` after a clean validation
  * @returns The discovered routes and any validation diagnostics
  */
-export function validateProject(cwd = process.cwd()): ProjectValidationResult {
+export function validateProject(
+	cwd = process.cwd(),
+	options: { write?: boolean } = {},
+): ProjectValidationResult {
+	const write = options.write ?? true;
 	const discovery = discoverRoutes(cwd);
 	const routes = discovery.routes;
 	const diagnostics = [
 		...projectStructureDiagnostics(cwd),
 		...discovery.diagnostics,
+		...runResultShapeDiagnostics(cwd),
 		...duplicateRouteDiagnostics(routes),
+		...deprecationReplacementDiagnostics(routes),
 		...missingSuccessResponseDiagnostics(routes),
 		...duplicateSchemaDiagnostics(cwd),
 		...middlewareOrderDiagnostics(routes),
+		...middlewareRejectStatusDiagnostics(routes),
 	];
 
-	if (diagnostics.length === 0) {
+	if (write && diagnostics.length === 0) {
 		writeRoutesMetadata(cwd, routes);
 	}
 
@@ -129,6 +179,31 @@ export function runProjectCheck(cwd = process.cwd()): {
 }
 
 /**
+ * Validates a Routa project and writes its generated route metadata.
+ *
+ * @returns A result object containing the exit code and any generation output.
+ */
+export function runProjectGenerate(cwd = process.cwd()): {
+	code: number;
+	stdout?: string;
+	stderr?: string;
+} {
+	const validation = validateProject(cwd);
+
+	if (validation.diagnostics.length > 0) {
+		return {
+			code: 1,
+			stderr: formatDiagnostics(validation.diagnostics),
+		};
+	}
+
+	return {
+		code: 0,
+		stdout: `Generated .routa/routes.gen.ts for ${validation.routes.length} route file(s).\n`,
+	};
+}
+
+/**
  * Builds a Routa project after validating its routes.
  *
  * @returns Build output. On success, `stdout` reports how many route files passed validation and build.
@@ -154,6 +229,44 @@ export function runProjectBuild(cwd = process.cwd()): {
 	}
 
 	return { code: 0, stdout: `Routa build passed for ${validation.routes.length} route file(s).\n` };
+}
+
+/**
+ * Prints a route reference from Routa's validated route metadata.
+ *
+ * @param argv - Command-line arguments for route reference formatting
+ * @param cwd - Project root directory
+ * @returns The formatted route reference or validation/argument diagnostics
+ */
+export function runProjectRoutes(
+	argv: readonly string[] = [],
+	cwd = process.cwd(),
+): { code: number; stdout?: string; stderr?: string } {
+	const format = routeReferenceFormat(argv);
+
+	if (!format) {
+		return {
+			code: 1,
+			stderr: "Invalid routes format. Use --format json or --format markdown.\n",
+		};
+	}
+
+	const validation = validateProject(cwd);
+
+	if (validation.diagnostics.length > 0) {
+		return {
+			code: 1,
+			stderr: formatDiagnostics(validation.diagnostics),
+		};
+	}
+
+	return {
+		code: 0,
+		stdout:
+			format === "json"
+				? `${JSON.stringify(routeReference(validation.routes), null, "\t")}\n`
+				: routeReferenceMarkdown(validation.routes),
+	};
 }
 
 /**
@@ -393,45 +506,96 @@ function runtimeArgs(
  * Supervises the Routa dev runtime and restarts it when source files change.
  *
  * Re-stubs empty route files before each validation, reports validation diagnostics, and exits cleanly on termination signals.
+ * Restarts are debounced and wait for the previous child process to exit before respawning.
  */
 function runDevSupervisor(cwd: string, runtimeFile: string): void {
 	let child = startRuntimeProcess(cwd, runtimeFile);
 	let snapshot = sourceSnapshot(cwd);
+	let restartTimer: ReturnType<typeof setTimeout> | undefined;
+	let restarting = false;
+	let restartQueued = false;
 
-	const restart = () => {
-		const changed = sourceSnapshotChanged(snapshot, sourceSnapshot(cwd));
-
-		if (!changed) {
+	const restart = async () => {
+		if (restarting) {
+			restartQueued = true;
 			return;
 		}
 
-		for (const file of stubEmptyRouteFiles(cwd)) {
-			process.stdout.write(`Stubbed ${file}\n`);
+		restarting = true;
+
+		try {
+			do {
+				restartQueued = false;
+				const nextSnapshot = sourceSnapshot(cwd);
+
+				if (!sourceSnapshotChanged(snapshot, nextSnapshot)) {
+					continue;
+				}
+
+				for (const file of stubEmptyRouteFiles(cwd)) {
+					process.stdout.write(`Stubbed ${file}\n`);
+				}
+
+				const validation = validateProject(cwd);
+
+				if (validation.diagnostics.length > 0) {
+					process.stderr.write(formatDiagnostics(validation.diagnostics));
+					snapshot = sourceSnapshot(cwd);
+					continue;
+				}
+
+				process.stdout.write("Restarting Routa dev server...\n");
+				const previous = child;
+				previous.kill();
+				await waitForChildExit(previous);
+				child = startRuntimeProcess(cwd, runtimeFile);
+				snapshot = sourceSnapshot(cwd);
+			} while (restartQueued);
+		} finally {
+			restarting = false;
 		}
-
-		const validation = validateProject(cwd);
-
-		if (validation.diagnostics.length > 0) {
-			process.stderr.write(formatDiagnostics(validation.diagnostics));
-			snapshot = sourceSnapshot(cwd);
-			return;
-		}
-
-		process.stdout.write("Restarting Routa dev server...\n");
-		child.kill();
-		child = startRuntimeProcess(cwd, runtimeFile);
-		snapshot = sourceSnapshot(cwd);
 	};
 
-	const timer = setInterval(restart, devPollMs);
+	const scheduleRestart = () => {
+		if (!sourceSnapshotChanged(snapshot, sourceSnapshot(cwd))) {
+			return;
+		}
+
+		if (restartTimer) {
+			clearTimeout(restartTimer);
+		}
+
+		restartTimer = setTimeout(() => {
+			restartTimer = undefined;
+			void restart();
+		}, devRestartDebounceMs);
+	};
+
+	const timer = setInterval(scheduleRestart, devPollMs);
 	const stop = () => {
 		clearInterval(timer);
+		if (restartTimer) {
+			clearTimeout(restartTimer);
+		}
 		child.kill();
 		process.exit(0);
 	};
 
 	process.once("SIGINT", stop);
 	process.once("SIGTERM", stop);
+}
+
+/**
+ * Resolves when a child process has exited.
+ */
+function waitForChildExit(child: ChildProcess): Promise<void> {
+	if (child.exitCode !== null || child.signalCode !== null) {
+		return Promise.resolve();
+	}
+
+	return new Promise((resolve) => {
+		child.once("exit", () => resolve());
+	});
 }
 
 /**
@@ -463,7 +627,7 @@ export function stubEmptyRouteFiles(cwd = process.cwd()): string[] {
 		return [];
 	}
 
-	const files = walk(routesDir).filter((file) => file.endsWith(`${sep}route.ts`));
+	const files = walk(routesDir).filter(isRouteFile);
 	const written: string[] = [];
 
 	for (const file of files) {
@@ -520,6 +684,184 @@ export function sourceSnapshotChanged(previous: SourceSnapshot, next: SourceSnap
 	return false;
 }
 
+type RouteReferenceFormat = "json" | "markdown";
+
+type RouteReference = {
+	routes: RouteReferenceRoute[];
+};
+
+type RouteReferenceRoute = {
+	path: string;
+	file: string;
+	groups: string[];
+	segments: string[];
+	methods: RouteReferenceMethod[];
+};
+
+type RouteReferenceMethod = {
+	method: string;
+	inputs: RouteMethodInputMetadata;
+	responses: number[];
+	ctx: string[];
+	rejects: MiddlewareRejectMetadata[];
+	middleware: Array<
+		Pick<MiddlewareMetadata, "file" | "name" | "requires" | "provides" | "rejects">
+	>;
+};
+
+/**
+ * Reads the requested route reference output format from CLI arguments.
+ *
+ * @param argv - Command-line arguments after `routes`
+ * @returns The requested format, or `undefined` when the format is invalid
+ */
+function routeReferenceFormat(argv: readonly string[]): RouteReferenceFormat | undefined {
+	const formatArg = argv.find((item) => item.startsWith("--format"));
+
+	if (!formatArg) {
+		return "markdown";
+	}
+
+	const value = formatArg.includes("=")
+		? formatArg.slice(formatArg.indexOf("=") + 1)
+		: argv[argv.indexOf(formatArg) + 1];
+
+	return value === "json" || value === "markdown" ? value : undefined;
+}
+
+/**
+ * Projects route metadata into a public route reference shape.
+ *
+ * @param routes - Validated route metadata
+ * @returns Route reference data suitable for JSON or Markdown rendering
+ */
+function routeReference(routes: readonly RouteMetadata[]): RouteReference {
+	return {
+		routes: [...routes]
+			.sort(
+				(left, right) => left.path.localeCompare(right.path) || left.file.localeCompare(right.file),
+			)
+			.map((route) => ({
+				path: route.path,
+				file: route.file,
+				groups: route.groups,
+				segments: route.segments,
+				methods: [...route.methods]
+					.sort((left, right) => left.localeCompare(right))
+					.map((method) => routeReferenceMethod(route, method)),
+			})),
+	};
+}
+
+/**
+ * Builds a method-level route reference entry.
+ *
+ * @param route - Route metadata that owns the method
+ * @param method - Uppercase HTTP method name
+ * @returns Method metadata with resolved middleware, context, rejects, inputs, and responses
+ */
+function routeReferenceMethod(route: RouteMetadata, method: string): RouteReferenceMethod {
+	const key = method.toLowerCase();
+	const middleware = route.methodMiddleware[key] ?? route.middleware;
+	const ctx = Array.from(new Set(middleware.flatMap((item) => item.provides))).sort();
+	const rejects = uniqueRejects(middleware.flatMap((item) => item.rejects));
+
+	return {
+		method,
+		inputs: route.inputs[key] ?? { ...emptyRouteInputs },
+		responses: [...(route.responses[key] ?? [])].sort((left, right) => left - right),
+		ctx,
+		rejects,
+		middleware: middleware.map((item) => ({
+			file: item.file,
+			name: item.name,
+			requires: item.requires,
+			provides: item.provides,
+			rejects: item.rejects,
+		})),
+	};
+}
+
+/**
+ * Renders validated route metadata as a Markdown route reference.
+ *
+ * @param routes - Validated route metadata
+ * @returns Markdown route reference
+ */
+function routeReferenceMarkdown(routes: readonly RouteMetadata[]): string {
+	const reference = routeReference(routes);
+	const lines = ["# Routa Route Reference", ""];
+
+	if (reference.routes.length === 0) {
+		lines.push("No routes found.", "");
+		return lines.join("\n");
+	}
+
+	for (const route of reference.routes) {
+		lines.push(`## ${route.path}`, "", `File: \`${route.file}\``);
+
+		if (route.groups.length > 0) {
+			lines.push(`Groups: ${route.groups.map((item) => `\`${item}\``).join(", ")}`);
+		}
+
+		if (route.segments.length > 0) {
+			lines.push(`Segments: ${route.segments.map((item) => `\`${item}\``).join(", ")}`);
+		}
+
+		lines.push("");
+
+		for (const method of route.methods) {
+			lines.push(
+				`### ${method.method}`,
+				"",
+				`Inputs: ${inputList(method.inputs).join(", ") || "none"}`,
+				`Responses: ${method.responses.join(", ") || "none"}`,
+				`Context: ${method.ctx.map((item) => `\`ctx.${item}\``).join(", ") || "none"}`,
+				`Rejects: ${method.rejects.map((item) => `\`${item.type}\` (${item.status})`).join(", ") || "none"}`,
+				"",
+				"Middleware:",
+			);
+
+			if (method.middleware.length === 0) {
+				lines.push("- none");
+			} else {
+				for (const middleware of method.middleware) {
+					lines.push(
+						`- \`${middleware.name}\` from \`${middleware.file}\``
+							+ `; requires: ${middleware.requires.join(", ") || "none"}`
+							+ `; provides: ${middleware.provides.join(", ") || "none"}`
+							+ `; rejects: ${middleware.rejects.map((item) => `${item.type}:${item.status}`).join(", ") || "none"}`,
+					);
+				}
+			}
+
+			lines.push("");
+		}
+	}
+
+	return `${lines.join("\n")}\n`;
+}
+
+/**
+ * Converts input metadata into a compact list of declared input locations.
+ *
+ * @param inputs - Route method input metadata
+ * @returns Declared input location names
+ */
+function inputList(inputs: RouteMethodInputMetadata): string[] {
+	return (["params", "query", "headers", "cookies", "body"] as const).filter((key) => inputs[key]);
+}
+
+function uniqueRejects(rejects: readonly MiddlewareRejectMetadata[]): MiddlewareRejectMetadata[] {
+	const unique = new Map<string, MiddlewareRejectMetadata>();
+
+	for (const reject of rejects) {
+		unique.set(reject.type, reject);
+	}
+
+	return Array.from(unique.values()).sort((left, right) => left.type.localeCompare(right.type));
+}
+
 type RouteDiscovery = {
 	routes: RouteMetadata[];
 	diagnostics: Diagnostic[];
@@ -538,13 +880,17 @@ function discoverRoutes(cwd: string): RouteDiscovery {
 		return { routes: [], diagnostics: [] };
 	}
 
-	const files = walk(routesDir).filter((file) => file.endsWith(`${sep}route.ts`));
+	const files = walk(routesDir).filter(isRouteFile);
 	const diagnostics: Diagnostic[] = [];
 
-	const routes = files.map((file) => {
+	const routes = files.flatMap((file) => {
 		const relativeFile = relative(cwd, file);
 		const relativeRouteDir = relative(routesDir, dirname(file));
-		const rawSegments = relativeRouteDir === "" ? [] : relativeRouteDir.split(sep);
+		const directorySegments = relativeRouteDir === "" ? [] : relativeRouteDir.split(sep);
+		const rawSegments = [
+			...directorySegments,
+			...(basename(file) === "route.ts" ? [] : flatRouteSegments(basename(file))),
+		];
 		const groups = rawSegments.filter(
 			(segment) => segment.startsWith("(") && segment.endsWith(")"),
 		);
@@ -563,7 +909,23 @@ function discoverRoutes(cwd: string): RouteDiscovery {
 				[...middleware, ...items],
 			]),
 		);
-		const contract = parseRouteContract(file);
+		const path = `/${pathSegments.join("/")}`.replace(/\/$/, "") || "/";
+		const parsed = parseRouteContract(file);
+
+		if (!parsed.configFound) {
+			diagnostics.push({
+				code: "ROUTA_ROUTE_CONFIG_UNRESOLVED",
+				severity: "error",
+				message: `Route config in ${relativeFile} could not be resolved.`,
+				file: relativeFile,
+				routePath: path,
+				suggestion:
+					"Export `defineRoute({ ... })` directly, or `export default routeConfig` where `routeConfig` is initialized with `defineRoute({ ... })`.",
+			});
+			return [];
+		}
+
+		const contract = parsed.contract;
 		const ctx = Array.from(
 			new Set([
 				...middleware.flatMap((item) => item.provides),
@@ -572,7 +934,6 @@ function discoverRoutes(cwd: string): RouteDiscovery {
 				),
 			]),
 		).sort();
-		const path = `/${pathSegments.join("/")}`.replace(/\/$/, "") || "/";
 
 		for (const unresolved of routeFileMiddleware.unresolved) {
 			diagnostics.push({
@@ -586,101 +947,88 @@ function discoverRoutes(cwd: string): RouteDiscovery {
 			});
 		}
 
-		diagnostics.push(
-			...middlewareRejectsDiagnostics(relativeFile, path, contract, {
+		return [
+			{
+				file: relativeFile,
+				path,
+				methods: Object.keys(contract).map((method) => method.toUpperCase()),
+				responses: Object.fromEntries(
+					Object.entries(contract).map(([method, metadata]) => [
+						method,
+						methodResponseStatuses(metadata.responses, methodMiddleware[method] ?? middleware),
+					]),
+				),
+				inputs: Object.fromEntries(
+					Object.entries(contract).map(([method, metadata]) => [method, metadata.inputs]),
+				),
+				...(Object.values(contract).some((metadata) => metadata.deprecation)
+					? {
+							deprecations: Object.fromEntries(
+								Object.entries(contract).flatMap(([method, metadata]) =>
+									metadata.deprecation ? [[method, metadata.deprecation]] : [],
+								),
+							),
+						}
+					: {}),
 				middleware,
 				methodMiddleware,
-			}),
-		);
-
-		return {
-			file: relativeFile,
-			path,
-			methods: Object.keys(contract).map((method) => method.toUpperCase()),
-			responses: Object.fromEntries(
-				Object.entries(contract).map(([method, metadata]) => [method, metadata.responses]),
-			),
-			inputs: Object.fromEntries(
-				Object.entries(contract).map(([method, metadata]) => [method, metadata.inputs]),
-			),
-			middleware,
-			methodMiddleware,
-			ctx,
-			groups,
-			segments,
-		};
+				ctx,
+				groups,
+				segments,
+			},
+		];
 	});
 
 	return { routes, diagnostics };
 }
 
-/**
- * Reports middleware rejections that a route method does not declare as a response.
- *
- * A middleware rejection becomes the handler result at runtime, so its type key
- * must exist in the route's response map or the request fails with a 500.
- *
- * @param file - The route file for diagnostics
- * @param path - The resolved route path
- * @param contract - Parsed method contracts including declared response type keys
- * @param chains - The resolved route and per-method middleware chains
- * @returns Diagnostics for each undeclared middleware rejection
- */
-function middlewareRejectsDiagnostics(
-	file: string,
-	path: string,
-	contract: Record<string, { responseTypes: string[] }>,
-	chains: {
-		middleware: MiddlewareMetadata[];
-		methodMiddleware: Record<string, MiddlewareMetadata[]>;
-	},
-): Diagnostic[] {
-	const diagnostics: Diagnostic[] = [];
+function isRouteFile(file: string): boolean {
+	const name = basename(file);
+	return (
+		name === "route.ts"
+		|| (name.endsWith(".ts")
+			&& name !== "middleware.ts"
+			&& name !== "schemas.ts"
+			&& !name.endsWith(".test.ts"))
+	);
+}
 
-	for (const [method, metadata] of Object.entries(contract)) {
-		const chain = chains.methodMiddleware[method] ?? chains.middleware;
-
-		for (const middleware of chain) {
-			for (const reject of middleware.rejects) {
-				if (metadata.responseTypes.includes(reject)) {
-					continue;
-				}
-
-				diagnostics.push({
-					code: "ROUTA_MIDDLEWARE_REJECTS_UNDECLARED",
-					severity: "error",
-					message: `${middleware.name} rejects "${reject}" but ${method.toUpperCase()} ${path} does not declare a "${reject}" response.`,
-					file,
-					routePath: path,
-					suggestion: `Add a "${reject}" entry to the ${method} responses map so the rejection has a declared status and schema.`,
-				});
-			}
-		}
-	}
-
-	return diagnostics;
+function flatRouteSegments(file: string): string[] {
+	return file.slice(0, -".ts".length).split(".");
 }
 
 /**
  * Extracts route method contract metadata from a route file.
  *
  * @param file - Path to the route file
- * @returns A map of HTTP methods to their declared response statuses and input flags
+ * @returns Parsed contract metadata and whether a route config object was found
  */
-function parseRouteContract(
-	file: string,
-): Record<
-	string,
-	{ responses: number[]; responseTypes: string[]; inputs: RouteMethodInputMetadata }
-> {
+function parseRouteContract(file: string): {
+	configFound: boolean;
+	contract: Record<
+		string,
+		{
+			responses: number[];
+			responseTypes: string[];
+			inputs: RouteMethodInputMetadata;
+			deprecation?: RouteDeprecationMetadata;
+		}
+	>;
+} {
 	const contract: Record<
 		string,
-		{ responses: number[]; responseTypes: string[]; inputs: RouteMethodInputMetadata }
+		{
+			responses: number[];
+			responseTypes: string[];
+			inputs: RouteMethodInputMetadata;
+			deprecation?: RouteDeprecationMetadata;
+		}
 	> = {};
-	const routeConfig = routeConfigObject(parseTypeScriptFile(file));
+	const sourceFile = parseTypeScriptFile(file);
+	const routeConfig = routeConfigObject(sourceFile);
 
 	if (!routeConfig) {
-		return contract;
+		return { configFound: false, contract };
 	}
 
 	for (const property of objectProperties(routeConfig)) {
@@ -700,10 +1048,35 @@ function parseRouteContract(
 			responses: responseStatuses(routeContract),
 			responseTypes: responseTypeKeys(routeContract),
 			inputs: routeInputs(routeContract),
+			deprecation: routeDeprecation(routeContract),
 		};
 	}
 
-	return contract;
+	return { configFound: true, contract };
+}
+
+function routeDeprecation(
+	routeContract: ts.ObjectLiteralExpression,
+): RouteDeprecationMetadata | undefined {
+	const property = objectProperty(routeContract, "deprecation");
+	const deprecation = property ? objectLiteral(property.initializer) : undefined;
+	const replacement = deprecation && objectProperty(deprecation, "replacement");
+	const expression = replacement && unwrapExpression(replacement.initializer);
+	return expression && ts.isStringLiteralLike(expression)
+		? { replacement: expression.text }
+		: undefined;
+}
+
+function methodResponseStatuses(
+	routeStatuses: readonly number[],
+	middleware: readonly MiddlewareMetadata[],
+): number[] {
+	return Array.from(
+		new Set([
+			...routeStatuses,
+			...middleware.flatMap((item) => item.rejects.map((reject) => reject.status)),
+		]),
+	).sort((left, right) => left - right);
 }
 
 /**
@@ -729,6 +1102,8 @@ function responseTypeKeys(routeContract: ts.ObjectLiteralExpression): string[] {
 /**
  * Reports route methods that do not declare a 2xx success response.
  *
+ * DELETE methods are included and may satisfy the check with a 204 response.
+ *
  * @param routes - Route metadata to inspect
  * @returns Diagnostics for route methods missing a declared 2xx response
  */
@@ -737,10 +1112,6 @@ function missingSuccessResponseDiagnostics(routes: RouteMetadata[]): Diagnostic[
 
 	for (const route of routes) {
 		for (const [method, statuses] of Object.entries(route.responses)) {
-			if (method === "delete") {
-				continue;
-			}
-
 			if (!statuses.some((status) => status >= 200 && status < 300)) {
 				diagnostics.push({
 					code: "ROUTA_MISSING_SUCCESS_RESPONSE",
@@ -748,7 +1119,10 @@ function missingSuccessResponseDiagnostics(routes: RouteMetadata[]): Diagnostic[
 					message: `${method.toUpperCase()} ${route.path} is missing a 2xx success response.`,
 					file: route.file,
 					routePath: route.path,
-					suggestion: "Add a declared success response with a 2xx HTTP status.",
+					suggestion:
+						method === "delete"
+							? "Add a declared success response with a 2xx HTTP status (204 is allowed)."
+							: "Add a declared success response with a 2xx HTTP status.",
 				});
 			}
 		}
@@ -774,28 +1148,204 @@ function duplicateSchemaDiagnostics(cwd: string): Diagnostic[] {
 
 	for (const file of walk(routesDir).filter((item) => item.endsWith(`${sep}schemas.ts`))) {
 		const relativeFile = relative(cwd, file);
-		const source = readFileSync(file, "utf8");
+		const sourceFile = parseTypeScriptFile(file);
 		const seen = new Set<string>();
 
-		for (const match of source.matchAll(/export\s+const\s+([A-Za-z_$][\w$]*)/g)) {
-			const name = match[1];
-
-			if (seen.has(name)) {
-				diagnostics.push({
-					code: "ROUTA_DUPLICATE_SCHEMA_NAME",
-					severity: "error",
-					message: `Duplicate schema export ${name}.`,
-					file: relativeFile,
-					suggestion: "Use a stable contract-purpose name such as CreateUserResponse.",
-				});
+		for (const statement of sourceFile.statements) {
+			if (!ts.isVariableStatement(statement)) {
 				continue;
 			}
 
-			seen.add(name);
+			if (!statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) {
+				continue;
+			}
+
+			if (!(statement.declarationList.flags & ts.NodeFlags.Const)) {
+				continue;
+			}
+
+			for (const declaration of statement.declarationList.declarations) {
+				if (!ts.isIdentifier(declaration.name)) {
+					continue;
+				}
+
+				const name = declaration.name.text;
+
+				if (seen.has(name)) {
+					diagnostics.push({
+						code: "ROUTA_DUPLICATE_SCHEMA_NAME",
+						severity: "error",
+						message: `Duplicate schema export ${name}.`,
+						file: relativeFile,
+						suggestion: "Use a stable contract-purpose name such as CreateUserResponse.",
+					});
+					continue;
+				}
+
+				seen.add(name);
+			}
 		}
 	}
 
 	return diagnostics;
+}
+
+function runResultShapeDiagnostics(cwd: string): Diagnostic[] {
+	const srcDir = join(cwd, "src");
+
+	if (!existsSync(srcDir)) {
+		return [];
+	}
+
+	return walk(srcDir)
+		.filter((file) => file.endsWith(".ts"))
+		.flatMap((file) => runResultShapeDiagnosticsForFile(cwd, relative(cwd, file), file));
+}
+
+function runResultShapeDiagnosticsForFile(
+	cwd: string,
+	relativeFile: string,
+	file: string,
+): Diagnostic[] {
+	const sourceFile = parseTypeScriptFile(file);
+	const diagnostics: Diagnostic[] = [];
+
+	function visit(node: ts.Node): void {
+		if (
+			ts.isCallExpression(node)
+			&& (callName(node.expression) === "createRoute"
+				|| callName(node.expression) === "createMiddleware")
+			&& ts.isObjectLiteralExpression(node.arguments[0])
+		) {
+			const contract = node.arguments[0];
+			const run = objectProperty(contract, "run");
+			const resultTypes =
+				callName(node.expression) === "createRoute"
+					? contractObjectKeys(contract, "responses")
+					: contractObjectKeys(contract, "rejects");
+
+			if (run) {
+				diagnostics.push(
+					...runReturnObjectDiagnostics(
+						cwd,
+						sourceFile,
+						relativeFile,
+						run.initializer,
+						resultTypes,
+					),
+				);
+			}
+		}
+
+		ts.forEachChild(node, visit);
+	}
+
+	visit(sourceFile);
+	return diagnostics;
+}
+
+function runReturnObjectDiagnostics(
+	cwd: string,
+	sourceFile: ts.SourceFile,
+	file: string,
+	run: ts.Expression,
+	resultTypes: Set<string> | undefined,
+): Diagnostic[] {
+	const diagnostics: Diagnostic[] = [];
+
+	function checkReturn(expression: ts.Expression): void {
+		const object = objectLiteral(expression);
+
+		if (!object) {
+			return;
+		}
+
+		for (const property of objectProperties(object)) {
+			const name = propertyName(property.name);
+
+			if (!name || name === "type" || name === "data") {
+				continue;
+			}
+
+			const position = sourceFile.getLineAndCharacterOfPosition(property.name.getStart(sourceFile));
+			diagnostics.push({
+				code: "ROUTA_RESULT_SHAPE",
+				severity: "error",
+				message: `Run result includes unsupported field "${name}". Route and middleware results may only include "type" and "data".`,
+				file: `${file}:${position.line + 1}:${position.character + 1}`,
+				suggestion: `Remove "${name}" from the returned result object.`,
+			});
+		}
+
+		const typeProperty = objectProperty(object, "type");
+		const typeExpression = typeProperty ? unwrapExpression(typeProperty.initializer) : undefined;
+
+		if (
+			resultTypes
+			&& typeProperty
+			&& typeExpression
+			&& ts.isStringLiteralLike(typeExpression)
+			&& !resultTypes.has(typeExpression.text)
+		) {
+			const position = sourceFile.getLineAndCharacterOfPosition(
+				typeProperty.initializer.getStart(sourceFile),
+			);
+			const options = [...resultTypes].map((type) => `"${type}"`).join(", ");
+			diagnostics.push({
+				code: "ROUTA_RESULT_TYPE",
+				severity: "error",
+				message: `Run result type "${typeExpression.text}" is not declared.`,
+				file: `${file}:${position.line + 1}:${position.character + 1}`,
+				suggestion: options
+					? `Use one of the declared result types: ${options}.`
+					: "Declare this result type before returning it.",
+			});
+		}
+	}
+
+	function visit(node: ts.Node): void {
+		if (ts.isReturnStatement(node) && node.expression) {
+			checkReturn(node.expression);
+		}
+
+		if (
+			(ts.isArrowFunction(run) || ts.isFunctionExpression(run))
+			&& run.body === node
+			&& ts.isExpression(node)
+		) {
+			checkReturn(node);
+		}
+
+		ts.forEachChild(node, visit);
+	}
+
+	if (ts.isArrowFunction(run) || ts.isFunctionExpression(run)) {
+		visit(run.body);
+	}
+
+	return diagnostics.map((diagnostic) => ({
+		...diagnostic,
+		file: diagnostic.file?.startsWith(cwd) ? relative(cwd, diagnostic.file) : diagnostic.file,
+	}));
+}
+
+function contractObjectKeys(
+	contract: ts.ObjectLiteralExpression,
+	name: string,
+): Set<string> | undefined {
+	const property = objectProperty(contract, name);
+	const object = objectLiteral(property?.initializer);
+
+	if (!object) {
+		return;
+	}
+
+	return new Set(
+		objectProperties(object).flatMap((item) => {
+			const key = propertyName(item.name);
+			return key ? [key] : [];
+		}),
+	);
 }
 
 /**
@@ -1187,8 +1737,85 @@ function middlewareMetadata(
 				provides.types[provided] ?? inferred[provided] ?? "unknown",
 			]),
 		),
-		rejects: stringArrayProperty(contract, "rejects"),
+		rejects: middlewareRejects(contract),
+		security: middlewareSecurity(contract),
+		permissions: middlewarePermissions(contract),
 	};
+}
+
+function middlewareOpenApi(
+	contract: ts.ObjectLiteralExpression,
+): ts.ObjectLiteralExpression | undefined {
+	const property = objectProperty(contract, "openapi");
+	return property ? objectLiteral(property.initializer) : undefined;
+}
+
+function middlewarePermissions(contract: ts.ObjectLiteralExpression): string[] {
+	const openapi = middlewareOpenApi(contract);
+	return openapi ? stringArrayProperty(openapi, "permissions") : [];
+}
+
+function middlewareSecurity(contract: ts.ObjectLiteralExpression): Array<Record<string, string[]>> {
+	const openapi = middlewareOpenApi(contract);
+	const property = openapi && objectProperty(openapi, "security");
+	const expression = property && unwrapExpression(property.initializer);
+	if (!expression || !ts.isArrayLiteralExpression(expression)) return [];
+	return expression.elements.flatMap((element) => {
+		const object = objectLiteral(element);
+		if (!object) return [];
+		return [
+			Object.fromEntries(
+				objectProperties(object).flatMap((item) => {
+					const name = propertyName(item.name);
+					const value = unwrapExpression(item.initializer);
+					return name && ts.isArrayLiteralExpression(value)
+						? [
+								[
+									name,
+									value.elements.flatMap((entry) =>
+										ts.isStringLiteralLike(entry) ? [entry.text] : [],
+									),
+								],
+							]
+						: [];
+				}),
+			),
+		];
+	});
+}
+
+function middlewareRejects(contract: ts.ObjectLiteralExpression): MiddlewareRejectMetadata[] {
+	const item = objectProperty(contract, "rejects");
+	const rejects = item ? objectLiteral(item.initializer) : undefined;
+
+	if (!rejects) {
+		return [];
+	}
+
+	return objectProperties(rejects).flatMap((property) => {
+		const type = propertyName(property.name);
+		const reject = objectLiteral(property.initializer);
+
+		if (!type || !reject) {
+			return [];
+		}
+
+		const statusProperty = objectProperty(reject, "status");
+		const schemaProperty = objectProperty(reject, "schema");
+		const status = statusProperty ? numericValue(statusProperty.initializer) : undefined;
+
+		if (status === undefined || !schemaProperty) {
+			return [];
+		}
+
+		return [
+			{
+				type,
+				status,
+				schema: schemaProperty.initializer.getText(),
+			},
+		];
+	});
 }
 
 /**
@@ -1646,17 +2273,42 @@ function parseTypeScriptFile(file: string): ts.SourceFile {
 /**
  * Extracts the exported route configuration object from a source file.
  *
+ * Follows `export default identifier` to a local initializer when possible.
+ *
  * @param sourceFile - The parsed TypeScript source file to inspect
  * @returns The exported route configuration object, if present
  */
 function routeConfigObject(sourceFile: ts.SourceFile): ts.ObjectLiteralExpression | undefined {
 	for (const statement of sourceFile.statements) {
-		if (ts.isExportAssignment(statement)) {
-			return defineRouteObject(statement.expression) ?? objectLiteral(statement.expression);
+		if (!ts.isExportAssignment(statement) || statement.isExportEquals) {
+			continue;
 		}
+
+		const expression = resolveExportedExpression(sourceFile, statement.expression);
+		return defineRouteObject(expression) ?? objectLiteral(expression);
 	}
 }
 
+/**
+ * Resolves an exported expression to a local initializer when it is an identifier.
+ */
+function resolveExportedExpression(
+	sourceFile: ts.SourceFile,
+	expression: ts.Expression,
+): ts.Expression {
+	const unwrapped = unwrapExpression(expression);
+
+	if (!ts.isIdentifier(unwrapped)) {
+		return unwrapped;
+	}
+
+	const initializer = localInitializer(sourceFile, unwrapped.text);
+	return initializer ? unwrapExpression(initializer) : unwrapped;
+}
+
+/**
+ * Finds the initializer for a local `const`/`let`/`var` binding in a source file.
+ */
 /**
  * Extracts the route definition object from a `defineRoute(...)` call.
  *
@@ -1820,7 +2472,7 @@ function middlewareExpressions(expression: ts.Expression): {
  * Extracts the declared input locations from a route contract.
  *
  * @param routeContract - The route contract object literal to inspect.
- * @returns An object indicating whether `params`, `query`, and `body` inputs are declared.
+ * @returns An object indicating whether `params`, `query`, `headers`, `cookies`, and `body` inputs are declared.
  */
 function routeInputs(routeContract: ts.ObjectLiteralExpression): RouteMethodInputMetadata {
 	const input = objectProperty(routeContract, "input");
@@ -1829,6 +2481,8 @@ function routeInputs(routeContract: ts.ObjectLiteralExpression): RouteMethodInpu
 	return {
 		params: Boolean(inputObject && objectProperty(inputObject, "params")),
 		query: Boolean(inputObject && objectProperty(inputObject, "query")),
+		headers: Boolean(inputObject && objectProperty(inputObject, "headers")),
+		cookies: Boolean(inputObject && objectProperty(inputObject, "cookies")),
 		body: Boolean(inputObject && objectProperty(inputObject, "body")),
 	};
 }
@@ -1878,98 +2532,6 @@ function numericValue(expression: ts.Expression): number | undefined {
 }
 
 /**
- * Finds a property assignment with the given name in an object literal.
- *
- * @param object - The object literal to search.
- * @param name - The property name to match.
- * @returns The matching property assignment, or `undefined` if none is found.
- */
-function objectProperty(
-	object: ts.ObjectLiteralExpression,
-	name: string,
-): ts.PropertyAssignment | undefined {
-	return objectProperties(object).find((property) => propertyName(property.name) === name);
-}
-
-/**
- * Gets the property assignments declared in an object literal.
- *
- * @param object - The object literal to inspect
- * @returns The property assignments contained in `object`
- */
-function objectProperties(object: ts.ObjectLiteralExpression): ts.PropertyAssignment[] {
-	return object.properties.filter(ts.isPropertyAssignment);
-}
-
-/**
- * Gets an object literal expression from a node.
- *
- * @param node - The node to inspect
- * @returns The object literal expression if the node resolves to one, `undefined` otherwise
- */
-function objectLiteral(node: ts.Node | undefined): ts.ObjectLiteralExpression | undefined {
-	if (!node || !ts.isExpression(node)) {
-		return;
-	}
-
-	const unwrapped = unwrapExpression(node);
-	return ts.isObjectLiteralExpression(unwrapped) ? unwrapped : undefined;
-}
-
-/**
- * Gets the name of a called function or property access.
- *
- * @returns The identifier or property name used by the expression, or `undefined` when it cannot be determined.
- */
-function callName(expression: ts.Expression): string | undefined {
-	const callee = ts.isCallExpression(expression)
-		? unwrapExpression(expression.expression)
-		: unwrapExpression(expression);
-
-	if (ts.isIdentifier(callee)) {
-		return callee.text;
-	}
-
-	if (ts.isPropertyAccessExpression(callee)) {
-		return callee.name.text;
-	}
-}
-
-/**
- * Gets the text name of a property declaration.
- *
- * @param name - The property name node
- * @returns The property name text, or `undefined` for computed names
- */
-function propertyName(name: ts.PropertyName): string | undefined {
-	if (ts.isIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)) {
-		return name.text;
-	}
-}
-
-/**
- * Removes common TypeScript wrapper expressions from an expression.
- *
- * @param expression - The expression to unwrap.
- * @returns The innermost expression after removing wrappers.
- */
-function unwrapExpression(expression: ts.Expression): ts.Expression {
-	let current = expression;
-
-	while (
-		ts.isParenthesizedExpression(current)
-		|| ts.isAsExpression(current)
-		|| ts.isSatisfiesExpression(current)
-		|| ts.isTypeAssertionExpression(current)
-		|| ts.isNonNullExpression(current)
-	) {
-		current = current.expression;
-	}
-
-	return current;
-}
-
-/**
  * Validates middleware ordering for each route.
  *
  * @returns Diagnostics for middleware that requires context before it has been provided.
@@ -2012,6 +2574,34 @@ function middlewareOrderDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 	return diagnostics;
 }
 
+function middlewareRejectStatusDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
+	const diagnostics: Diagnostic[] = [];
+
+	for (const route of routes) {
+		for (const middleware of [
+			...route.middleware,
+			...Object.values(route.methodMiddleware).flat(),
+		]) {
+			for (const reject of middleware.rejects) {
+				if (reject.status >= 400 && reject.status <= 599) {
+					continue;
+				}
+
+				diagnostics.push({
+					code: "ROUTA_MIDDLEWARE_REJECT_STATUS",
+					severity: "error",
+					message: `${middleware.name} reject "${reject.type}" uses non-error status ${reject.status}.`,
+					file: middleware.file,
+					routePath: route.path,
+					suggestion: "Middleware rejects must use a 4xx or 5xx HTTP status.",
+				});
+			}
+		}
+	}
+
+	return diagnostics;
+}
+
 /**
  * Reports routes that share the same path.
  *
@@ -2041,6 +2631,57 @@ function duplicateRouteDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 	}
 
 	return diagnostics;
+}
+
+function deprecationReplacementDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
+	const paths = new Set(routes.map((route) => route.path));
+	const diagnostics: Diagnostic[] = [];
+
+	for (const route of routes) {
+		for (const [method, deprecation] of Object.entries(route.deprecations ?? {})) {
+			if (!deprecation) continue;
+			const replacement = deprecation.replacement;
+			if (!replacement) continue;
+
+			if (replacement.startsWith("/")) {
+				if (!paths.has(replacement)) {
+					diagnostics.push({
+						code: "ROUTA_DEPRECATION_REPLACEMENT_ROUTE_NOT_FOUND",
+						severity: "error",
+						message: `${method.toUpperCase()} ${route.path} deprecation replacement ${replacement} is not a Routa route.`,
+						file: route.file,
+						routePath: route.path,
+						suggestion:
+							"Use an existing local path beginning with /, or an absolute http(s) URL for another API.",
+					});
+				}
+				continue;
+			}
+
+			if (!isExternalApiUrl(replacement)) {
+				diagnostics.push({
+					code: "ROUTA_DEPRECATION_REPLACEMENT_URL_INVALID",
+					severity: "error",
+					message: `${method.toUpperCase()} ${route.path} deprecation replacement must be an existing local path or absolute http(s) URL.`,
+					file: route.file,
+					routePath: route.path,
+					suggestion:
+						"Use /new-route for this API, or https://api.example.com/new-route for another API.",
+				});
+			}
+		}
+	}
+
+	return diagnostics;
+}
+
+function isExternalApiUrl(value: string): boolean {
+	try {
+		const url = new URL(value);
+		return url.protocol === "http:" || url.protocol === "https:";
+	} catch {
+		return false;
+	}
 }
 
 /**
@@ -2221,33 +2862,6 @@ function pascalCase(value: string): string {
 }
 
 /**
- * Runs the TypeScript compiler for a project.
- *
- * @param cwd - Project root directory
- * @param args - Arguments passed to `tsc`
- * @returns The compiler result, or `{ code: 0 }` when `tsconfig.json` is missing
- */
-function runTypeScript(
-	cwd: string,
-	args: string[],
-): { code: number; stdout?: string; stderr?: string } {
-	if (!existsSync(join(cwd, "tsconfig.json"))) {
-		return { code: 0 };
-	}
-
-	const result = spawnSync("pnpm", ["exec", "tsc", ...args], {
-		cwd,
-		encoding: "utf8",
-	});
-
-	return {
-		code: result.status ?? 1,
-		stdout: result.stdout,
-		stderr: result.stderr || result.error?.message,
-	};
-}
-
-/**
  * Appends captured output to a list of lines.
  *
  * @param lines - The lines to join.
@@ -2283,12 +2897,42 @@ function formatDiagnostics(diagnostics: Diagnostic[]): string {
 /**
  * Recursively lists all files under a directory.
  *
+ * Symlink cycles are skipped by tracking visited real paths.
+ *
  * @param dir - The directory to traverse
+ * @param visited - Real paths already visited during this walk
  * @returns The full paths of all files found under `dir`
  */
-function walk(dir: string): string[] {
+function walk(dir: string, visited = new Set<string>()): string[] {
+	let realDir: string;
+
+	try {
+		realDir = realpathSync(dir);
+	} catch {
+		return [];
+	}
+
+	if (visited.has(realDir)) {
+		return [];
+	}
+
+	visited.add(realDir);
+
 	return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
 		const file = join(dir, entry.name);
-		return entry.isDirectory() ? walk(file) : [file];
+
+		if (entry.isSymbolicLink()) {
+			let stats: ReturnType<typeof statSync>;
+
+			try {
+				stats = statSync(file);
+			} catch {
+				return [];
+			}
+
+			return stats.isDirectory() ? walk(file, visited) : [file];
+		}
+
+		return entry.isDirectory() ? walk(file, visited) : [file];
 	});
 }

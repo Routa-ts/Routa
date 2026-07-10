@@ -4,17 +4,32 @@
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 
+/* Lattice identity — teal edges on graphite, Space Grotesk + Space Mono */
 @theme {
-	/*
-	Design-system entrypoint. Configure Routa colors and fonts here when the
-	brand system is ready.
+	--font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+	--font-mono: "Space Mono", ui-monospace, monospace;
 
-	Starlight reads these Tailwind theme tokens:
-	--color-accent-*
-	--color-gray-*
-	--font-sans
-	--font-mono
+	--color-accent-50: #f0fdfa;
+	--color-accent-100: #ccfbf1;
+	--color-accent-200: #99f6e4;
+	--color-accent-300: #5eead4;
+	--color-accent-400: #2dd4bf;
+	--color-accent-500: #14b8a6;
+	--color-accent-600: #0d9488;
+	--color-accent-700: #0f766e;
+	--color-accent-800: #115e59;
+	--color-accent-900: #134e4a;
+	--color-accent-950: #042f2e;
 
-	https://starlight.astro.build/guides/css-and-tailwind/#styling-starlight-with-tailwind
-	*/
+	--color-gray-50: #f6f7f9;
+	--color-gray-100: #e4e7ed;
+	--color-gray-200: #c9ced8;
+	--color-gray-300: #8b93a4;
+	--color-gray-400: #6b7384;
+	--color-gray-500: #555d6e;
+	--color-gray-600: #3f4656;
+	--color-gray-700: #2a303c;
+	--color-gray-800: #1f2430;
+	--color-gray-900: #15181e;
+	--color-gray-950: #0f1115;
 }

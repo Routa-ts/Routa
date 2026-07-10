@@ -1,0 +1,137 @@
+---
+import LandingLayout from "../../layouts/LandingLayout.astro";
+---
+
+<LandingLayout
+	title="Contract"
+	description="Schema-first REST for TypeScript — route, contract, OpenAPI in one glance."
+	slug="contract"
+>
+	<main id="main" class="lp-contract">
+		<section class="hero" aria-label="Hero">
+			<div class="hero-grid">
+				<div class="hero-copy">
+					<div class="brand-mark">
+						<img src="/favicon.svg" alt="" width="40" height="40">
+						Routa
+						<span class="dot" aria-hidden="true"></span>
+					</div>
+					<h1 class="headline">Schema-first REST for TypeScript</h1>
+					<p class="lede">
+						Filesystem routes with Zod contracts — not vibes. The route file is the API surface;
+						OpenAPI stays in lockstep.
+					</p>
+					<div class="cta-row">
+						<a class="btn btn-primary" href="https://routa-ts.dev/docs/">Get started</a>
+						<a class="btn btn-ghost" href="https://github.com/Routa-ts/Routa">GitHub</a>
+					</div>
+					<div class="cli" data-cmd="pnpm create routa-ts@latest">
+						<span>$ pnpm create routa-ts@latest</span>
+						<button type="button">Copy</button>
+					</div>
+				</div>
+
+				<div class="stack">
+					<div class="flow-label">One route · one contract</div>
+					<div class="code-panel">
+						<div class="code-panel__bar">
+							<span>src/routes/users/route.ts</span><span>filesystem</span>
+						</div>
+						<pre
+						><code><span class="kw">export default</span> <span class="fn">defineRoute</span>({"{"}
+  post: <span class="fn">createRoute</span>({"{"}
+    input: {"{"} body: CreateUserSchema {"}"},
+    responses: {"{"}
+      success: {"{"} status: <span class="str">201</span>, schema: UserSchema {"}"},
+    {"}"},
+    run: <span class="kw">async</span> ({"{"} input, ctx {"}"}) =>
+      users.createUser(input.body, ctx),
+  {"}"}),
+{"}"});</code></pre>
+					</div>
+					<div class="code-panel">
+						<div class="code-panel__bar"><span>schemas/user.ts</span><span>zod</span></div>
+						<pre><code><span class="kw">export const</span> CreateUserSchema = z.object({"{"}
+  email: z.string().email(),
+  name: z.string().min(<span class="str">1</span>),
+{"}"});</code></pre>
+					</div>
+					<div class="code-panel">
+						<div class="code-panel__bar"><span>openapi.yaml · emitted</span><span>peer</span></div>
+						<pre><code><span class="cm"># POST /users — generated from the contract</span>
+paths:
+  /users:
+    post:
+      responses:
+        <span class="str">"201"</span>:
+          description: success</code></pre>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<section class="section">
+			<div class="section-inner">
+				<p class="section-kicker">Primitives</p>
+				<h2 class="section-title">What the contract owns</h2>
+				<p class="section-lede">
+					Short list. Real surfaces. Built on Hono underneath — Routa owns the contract layer.
+				</p>
+				<ul class="pillars">
+					<li>
+						<strong>Filesystem routes</strong>
+						<p>Folders map to URL segments. Each route.ts owns the methods for that path.</p>
+					</li>
+					<li>
+						<strong>Zod I/O</strong>
+						<p>Inputs and named response outcomes are schemas — typed end to end.</p>
+					</li>
+					<li>
+						<strong>OpenAPI bidirectional</strong>
+						<p>Scaffold from a spec or emit from source. Drift is a check failure.</p>
+					</li>
+					<li>
+						<strong>Typed middleware</strong>
+						<p>Context composes through the lattice without losing types.</p>
+					</li>
+					<li>
+						<strong>CLI lifecycle</strong>
+						<p>
+							<code class="mono">check</code>
+							→ <code class="mono">build</code> → <code class="mono">start</code> before you ship.
+						</p>
+					</li>
+					<li>
+						<strong>Hono runtime</strong>
+						<p>Web Standards handlers. Routa sits on the contract boundary.</p>
+					</li>
+				</ul>
+				<ul class="built-on" style="margin-top: 2rem" aria-label="Built on">
+					<li>Hono</li>
+					<li>Zod</li>
+					<li>OpenAPI</li>
+					<li>TypeScript</li>
+				</ul>
+				<p class="v0-note">
+					<strong>v0</strong>
+					— intentionally narrow. No enterprise logo wall. No cloud funnel.
+				</p>
+			</div>
+		</section>
+
+		<section class="close">
+			<div class="close-inner">
+				<div>
+					<h2>Read the contract docs</h2>
+					<p>Quickstart, route anatomy, and OpenAPI workflow under /docs/.</p>
+				</div>
+				<div class="cta-row">
+					<a class="btn btn-primary" href="https://routa-ts.dev/docs/start/quickstart/"
+						>Quickstart</a
+					>
+					<a class="btn btn-ghost" href="/landings/">All options</a>
+				</div>
+			</div>
+		</section>
+	</main>
+</LandingLayout>

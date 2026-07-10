@@ -29,8 +29,43 @@ export type RouteResponses = Record<
 		schema: z.ZodTypeAny;
 	}
 >;
+export type ExternalApiUrl = `http://${string}` | `https://${string}`;
+export type RegisteredRoutePath = keyof RegisteredRouteCtxByPath & `/${string}`;
+export type RouteDeprecationReplacement = RegisteredRoutePath | ExternalApiUrl;
+export type RouteDeprecation = {
+	sunset?: string;
+	replacement?: RouteDeprecationReplacement;
+};
+export type MiddlewareRejectsSpec = RouteResponses;
+
+type MaybePromise<T> = T | Promise<T>;
+
+export type RoutaResult<TResponses extends RouteResponses> = {
+	[K in keyof TResponses & string]: {
+		readonly type: K;
+		readonly data: SchemaOutput<TResponses[K]["schema"]>;
+	};
+}[keyof TResponses & string];
+
+export type RouteRunResult<TResponses extends RouteResponses> = RoutaResult<TResponses>;
+
+type WidenedRouteRunResult<TResponses extends RouteResponses> = {
+	readonly type: string;
+	readonly data: SchemaOutput<TResponses[keyof TResponses & string]["schema"]>;
+};
+
+type RouteRunReturn<TResponses extends RouteResponses> =
+	| RouteRunResult<TResponses>
+	| WidenedRouteRunResult<TResponses>;
+
+export type MiddlewareRejectResult<TRejects extends MiddlewareRejectsSpec> =
+	keyof TRejects extends never ? never : RoutaResult<TRejects>;
 
 export type MiddlewareProvidesSpec = Record<string, z.ZodTypeAny>;
+export type MiddlewareOpenApi = {
+	security?: readonly Record<string, readonly string[]>[];
+	permissions?: readonly string[];
+};
 
 export type MiddlewareProvidesKeys<TProvides extends MiddlewareProvidesSpec> = keyof TProvides &
 	string;
@@ -39,47 +74,45 @@ export type MiddlewareProvidedCtx<TProvides extends MiddlewareProvidesSpec> = {
 	[K in keyof TProvides]: SchemaOutput<TProvides[K]>;
 };
 
+export type MiddlewareNext<
+	TProvides extends MiddlewareProvidesSpec,
+	TRejects extends MiddlewareRejectsSpec,
+> = keyof TProvides extends never
+	? (ctx?: MiddlewareProvidedCtx<TProvides>) => Promise<MiddlewareRejectResult<TRejects>>
+	: (ctx: MiddlewareProvidedCtx<TProvides>) => Promise<MiddlewareRejectResult<TRejects>>;
+
+export type MiddlewareRunArgs<
+	TRequires extends readonly RegisteredCtxKey[],
+	TProvides extends MiddlewareProvidesSpec,
+	TRejects extends MiddlewareRejectsSpec,
+	TInput extends RouteInput | undefined,
+> = {
+	input: InferInput<TInput>;
+	ctx: RequiredMiddlewareCtx<TRequires>;
+	next: MiddlewareNext<TProvides, TRejects>;
+};
+
+export type MiddlewareRun<
+	TRequires extends readonly RegisteredCtxKey[],
+	TProvides extends MiddlewareProvidesSpec,
+	TRejects extends MiddlewareRejectsSpec,
+	TInput extends RouteInput | undefined,
+> = (
+	args: MiddlewareRunArgs<TRequires, TProvides, TRejects, TInput>,
+) => MaybePromise<MiddlewareRejectResult<NoInfer<TRejects>>>;
+
 export type MiddlewareContract<
 	TRequires extends readonly RegisteredCtxKey[] = readonly RegisteredCtxKey[],
 	TProvides extends MiddlewareProvidesSpec = Record<never, never>,
-	TRejects extends readonly string[] = readonly never[],
+	TRejects extends MiddlewareRejectsSpec = Record<never, never>,
 	TInput extends RouteInput | undefined = RouteInput | undefined,
 > = {
 	requires?: TRequires;
 	provides?: TProvides;
 	rejects?: TRejects;
 	input?: TInput;
-	run?: (args: {
-		input: InferInput<TInput>;
-		ctx: RequiredMiddlewareCtx<TRequires>;
-		next: keyof TProvides extends never
-			? (ctx?: MiddlewareProvidedCtx<TProvides>) => Promise<
-					| {
-							type: TRejects[number];
-							data: unknown;
-					  }
-					| unknown
-				>
-			: (ctx: MiddlewareProvidedCtx<TProvides>) => Promise<
-					| {
-							type: TRejects[number];
-							data: unknown;
-					  }
-					| unknown
-				>;
-	}) =>
-		| Promise<
-				| {
-						type: TRejects[number];
-						data: unknown;
-				  }
-				| unknown
-		  >
-		| {
-				type: TRejects[number];
-				data: unknown;
-		  }
-		| unknown;
+	openapi?: MiddlewareOpenApi;
+	run?: MiddlewareRun<TRequires, TProvides, TRejects, TInput>;
 };
 
 export type AnyMiddlewareContract = Omit<MiddlewareContract<any, any, any, any>, "run"> & {
@@ -118,21 +151,28 @@ export type InferMiddlewareCtx<TMiddleware extends readonly AnyMiddlewareContrac
 			: unknown
 	>;
 
+/**
+ * Parsed route input after Zod validation.
+ *
+ * Each field uses {@link SchemaOutput} (Zod's output / parsed type), not
+ * {@link SchemaInput}, because handlers and middleware receive validated values.
+ */
 export type InferInput<TInput extends RouteInput | undefined> = {
 	[K in keyof NonNullable<TInput>]: SchemaOutput<NonNullable<TInput>[K]>;
 };
 
-export type InferResponse<TResponses extends RouteResponses> = {
-	[K in keyof TResponses]: {
-		type: K;
-		data: SchemaOutput<TResponses[K]["schema"]>;
-	};
-}[keyof TResponses];
+export type InferResponse<TResponses extends RouteResponses> = RouteRunResult<TResponses>;
 
 export type RouteHandlerArgs<TInput extends RouteInput | undefined, TCtx> = {
 	input: InferInput<TInput>;
 	ctx: TCtx;
 };
+
+export type RouteRun<
+	TInput extends RouteInput | undefined,
+	TResponses extends RouteResponses,
+	TCtx,
+> = (args: RouteHandlerArgs<TInput, TCtx>) => MaybePromise<RouteRunReturn<NoInfer<TResponses>>>;
 
 export type RouteContract<
 	TInput extends RouteInput | undefined,
@@ -143,15 +183,15 @@ export type RouteContract<
 	input?: TInput;
 	responses: TResponses;
 	middleware?: TMiddleware;
-	run: (
-		args: RouteHandlerArgs<TInput, TCtx>,
-	) => InferResponse<TResponses> | Promise<InferResponse<TResponses>>;
+	deprecation?: RouteDeprecation;
+	run: RouteRun<TInput, TResponses, TCtx>;
 };
 
 export type AnyRouteContract = {
 	input?: RouteInput;
 	responses: RouteResponses;
 	middleware?: readonly AnyMiddlewareContract[];
+	deprecation?: RouteDeprecation;
 	run: (args: any) => unknown;
 };
 
@@ -191,6 +231,7 @@ export type RoutaConfig = {
 	host?: string;
 	port?: number;
 	logger?: RoutaLogger | false;
+	lifecycleHeaders?: boolean;
 };
 
 /**
@@ -233,7 +274,13 @@ export function defineRoute<const TConfig extends DefineRouteConfig>(config: TCo
 }
 
 /**
- * Creates a route definition factory that binds route configs to per-path context types.
+ * Creates a route definition factory that binds route configs to an explicit
+ * per-path context map.
+ *
+ * Prefer {@link createRouteRoot} in app code: it reads context types from the
+ * generated `Register` augmentation in `.routa/routes.gen.ts`. Use this factory
+ * when you need the same path-bound helper against a custom `TCtxByPath` map
+ * (for example in tests, libraries, or tooling that does not rely on `Register`).
  *
  * @returns A function that accepts a route path and returns a config helper for that path.
  */
@@ -274,7 +321,7 @@ export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPa
 export function createMiddleware<
 	const TRequires extends readonly RegisteredCtxKey[] = readonly RegisteredCtxKey[],
 	const TProvides extends MiddlewareProvidesSpec = Record<never, never>,
-	const TRejects extends readonly string[] = readonly never[],
+	const TRejects extends MiddlewareRejectsSpec = Record<never, never>,
 	const TInput extends RouteInput | undefined = undefined,
 >(
 	contract: MiddlewareContract<TRequires, TProvides, TRejects, TInput>,

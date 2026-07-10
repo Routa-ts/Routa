@@ -1,0 +1,125 @@
+---
+import LandingLayout from "../../layouts/LandingLayout.astro";
+---
+
+<LandingLayout
+	title="Check"
+	description="Check the API before you ship it — CLI drift, then pass."
+	slug="check"
+>
+	<main id="main" class="lp-check">
+		<section class="hero" aria-label="Hero">
+			<div class="hero-inner">
+				<div class="hero-copy">
+					<div class="brand-mark">
+						<img src="/favicon.svg" alt="" width="40" height="40">
+						Routa
+						<span class="dot" aria-hidden="true"></span>
+					</div>
+					<h1 class="headline">Check the API before you ship it</h1>
+					<p class="lede">
+						Contracts drift. Specs lie. <code class="mono">routa check</code> fails loud, then
+						passes clean — so <code class="mono">build</code> and
+						<code class="mono">start</code>
+						mean something.
+					</p>
+					<div class="cta-row">
+						<a class="btn btn-primary" href="https://routa-ts.dev/docs/">Get started</a>
+						<a class="btn btn-ghost" href="https://github.com/Routa-ts/Routa">GitHub</a>
+					</div>
+					<div class="cli" data-cmd="pnpm create routa-ts@latest">
+						<span>$ pnpm create routa-ts@latest</span>
+						<button type="button">Copy</button>
+					</div>
+				</div>
+
+				<div class="terminal" aria-label="CLI check demo" role="img">
+					<div class="terminal__bar" aria-hidden="true">
+						<span></span><span></span><span></span>
+					</div>
+					<div class="terminal__body">
+						<div class="line">
+							<span class="prompt">$</span> <span class="cmd">routa check</span>
+						</div>
+						<div class="line fail">✗ OpenAPI drift · POST /users responses.success</div>
+						<div class="line dim">source schema ≠ openapi.yaml#/paths/~1users/post</div>
+						<div class="line dim">exit 1</div>
+						<div class="line" style="margin-top: 0.85rem">
+							<span class="prompt">$</span> <span class="cmd">routa check</span>
+							<span class="dim"> · after fix</span>
+						</div>
+						<div class="line ok">✓ route graph valid</div>
+						<div class="line ok">✓ OpenAPI in lockstep</div>
+						<div class="line ok">✓ ready for build</div>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<section class="section">
+			<div class="section-inner">
+				<p class="section-kicker">Lifecycle</p>
+				<h2 class="section-title">check → build → start</h2>
+				<p class="section-lede">
+					The CLI is part of the product story — not an afterthought. Validate the lattice, generate
+					what you need, then run on Hono.
+				</p>
+				<div class="lifecycle">
+					<div>
+						<span class="step">01</span>
+						<strong>check</strong>
+						<p>Contracts, generated files, OpenAPI drift.</p>
+					</div>
+					<div>
+						<span class="step">02</span>
+						<strong>build</strong>
+						<p>Emit route metadata and typechecked graph.</p>
+					</div>
+					<div>
+						<span class="step">03</span>
+						<strong>start</strong>
+						<p>Serve only after the lattice holds.</p>
+					</div>
+				</div>
+				<ul class="pillars" style="margin-top: 2.5rem">
+					<li>
+						<strong>Route = contract</strong>
+						<p>Filesystem path plus Zod I/O — the checkable unit.</p>
+					</li>
+					<li>
+						<strong>OpenAPI as peer</strong>
+						<p>Scaffold in or emit out; mismatch fails the check.</p>
+					</li>
+					<li>
+						<strong>Typed middleware</strong>
+						<p>Context stays in the graph the CLI can see.</p>
+					</li>
+					<li>
+						<strong>Hono underneath</strong>
+						<p>Web Standards runtime once the contract passes.</p>
+					</li>
+				</ul>
+				<ul class="built-on" style="margin-top: 2rem">
+					<li>Hono</li>
+					<li>Zod</li>
+					<li>OpenAPI</li>
+					<li>TypeScript</li>
+				</ul>
+				<p class="v0-note"><strong>v0</strong> — honest scope. Check before run is the point.</p>
+			</div>
+		</section>
+
+		<section class="close">
+			<div class="close-inner">
+				<div>
+					<h2>Ship with the CLI</h2>
+					<p>Guides for check, build, start, and regeneration.</p>
+				</div>
+				<div class="cta-row">
+					<a class="btn btn-primary" href="https://routa-ts.dev/docs/">Read the docs</a>
+					<a class="btn btn-ghost" href="/landings/">All options</a>
+				</div>
+			</div>
+		</section>
+	</main>
+</LandingLayout>

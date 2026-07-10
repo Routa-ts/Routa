@@ -1,0 +1,226 @@
+---
+title: "Option A · Compass"
+description: Orientation identity — signal cyan on deep navy, Sora + IBM Plex Mono, the star mark as true north.
+sidebar:
+  badge:
+    text: A
+    variant: tip
+---
+
+import {
+	Aside,
+	Badge,
+	Card,
+	CardGrid,
+	FileTree,
+	LinkButton,
+	LinkCard,
+	Steps,
+	TabItem,
+	Tabs,
+} from "@astrojs/starlight/components";
+
+<div class="ds-compass">
+
+Routa as a **compass**: every route points somewhere. The star mark is not decoration — it is the product’s north. Cyan signals orientation; navy holds the chart.
+
+<div class="ds-mark">
+	<img src="/favicon.svg" alt="Routa star mark" width="56" height="56" />
+	<div>
+		<div class="ds-mark__word">Routa</div>
+		<p class="ds-mark__tag">True north for schema-first APIs</p>
+	</div>
+</div>
+
+<div class="ds-cta-row">
+	<LinkButton href="https://routa-ts.dev/start/quickstart/" variant="primary" icon="rocket">
+		Set course
+	</LinkButton>
+	<LinkButton href="/" variant="minimal" icon="right-arrow" iconPlacement="end">
+		All options
+	</LinkButton>
+</div>
+
+## Palette
+
+Signal cyan for action, deep navy for depth, frost for readable body text.
+
+<div class="ds-swatch-row">
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#0891b2" />
+		<div class="ds-swatch__meta"><strong>Signal</strong>#0891b2 · accent</div>
+	</div>
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#67e8f9" />
+		<div class="ds-swatch__meta"><strong>Beacon</strong>#67e8f9 · accent-high</div>
+	</div>
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#0b1220" />
+		<div class="ds-swatch__meta"><strong>Chart</strong>#0b1220 · bg</div>
+	</div>
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#e8f4fc" />
+		<div class="ds-swatch__meta"><strong>Frost</strong>#e8f4fc · text</div>
+	</div>
+</div>
+
+| Token | Role | Feeling |
+| --- | --- | --- |
+| Accent cyan | Links, primary CTA, focus | “You are here” |
+| Navy ground | Page / sidebar | Night navigation |
+| Sora | UI + headings | Modern, directional |
+| IBM Plex Mono | Code + badges | Instrument readout |
+
+## Voice badges
+
+<div class="ds-gallery">
+	<Badge text="oriented" variant="success" />
+	<Badge text="bearing" variant="note" />
+	<Badge text="drift" variant="caution" />
+	<Badge text="lost" variant="danger" />
+	<Badge text="v0" variant="tip" size="small" />
+	<Badge text="contract" variant="default" size="large" />
+</div>
+
+## Callouts as bearings
+
+<Aside type="note" title="Note · Steady bearing">
+	Route folders map to URL segments. Keep the tree readable and the path stays true.
+</Aside>
+
+<Aside type="tip" title="Tip · Fix your heading">
+	Start from OpenAPI when the map already exists — scaffold, then refine contracts.
+</Aside>
+
+<Aside type="caution" title="Caution · Magnetic drift">
+	Hand-edited generated files will diverge. Regenerate from the source contract instead.
+</Aside>
+
+<Aside type="danger" title="Danger · Off the chart">
+	Shipping without `routa check` leaves OpenAPI and handlers out of sync.
+</Aside>
+
+## Navigation cards
+
+<CardGrid stagger>
+	<Card title="Quickstart" icon="rocket">
+		Create a project and run the first local API — your first waypoint.
+	</Card>
+	<Card title="Route contracts" icon="document">
+		The source of truth for inputs, responses, and middleware boundaries.
+	</Card>
+	<Card title="OpenAPI" icon="open-book">
+		Bidirectional: scaffold from a document, or emit one from source.
+	</Card>
+	<Card title="Middleware" icon="puzzle">
+		Typed context that travels with the request along the trail.
+	</Card>
+</CardGrid>
+
+<CardGrid>
+	<LinkCard
+		title="Project anatomy"
+		href="https://routa-ts.dev/getting-started/project-anatomy/"
+		description="What Routa owns vs what your app owns."
+	/>
+	<LinkCard
+		title="CLI reference"
+		href="https://routa-ts.dev/reference/cli/"
+		description="check, build, start, scaffold — the instrument panel."
+	/>
+</CardGrid>
+
+## Course plot · Steps
+
+<Steps>
+
+1. Create a project.
+
+	```sh
+	pnpm create routa-ts@latest
+	```
+
+2. Define a route contract in `src/routes`.
+
+	```ts
+	export default defineRoute({
+		get: createRoute({
+			responses: {
+				success: { status: 200, schema: StatusSchema },
+			},
+			run: async () => ({ ok: true }),
+		}),
+	});
+	```
+
+3. Check alignment, then start the server.
+
+	```sh
+	pnpm routa check
+	pnpm routa start
+	```
+
+</Steps>
+
+## Chart · File tree
+
+<FileTree>
+
+- src/
+	- routes/
+		- status/
+			- route.ts
+			- schemas.ts
+		- users/
+			- route.ts
+			- $userId/
+				- route.ts
+	- routa.ts
+- .routa/
+	- routes.gen.ts
+
+</FileTree>
+
+## Package manager tabs
+
+<Tabs syncKey="package-manager">
+	<TabItem label="pnpm" icon="pnpm">
+		```sh
+		pnpm create routa-ts@latest
+		pnpm routa check
+		```
+	</TabItem>
+	<TabItem label="npm" icon="npm">
+		```sh
+		npm create routa-ts@latest
+		npx routa check
+		```
+	</TabItem>
+	<TabItem label="bun" icon="bun">
+		```sh
+		bun create routa-ts@latest
+		bunx routa check
+		```
+	</TabItem>
+</Tabs>
+
+## Contract sample
+
+```ts
+export default defineRoute({
+	post: createRoute({
+		input: { body: CreateUserSchema },
+		responses: {
+			success: { status: 201, schema: UserSchema },
+			conflict: { status: 409, schema: ErrorSchema },
+		},
+		run: async ({ input, ctx }) => {
+			return users.createUser(input.body, ctx);
+		},
+	}),
+});
+```
+
+> Compass identity: **orient first, then move.** Docs should feel like instruments — clear bearings, no fog.
+
+</div>

@@ -16,6 +16,9 @@ You can also run the package directly:
 npm create routa-ts@latest
 ```
 
+Generated projects require Node.js 24+ and work with npm, pnpm, Yarn, Bun, or another
+compatible package manager. The scaffold does not lock the project to one package manager.
+
 ## What It Creates
 
 - TypeScript Routa app structure

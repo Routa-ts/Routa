@@ -202,6 +202,8 @@ export function scaffoldOpenApi(
 			inputsByMethod[method] = {
 				params: Boolean(paramsSchema),
 				query: Boolean(querySchema),
+				headers: Boolean(headersSchema),
+				cookies: Boolean(cookiesSchema),
 				body: Boolean(bodySchema),
 			};
 

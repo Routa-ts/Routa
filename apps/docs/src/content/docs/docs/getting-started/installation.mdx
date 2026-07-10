@@ -1,0 +1,86 @@
+---
+title: Installation
+description: Install Routa packages in an existing TypeScript API.
+---
+
+import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
+
+Use the project scaffolder for new applications:
+
+```sh
+<package-manager> create routa-ts@latest
+```
+
+## Requirements
+
+Routa v0 requires Node.js 24 or later. New projects include `.nvmrc` to help
+version managers select the supported runtime.
+
+```sh
+node --version
+```
+
+Use npm, pnpm, Yarn, Bun, or another compatible package manager. Routa does not write a
+lockfile or package-manager field, so your project stays under your team's control.
+
+For an existing application, install the same runtime set used by generated Routa apps:
+
+```sh
+<package-manager> add @routa-ts/cli @routa-ts/core hono zod
+<package-manager> add --dev @biomejs/biome @types/node tsx typescript vitest
+```
+
+<Aside type="note" title="CLI dependency">
+	Generated Routa apps currently keep `@routa-ts/cli` in `dependencies` so `routa start` is available in deployed environments. If your deployment provides build/start tooling another way, you can choose a stricter dependency split later.
+</Aside>
+
+## Packages
+
+- `@routa-ts/core`: route definition helpers and runtime primitives.
+- `@routa-ts/cli`: `routa` command for checks, builds, scaffolding, and dev server workflows.
+- `create-routa-ts`: project scaffolder for your package manager's `create` command.
+
+## Scripts
+
+Add scripts that mirror generated Routa apps:
+
+<Tabs>
+	<TabItem label="package.json">
+
+```json
+{
+	"scripts": {
+		"dev": "routa dev",
+		"start": "routa start",
+		"generate": "routa generate",
+		"check": "routa check",
+		"build": "routa build",
+		"test": "vitest run",
+		"scaffold": "routa scaffold openapi.yaml",
+		"openapi:check": "routa openapi check"
+	}
+}
+```
+
+	</TabItem>
+</Tabs>
+
+## Existing Hono Apps
+
+Routa owns the HTTP route tree and server lifecycle. Start by adding `src/routa.ts`,
+then move one endpoint into `src/routes/` and keep services, persistence, and domain
+logic in your existing application modules.
+
+```ts
+import { createRouta } from "@routa-ts/core";
+
+export default createRouta({
+	port: 3000,
+});
+```
+
+See [First route](/docs/getting-started/first-route/) for the smallest route contract.
+
+## Next Step
+
+Create a starter project with the scaffolder or add route contracts to an existing app.

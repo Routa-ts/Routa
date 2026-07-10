@@ -87,7 +87,7 @@ Examples:
 ```ts
 import { defineRoute, createRoute } from "@routa-ts/core";
 import { Fields, Sort } from "@routa-ts/core/query/helpers";
-import { requireAuth } from "@routa-ts/core/middleware/auth";
+import { requireAuth } from "../middleware/auth.js"; // app-owned guard
 ```
 
 ---
@@ -177,7 +177,7 @@ The HTTP verb for each handler comes from the key (`get`, `post`, `methods.patch
 ```ts
 export default defineRoute({
 	post: createRoute({
-		middleware: [requireAuth()],
+		middleware: [requireAuth],
 
 		input: {
 			body: CreateUserSchema,

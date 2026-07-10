@@ -27,6 +27,12 @@ describe("query helpers", () => {
 		expect(schema.parse("id,email")).toEqual(["id", "email"]);
 	});
 
+	it("trims whitespace and drops empty field segments", () => {
+		const schema = Fields(["id", "email", "createdAt"]);
+
+		expect(schema.parse(" id , email , ")).toEqual(["id", "email"]);
+	});
+
 	it("rejects unknown fields", () => {
 		const schema = Fields(["id", "email", "createdAt"]);
 

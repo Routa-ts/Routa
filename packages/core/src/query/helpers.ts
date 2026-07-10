@@ -35,6 +35,11 @@ export function Sort<const TFields extends readonly [string, ...string[]]>(field
 export function Fields<const TFields extends readonly [string, ...string[]]>(fields: TFields) {
 	return z
 		.string()
-		.transform((value) => value.split(","))
+		.transform((value) =>
+			value
+				.split(",")
+				.map((field) => field.trim())
+				.filter((field) => field.length > 0),
+		)
 		.pipe(z.array(z.enum(fields)));
 }

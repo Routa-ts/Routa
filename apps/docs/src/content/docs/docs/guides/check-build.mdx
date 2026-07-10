@@ -1,0 +1,36 @@
+---
+title: Check and Build
+description: Validate Routa contracts before emitting JavaScript.
+---
+
+Use `routa check` before shipping changes:
+
+```sh
+pnpm exec routa check
+```
+
+`routa check`:
+
+- validates project structure
+- discovers route files
+- detects duplicate routes
+- detects missing `success` responses
+- detects duplicate schema names
+- checks middleware ordering
+- writes generated route metadata when validation passes
+- runs `tsc -p tsconfig.json --noEmit`
+
+Use `routa generate` when you want to deliberately refresh committed metadata after a
+route-structure change:
+
+```sh
+pnpm exec routa generate
+```
+
+Use `routa build` to validate and compile:
+
+```sh
+pnpm exec routa build
+```
+
+If Routa validation fails, build does not emit JavaScript.

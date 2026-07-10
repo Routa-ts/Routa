@@ -1,0 +1,47 @@
+---
+title: Quickstart
+description: Create and run a Routa API.
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+<Steps>
+1. Create a Routa project.
+
+	```sh
+	<package-manager> create routa-ts@latest
+	```
+
+2. Enter the project and install dependencies if the create command did not install them.
+
+	```sh
+	cd routa-app
+	<package-manager> install
+	```
+
+3. Start development mode.
+
+	```sh
+	<package-manager> run dev
+	```
+
+4. Run the checks used before shipping.
+
+	```sh
+	<package-manager> run generate
+	<package-manager> run check
+	<package-manager> run build
+	<package-manager> run test
+	<package-manager> run openapi:check
+	```
+
+</Steps>
+
+Replace `<package-manager>` with npm, pnpm, Yarn, Bun, or another compatible package
+manager. `<package-manager> run dev` runs `routa dev`, which validates the route graph,
+writes `.routa/routes.gen.ts`, typechecks the project, and starts the internal development server.
+
+After a route-structure change, run `<package-manager> run generate`, review the `.routa/` diff, and
+commit it with the source change.
+
+Use `src/routes` as the source of truth for the HTTP contract.

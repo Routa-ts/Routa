@@ -2,7 +2,7 @@ import { createMiddleware } from "@routa-ts/core";
 import { z } from "zod";
 
 export const withTenant = createMiddleware({
-	requires: ["session"],
+	requires: ["auth", "session"],
 	input: {
 		params: z.object({
 			tenantId: z.string(),
@@ -14,11 +14,11 @@ export const withTenant = createMiddleware({
 			name: z.string(),
 		}),
 	},
-	run: async ({ ctx, input, next }) => {
+	run: async ({ input, next }) => {
 		return next({
 			tenant: {
 				id: input.params.tenantId,
-				name: ctx.session.authenticated ? `Tenant ${input.params.tenantId}` : "Anonymous tenant",
+				name: `Tenant ${input.params.tenantId}`,
 			},
 		});
 	},

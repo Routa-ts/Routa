@@ -1,0 +1,86 @@
+---
+title: Routa
+description: Schema-first, OpenAPI-aware REST framework for new TypeScript APIs.
+---
+
+import { Aside, Card, CardGrid, Steps } from "@astrojs/starlight/components";
+
+Routa is a schema-first, OpenAPI-aware REST framework for new TypeScript APIs.
+
+Route files define inputs, responses, middleware, metadata, and handler boundaries. From that contract, Routa can generate typed handlers, runtime validation, and OpenAPI. Routa can also start from an OpenAPI file and scaffold the first version of the source contract.
+
+<Steps>
+1. Create a new project.
+
+	```sh
+	pnpm create routa-ts@latest
+	```
+
+2. Define route contracts in `src/routes`.
+3. Use Routa to check, build, run, and keep OpenAPI aligned.
+</Steps>
+
+<Aside type="caution" title="v0 status">
+	Routa has a v0 implementation baseline. These docs describe current v0 behavior and call out deferred features where needed.
+</Aside>
+
+## v0 Scope
+
+Routa v0 is intentionally narrow:
+
+- Hono runtime
+- Zod schemas
+- OpenAPI `.yaml`, `.yml`, and `.json` input
+- OpenAPI-to-source scaffolding
+- Source-to-OpenAPI checking
+- Typed route responses
+- Minimal typed middleware context
+
+## Start Here
+
+<CardGrid>
+	<Card title="Quickstart" icon="rocket">
+		[Create a project](/docs/start/quickstart/) and run the first local Routa API.
+	</Card>
+	<Card title="Project anatomy" icon="document">
+		[Learn the files](/docs/getting-started/project-anatomy/) Routa owns and the files your app owns.
+	</Card>
+	<Card title="Route contracts" icon="document">
+		[Learn the source-of-truth model](/docs/concepts/route-contracts/) for Routa HTTP boundaries.
+	</Card>
+	<Card title="Scaffold from OpenAPI" icon="open-book">
+		[Generate route files](/docs/guides/openapi-scaffold/) from an OpenAPI document.
+	</Card>
+</CardGrid>
+
+## Framework Model
+
+Routa routes are filesystem-backed. Folders map to URL segments, and each `route.ts` file owns the methods for that path.
+
+```txt
+src/routes/users/route.ts
+src/routes/users/$id/route.ts
+```
+
+Each method is declared as a route contract:
+
+```ts
+export default defineRoute({
+	post: createRoute({
+		input: {
+			body: CreateUserSchema,
+		},
+		responses: {
+			success: {
+				status: 201,
+				schema: UserSchema,
+			},
+		},
+		run: async ({ input, ctx }) => {
+			return users.createUser(input.body, ctx);
+		},
+	}),
+});
+```
+
+Handlers return named outcomes from the declared response map. Business logic stays in application-owned services, modules, use cases, or domain code. Routa owns the HTTP boundary: routing, validation, middleware context, typed responses, and OpenAPI.

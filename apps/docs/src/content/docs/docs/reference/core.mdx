@@ -1,0 +1,56 @@
+---
+title: Core Reference
+description: Core Routa framework APIs.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+`@routa-ts/core` provides the route definition helpers and runtime primitives used by Routa applications and generated code.
+
+## Install
+
+```sh
+pnpm add @routa-ts/core hono zod
+```
+
+## Basic Usage
+
+```ts
+import { createRoute, defineRoute } from "@routa-ts/core";
+import { z } from "zod";
+
+export default defineRoute({
+	get: createRoute({
+		responses: {
+			success: {
+				status: 200,
+				schema: z.object({
+					ok: z.boolean(),
+				}),
+			},
+		},
+		run: async () => {
+			return { type: "success", data: { ok: true } };
+		},
+	}),
+});
+```
+
+## Model
+
+Route contracts keep HTTP behavior explicit in source: inputs, responses, middleware, metadata, and handler boundaries live together.
+
+Business logic remains application-owned. Routa owns the HTTP boundary.
+
+## Main APIs
+
+- `createRouta(config)`: preserves the app runtime configuration.
+- `defineRoute(config)`: defines methods and route-file middleware for one route file.
+- `createRoute(contract)`: preserves a method contract with typed input, responses, middleware, and handler output.
+- `createMiddleware(contract)`: defines middleware requirements, provided context, rejects, and runtime behavior.
+- `createRouteRoot(path)`: binds a route file to generated route context types.
+- `createHonoApp(routes, options)`: creates the Hono runtime app from generated route metadata.
+
+<Aside type="note" title="Generated types">
+	Generated `.routa/routes.gen.ts` files augment core types so route context can be inferred from middleware metadata.
+</Aside>

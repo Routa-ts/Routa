@@ -3,7 +3,13 @@
 import { chmodSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-const root = resolve(import.meta.dirname, "..");
+const rootFlag = process.argv.indexOf("--root");
+const root =
+	rootFlag === -1 ? resolve(import.meta.dirname, "..") : resolve(process.argv[rootFlag + 1]);
+
+if (rootFlag !== -1 && !process.argv[rootFlag + 1]) {
+	throw new Error("Missing path after --root.");
+}
 const shim = [
 	"#!/usr/bin/env sh",
 	`exec node "${join(root, "packages/cli/dist/index.js")}" "$@"`,

@@ -1,0 +1,214 @@
+---
+title: "Option C · Trace"
+description: Terminal-native identity — phosphor green + cyan signal, JetBrains Mono everywhere.
+sidebar:
+  badge:
+    text: C
+    variant: success
+---
+
+import {
+	Aside,
+	Badge,
+	Card,
+	CardGrid,
+	FileTree,
+	LinkButton,
+	LinkCard,
+	Steps,
+	TabItem,
+	Tabs,
+} from "@astrojs/starlight/components";
+
+<div class="ds-trace">
+
+Routa as a **trace**: docs that speak like the CLI. Phosphor green for success, cyan for commands, monospace as the default voice — because the product lives in the terminal first.
+
+<div class="ds-mark">
+	<img src="/favicon.svg" alt="Routa star mark" width="56" height="56" />
+	<div>
+		<div class="ds-mark__word">routa</div>
+		<p class="ds-mark__tag">stdout for schema-first APIs</p>
+	</div>
+</div>
+
+<div class="ds-cta-row">
+	<LinkButton href="https://routa-ts.dev/reference/cli/" variant="primary" icon="laptop">
+		Open the CLI
+	</LinkButton>
+	<LinkButton href="/" variant="minimal" icon="right-arrow" iconPlacement="end">
+		All options
+	</LinkButton>
+</div>
+
+## Palette
+
+Mapped 1:1 to CLI ANSI roles: cyan heading/command, green success, yellow warn, red error.
+
+<div class="ds-swatch-row">
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#16a34a" />
+		<div class="ds-swatch__meta"><strong>ok</strong>#16a34a · accent</div>
+	</div>
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#22d3ee" />
+		<div class="ds-swatch__meta"><strong>cmd</strong>#22d3ee · signal</div>
+	</div>
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#070a08" />
+		<div class="ds-swatch__meta"><strong>term</strong>#070a08 · bg</div>
+	</div>
+	<div class="ds-swatch">
+		<div class="ds-swatch__chip" style="background:#d8f5e4" />
+		<div class="ds-swatch__meta"><strong>out</strong>#d8f5e4 · text</div>
+	</div>
+</div>
+
+| CLI role | ANSI | Docs twin |
+| --- | --- | --- |
+| heading / command | cyan `36` | Links + primary CTA |
+| success | green `32` | Accent, success badges |
+| warn | yellow `33` | Caution asides |
+| error | red `31` | Danger asides |
+| muted | dim | Secondary copy |
+
+## Process badges
+
+<div class="ds-gallery">
+	<Badge text="exit 0" variant="success" />
+	<Badge text="info" variant="note" />
+	<Badge text="WARN" variant="caution" />
+	<Badge text="ERR" variant="danger" />
+	<Badge text="pid" variant="tip" size="small" />
+	<Badge text="routa check" variant="default" size="large" />
+</div>
+
+## Log levels · Asides
+
+<Aside type="note" title="note">
+	`routa start` serves the Hono app with generated routes wired in.
+</Aside>
+
+<Aside type="tip" title="tip">
+	Pipe diagnostics into CI — treat `routa check` like `tsc --noEmit` for HTTP.
+</Aside>
+
+<Aside type="caution" title="warn">
+	Skipping regeneration after schema edits leaves handlers typed against yesterday.
+</Aside>
+
+<Aside type="danger" title="error">
+	Contract mismatch: response `conflict` declared but never returned from `run`.
+</Aside>
+
+## Module cards
+
+<CardGrid stagger>
+	<Card title="check" icon="approve-check">
+		Validate source ↔ OpenAPI alignment before merge.
+	</Card>
+	<Card title="build" icon="setting">
+		Emit generated artifacts for deploy.
+	</Card>
+	<Card title="start" icon="rocket">
+		Boot the local or production server entry.
+	</Card>
+	<Card title="scaffold" icon="add-document">
+		Mint route files from an OpenAPI document.
+	</Card>
+</CardGrid>
+
+<CardGrid>
+	<LinkCard
+		title="Runtime behavior"
+		href="https://routa-ts.dev/reference/runtime-behavior/"
+		description="What happens between request and named response."
+	/>
+	<LinkCard
+		title="Diagnostics"
+		href="https://routa-ts.dev/reference/diagnostics/"
+		description="Messages you will see on stderr."
+	/>
+</CardGrid>
+
+## Boot sequence
+
+<Steps>
+
+1. Scaffold.
+
+	```sh
+	pnpm create routa-ts@latest my-api
+	cd my-api
+	```
+
+2. Inspect the generated entry.
+
+	```ts
+	// src/routa.ts
+	import { createApp } from "@routa-ts/core";
+	```
+
+3. Run the loop.
+
+	```sh
+	pnpm routa check
+	pnpm routa start
+	# listening on :3000
+	```
+
+</Steps>
+
+## cwd tree
+
+<FileTree>
+
+- my-api/
+	- package.json
+	- src/
+		- routa.ts
+		- routes/
+			- demo/
+				- route.ts
+	- .routa/
+		- routes.gen.ts
+	- .nvmrc
+
+</FileTree>
+
+## Shell tabs
+
+<Tabs syncKey="package-manager">
+	<TabItem label="pnpm" icon="pnpm">
+		```sh
+		pnpm routa check
+		pnpm routa start --port 3000
+		```
+	</TabItem>
+	<TabItem label="npm" icon="npm">
+		```sh
+		npx routa check
+		npx routa start --port 3000
+		```
+	</TabItem>
+	<TabItem label="bun" icon="bun">
+		```sh
+		bunx routa check
+		bunx routa start --port 3000
+		```
+	</TabItem>
+</Tabs>
+
+## Handler trace
+
+```ts
+run: async ({ input, ctx }) => {
+	ctx.log.info("create_user", { email: input.body.email });
+	const user = await users.createUser(input.body, ctx);
+	return { success: user };
+},
+```
+
+> Trace identity: **docs are another stdout.** Sharp edges, mono voice, green when it works.
+
+</div>

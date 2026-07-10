@@ -49,10 +49,18 @@ for (const requiredFile of ["package/dist/index.js", "package/dist/runtime.js"])
 	}
 }
 
+const createTarballFiles = run("tar", ["-tf", tarballs.get("create-routa-ts")], root);
+
+for (const requiredFile of ["package/dist/cli.js", "package/dist/index.js"]) {
+	if (!createTarballFiles.split("\n").includes(requiredFile)) {
+		throw new Error(`create-routa-ts tarball is missing ${requiredFile}.`);
+	}
+}
+
 run(
 	"pnpm",
-	["dlx", `file:${tarballs.get("create-routa-ts")}`, appDir, "--no-git", "--no-install", "--yes"],
-	root,
+	["dlx", `file:${tarballs.get("create-routa-ts")}`, "app", "--no-git", "--no-install", "--yes"],
+	tmp,
 );
 
 const manifestPath = join(appDir, "package.json");
@@ -68,7 +76,37 @@ writeFileSync(
 run("pnpm", ["install"], appDir);
 run("pnpm", ["exec", "routa", "check"], appDir);
 run("pnpm", ["exec", "routa", "build"], appDir);
+run("pnpm", ["test"], appDir);
+run("pnpm", ["exec", "routa", "openapi", "check"], appDir);
 await smokeTestStart(appDir);
+
+const noOpenApiDir = join(tmp, "app-no-openapi");
+run(
+	"pnpm",
+	[
+		"dlx",
+		`file:${tarballs.get("create-routa-ts")}`,
+		"app-no-openapi",
+		"--no-openapi",
+		"--no-git",
+		"--no-install",
+		"--yes",
+	],
+	tmp,
+);
+const noOpenApiManifestPath = join(noOpenApiDir, "package.json");
+const noOpenApiManifest = JSON.parse(readFileSync(noOpenApiManifestPath, "utf8"));
+noOpenApiManifest.dependencies["@routa-ts/core"] = `file:${tarballs.get("@routa-ts/core")}`;
+noOpenApiManifest.dependencies["@routa-ts/cli"] = `file:${tarballs.get("@routa-ts/cli")}`;
+writeFileSync(noOpenApiManifestPath, `${JSON.stringify(noOpenApiManifest, null, "\t")}\n`);
+writeFileSync(
+	join(noOpenApiDir, "pnpm-workspace.yaml"),
+	`overrides:\n  "@routa-ts/cli": "file:${tarballs.get("@routa-ts/cli")}"\n  "@routa-ts/core": "file:${tarballs.get("@routa-ts/core")}"\n  "create-routa-ts": "file:${tarballs.get("create-routa-ts")}"\nallowBuilds:\n  esbuild: true\n`,
+);
+run("pnpm", ["install"], noOpenApiDir);
+run("pnpm", ["exec", "routa", "check"], noOpenApiDir);
+run("pnpm", ["exec", "routa", "build"], noOpenApiDir);
+run("pnpm", ["test"], noOpenApiDir);
 
 process.stdout.write(`Pack check passed in ${basename(tmp)}.\n`);
 

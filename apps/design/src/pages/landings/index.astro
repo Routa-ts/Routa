@@ -1,0 +1,77 @@
+---
+import LandingLayout from "../../layouts/LandingLayout.astro";
+
+const options = [
+	{
+		slug: "contract",
+		idx: "01",
+		title: "Contract",
+		blurb: "Route file → Zod → handler → OpenAPI in one stacked glance. Hono-sparse, code-first.",
+	},
+	{
+		slug: "walk",
+		idx: "02",
+		title: "Walk",
+		blurb: "Numbered request trace through the lattice — middleware, validate, handler, response.",
+	},
+	{
+		slug: "check",
+		idx: "03",
+		title: "Check",
+		blurb: "CLI-first: drift fails, then passes. check → build → start as the product story.",
+	},
+	{
+		slug: "peer",
+		idx: "04",
+		title: "Peer",
+		blurb: "Bidirectional OpenAPI — edit Zod or the spec; regenerate the other. Dual panels.",
+	},
+	{
+		slug: "schematic",
+		idx: "05",
+		title: "Schematic",
+		blurb: "Cartographic lattice map as atmosphere; untyped vs contracted side-by-side below.",
+	},
+];
+---
+
+<LandingLayout
+	title="Landing options"
+	description="Five Lattice-branded Routa marketing landing compositions for review."
+	slug="hub"
+>
+	<main id="main" class="hub">
+		<div class="hub-inner">
+			<div class="brand-mark">
+				<img src="/favicon.svg" alt="" width="36" height="36">
+				Routa
+				<span class="dot" aria-hidden="true"></span>
+			</div>
+			<h1>Five landing compositions</h1>
+			<p>
+				Same Lattice system (teal / graphite / Space Grotesk + Space Mono). Different metaphor and
+				first-viewport composition each. Pick a winner before shipping to
+				<code class="mono" style="color: var(--node)">apps/docs</code>.
+			</p>
+			<ol class="hub-list">
+				{options.map((o) => (
+						<li>
+							<a href={`/landings/${o.slug}/`}>
+								<span class="idx">{o.idx}</span>
+								<span>
+									<strong>{o.title}</strong>
+									<span>{o.blurb}</span>
+								</span>
+								<span class="go">Open →</span>
+							</a>
+						</li>
+					))}
+			</ol>
+			<p class="v0-note" style="margin-top: 2rem">
+				<strong>v0</strong>
+				· Review only · Not production ·
+				<a href="/" style="color: var(--node)">Design lab home</a>
+			</p>
+		</div>
+	</main>
+</LandingLayout>

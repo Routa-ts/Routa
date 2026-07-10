@@ -2,7 +2,14 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { isBodylessStatus } from "@routa-ts/core/hono";
 import ts from "typescript";
-import { validateProject } from "./project.js";
+import {
+	callName,
+	localInitializer,
+	objectLiteral,
+	propertyName,
+	unwrapExpression,
+} from "./ast.js";
+import { type MiddlewareMetadata, validateProject } from "./project.js";
 
 type OpenApiLike = {
 	openapi?: string;
@@ -13,6 +20,7 @@ type OpenApiLike = {
 			string,
 			{
 				operationId?: string;
+				security?: unknown;
 				parameters?: Array<Record<string, unknown>>;
 				requestBody?: Record<string, unknown>;
 				responses?: Record<string, unknown>;
@@ -82,7 +90,7 @@ export function runOpenApiBreaking(
 		return { code: 1, stderr: `${invalidGraph.join("\n")}\n` };
 	}
 
-	const diagnostics = removedOperationDiagnostics(baseline, current);
+	const diagnostics = breakingChangeDiagnostics(baseline, current);
 
 	if (argv.includes("--update-baseline")) {
 		writeFileSync(
@@ -99,7 +107,7 @@ export function runOpenApiBreaking(
 		};
 	}
 
-	return { code: 0, stdout: "OpenAPI breaking check passed. No removed operations detected.\n" };
+	return { code: 0, stdout: "OpenAPI breaking check passed. No breaking changes detected.\n" };
 }
 
 /**
@@ -109,10 +117,11 @@ export function runOpenApiBreaking(
  * @returns The generated OpenAPI document, including diagnostics when project validation fails.
  */
 export function generateOpenApi(cwd = process.cwd()): OpenApiLike {
-	const validation = validateProject(cwd);
+	const validation = validateProject(cwd, { write: false });
 	const baseline = readBaseline(cwd);
 	const paths: NonNullable<OpenApiLike["paths"]> = {};
 	const components = baseline?.components;
+	const schemaWarnings: string[] = [];
 
 	if (validation.diagnostics.length > 0) {
 		return {
@@ -129,23 +138,28 @@ export function generateOpenApi(cwd = process.cwd()): OpenApiLike {
 	}
 
 	for (const route of validation.routes) {
-		const contracts = readRouteContracts(cwd, route.file, components?.schemas ?? {});
+		const { contracts, warnings } = readRouteContracts(cwd, route.file, components?.schemas ?? {});
+		schemaWarnings.push(...warnings.map((message) => `${route.file}: ${message}`));
 		const openApiPath = route.path.replaceAll(/:([^/]+)/g, "{$1}");
 		paths[openApiPath] = Object.fromEntries(
 			Object.entries(route.responses).map(([method, statuses]) => {
 				const baselineOperation = baseline?.paths?.[openApiPath]?.[method];
 				const input = operationInput(route.path, contracts[method]?.input, baselineOperation);
+				const middleware = route.methodMiddleware[method] ?? route.middleware;
+
+				const responseSchemas = new Map([
+					...middlewareRejectSchemas(middleware, components?.schemas ?? {}),
+					...(contracts[method]?.responses ?? new Map()),
+				]);
 
 				return [
 					method,
 					{
 						...operationMetadataForBaseline(baselineOperation),
+						...middlewareOpenApiMetadata(middleware),
+						...deprecationMetadata(contracts[method]?.deprecation),
 						...input,
-						responses: operationResponses(
-							statuses,
-							contracts[method]?.responses,
-							baselineOperation,
-						),
+						responses: operationResponses(statuses, responseSchemas, baselineOperation),
 					},
 				];
 			}),
@@ -157,6 +171,34 @@ export function generateOpenApi(cwd = process.cwd()): OpenApiLike {
 		info: baseline?.info ?? { title: "Routa API", version: "0.0.0" },
 		paths,
 		...(components ? { components } : {}),
+		...(schemaWarnings.length > 0
+			? {
+					"x-routa-schema-warnings": schemaWarnings.map((message) => ({
+						code: "ROUTA_OPENAPI_UNSUPPORTED_ZOD",
+						message,
+					})),
+				}
+			: {}),
+	};
+}
+
+function middlewareOpenApiMetadata(
+	middleware: readonly MiddlewareMetadata[],
+): Record<string, unknown> {
+	const security = middleware.flatMap((item) => item.security);
+	const permissions = Array.from(new Set(middleware.flatMap((item) => item.permissions))).sort();
+	return {
+		...(security.length > 0 ? { security } : {}),
+		...(permissions.length > 0 ? { "x-routa-authz": permissions } : {}),
+	};
+}
+
+function deprecationMetadata(deprecation: ParsedContract["deprecation"]): Record<string, unknown> {
+	if (!deprecation) return {};
+	return {
+		deprecated: true,
+		...(deprecation.sunset ? { "x-routa-sunset": deprecation.sunset } : {}),
+		...(deprecation.replacement ? { "x-routa-replacement": deprecation.replacement } : {}),
 	};
 }
 
@@ -236,6 +278,7 @@ function invalidGraphDiagnostics(document: OpenApiLike): string[] {
 type ParsedContract = {
 	input: Partial<Record<"params" | "query" | "headers" | "cookies" | "body", unknown>>;
 	responses: Map<number, unknown>;
+	deprecation?: { sunset?: string; replacement?: string };
 };
 
 /**
@@ -309,7 +352,7 @@ function readRouteContracts(
 	cwd: string,
 	routeFile: string,
 	components: Record<string, unknown>,
-): Record<string, ParsedContract> {
+): { contracts: Record<string, ParsedContract>; warnings: string[] } {
 	const routePath = join(cwd, routeFile);
 	const routeSource = readFileSync(routePath, "utf8");
 	const routeAst = ts.createSourceFile(routeFile, routeSource, ts.ScriptTarget.Latest, true);
@@ -335,15 +378,64 @@ function readRouteContracts(
 		contracts[method] = {
 			input: readInputSchemas(createRouteArg, schemas),
 			responses: readResponseSchemas(createRouteArg, schemas),
+			deprecation: readDeprecation(createRouteArg),
 		};
 	}
 
-	return contracts;
+	return { contracts, warnings: schemas.warnings };
+}
+
+function readDeprecation(contract: ts.ObjectLiteralExpression): ParsedContract["deprecation"] {
+	const property = objectProperty(contract, "deprecation");
+	const value = objectLiteral(property);
+	if (!value) return undefined;
+	const string = (name: string) => {
+		const item = objectProperty(value, name);
+		const expression = item && unwrapExpression(item);
+		return expression && ts.isStringLiteralLike(expression) ? expression.text : undefined;
+	};
+	const sunset = string("sunset");
+	const replacement = string("replacement");
+	return sunset || replacement ? { sunset, replacement } : undefined;
+}
+
+function middlewareRejectSchemas(
+	middleware: readonly MiddlewareMetadata[],
+	components: Record<string, unknown>,
+): Map<number, unknown> {
+	const schemas = new Map<number, unknown>();
+
+	for (const item of middleware) {
+		for (const reject of item.rejects) {
+			schemas.set(reject.status, schemaFromExpressionText(reject.schema, components));
+		}
+	}
+
+	return schemas;
+}
+
+function schemaFromExpressionText(
+	expressionText: string,
+	components: Record<string, unknown>,
+): unknown {
+	const source = ts.createSourceFile(
+		"middleware-reject.ts",
+		`const schema = ${expressionText};`,
+		ts.ScriptTarget.Latest,
+		true,
+	);
+	const declaration = source.statements.find(ts.isVariableStatement)?.declarationList
+		.declarations[0];
+
+	return declaration?.initializer
+		? new SchemaReader("", components).expressionSchema(declaration.initializer)
+		: {};
 }
 
 class SchemaReader {
 	private readonly ast?: ts.SourceFile;
 	private readonly exports = new Map<string, ts.Expression>();
+	readonly warnings: string[] = [];
 
 	constructor(
 		source: string,
@@ -380,6 +472,15 @@ class SchemaReader {
 		return this.schemaForExpression(expression, new Set());
 	}
 
+	private warnUnknown(expression: ts.Expression, detail: string): void {
+		const text = expression.getText(expression.getSourceFile()).slice(0, 80);
+		const message = `Unsupported Zod construct for OpenAPI (${detail}): ${text}`;
+
+		if (!this.warnings.includes(message)) {
+			this.warnings.push(message);
+		}
+	}
+
 	private schemaForName(name: string, seen: Set<string>): unknown {
 		if (this.components[name]) {
 			return { $ref: `#/components/schemas/${name}` };
@@ -392,6 +493,10 @@ class SchemaReader {
 		const expression = this.exports.get(name);
 
 		if (!expression) {
+			const message = `Could not resolve schema export ${name} for OpenAPI generation.`;
+			if (!this.warnings.includes(message)) {
+				this.warnings.push(message);
+			}
 			return {};
 		}
 
@@ -407,6 +512,7 @@ class SchemaReader {
 		}
 
 		if (!ts.isCallExpression(unwrapped)) {
+			this.warnUnknown(unwrapped, "expected a Zod call expression");
 			return {};
 		}
 
@@ -450,7 +556,11 @@ class SchemaReader {
 
 		if (call === "literal") {
 			const value = literalValue(unwrapped.arguments[0]);
-			return value === undefined ? {} : { type: typeof value, const: value };
+			if (value === undefined) {
+				this.warnUnknown(unwrapped, "unsupported z.literal argument");
+				return {};
+			}
+			return { type: typeof value, const: value };
 		}
 
 		if (call === "union" && ts.isArrayLiteralExpression(unwrapped.arguments[0])) {
@@ -506,6 +616,7 @@ class SchemaReader {
 		}
 
 		if (call !== "object" || !ts.isObjectLiteralExpression(unwrapped.arguments[0])) {
+			this.warnUnknown(unwrapped, call ? `unsupported Zod call "${call}"` : "unknown Zod call");
 			return {};
 		}
 
@@ -633,34 +744,95 @@ function readSchemaExports(schemaFile: string, components: Record<string, unknow
 }
 
 /**
- * Collects property assignments from object literals passed to function calls.
+ * Collects HTTP method property assignments from `defineRoute` / `createRouteRoot`
+ * route config object literals (same call shapes `project.ts` walks).
  *
  * @param ast - The source file to scan
- * @returns The property assignments found inside call expression arguments
+ * @returns The property assignments found on matching route config objects
  */
 function defineRouteProperties(ast: ts.SourceFile): ts.PropertyAssignment[] {
 	const properties: ts.PropertyAssignment[] = [];
+
+	function collectFromConfig(config: ts.ObjectLiteralExpression): void {
+		for (const property of config.properties) {
+			if (ts.isPropertyAssignment(property)) {
+				properties.push(property);
+			}
+		}
+	}
+
+	function isRouteConfigCall(node: ts.CallExpression): boolean {
+		const callee = unwrapExpression(node.expression);
+
+		if (callName(node.expression) === "defineRoute") {
+			return true;
+		}
+
+		// Inline `createRouteRoot("/path")({ ... })`
+		if (ts.isCallExpression(callee) && callName(callee.expression) === "createRouteRoot") {
+			return true;
+		}
+
+		// `const route = createRouteRoot("/path"); export default route({ ... })`
+		if (ts.isIdentifier(callee)) {
+			const initializer = localInitializer(ast, callee.text);
+
+			if (initializer) {
+				const unwrapped = unwrapExpression(initializer);
+				return (
+					ts.isCallExpression(unwrapped) && callName(unwrapped.expression) === "createRouteRoot"
+				);
+			}
+		}
+
+		return false;
+	}
 
 	function visit(node: ts.Node): void {
 		if (
 			ts.isCallExpression(node)
 			&& node.arguments.length > 0
 			&& ts.isObjectLiteralExpression(node.arguments[0])
+			&& isRouteConfigCall(node)
 		) {
-			for (const property of node.arguments[0].properties) {
-				if (ts.isPropertyAssignment(property)) {
-					properties.push(property);
-				}
-			}
+			collectFromConfig(node.arguments[0]);
 		}
 
 		ts.forEachChild(node, visit);
 	}
 
 	visit(ast);
+
+	// Also accept bare `export default { get: createRoute(...) }` like project.ts.
+	if (properties.length === 0) {
+		for (const statement of ast.statements) {
+			if (!ts.isExportAssignment(statement) || statement.isExportEquals) {
+				continue;
+			}
+
+			const expression = unwrapExpression(statement.expression);
+			const resolved = ts.isIdentifier(expression)
+				? localInitializer(ast, expression.text)
+				: expression;
+			const config = resolved ? unwrapExpression(resolved) : undefined;
+
+			if (config && ts.isObjectLiteralExpression(config)) {
+				collectFromConfig(config);
+			} else if (config && ts.isCallExpression(config) && isRouteConfigCall(config)) {
+				const arg = config.arguments[0];
+				if (arg && ts.isObjectLiteralExpression(arg)) {
+					collectFromConfig(arg);
+				}
+			}
+		}
+	}
+
 	return properties;
 }
 
+/**
+ * Finds the initializer for a top-level `const`/`let`/`var` binding.
+ */
 /**
  * Extracts the route configuration object from a `createRoute` call.
  *
@@ -788,33 +960,11 @@ function numericProperty(object: ts.ObjectLiteralExpression, name: string): numb
  * @param name - The property name node to read.
  * @returns The property name text, or `undefined` for unsupported name nodes.
  */
-function propertyName(name: ts.PropertyName): string | undefined {
-	if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
-		return name.text;
-	}
-
-	return undefined;
-}
-
 /**
  * Gets the name of a callable expression.
  *
  * @returns The identifier or property name for the expression, or `undefined` if no name can be resolved.
  */
-function callName(expression: ts.Expression): string | undefined {
-	const unwrapped = unwrapExpression(expression);
-
-	if (ts.isIdentifier(unwrapped)) {
-		return unwrapped.text;
-	}
-
-	if (ts.isPropertyAccessExpression(unwrapped)) {
-		return unwrapped.name.text;
-	}
-
-	return undefined;
-}
-
 /**
  * Determines whether an expression calls `optional`.
  *
@@ -847,22 +997,6 @@ function isHttpMethod(value: string): boolean {
  * @param expression - The expression to unwrap
  * @returns The innermost expression after removing wrapper syntax
  */
-function unwrapExpression(expression: ts.Expression): ts.Expression {
-	let current = expression;
-
-	while (
-		ts.isParenthesizedExpression(current)
-		|| ts.isAsExpression(current)
-		|| ts.isSatisfiesExpression(current)
-		|| ts.isTypeAssertionExpression(current)
-		|| ts.isNonNullExpression(current)
-	) {
-		current = current.expression;
-	}
-
-	return current;
-}
-
 /**
  * Builds OpenAPI parameter definitions from an object schema.
  *
@@ -957,7 +1091,14 @@ function driftDiagnostics(baseline: OpenApiLike, current: OpenApiLike): string[]
 
 	for (const [path, methods] of Object.entries(current.paths ?? {})) {
 		for (const [method, operation] of Object.entries(methods)) {
-			const baselineResponses = baseline.paths?.[path]?.[method]?.responses ?? {};
+			const baselineOperation = baseline.paths?.[path]?.[method];
+
+			if (!baselineOperation) {
+				diagnostics.push(`OPENAPI_DRIFT: ${method.toUpperCase()} ${path} added`);
+				continue;
+			}
+
+			const baselineResponses = baselineOperation.responses ?? {};
 			const currentStatuses = Object.keys(operation.responses ?? {});
 
 			for (const status of currentStatuses) {
@@ -1099,22 +1240,92 @@ function isEmptySchemaContainer(value: unknown): boolean {
 }
 
 /**
- * Reports operations that exist in the baseline but are missing from the current OpenAPI document.
+ * Reports compatibility changes between the baseline and the current OpenAPI document.
  *
- * @returns Diagnostic strings for each removed operation.
+ * @returns Diagnostic strings for every detected breaking change.
  */
-function removedOperationDiagnostics(baseline: OpenApiLike, current: OpenApiLike): string[] {
+function breakingChangeDiagnostics(baseline: OpenApiLike, current: OpenApiLike): string[] {
 	const diagnostics: string[] = [];
 
 	for (const [path, methods] of Object.entries(baseline.paths ?? {})) {
-		for (const method of Object.keys(methods)) {
-			if (!current.paths?.[path]?.[method]) {
+		for (const [method, baselineOperation] of Object.entries(methods)) {
+			const currentOperation = current.paths?.[path]?.[method];
+
+			if (!currentOperation) {
 				diagnostics.push(`OPENAPI_REMOVED_OPERATION: ${method.toUpperCase()} ${path}`);
+				continue;
 			}
+
+			diagnostics.push(
+				...requiredInputDiagnostics(path, method, baselineOperation, currentOperation),
+			);
 		}
 	}
 
 	return diagnostics;
+}
+
+/**
+ * Reports inputs that became mandatory, because callers which omit them would
+ * no longer be compatible with the current operation.
+ */
+function requiredInputDiagnostics(
+	path: string,
+	method: string,
+	baseline: NonNullable<OpenApiLike["paths"]>[string][string],
+	current: NonNullable<OpenApiLike["paths"]>[string][string],
+): string[] {
+	const diagnostics: string[] = [];
+	const previous = new Map(
+		(baseline.parameters ?? []).flatMap((parameter) => {
+			const key = parameterKey(parameter);
+			return key ? [[key, parameter] as const] : [];
+		}),
+	);
+
+	for (const parameter of current.parameters ?? []) {
+		const key = parameterKey(parameter);
+
+		if (!key || parameter.required !== true) {
+			continue;
+		}
+
+		const before = previous.get(key);
+		if (before?.required !== true) {
+			const name = typeof parameter.name === "string" ? parameter.name : "unknown";
+			const location = typeof parameter.in === "string" ? parameter.in : "parameter";
+			diagnostics.push(
+				`OPENAPI_REQUIRED_INPUT: ${method.toUpperCase()} ${path} ${location} parameter "${name}" became required`,
+			);
+		}
+	}
+
+	if (current.requestBody?.required === true && baseline.requestBody?.required !== true) {
+		diagnostics.push(
+			`OPENAPI_REQUIRED_INPUT: ${method.toUpperCase()} ${path} request body became required`,
+		);
+	}
+
+	if (hasSecurity(current.security) && !hasSecurity(baseline.security)) {
+		diagnostics.push(
+			`OPENAPI_TIGHTER_AUTH: ${method.toUpperCase()} ${path} now requires authentication`,
+		);
+	}
+
+	return diagnostics;
+}
+
+function hasSecurity(security: unknown): boolean {
+	return Array.isArray(security) && security.length > 0;
+}
+
+function parameterKey(parameter: Record<string, unknown>): string | undefined {
+	if (typeof parameter.name !== "string" || typeof parameter.in !== "string") {
+		return undefined;
+	}
+
+	const name = parameter.in === "header" ? parameter.name.toLowerCase() : parameter.name;
+	return `${parameter.in}:${name}`;
 }
 
 /**

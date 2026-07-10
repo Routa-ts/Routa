@@ -20,7 +20,10 @@ type CreateConfig = {
 	prompted: boolean;
 	yes: boolean;
 	cwd: string;
+	packageManager: PackageManager;
 };
+
+type PackageManager = "bun" | "npm" | "pnpm" | "yarn";
 
 class UserCancelledError extends Error {
 	constructor() {
@@ -43,7 +46,7 @@ export function createCommandArgs(argv: readonly string[]): string[] {
  *
  * @param argv - Command-line arguments to parse
  * @param cwd - Current working directory used to resolve paths
- * @returns `0` on success or cancellation, `1` if project creation fails
+ * @returns `0` on success or cancellation, `1` if project creation, git init, or install fails
  */
 export async function runCreate(
 	argv = process.argv.slice(2),
@@ -71,6 +74,8 @@ export async function runCreate(
 			routaVersion: resolveRoutaVersion(config.cwd, config.targetDir),
 		});
 
+		let postCreateFailed = false;
+
 		if (config.git) {
 			const git = spawnSync("git", ["init"], {
 				cwd: result.projectDir,
@@ -80,20 +85,22 @@ export async function runCreate(
 			if (git.status === 0) {
 				process.stdout.write(`${ui.success("Initialized git repository.")}\n`);
 			} else {
+				postCreateFailed = true;
 				process.stderr.write(`${ui.error("git init failed.")} ${git.stderr ?? ""}\n`);
 			}
 		}
 
 		if (config.install) {
-			const install = spawnSync("pnpm", ["install"], {
+			const install = spawnSync(config.packageManager, ["install"], {
 				cwd: result.projectDir,
 				encoding: "utf8",
 				stdio: "inherit",
 			});
 
 			if (install.status !== 0) {
+				postCreateFailed = true;
 				process.stderr.write(
-					`${ui.error('Command "pnpm install" did not run successfully.')} Please run this manually in your project.\n`,
+					`${ui.error(`Command "${config.packageManager} install" did not run successfully.`)} Please run this manually in your project.\n`,
 				);
 			}
 		}
@@ -105,11 +112,11 @@ export async function runCreate(
 		process.stdout.write(`${ui.command(`cd ${config.targetDir}`)}\n`);
 
 		if (!config.install) {
-			process.stdout.write(`${ui.command("pnpm install")}\n`);
+			process.stdout.write(`${ui.command(`${config.packageManager} install`)}\n`);
 		}
 
-		process.stdout.write(`${ui.command("pnpm dev")}\n`);
-		return 0;
+		process.stdout.write(`${ui.command(packageManagerRun(config.packageManager, "dev"))}\n`);
+		return postCreateFailed ? 1 : 0;
 	} catch (error) {
 		if (error instanceof UserCancelledError) {
 			process.stdout.write(`${ui.muted("Creation cancelled.")}\n`);
@@ -222,7 +229,44 @@ async function resolveCreateConfig(argv: readonly string[], cwd: string): Promis
 		prompted,
 		yes: argv.includes("--yes") || argv.includes("-y"),
 		cwd,
+		packageManager: detectPackageManager(),
 	};
+}
+
+/**
+ * Detects the package manager that invoked the scaffolder without storing that choice in the project.
+ *
+ * @returns A supported package manager, defaulting to npm for direct execution.
+ */
+function detectPackageManager(): PackageManager {
+	const userAgent = process.env.npm_config_user_agent ?? "";
+
+	if (userAgent.startsWith("pnpm/")) {
+		return "pnpm";
+	}
+
+	if (userAgent.startsWith("yarn/")) {
+		return "yarn";
+	}
+
+	if (userAgent.startsWith("bun/")) {
+		return "bun";
+	}
+
+	return "npm";
+}
+
+/**
+ * Formats a script command for a package manager's conventional syntax.
+ *
+ * @param packageManager - The detected package manager.
+ * @param script - The package script to run.
+ * @returns The command users can copy from creation output.
+ */
+function packageManagerRun(packageManager: PackageManager, script: string): string {
+	return packageManager === "npm" || packageManager === "bun"
+		? `${packageManager} run ${script}`
+		: `${packageManager} ${script}`;
 }
 
 /**
@@ -389,7 +433,7 @@ function printSummary(config: CreateConfig, ui: Ui): void {
 	process.stdout.write(`${ui.muted("About to create:")}\n\n`);
 	process.stdout.write(`  Project:         ${config.targetDir}\n`);
 	process.stdout.write(`  Location:        ${config.cwd}/${config.targetDir}\n`);
-	process.stdout.write("  Package manager: pnpm\n");
+	process.stdout.write(`  Package manager: ${config.packageManager} (detected)\n`);
 	process.stdout.write("  Toolchain:       TypeScript, Biome\n");
 	process.stdout.write(`  OpenAPI starter: ${config.openApi ? "yes" : "no"}\n`);
 	process.stdout.write(`  Initialize git:  ${config.git ? "yes" : "no"}\n`);
