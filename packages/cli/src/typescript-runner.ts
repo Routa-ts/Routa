@@ -1,10 +1,10 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const require = createRequire(import.meta.url);
-const bundledTsc = require.resolve("typescript/bin/tsc");
+const bundledTsc = join(dirname(require.resolve("typescript/package.json")), "bin", "tsc");
 
 export type TypeScriptResult = {
 	code: number;

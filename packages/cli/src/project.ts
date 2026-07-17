@@ -10,7 +10,6 @@ import {
 } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import * as ts from "typescript";
 import {
 	callName,
 	localInitializer,
@@ -20,6 +19,7 @@ import {
 	propertyName,
 	unwrapExpression,
 } from "./ast.js";
+import * as ts from "./typescript.js";
 import { runTypeScript } from "./typescript-runner.js";
 
 export type Diagnostic = {

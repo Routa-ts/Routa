@@ -1,7 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { isBodylessStatus } from "@routa-ts/core/hono";
-import ts from "typescript";
 import {
 	callName,
 	localInitializer,
@@ -10,6 +9,7 @@ import {
 	unwrapExpression,
 } from "./ast.js";
 import { type MiddlewareMetadata, validateProject } from "./project.js";
+import * as ts from "./typescript.js";
 
 type OpenApiLike = {
 	openapi?: string;

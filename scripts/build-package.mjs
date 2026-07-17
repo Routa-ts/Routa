@@ -24,6 +24,7 @@ const configs = {
 				"@routa-ts/core/*",
 				"tsx",
 				"typescript",
+				"typescript/*",
 				"yaml",
 			],
 			requiredOutputs: ["dist/index.js", "dist/runtime.js"],

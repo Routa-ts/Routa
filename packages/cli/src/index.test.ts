@@ -174,7 +174,7 @@ export default {};
 
 		const result = run(["check"], { cwd });
 
-		expect(result.code).toBe(2);
+		expect(result.code).toBe(1);
 		expect(result.stdout).toContain("Routa validation passed for 1 route file(s).");
 		expect(result.stdout).toContain("Running TypeScript check: tsc -p tsconfig.json --noEmit");
 		expect(result.stderr).toContain("TypeScript check failed.");
@@ -221,7 +221,7 @@ export default defineRoute({
 
 		const result = run(["check"], { cwd });
 
-		expect(result.code).toBe(2);
+		expect(result.code).toBe(1);
 		expect(result.stdout).toContain("Running TypeScript check: tsc -p tsconfig.json --noEmit");
 		expect(result.stderr).toContain("TypeScript check failed.");
 		expect(result.stdout).toContain("requiredUser");
@@ -3496,7 +3496,7 @@ function createTypeScriptProject(cwd: string): void {
 					zod: "^4.4.3",
 				},
 				devDependencies: {
-					typescript: "^6.0.3",
+					typescript: "7.0.2",
 				},
 			},
 			null,

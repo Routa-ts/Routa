@@ -29,7 +29,7 @@ create_project() {
 		"zod": "^4.4.3"
 	},
 	"devDependencies": {
-		"typescript": "^6.0.3"
+		"typescript": "^7.0.2"
 	}
 }
 JSON

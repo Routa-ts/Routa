@@ -313,7 +313,7 @@ function packageJson(name: string, routaVersion: string, openApi: boolean): stri
 			devDependencies: {
 				"@biomejs/biome": "^2.5.2",
 				"@types/node": "^26.1.0",
-				typescript: "^6.0.3",
+				typescript: "^7.0.2",
 				tsx: "^4.23.0",
 				vitest: "^4.1.9",
 			},
