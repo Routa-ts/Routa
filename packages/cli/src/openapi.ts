@@ -117,7 +117,11 @@ export function runOpenApiBreaking(
  * @returns The generated OpenAPI document, including diagnostics when project validation fails.
  */
 export function generateOpenApi(cwd = process.cwd()): OpenApiLike {
-	const validation = validateProject(cwd, { write: false });
+	return ts.withSourceFileParsing(cwd, (parser) => generateOpenApiInSession(cwd, parser));
+}
+
+function generateOpenApiInSession(cwd: string, parser: ts.SourceFileParser): OpenApiLike {
+	const validation = validateProject(cwd, { write: false }, parser);
 	const baseline = readBaseline(cwd);
 	const paths: NonNullable<OpenApiLike["paths"]> = {};
 	const components = baseline?.components;
@@ -138,7 +142,12 @@ export function generateOpenApi(cwd = process.cwd()): OpenApiLike {
 	}
 
 	for (const route of validation.routes) {
-		const { contracts, warnings } = readRouteContracts(cwd, route.file, components?.schemas ?? {});
+		const { contracts, warnings } = readRouteContracts(
+			cwd,
+			route.file,
+			components?.schemas ?? {},
+			parser,
+		);
 		schemaWarnings.push(...warnings.map((message) => `${route.file}: ${message}`));
 		const openApiPath = route.path.replaceAll(/:([^/]+)/g, "{$1}");
 		paths[openApiPath] = Object.fromEntries(
@@ -148,7 +157,12 @@ export function generateOpenApi(cwd = process.cwd()): OpenApiLike {
 				const middleware = route.methodMiddleware[method] ?? route.middleware;
 
 				const responseSchemas = new Map([
-					...middlewareRejectSchemas(middleware, components?.schemas ?? {}),
+					...middlewareRejectSchemas(
+						middleware,
+						components?.schemas ?? {},
+						parser,
+						join(".routa", "middleware-rejects", route.file, method),
+					),
 					...(contracts[method]?.responses ?? new Map()),
 				]);
 
@@ -352,14 +366,15 @@ function readRouteContracts(
 	cwd: string,
 	routeFile: string,
 	components: Record<string, unknown>,
+	parser: ts.SourceFileParser,
 ): { contracts: Record<string, ParsedContract>; warnings: string[] } {
 	const routePath = join(cwd, routeFile);
 	const routeSource = readFileSync(routePath, "utf8");
-	const routeAst = ts.createSourceFile(routeFile, routeSource, ts.ScriptTarget.Latest, true);
+	const routeAst = parser.createSourceFile(routePath, routeSource);
 	const schemaFile = join(dirname(routePath), "schemas.ts");
 	const schemas = existsSync(schemaFile)
-		? readSchemaExports(schemaFile, components)
-		: new SchemaReader("", components);
+		? readSchemaExports(schemaFile, components, parser)
+		: new SchemaReader("", components, parser, schemaFile);
 	const contracts: Record<string, ParsedContract> = {};
 
 	for (const routeProperty of defineRouteProperties(routeAst)) {
@@ -402,12 +417,19 @@ function readDeprecation(contract: ts.ObjectLiteralExpression): ParsedContract["
 function middlewareRejectSchemas(
 	middleware: readonly MiddlewareMetadata[],
 	components: Record<string, unknown>,
+	parser: ts.SourceFileParser,
+	virtualRoot: string,
 ): Map<number, unknown> {
 	const schemas = new Map<number, unknown>();
+	let snippetIndex = 0;
 
 	for (const item of middleware) {
 		for (const reject of item.rejects) {
-			schemas.set(reject.status, schemaFromExpressionText(reject.schema, components));
+			const virtualFile = join(virtualRoot, `${snippetIndex++}.ts`);
+			schemas.set(
+				reject.status,
+				schemaFromExpressionText(reject.schema, components, parser, virtualFile),
+			);
 		}
 	}
 
@@ -417,18 +439,17 @@ function middlewareRejectSchemas(
 function schemaFromExpressionText(
 	expressionText: string,
 	components: Record<string, unknown>,
+	parser: ts.SourceFileParser,
+	virtualFile: string,
 ): unknown {
-	const source = ts.createSourceFile(
-		"middleware-reject.ts",
-		`const schema = ${expressionText};`,
-		ts.ScriptTarget.Latest,
-		true,
-	);
+	const source = parser.createSourceFile(virtualFile, `const schema = ${expressionText};`);
 	const declaration = source.statements.find(ts.isVariableStatement)?.declarationList
 		.declarations[0];
 
 	return declaration?.initializer
-		? new SchemaReader("", components).expressionSchema(declaration.initializer)
+		? new SchemaReader("", components, parser, virtualFile).expressionSchema(
+				declaration.initializer,
+			)
 		: {};
 }
 
@@ -440,12 +461,14 @@ class SchemaReader {
 	constructor(
 		source: string,
 		private readonly components: Record<string, unknown>,
+		private readonly parser: ts.SourceFileParser,
+		fileName: string,
 	) {
 		if (!source) {
 			return;
 		}
 
-		this.ast = ts.createSourceFile("schemas.ts", source, ts.ScriptTarget.Latest, true);
+		this.ast = this.parser.createSourceFile(fileName, source);
 
 		for (const statement of this.ast.statements) {
 			if (!ts.isVariableStatement(statement)) {
@@ -739,8 +762,12 @@ function literalValue(
  * @param components - Component schemas available for `$ref` resolution
  * @returns A schema reader initialized with the file contents
  */
-function readSchemaExports(schemaFile: string, components: Record<string, unknown>): SchemaReader {
-	return new SchemaReader(readFileSync(schemaFile, "utf8"), components);
+function readSchemaExports(
+	schemaFile: string,
+	components: Record<string, unknown>,
+	parser: ts.SourceFileParser,
+): SchemaReader {
+	return new SchemaReader(readFileSync(schemaFile, "utf8"), components, parser, schemaFile);
 }
 
 /**

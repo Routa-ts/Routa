@@ -116,18 +116,31 @@ export default defineRoute({
 export function validateProject(
 	cwd = process.cwd(),
 	options: { write?: boolean } = {},
+	parser?: ts.SourceFileParser,
+): ProjectValidationResult {
+	return parser
+		? validateProjectInSession(cwd, options, parser)
+		: ts.withSourceFileParsing(cwd, (ownedParser) =>
+				validateProjectInSession(cwd, options, ownedParser),
+			);
+}
+
+function validateProjectInSession(
+	cwd: string,
+	options: { write?: boolean },
+	parser: ts.SourceFileParser,
 ): ProjectValidationResult {
 	const write = options.write ?? true;
-	const discovery = discoverRoutes(cwd);
+	const discovery = discoverRoutes(cwd, parser);
 	const routes = discovery.routes;
 	const diagnostics = [
 		...projectStructureDiagnostics(cwd),
 		...discovery.diagnostics,
-		...runResultShapeDiagnostics(cwd),
+		...runResultShapeDiagnostics(cwd, parser),
 		...duplicateRouteDiagnostics(routes),
 		...deprecationReplacementDiagnostics(routes),
 		...missingSuccessResponseDiagnostics(routes),
-		...duplicateSchemaDiagnostics(cwd),
+		...duplicateSchemaDiagnostics(cwd, parser),
 		...middlewareOrderDiagnostics(routes),
 		...middlewareRejectStatusDiagnostics(routes),
 	];
@@ -873,7 +886,7 @@ type RouteDiscovery = {
  * @param cwd - Project root directory
  * @returns The discovered route metadata for each `route.ts` file under `src/routes`, plus discovery diagnostics
  */
-function discoverRoutes(cwd: string): RouteDiscovery {
+function discoverRoutes(cwd: string, parser: ts.SourceFileParser): RouteDiscovery {
 	const routesDir = join(cwd, routesRoot);
 
 	if (!existsSync(routesDir)) {
@@ -900,8 +913,8 @@ function discoverRoutes(cwd: string): RouteDiscovery {
 		const pathSegments = segments.map((segment) =>
 			segment.startsWith("$") ? `:${segment.slice(1)}` : segment,
 		);
-		const inheritedMiddleware = middlewareChain(cwd, rawSegments);
-		const routeFileMiddleware = parseRouteFileMiddleware(cwd, relativeFile);
+		const inheritedMiddleware = middlewareChain(cwd, rawSegments, parser);
+		const routeFileMiddleware = parseRouteFileMiddleware(cwd, relativeFile, parser);
 		const middleware = [...inheritedMiddleware, ...routeFileMiddleware.route];
 		const methodMiddleware = Object.fromEntries(
 			Object.entries(routeFileMiddleware.methods).map(([method, items]) => [
@@ -910,7 +923,7 @@ function discoverRoutes(cwd: string): RouteDiscovery {
 			]),
 		);
 		const path = `/${pathSegments.join("/")}`.replace(/\/$/, "") || "/";
-		const parsed = parseRouteContract(file);
+		const parsed = parseRouteContract(file, parser);
 
 		if (!parsed.configFound) {
 			diagnostics.push({
@@ -1003,7 +1016,10 @@ function flatRouteSegments(file: string): string[] {
  * @param file - Path to the route file
  * @returns Parsed contract metadata and whether a route config object was found
  */
-function parseRouteContract(file: string): {
+function parseRouteContract(
+	file: string,
+	parser: ts.SourceFileParser,
+): {
 	configFound: boolean;
 	contract: Record<
 		string,
@@ -1024,7 +1040,7 @@ function parseRouteContract(file: string): {
 			deprecation?: RouteDeprecationMetadata;
 		}
 	> = {};
-	const sourceFile = parseTypeScriptFile(file);
+	const sourceFile = parseTypeScriptFile(file, parser);
 	const routeConfig = routeConfigObject(sourceFile);
 
 	if (!routeConfig) {
@@ -1137,7 +1153,7 @@ function missingSuccessResponseDiagnostics(routes: RouteMetadata[]): Diagnostic[
  * @param cwd - Project root directory
  * @returns Diagnostics for repeated `export const` names in route `schemas.ts` files under `src/routes`
  */
-function duplicateSchemaDiagnostics(cwd: string): Diagnostic[] {
+function duplicateSchemaDiagnostics(cwd: string, parser: ts.SourceFileParser): Diagnostic[] {
 	const routesDir = join(cwd, routesRoot);
 
 	if (!existsSync(routesDir)) {
@@ -1148,7 +1164,7 @@ function duplicateSchemaDiagnostics(cwd: string): Diagnostic[] {
 
 	for (const file of walk(routesDir).filter((item) => item.endsWith(`${sep}schemas.ts`))) {
 		const relativeFile = relative(cwd, file);
-		const sourceFile = parseTypeScriptFile(file);
+		const sourceFile = parseTypeScriptFile(file, parser);
 		const seen = new Set<string>();
 
 		for (const statement of sourceFile.statements) {
@@ -1190,7 +1206,7 @@ function duplicateSchemaDiagnostics(cwd: string): Diagnostic[] {
 	return diagnostics;
 }
 
-function runResultShapeDiagnostics(cwd: string): Diagnostic[] {
+function runResultShapeDiagnostics(cwd: string, parser: ts.SourceFileParser): Diagnostic[] {
 	const srcDir = join(cwd, "src");
 
 	if (!existsSync(srcDir)) {
@@ -1199,15 +1215,16 @@ function runResultShapeDiagnostics(cwd: string): Diagnostic[] {
 
 	return walk(srcDir)
 		.filter((file) => file.endsWith(".ts"))
-		.flatMap((file) => runResultShapeDiagnosticsForFile(cwd, relative(cwd, file), file));
+		.flatMap((file) => runResultShapeDiagnosticsForFile(cwd, relative(cwd, file), file, parser));
 }
 
 function runResultShapeDiagnosticsForFile(
 	cwd: string,
 	relativeFile: string,
 	file: string,
+	parser: ts.SourceFileParser,
 ): Diagnostic[] {
-	const sourceFile = parseTypeScriptFile(file);
+	const sourceFile = parseTypeScriptFile(file, parser);
 	const diagnostics: Diagnostic[] = [];
 
 	function visit(node: ts.Node): void {
@@ -1355,7 +1372,11 @@ function contractObjectKeys(
  * @param rawSegments - Route path segments used to locate nested `middleware.ts` files
  * @returns Middleware declarations from the global route middleware file and any matching nested middleware files
  */
-function middlewareChain(cwd: string, rawSegments: string[]): MiddlewareMetadata[] {
+function middlewareChain(
+	cwd: string,
+	rawSegments: string[],
+	parser: ts.SourceFileParser,
+): MiddlewareMetadata[] {
 	const candidates = [`${routesRoot}/middleware.ts`];
 	let current = routesRoot;
 
@@ -1366,7 +1387,7 @@ function middlewareChain(cwd: string, rawSegments: string[]): MiddlewareMetadata
 
 	return candidates
 		.filter((file) => existsSync(join(cwd, file)))
-		.flatMap((file) => parseMiddlewareFile(cwd, file));
+		.flatMap((file) => parseMiddlewareFile(cwd, file, parser));
 }
 
 /**
@@ -1401,10 +1422,14 @@ function projectStructureDiagnostics(cwd: string): Diagnostic[] {
  * @param file - Path to the middleware file relative to `cwd`.
  * @returns Metadata for each exported middleware declaration found in the file.
  */
-function parseMiddlewareFile(cwd: string, file: string): MiddlewareMetadata[] {
-	const sourceFile = parseTypeScriptFile(join(cwd, file));
+function parseMiddlewareFile(
+	cwd: string,
+	file: string,
+	parser: ts.SourceFileParser,
+): MiddlewareMetadata[] {
+	const sourceFile = parseTypeScriptFile(join(cwd, file), parser);
 
-	return exportedMiddlewareDeclarations(cwd, file, sourceFile).map((block) =>
+	return exportedMiddlewareDeclarations(cwd, file, sourceFile, parser).map((block) =>
 		middlewareMetadata(block.file, block.name, block.contract),
 	);
 }
@@ -1421,6 +1446,7 @@ function exportedMiddlewareDeclarations(
 	cwd: string,
 	file: string,
 	sourceFile: ts.SourceFile,
+	parser: ts.SourceFileParser,
 	seen = new Set<string>(),
 ): Array<{ file: string; name: string; contract: ts.ObjectLiteralExpression }> {
 	if (seen.has(file)) {
@@ -1476,8 +1502,14 @@ function exportedMiddlewareDeclarations(
 				continue;
 			}
 
-			const targetAst = parseTypeScriptFile(join(cwd, source.file));
-			const targetDeclarations = exportedMiddlewareDeclarations(cwd, source.file, targetAst, seen);
+			const targetAst = parseTypeScriptFile(join(cwd, source.file), parser);
+			const targetDeclarations = exportedMiddlewareDeclarations(
+				cwd,
+				source.file,
+				targetAst,
+				parser,
+				seen,
+			);
 			const declaration = targetDeclarations.find((item) => item.name === source.name);
 
 			if (declaration) {
@@ -1586,12 +1618,13 @@ function resolveImportFile(cwd: string, fromFile: string, specifier: string): st
 function parseRouteFileMiddleware(
 	cwd: string,
 	routeFile: string,
+	parser: ts.SourceFileParser,
 ): {
 	route: MiddlewareMetadata[];
 	methods: Record<string, MiddlewareMetadata[]>;
 	unresolved: string[];
 } {
-	const sourceFile = parseTypeScriptFile(join(cwd, routeFile));
+	const sourceFile = parseTypeScriptFile(join(cwd, routeFile), parser);
 	const routeConfig = routeConfigObject(sourceFile);
 
 	if (!routeConfig) {
@@ -1623,9 +1656,9 @@ function parseRouteFileMiddleware(
 			return;
 		}
 
-		const targetAst = parseTypeScriptFile(join(cwd, source.file));
+		const targetAst = parseTypeScriptFile(join(cwd, source.file), parser);
 		const declaration =
-			exportedMiddlewareDeclarations(cwd, source.file, targetAst).find(
+			exportedMiddlewareDeclarations(cwd, source.file, targetAst, parser).find(
 				(item) => item.name === source.name,
 			) ?? middlewareDeclarations(targetAst, true).find((item) => item.name === source.name);
 
@@ -2260,14 +2293,8 @@ function inputAccessPath(expression: ts.Expression): string | undefined {
  * @param file - The file path to read and parse.
  * @returns The parsed TypeScript source file.
  */
-function parseTypeScriptFile(file: string): ts.SourceFile {
-	return ts.createSourceFile(
-		file,
-		readFileSync(file, "utf8"),
-		ts.ScriptTarget.Latest,
-		true,
-		ts.ScriptKind.TS,
-	);
+function parseTypeScriptFile(file: string, parser: ts.SourceFileParser): ts.SourceFile {
+	return parser.createSourceFile(file, readFileSync(file, "utf8"));
 }
 
 /**

@@ -8,6 +8,103 @@ export {
 	isTypeAssertion as isTypeAssertionExpression,
 } from "typescript/unstable/ast";
 
+type CachedSourceFile = {
+	source: string;
+	sourceFile: SourceFile;
+};
+
+export type SourceFileParser = {
+	createSourceFile(fileName: string, source: string): SourceFile;
+	close(): void;
+};
+
+class NativeSourceFileParser implements SourceFileParser {
+	private readonly api: API;
+	private readonly files = new Map<string, string>();
+	private readonly cache = new Map<string, CachedSourceFile>();
+	private snapshot: ReturnType<API["updateSnapshot"]> | undefined;
+	private closed = false;
+
+	constructor(private readonly cwd: string) {
+		this.api = new API({
+			cwd,
+			fs: {
+				fileExists: (candidate) => (this.files.has(resolve(candidate)) ? true : undefined),
+				readFile: (candidate) => this.files.get(resolve(candidate)),
+			},
+		});
+	}
+
+	createSourceFile(fileName: string, source: string): SourceFile {
+		if (this.closed) {
+			throw new Error("TypeScript source-file parser is closed.");
+		}
+
+		const file = resolve(this.cwd, fileName);
+		const cached = this.cache.get(file);
+
+		if (cached?.source === source) {
+			return cached.sourceFile;
+		}
+
+		const alreadyOpen = this.files.has(file);
+		this.files.set(file, source);
+		const nextSnapshot = this.api.updateSnapshot(
+			alreadyOpen ? { fileChanges: { changed: [file] } } : { openFiles: [file] },
+		);
+
+		try {
+			const sourceFile = nextSnapshot.getDefaultProjectForFile(file)?.program.getSourceFile(file);
+
+			if (!sourceFile) {
+				throw new Error(`TypeScript could not parse ${fileName}.`);
+			}
+
+			this.snapshot?.dispose();
+			this.snapshot = nextSnapshot;
+			this.cache.set(file, { source, sourceFile });
+			return sourceFile;
+		} catch (error) {
+			nextSnapshot.dispose();
+			throw error;
+		}
+	}
+
+	close(): void {
+		if (this.closed) {
+			return;
+		}
+
+		this.closed = true;
+		this.snapshot?.dispose();
+		this.snapshot = undefined;
+		this.api.close();
+		this.cache.clear();
+		this.files.clear();
+	}
+}
+
+/** Creates a reusable native TypeScript parser for one project-scoped parse batch. */
+export function createSourceFileParser(cwd: string): SourceFileParser {
+	return new NativeSourceFileParser(resolve(cwd));
+}
+
+/**
+ * Reuses one native TypeScript API and its project cache for a synchronous parse batch.
+ */
+export function withSourceFileParsing<T>(
+	cwd: string,
+	callback: (parser: SourceFileParser) => T,
+): T {
+	const parser = createSourceFileParser(cwd);
+
+	try {
+		return callback(parser);
+	} finally {
+		parser.close();
+	}
+}
+
 /**
  * Parses TypeScript source through the TypeScript 7 native API.
  *
@@ -20,28 +117,9 @@ export function createSourceFile(
 	source: string,
 	..._legacyOptions: readonly unknown[]
 ): SourceFile {
-	const file = resolve(fileName);
-	const api = new API({
-		cwd: process.cwd(),
-		fs: {
-			fileExists: (candidate) => (candidate === file ? true : undefined),
-			readFile: (candidate) => (candidate === file ? source : undefined),
-		},
-	});
-	const snapshot = api.updateSnapshot({ openFiles: [file] });
-
-	try {
-		const sourceFile = snapshot.getDefaultProjectForFile(file)?.program.getSourceFile(file);
-
-		if (!sourceFile) {
-			throw new Error(`TypeScript could not parse ${fileName}.`);
-		}
-
-		return sourceFile;
-	} finally {
-		snapshot.dispose();
-		api.close();
-	}
+	return withSourceFileParsing(process.cwd(), (parser) =>
+		parser.createSourceFile(fileName, source),
+	);
 }
 
 /** Compatibility wrapper for the legacy namespace-level traversal helper. */
