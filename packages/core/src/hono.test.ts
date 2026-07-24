@@ -65,6 +65,44 @@ describe("createHonoApp", () => {
 		await expect(response.text()).resolves.toBe("");
 	});
 
+	it("prefers an explicit HEAD contract over Hono's GET fallback", async () => {
+		const app = createHonoApp([
+			{
+				method: "get",
+				path: "/status",
+				contract: createRoute({
+					responses: {
+						success: {
+							status: 200,
+							schema: z.object({ ok: z.boolean() }),
+						},
+					},
+					run: () => ({ type: "success", data: { ok: true } }),
+				}),
+			},
+			{
+				method: "head",
+				path: "/status",
+				contract: createRoute({
+					responses: {
+						success: {
+							status: 204,
+							schema: z.null(),
+						},
+					},
+					run: () => ({ type: "success", data: null }),
+				}),
+			},
+		]);
+
+		const headResponse = await app.request("/status", { method: "HEAD" });
+		const getResponse = await app.request("/status");
+
+		expect(headResponse.status).toBe(204);
+		expect(getResponse.status).toBe(200);
+		await expect(getResponse.json()).resolves.toEqual({ ok: true });
+	});
+
 	it("returns problem details for validation failures", async () => {
 		const app = createHonoApp([
 			{
@@ -969,7 +1007,83 @@ describe("createHonoApp", () => {
 		const response = await app.request("/status", { method: "POST" });
 
 		expect(response.status).toBe(405);
-		expect(response.headers.get("allow")).toBe("GET");
+		expect(response.headers.get("allow")).toBe("GET, HEAD, OPTIONS");
+	});
+
+	it("generates OPTIONS from declared methods", async () => {
+		const responseSchema = z.object({ ok: z.boolean() });
+		const app = createHonoApp([
+			{
+				method: "get",
+				path: "/status",
+				contract: createRoute({
+					responses: { success: { status: 200, schema: responseSchema } },
+					run: () => ({ type: "success", data: { ok: true } }),
+				}),
+			},
+			{
+				method: "put",
+				path: "/status",
+				contract: createRoute({
+					responses: { success: { status: 200, schema: responseSchema } },
+					run: () => ({ type: "success", data: { ok: true } }),
+				}),
+			},
+		]);
+
+		const response = await app.request("/status", { method: "OPTIONS" });
+
+		expect(response.status).toBe(204);
+		expect(response.headers.get("allow")).toBe("GET, HEAD, OPTIONS, PUT");
+		expect(response.headers.get("access-control-allow-methods")).toBeNull();
+		await expect(response.text()).resolves.toBe("");
+	});
+
+	it("advertises derived methods for CORS preflight without granting an origin", async () => {
+		const app = createHonoApp([
+			{
+				method: "post",
+				path: "/users",
+				contract: createRoute({
+					responses: {
+						success: { status: 201, schema: z.object({ id: z.string() }) },
+					},
+					run: () => ({ type: "success", data: { id: "user_1" } }),
+				}),
+			},
+		]);
+
+		const response = await app.request("/users", {
+			method: "OPTIONS",
+			headers: {
+				origin: "https://app.example.com",
+				"access-control-request-method": "POST",
+				"access-control-request-headers": "content-type",
+			},
+		});
+
+		expect(response.status).toBe(204);
+		expect(response.headers.get("allow")).toBe("OPTIONS, POST");
+		expect(response.headers.get("access-control-allow-methods")).toBe("OPTIONS, POST");
+		expect(response.headers.get("access-control-allow-origin")).toBeNull();
+		expect(response.headers.get("vary")).toBe(
+			"Origin, Access-Control-Request-Method, Access-Control-Request-Headers",
+		);
+	});
+
+	it("rejects manually declared OPTIONS routes at runtime", () => {
+		expect(() =>
+			createHonoApp([
+				{
+					method: "options" as never,
+					path: "/status",
+					contract: createRoute({
+						responses: { success: { status: 204, schema: z.null() } },
+						run: () => ({ type: "success", data: null }),
+					}),
+				},
+			]),
+		).toThrow("OPTIONS /status cannot be declared explicitly");
 	});
 
 	it("logs request completion when a logger is configured", async () => {

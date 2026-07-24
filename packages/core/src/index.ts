@@ -9,7 +9,7 @@ export type {
 } from "./logger.js";
 export { createLogger } from "./logger.js";
 
-export type HttpMethod = "get" | "post" | "put" | "patch" | "delete" | "head" | "options";
+export type HttpMethod = "get" | "post" | "put" | "patch" | "delete" | "head";
 
 export type SchemaInput<TSchema> = TSchema extends z.ZodTypeAny ? z.input<TSchema> : never;
 export type SchemaOutput<TSchema> = TSchema extends z.ZodTypeAny ? z.output<TSchema> : never;

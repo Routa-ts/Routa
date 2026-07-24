@@ -46,6 +46,16 @@ describe("route contracts", () => {
 		});
 
 		expect(route.post.responses.success.status).toBe(201);
+
+		routeRoot({
+			// @ts-expect-error OPTIONS is generated from the declared route methods.
+			options: createRoute({
+				responses: {
+					success: { status: 204, schema: z.null() },
+				},
+				run: () => ({ type: "success", data: null }),
+			}),
+		});
 	});
 
 	it("preserves Routa app configuration", () => {
