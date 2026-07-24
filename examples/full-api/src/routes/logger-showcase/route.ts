@@ -117,8 +117,10 @@ function emitShowcaseOperation(
 		case "warn":
 		case "error":
 		case "fatal":
-		case "silent":
 			logger[operation](event, message, data);
+			return;
+		case "silent":
+			logger.silent(event, message, data);
 			return;
 		case "child":
 			logger.info(event, message, { ...data, child: true });

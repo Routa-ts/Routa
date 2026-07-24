@@ -594,6 +594,14 @@ class SchemaReader {
 			};
 		}
 
+		if (call === "discriminatedUnion" && ts.isArrayLiteralExpression(unwrapped.arguments[1])) {
+			return {
+				anyOf: unwrapped.arguments[1].elements.map((element) =>
+					this.schemaForExpression(element as ts.Expression, seen),
+				),
+			};
+		}
+
 		if (call === "record") {
 			const valueSchema = unwrapped.arguments[unwrapped.arguments.length - 1];
 			return {

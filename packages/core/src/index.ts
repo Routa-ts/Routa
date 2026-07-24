@@ -220,6 +220,8 @@ export type RouteRootConfigForCtx<TCtxByMethod extends Partial<Record<HttpMethod
 	[K in HttpMethod]?: ContextualRouteContract<CtxForMethod<TCtxByMethod, K>>;
 };
 
+type NoExtraRouteKeys<TConfig> = Record<Exclude<keyof TConfig, HttpMethod | "middleware">, never>;
+
 type CtxForMethod<TCtxByMethod, TMethod extends HttpMethod> = TMethod extends keyof TCtxByMethod
 	? TCtxByMethod[TMethod]
 	: unknown;
@@ -287,7 +289,7 @@ export function createRouteRootFactory<
 >() {
 	return function createRouteRoot<const TPath extends keyof TCtxByPath & string>(_path: TPath) {
 		return function routeRoot<const TConfig extends RouteRootConfigForCtx<TCtxByPath[TPath]>>(
-			config: TConfig,
+			config: TConfig & NoExtraRouteKeys<TConfig>,
 		): TConfig {
 			return config;
 		};
@@ -305,7 +307,7 @@ export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPa
 ) {
 	return function routeRoot<
 		const TConfig extends RouteRootConfigForCtx<RegisteredRouteCtxByPath[TPath]>,
-	>(config: TConfig): TConfig {
+	>(config: TConfig & NoExtraRouteKeys<TConfig>): TConfig {
 		return config;
 	};
 }

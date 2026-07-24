@@ -29,6 +29,7 @@ Example interface shape:
 
 ```ts
 type RoutaLogger = {
+	log(event: RoutaLogEvent): void;
 	trace(event: string, message: string, data?: object): void;
 	debug(event: string, message: string, data?: object): void;
 	info(event: string, message: string, data?: object): void;

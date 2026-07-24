@@ -17,7 +17,7 @@ export const CatalogItem = z.object({
 	enabled: z.boolean(),
 	score: z.number().nullable(),
 	attributes: z.record(z.string(), z.string()),
-	delivery: z.union([z.object({
+	delivery: z.discriminatedUnion("kind", [z.object({
 	kind: z.literal("email"),
 	email: z.email(),
 }), z.object({
@@ -36,7 +36,7 @@ export const CatalogItemInput = z.object({
 	enabled: z.boolean(),
 	score: z.number().nullable().optional(),
 	attributes: z.record(z.string(), z.string()),
-	delivery: z.union([z.object({
+	delivery: z.discriminatedUnion("kind", [z.object({
 	kind: z.literal("email"),
 	email: z.email(),
 }), z.object({

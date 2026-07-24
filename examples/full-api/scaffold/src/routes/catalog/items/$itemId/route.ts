@@ -33,7 +33,7 @@ export default route({
 			// TODO: call application-owned business logic.
 			return {
 				type: "success",
-				data: { id: "", name: "", enabled: false, score: 0, attributes: {  }, delivery: { kind: "email", email: "" }, createdAt: "" } as unknown as z.output<typeof GetCatalogItemResponse>,
+				data: { id: "00000000-0000-4000-8000-000000000000", name: "", enabled: false, score: 0, attributes: {  }, delivery: { kind: "email", email: "example@example.com" }, createdAt: "2026-01-01T00:00:00.000Z" } as unknown as z.output<typeof GetCatalogItemResponse>,
 			};
 		},
 	}),
@@ -52,7 +52,7 @@ export default route({
 			// TODO: call application-owned business logic.
 			return {
 				type: "success",
-				data: { id: "", name: "", enabled: false, score: 0, attributes: {  }, delivery: { kind: "email", email: "" }, createdAt: "" } as unknown as z.output<typeof ReplaceCatalogItemResponse>,
+				data: { id: "00000000-0000-4000-8000-000000000000", name: "", enabled: false, score: 0, attributes: {  }, delivery: { kind: "email", email: "example@example.com" }, createdAt: "2026-01-01T00:00:00.000Z" } as unknown as z.output<typeof ReplaceCatalogItemResponse>,
 			};
 		},
 	}),

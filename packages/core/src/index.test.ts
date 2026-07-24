@@ -59,6 +59,17 @@ describe("route contracts", () => {
 				run: () => ({ type: "success", data: null }),
 			}),
 		});
+
+		const indirectOptions = {
+			options: createRoute({
+				responses: {
+					success: { status: 204, schema: z.null() },
+				},
+				run: () => ({ type: "success", data: null }),
+			}),
+		};
+		// @ts-expect-error Extra method keys are rejected even through an intermediate value.
+		routeRoot(indirectOptions);
 	});
 
 	it("preserves Routa app configuration", () => {
