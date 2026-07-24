@@ -1,5 +1,16 @@
 # @routa-ts/cli
 
+## 0.2.0
+
+### Minor Changes
+
+- 1c92b3d: Remove the legacy `defineRoute` API and require path-bound `createRouteRoot` route configs across project creation, OpenAPI scaffolding, dev stubs, examples, and validation.
+
+### Patch Changes
+
+- Updated dependencies [1c92b3d]
+  - @routa-ts/core@0.2.0
+
 ## 0.1.2
 
 ### Patch Changes
