@@ -1,6 +1,6 @@
 {
 	"name": "@routa-ts/cli",
-	"version": "0.1.2",
+	"version": "0.2.0",
 	"description": "CLI for Routa route checks, scaffolding, and dev server",
 	"private": false,
 	"type": "module",
