@@ -143,7 +143,7 @@ Signal cyan for action, deep navy for depth, frost for readable body text.
 2. Define a route contract in `src/routes`.
 
 	```ts
-	export default defineRoute({
+	export default createRouteRoot("/status")({
 		get: createRoute({
 			responses: {
 				success: { status: 200, schema: StatusSchema },
@@ -207,7 +207,7 @@ Signal cyan for action, deep navy for depth, frost for readable body text.
 ## Contract sample
 
 ```ts
-export default defineRoute({
+export default createRouteRoot("/users")({
 	post: createRoute({
 		input: { body: CreateUserSchema },
 		responses: {

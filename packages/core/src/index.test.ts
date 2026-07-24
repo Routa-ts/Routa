@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { createMiddleware, createRouta, createRoute, defineRoute } from "./index.js";
+import { createMiddleware, createRouta, createRoute, createRouteRoot } from "./index.js";
 
 declare module "./index.js" {
 	interface Register {
 		routeCtxByPath: {
 			"/status": { get: Record<never, never> };
+			"/users": { post: { user: { id: string } } };
 		};
 	}
 }
@@ -20,7 +21,8 @@ describe("route contracts", () => {
 			},
 		});
 
-		const route = defineRoute({
+		const routeRoot = createRouteRoot("/users");
+		const route = routeRoot({
 			post: createRoute({
 				input: {
 					body: z.object({

@@ -1,14 +1,16 @@
-import { createRoute, defineRoute } from "@routa-ts/core";
+import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
 /**
  * Hand-written route (not OpenAPI-scaffolded).
  *
- * Shows `defineRoute` + Accept negotiation: clients may send
+ * Shows route-level Accept negotiation: clients may send
  * `Accept: application/problem+json` or other `application/*+json` types
  * and still receive JSON responses.
  */
-export default defineRoute({
+const route = createRouteRoot("/demo");
+
+export default route({
 	get: createRoute({
 		responses: {
 			success: {

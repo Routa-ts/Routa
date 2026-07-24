@@ -31,7 +31,7 @@ routes/users/route.ts
 routes/users/$id/route.ts
 ```
 
-Each **route file** covers **one URL segment** (collection or item). Methods on that path (`get`, `post`, `patch`, …) are **`createRoute`** entries inside a single **`defineRoute`** export, so shared params, middleware, and metadata stay together. The framework handles the HTTP translation.
+Each **route file** covers **one URL segment** (collection or item). Methods on that path (`get`, `post`, `patch`, …) are **`createRoute`** entries in one **`createRouteRoot(path)(config)`** export, so shared middleware and metadata stay together. The framework handles the HTTP translation.
 
 ## Why Routa
 
@@ -70,7 +70,7 @@ The handler lives at the route boundary. The service, use case, module, domain m
 ## What It Feels Like
 
 ```ts
-export default defineRoute({
+export default createRouteRoot("/users")({
 	post: createRoute({
 		middleware: [requireAuth],
 
@@ -99,7 +99,7 @@ export default defineRoute({
 });
 ```
 
-The **method** (`post` here) is the map key under **`defineRoute`**. That `createRoute` says what the handler accepts, what it can return, and receives typed input and typed context. The handler may call any application-owned service, use case, module, or domain code. Routa turns the returned **`{ type, data }`** value into the HTTP response (including **`201`** for this `success` entry).
+The **method** (`post` here) is the map key in the config passed to **`createRouteRoot("/users")`**. That `createRoute` says what the handler accepts, what it can return, and receives typed input and typed context. The handler may call any application-owned service, use case, module, or domain code. Routa turns the returned **`{ type, data }`** value into the HTTP response (including **`201`** for this `success` entry).
 
 ## The Mental Model
 

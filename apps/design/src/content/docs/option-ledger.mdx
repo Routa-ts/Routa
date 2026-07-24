@@ -143,7 +143,7 @@ Copper for seals and emphasis; cool gray stone for the page; warm ink for body c
 2. Enter the first line item — a route contract.
 
 	```ts
-	export default defineRoute({
+	export default createRouteRoot("/users")({
 		get: createRoute({
 			responses: {
 				success: { status: 200, schema: UserSchema },
@@ -204,7 +204,7 @@ Copper for seals and emphasis; cool gray stone for the page; warm ink for body c
 ## Sample deed
 
 ```ts
-export default defineRoute({
+export default createRouteRoot("/tenants/:tenantId")({
 	put: createRoute({
 		input: {
 			params: TenantParams,

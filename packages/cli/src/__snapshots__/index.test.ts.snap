@@ -5,7 +5,7 @@ exports[`routa cli > matches golden output for scaffolded route and schema files
 // Safe to edit, but regeneration may update this file after preview.
 // Source: openapi.yaml
 
-import { createRoute, defineRoute } from "@routa-ts/core";
+import { createRoute, createRouteRoot } from "@routa-ts/core";
 import type { z } from "zod";
 import {
 	DeleteUserParams,
@@ -15,7 +15,9 @@ import {
 	GetUserResponse,
 } from "./schemas.js";
 
-export default defineRoute({
+const route = createRouteRoot("/users/:id");
+
+export default route({
 	get: createRoute({
 		input: {
 			params: GetUserParams,

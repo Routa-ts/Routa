@@ -110,7 +110,7 @@ Teal for structural accent; graphite for the chassis; bright mint for high-signa
 		Zod nodes that validate and document the same shape.
 	</Card>
 	<Card title="Core" icon="setting">
-		`defineRoute`, `createRoute`, and runtime primitives.
+		`createRouteRoot(path)`, `createRoute`, and runtime primitives.
 	</Card>
 	<Card title="OpenAPI" icon="open-book">
 		The lattice projected into a portable document.
@@ -148,7 +148,7 @@ Teal for structural accent; graphite for the chassis; bright mint for high-signa
 		name: z.string().min(1),
 	});
 
-	export default defineRoute({
+	export default createRouteRoot("/users")({
 		post: createRoute({
 			input: { body: CreateUserSchema },
 			responses: {

@@ -377,7 +377,7 @@ function readRouteContracts(
 		: new SchemaReader("", components, parser, schemaFile);
 	const contracts: Record<string, ParsedContract> = {};
 
-	for (const routeProperty of defineRouteProperties(routeAst)) {
+	for (const routeProperty of routeConfigProperties(routeAst)) {
 		const method = propertyName(routeProperty.name);
 
 		if (!method || !isHttpMethod(method)) {
@@ -771,13 +771,13 @@ function readSchemaExports(
 }
 
 /**
- * Collects HTTP method property assignments from `defineRoute` / `createRouteRoot`
- * route config object literals (same call shapes `project.ts` walks).
+ * Collects HTTP method property assignments from `createRouteRoot` route config
+ * object literals (same call shapes `project.ts` walks).
  *
  * @param ast - The source file to scan
  * @returns The property assignments found on matching route config objects
  */
-function defineRouteProperties(ast: ts.SourceFile): ts.PropertyAssignment[] {
+function routeConfigProperties(ast: ts.SourceFile): ts.PropertyAssignment[] {
 	const properties: ts.PropertyAssignment[] = [];
 
 	function collectFromConfig(config: ts.ObjectLiteralExpression): void {
@@ -790,10 +790,6 @@ function defineRouteProperties(ast: ts.SourceFile): ts.PropertyAssignment[] {
 
 	function isRouteConfigCall(node: ts.CallExpression): boolean {
 		const callee = unwrapExpression(node.expression);
-
-		if (callName(node.expression) === "defineRoute") {
-			return true;
-		}
 
 		// Inline `createRouteRoot("/path")({ ... })`
 		if (ts.isCallExpression(callee) && callName(callee.expression) === "createRouteRoot") {

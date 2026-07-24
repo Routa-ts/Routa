@@ -195,10 +195,6 @@ export type AnyRouteContract = {
 	run: (args: any) => unknown;
 };
 
-export type DefineRouteConfig = Partial<Record<HttpMethod, AnyRouteContract>> & {
-	middleware?: readonly AnyMiddlewareContract[];
-};
-
 export type ContextualRouteContract<TCtx> = RouteContract<
 	any,
 	any,
@@ -206,7 +202,7 @@ export type ContextualRouteContract<TCtx> = RouteContract<
 	readonly AnyMiddlewareContract[]
 >;
 
-export type DefineRouteConfigForCtx<TCtxByMethod extends Partial<Record<HttpMethod, unknown>>> = {
+export type RouteRootConfigForCtx<TCtxByMethod extends Partial<Record<HttpMethod, unknown>>> = {
 	middleware?: readonly AnyMiddlewareContract[];
 } & {
 	[K in HttpMethod]?: ContextualRouteContract<CtxForMethod<TCtxByMethod, K>>;
@@ -264,16 +260,6 @@ export function createRoute<
 }
 
 /**
- * Defines a route configuration.
- *
- * @param config - The route configuration to preserve.
- * @returns The provided route configuration.
- */
-export function defineRoute<const TConfig extends DefineRouteConfig>(config: TConfig): TConfig {
-	return config;
-}
-
-/**
  * Creates a route definition factory that binds route configs to an explicit
  * per-path context map.
  *
@@ -288,9 +274,9 @@ export function createRouteRootFactory<
 	TCtxByPath extends Record<string, Partial<Record<HttpMethod, unknown>>>,
 >() {
 	return function createRouteRoot<const TPath extends keyof TCtxByPath & string>(_path: TPath) {
-		return function defineRouteForPath<
-			const TConfig extends DefineRouteConfigForCtx<TCtxByPath[TPath]>,
-		>(config: TConfig): TConfig {
+		return function routeRoot<const TConfig extends RouteRootConfigForCtx<TCtxByPath[TPath]>>(
+			config: TConfig,
+		): TConfig {
 			return config;
 		};
 	};
@@ -305,8 +291,8 @@ export function createRouteRootFactory<
 export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPath & string>(
 	_path: TPath,
 ) {
-	return function defineRouteForPath<
-		const TConfig extends DefineRouteConfigForCtx<RegisteredRouteCtxByPath[TPath]>,
+	return function routeRoot<
+		const TConfig extends RouteRootConfigForCtx<RegisteredRouteCtxByPath[TPath]>,
 	>(config: TConfig): TConfig {
 		return config;
 	};

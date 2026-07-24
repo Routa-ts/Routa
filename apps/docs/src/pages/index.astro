@@ -102,7 +102,9 @@ import "../styles/landing.css";
 								<span>with Routa</span><span>contract</span>
 							</div>
 							<pre
-							><code><span class="kw">export default</span> <span class="fn">defineRoute</span>({"{"}
+							><code><span class="kw">const</span> route = <span class="fn">createRouteRoot</span>(<span class="str">"/users"</span>);
+
+<span class="kw">export default</span> route({"{"}
   post: <span class="fn">createRoute</span>({"{"}
     input: {"{"} body: CreateUserSchema {"}"},
     responses: {"{"}

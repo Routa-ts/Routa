@@ -28,7 +28,9 @@ Each `route.ts` file owns the methods for one path. Keeping all verbs for one pa
 ## Contract Before Handler
 
 ```ts
-export default defineRoute({
+const route = createRouteRoot("/users");
+
+export default route({
 	post: createRoute({
 		input: {
 			body: CreateUserSchema,

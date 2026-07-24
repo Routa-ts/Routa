@@ -12,7 +12,7 @@ Middleware in Routa is part of the route contract. Auth, permissions, tenant loa
 Middleware declares what context it requires and what context it provides. Route handlers receive typed `ctx` from the middleware chain.
 
 ```ts
-import { createMiddleware, createRoute, defineRoute } from "@routa-ts/core";
+import { createMiddleware, createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
 const withAuth = createMiddleware({
@@ -37,7 +37,9 @@ const withAuth = createMiddleware({
 	},
 });
 
-export default defineRoute({
+const route = createRouteRoot("/users/me");
+
+export default route({
 	get: createRoute({
 		middleware: [withAuth],
 		responses: {

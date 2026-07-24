@@ -547,10 +547,12 @@ paths:
  * @returns The TypeScript module text for `src/routes/status/route.ts`.
  */
 function statusRouteSource(): string {
-	return `import { createRoute, defineRoute } from "@routa-ts/core";
+	return `import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { GetStatusResponse } from "./schemas.js";
 
-export default defineRoute({
+const route = createRouteRoot("/status");
+
+export default route({
 \tget: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {

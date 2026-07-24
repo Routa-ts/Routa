@@ -93,9 +93,12 @@ const emptyRouteInputs: RouteMethodInputMetadata = {
 	cookies: false,
 	body: false,
 };
-const routeStubSource = `import { createRoute, defineRoute } from "@routa-ts/core";
+function routeStubSource(path: string): string {
+	return `import { createRoute, createRouteRoot } from "@routa-ts/core";
 
-export default defineRoute({
+const route = createRouteRoot(${JSON.stringify(path)});
+
+export default route({
 \tget: createRoute({
 \t\tresponses: {},
 \t\trun: () => {
@@ -104,6 +107,7 @@ export default defineRoute({
 \t}),
 });
 `;
+}
 
 /**
  * Validates a Routa project and optionally generates route metadata when validation succeeds.
@@ -650,7 +654,7 @@ export function stubEmptyRouteFiles(cwd = process.cwd()): string[] {
 			continue;
 		}
 
-		writeFileSync(file, routeStubSource);
+		writeFileSync(file, routeStubSource(routePathForFile(routesDir, file)));
 		written.push(relative(cwd, file));
 	}
 
@@ -898,20 +902,12 @@ function discoverRoutes(cwd: string, parser: ts.SourceFileParser): RouteDiscover
 
 	const routes = files.flatMap((file) => {
 		const relativeFile = relative(cwd, file);
-		const relativeRouteDir = relative(routesDir, dirname(file));
-		const directorySegments = relativeRouteDir === "" ? [] : relativeRouteDir.split(sep);
-		const rawSegments = [
-			...directorySegments,
-			...(basename(file) === "route.ts" ? [] : flatRouteSegments(basename(file))),
-		];
+		const rawSegments = rawRouteSegments(routesDir, file);
 		const groups = rawSegments.filter(
 			(segment) => segment.startsWith("(") && segment.endsWith(")"),
 		);
 		const segments = rawSegments.filter(
 			(segment) => !(segment.startsWith("(") && segment.endsWith(")")),
-		);
-		const pathSegments = segments.map((segment) =>
-			segment.startsWith("$") ? `:${segment.slice(1)}` : segment,
 		);
 		const inheritedMiddleware = middlewareChain(cwd, rawSegments, parser);
 		const routeFileMiddleware = parseRouteFileMiddleware(cwd, relativeFile, parser);
@@ -922,7 +918,7 @@ function discoverRoutes(cwd: string, parser: ts.SourceFileParser): RouteDiscover
 				[...middleware, ...items],
 			]),
 		);
-		const path = `/${pathSegments.join("/")}`.replace(/\/$/, "") || "/";
+		const path = routePathForFile(routesDir, file);
 		const parsed = parseRouteContract(file, parser);
 
 		if (!parsed.configFound) {
@@ -932,8 +928,7 @@ function discoverRoutes(cwd: string, parser: ts.SourceFileParser): RouteDiscover
 				message: `Route config in ${relativeFile} could not be resolved.`,
 				file: relativeFile,
 				routePath: path,
-				suggestion:
-					"Export `defineRoute({ ... })` directly, or `export default routeConfig` where `routeConfig` is initialized with `defineRoute({ ... })`.",
+				suggestion: `Export a route config created by createRouteRoot(${JSON.stringify(path)}).`,
 			});
 			return [];
 		}
@@ -1008,6 +1003,24 @@ function isRouteFile(file: string): boolean {
 
 function flatRouteSegments(file: string): string[] {
 	return file.slice(0, -".ts".length).split(".");
+}
+
+function rawRouteSegments(routesDir: string, file: string): string[] {
+	const relativeRouteDir = relative(routesDir, dirname(file));
+	const directorySegments = relativeRouteDir === "" ? [] : relativeRouteDir.split(sep);
+
+	return [
+		...directorySegments,
+		...(basename(file) === "route.ts" ? [] : flatRouteSegments(basename(file))),
+	];
+}
+
+function routePathForFile(routesDir: string, file: string): string {
+	const segments = rawRouteSegments(routesDir, file)
+		.filter((segment) => !(segment.startsWith("(") && segment.endsWith(")")))
+		.map((segment) => (segment.startsWith("$") ? `:${segment.slice(1)}` : segment));
+
+	return `/${segments.join("/")}`.replace(/\/$/, "") || "/";
 }
 
 /**
@@ -2312,7 +2325,7 @@ function routeConfigObject(sourceFile: ts.SourceFile): ts.ObjectLiteralExpressio
 		}
 
 		const expression = resolveExportedExpression(sourceFile, statement.expression);
-		return defineRouteObject(expression) ?? objectLiteral(expression);
+		return routeRootObject(sourceFile, expression);
 	}
 }
 
@@ -2337,14 +2350,28 @@ function resolveExportedExpression(
  * Finds the initializer for a local `const`/`let`/`var` binding in a source file.
  */
 /**
- * Extracts the route definition object from a `defineRoute(...)` call.
+ * Extracts the route configuration object from a `createRouteRoot(path)(...)` call.
  *
- * @returns The first argument as an object literal, if the expression is a `defineRoute` call.
+ * @returns The first argument as an object literal, if the expression is a `createRouteRoot` call.
  */
-function defineRouteObject(expression: ts.Expression): ts.ObjectLiteralExpression | undefined {
+function routeRootObject(
+	sourceFile: ts.SourceFile,
+	expression: ts.Expression,
+): ts.ObjectLiteralExpression | undefined {
 	const unwrapped = unwrapExpression(expression);
 
 	if (!ts.isCallExpression(unwrapped)) {
+		return;
+	}
+
+	const callee = unwrapExpression(unwrapped.expression);
+	const routeRootCall = ts.isIdentifier(callee)
+		? localInitializer(sourceFile, callee.text)
+		: ts.isCallExpression(callee)
+			? callee
+			: undefined;
+
+	if (!routeRootCall || callName(unwrapExpression(routeRootCall)) !== "createRouteRoot") {
 		return;
 	}
 

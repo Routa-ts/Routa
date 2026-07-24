@@ -13,10 +13,10 @@ pnpm add @routa-ts/core@0.1.2 hono@^4.12.27 zod@^4.4.3
 ## Usage
 
 ```ts
-import { createRoute, defineRoute } from "@routa-ts/core";
+import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
-export default defineRoute({
+export default createRouteRoot("/status")({
 	get: createRoute({
 		responses: {
 			success: {

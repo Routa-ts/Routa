@@ -26,7 +26,7 @@ Any service or dependency support in this document is optional wiring for applic
 
 - App services are declared in `defineRoutaConfig`.
 - App services are created during startup and are available to all middleware, routes, lifecycle hooks, and handlers.
-- Route-file services are declared in `defineRoute`.
+- Route-file services are declared in the config passed to `createRouteRoot(path)`.
 - Route-file services are request-time services created only for the matched route file.
 - Method services are declared in `createRoute`.
 - Method services are request-time services created only for the matched method.
@@ -47,7 +47,7 @@ export default defineRoutaConfig({
 Example route and method services:
 
 ```ts
-export default defineRoute({
+export default createRouteRoot("/auth/session")({
 	services: ({ app, logger }) => ({
 		authAudit: createAuthAuditService({ logger }),
 	}),
@@ -240,7 +240,7 @@ The registry powers:
 ### Generated Types
 
 - Routa should avoid generated type files by default in v1.
-- Routa should prefer local generic inference from `defineRoute`, `createRoute`, middleware, and config.
+- Routa should prefer local generic inference from `createRouteRoot(path)`, `createRoute`, middleware, and config.
 - A generated file such as `routa.gen.ts` should not be required for normal route authoring.
 - Routa must still provide generated or inferred response unions for route handlers. Application services may use those types by choice, but they are not generated or required by Routa.
 - Route response unions should be importable or inferable close to the route contract.
