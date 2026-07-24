@@ -30,7 +30,7 @@ This file consolidates the final decisions that close Group 1 of the REST backen
 
 Routa supports three levels of response authoring complexity.
 
-**Route files:** The snippets below use a single **`createRoute`** for clarity. In a real **resource route file**, each level is nested under **`defineRoute`**: flat **`get` / `post`** keys on the **collection** file, and **`params` + `methods`** on **dynamic** segments (`users/$id/`)—see **Routing** in `backend_framework_design.md`.
+**Route files:** The snippets below use a single **`createRoute`** for clarity. In a real **resource route file**, each method is a key in the config passed to **`createRouteRoot(path)`**. Collection files use paths such as `/users`; dynamic files use paths such as `/users/:id` and declare params in each method input—see **Routing** in `backend_framework_design.md`.
 
 ### Level 1: Simple
 
@@ -517,10 +517,10 @@ This section ties together **Level 3 (advanced)** response authoring, the **`{ t
 
 What this example illustrates:
 
-- **Parent + child segments**: **`routes/users/route.ts`** holds **collection** methods (**`post` create → `201`**, list **`get`**, …). **`routes/users/$id/route.ts`** is the **dynamic item** file only: **`defineRoute({ params, methods: { get, … } })`** so path params are shared—never a one-off `get.ts` per verb.
-- **Resource route file**: Each segment is one module; the item example below is `routes/users/$id/route.ts` using **`params` + `methods.get`**.
+- **Parent + child segments**: **`routes/users/route.ts`** holds **collection** methods (**`post` create → `201`**, list **`get`**, …). **`routes/users/$id/route.ts`** is the **dynamic item** file only: **`createRouteRoot("/users/:id")({ get, … })`**, with the params schema in each method input—never a one-off `get.ts` per verb.
+- **Resource route file**: Each segment is one module; the item example below is `routes/users/$id/route.ts` using the **`get`** key in its root config.
 - **Level 3**: `responses` entries declare explicit `status`, `schema`, and `content` adapters (`json()`, `csv()`, `text()`, `binaryFile()`, `problem()`), matching the advanced authoring rules earlier in this document.
-- **GET read contract**: Treat the handler as a `GET` for that resource (`GET` is a strict route-level read; no request body). The verb comes from **`methods.get`** inside **`defineRoute`** on the item file (for example `routes/users/$id/route.ts`), not from a `method` field on each `createRoute`.
+- **GET read contract**: Treat the handler as a `GET` for that resource (`GET` is a strict route-level read; no request body). The verb comes from the **`get`** key in the config passed to **`createRouteRoot("/users/:id")`**, not from a `method` field on each `createRoute`.
 - **Canonical payload**: `success` and `avatarDownload` both use **HTTP 200** but different variant discriminants (`type`), different canonical schemas, and different media types. Runtime keeps them distinct by `type`; OpenAPI merges them under a single **`200`** entry (see OpenAPI note below).
 - **Query-shaped outcomes**: A validated **query** flag (`format=avatar` vs default profile) drives whether application code loads **profile fields** or **avatar bytes**; the returned **`type`** is still `success` vs `avatarDownload` according to that intent.
 - **Application return type (optional)**: Application code can **`import` the response union Routa generates** for that route (name and import path are tooling details) and return **`Promise<ThatUnion>`**, using `{ type, data }` directly. **`run`** can then forward that result with no extra mapping. Other teams may prefer a **domain-only union** and a thin **`run`** that maps into `{ type, data }`; Routa allows both and does not generate or own application services.
@@ -540,88 +540,86 @@ const ProblemBaseExtensions = {
 	code: z.string(),
 };
 
-export default defineRoute({
-	params: z.object({
-		id: z.string(),
-	}),
-	methods: {
-		get: createRoute({
-			input: {
-				query: z.object({
-					// `GET ...?format=avatar` asks for the PNG avatar payload; omit or `profile` for the user row.
-					format: z.enum(["profile", "avatar"]).optional(),
+export default createRouteRoot("/users/:id")({
+	get: createRoute({
+		input: {
+			params: z.object({
+				id: z.string(),
+			}),
+			query: z.object({
+				// `GET ...?format=avatar` asks for the PNG avatar payload; omit or `profile` for the user row.
+				format: z.enum(["profile", "avatar"]).optional(),
+			}),
+		},
+
+		responses: {
+			success: {
+				status: 200,
+				schema: UserSchema,
+				content: {
+					"application/json": json(),
+					"text/csv": csv((user) =>
+						["id,name,email", `${user.id},${user.name},${user.email}`].join(
+							"\n",
+						),
+					),
+					"text/plain": text(
+						(user) => `${user.id} | ${user.name} | ${user.email}`,
+					),
+				},
+			},
+
+			avatarDownload: {
+				status: 200,
+				schema: z.object({
+					file: z.instanceof(Uint8Array),
+					filename: z.string(),
 				}),
+				content: {
+					"image/png": binaryFile({
+						body: "file",
+						filename: "filename",
+					}),
+				},
 			},
 
-			responses: {
-				success: {
-					status: 200,
-					schema: UserSchema,
-					content: {
-						"application/json": json(),
-						"text/csv": csv((user) =>
-							["id,name,email", `${user.id},${user.name},${user.email}`].join(
-								"\n",
-							),
-						),
-						"text/plain": text(
-							(user) => `${user.id} | ${user.name} | ${user.email}`,
-						),
-					},
-				},
-
-				avatarDownload: {
-					status: 200,
-					schema: z.object({
-						file: z.instanceof(Uint8Array),
-						filename: z.string(),
-					}),
-					content: {
-						"image/png": binaryFile({
-							body: "file",
-							filename: "filename",
-						}),
-					},
-				},
-
-				userNotFound: {
+			userNotFound: {
+				status: 404,
+				schema: problem({
+					title: "User not found",
 					status: 404,
-					schema: problem({
-						title: "User not found",
-						status: 404,
-						extensions: {
-							...ProblemBaseExtensions,
-							userId: z.string(),
-						},
-					}),
-					content: {
-						"application/problem+json": json(),
+					extensions: {
+						...ProblemBaseExtensions,
+						userId: z.string(),
 					},
+				}),
+				content: {
+					"application/problem+json": json(),
 				},
+			},
 
-				emailConflict: {
+			emailConflict: {
+				status: 409,
+				schema: problem({
+					title: "Email already exists",
 					status: 409,
-					schema: problem({
-						title: "Email already exists",
-						status: 409,
-						extensions: {
-							...ProblemBaseExtensions,
-							email: z.string().email(),
-						},
-					}),
-					content: {
-						"application/problem+json": json(),
+					extensions: {
+						...ProblemBaseExtensions,
+						email: z.string().email(),
 					},
+				}),
+				content: {
+					"application/problem+json": json(),
 				},
 			},
+		},
 
-			run: async ({ params, input }) => {
-				return loadUserProfile(params.id, {
-					wantAvatar: input.query.format === "avatar",
-				});
-			},
-		}),
-	},
+		run: async ({ input }) => {
+			return loadUserProfile(input.params.id, {
+				wantAvatar: input.query.format === "avatar",
+			});
+		},
+	}),
 });
 ```
 
@@ -672,7 +670,7 @@ type RouteResponse =
 
 ### Service example (import the generated response union)
 
-Here application code **imports** the framework-generated union (this document calls it `RouteResponse`; Routa may emit `GetUserProfileResponse`, `typeof route.$inferResponse`, or another stable alias). That code returns **`Promise<RouteResponse>`** using **`{ type, data }`** so it stays aligned with the route contract. **`run`** forwards **validated** segment **`params`** (from **`defineRoute`**) and **`input.query`** into the application code. For problem-style errors, **`data`** omits **HTTP `status`**; Routa fills status (and any defaults from `problem(...)`) from the **`responses`** entry when building the wire response.
+Here application code **imports** the framework-generated union (this document calls it `RouteResponse`; Routa may emit `GetUserProfileResponse`, `typeof route.$inferResponse`, or another stable alias). That code returns **`Promise<RouteResponse>`** using **`{ type, data }`** so it stays aligned with the route contract. **`run`** forwards validated **`input.params`** and **`input.query`** into the application code. For problem-style errors, **`data`** omits **HTTP `status`**; Routa fills status (and any defaults from `problem(...)`) from the **`responses`** entry when building the wire response.
 
 ```ts
 // Illustrative: Routa emits an importable type for this route’s responses.

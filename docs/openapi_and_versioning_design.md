@@ -22,7 +22,7 @@ This document records decisions for Group 3 in small parts.
   - `scaffold`
   - `check`
   - `diff`
-- `defineRoute` is the main route authoring surface for OpenAPI-relevant contract data.
+- `createRouteRoot(path)(config)` is the main route authoring surface for OpenAPI-relevant contract data.
 - Schema-level OpenAPI metadata from Zod `.openapi(...)` is first-class.
 - Users should not need to declare the same contract information in multiple places.
 

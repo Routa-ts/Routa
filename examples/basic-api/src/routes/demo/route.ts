@@ -1,7 +1,9 @@
-import { createRoute, defineRoute } from "@routa-ts/core";
+import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
-export default defineRoute({
+const route = createRouteRoot("/demo");
+
+export default route({
 	get: createRoute({
 		responses: {
 			success: {

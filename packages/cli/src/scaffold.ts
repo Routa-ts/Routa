@@ -280,11 +280,14 @@ export function scaffoldOpenApi(
 		}
 
 		const imports = formatNamedImport(Array.from(routeImports).sort());
-		const routeSource = `${generatedHeader(source)}import { createRoute, defineRoute } from "@routa-ts/core";
+		const routePath = openApiPath.replaceAll(/\{([^}]+)\}/g, ":$1");
+		const routeSource = `${generatedHeader(source)}import { createRoute, createRouteRoot } from "@routa-ts/core";
 import type { z } from "zod";
 ${imports}
 
-export default defineRoute({
+const route = createRouteRoot(${JSON.stringify(routePath)});
+
+export default route({
 ${methodBlocks.join(",\n")},
 });
 `;
@@ -301,7 +304,7 @@ ${Array.from(schemaExports.entries())
 		generatedContent.set(relative(cwd, schemaFile), schemaSource);
 		routes.push({
 			file: relative(cwd, routeFile),
-			path: openApiPath.replaceAll(/\{([^}]+)\}/g, ":$1"),
+			path: routePath,
 			methods: operations.map(([method]) => method.toUpperCase()),
 			operationIds,
 			middleware: [],

@@ -1,4 +1,4 @@
-import { createRoute, defineRoute } from "@routa-ts/core";
+import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
 /**
@@ -7,7 +7,9 @@ import { z } from "zod";
  * This endpoint is deliberately deprecated so the example exercises generated
  * OpenAPI deprecation metadata and lifecycle response headers.
  */
-export default defineRoute({
+const route = createRouteRoot("/legacy");
+
+export default route({
 	get: createRoute({
 		deprecation: {
 			sunset: "2027-01-01",

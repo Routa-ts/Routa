@@ -85,7 +85,7 @@ Routa's public API should prefer direct, specific imports over one large namespa
 Examples:
 
 ```ts
-import { defineRoute, createRoute } from "@routa-ts/core";
+import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { Fields, Sort } from "@routa-ts/core/query/helpers";
 import { requireAuth } from "../middleware/auth.js"; // app-owned guard
 ```
@@ -94,7 +94,7 @@ import { requireAuth } from "../middleware/auth.js"; // app-owned guard
 
 ## Routing
 
-Routa maps folders to URL segments. A **route file** exports **`defineRoute`**, which attaches **one path** (or one parameterized path) to **several HTTP verbs**, each described by a **`createRoute`** call. Shared params, middleware, tags, and schemas for that path live in **one place**, which scales better than splitting every verb into `get.ts`, `patch.ts`, and so on.
+Routa maps folders to URL segments. A **route file** calls **`createRouteRoot(path)`** and exports the resulting route configuration, attaching one filesystem-derived path to several HTTP verbs. Each verb is described by a **`createRoute`** call. Shared middleware, tags, and schemas for that path live in one place, which scales better than splitting every verb into `get.ts`, `patch.ts`, and so on.
 
 ### File structure
 
@@ -126,12 +126,12 @@ routes/users.$id.ts
 
 Future flat route support should resolve into the same route graph as directory routes. Mixed directory and flat routes should be allowed in one project without a style config, but conflicting route ownership must fail build/check. For example, `routes/users/route.ts` and `routes/users.ts` both resolve to `/users`, so Routa must report a duplicate route conflict instead of choosing one silently.
 
-### `defineRoute` shape
+### `createRouteRoot(path)(config)` shape
 
 **Collection segment** (verbs on the folder’s path only):
 
 ```ts
-export default defineRoute({
+export default createRouteRoot("/users")({
 	get: createRoute({
 		/* list users */
 	}),
@@ -141,28 +141,28 @@ export default defineRoute({
 });
 ```
 
-**Item segment** (path params shared by every method in the file):
+**Item segment** (the explicit path must match the dynamic filesystem segment):
 
 ```ts
-export default defineRoute({
-	params: ParamsSchema,
-	methods: {
-		get: createRoute({
-			/* fetch one */
-		}),
-		patch: createRoute({
-			/* partial update */
-		}),
-		delete: createRoute({
-			/* remove */
-		}),
-	},
+export default createRouteRoot("/users/:id")({
+	get: createRoute({
+		input: { params: ParamsSchema },
+		/* fetch one */
+	}),
+	patch: createRoute({
+		input: { params: ParamsSchema },
+		/* partial update */
+	}),
+	delete: createRoute({
+		input: { params: ParamsSchema },
+		/* remove */
+	}),
 });
 ```
 
-The HTTP verb for each handler comes from the key (`get`, `post`, `methods.patch`, …). Individual `createRoute` values do not repeat a `method` field.
+The HTTP verb for each handler comes from the key (`get`, `post`, `patch`, …). Individual `createRoute` values do not repeat a `method` field.
 
-**Dynamic segments (`…/$id/`):** Always use **`params` + `methods`** on that file so every method on the item shares the same path param typing. Do not use a lone `get: createRoute({ input: { params } })` at the root of `defineRoute` for `$id` routes—lift **`params`** to `defineRoute` and nest verbs under **`methods`** (see `http_contract_group1_wrapup.md` consolidated example).
+**Dynamic segments (`…/$id/`):** Pass the corresponding URL form (`/users/:id`) to `createRouteRoot`. Declare the validation schema in each method that consumes the path params. Routa checks the root path against generated route metadata and binds the method to its resolved middleware context type.
 
 ### Rules
 
@@ -175,7 +175,7 @@ The HTTP verb for each handler comes from the key (`get`, `post`, `methods.patch
 ## Route Definition
 
 ```ts
-export default defineRoute({
+export default createRouteRoot("/users")({
 	post: createRoute({
 		middleware: [requireAuth],
 

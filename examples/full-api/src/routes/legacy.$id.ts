@@ -1,8 +1,10 @@
-import { createRoute, defineRoute } from "@routa-ts/core";
+import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
 // Flat dynamic route file: `legacy.$id.ts` maps to `/legacy/:id`.
-export default defineRoute({
+const route = createRouteRoot("/legacy/:id");
+
+export default route({
 	get: createRoute({
 		input: {
 			params: z.object({ id: z.string() }),

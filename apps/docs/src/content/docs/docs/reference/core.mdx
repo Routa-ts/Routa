@@ -16,10 +16,12 @@ pnpm add @routa-ts/core hono zod
 ## Basic Usage
 
 ```ts
-import { createRoute, defineRoute } from "@routa-ts/core";
+import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
-export default defineRoute({
+const route = createRouteRoot("/status");
+
+export default route({
 	get: createRoute({
 		responses: {
 			success: {
@@ -45,10 +47,9 @@ Business logic remains application-owned. Routa owns the HTTP boundary.
 ## Main APIs
 
 - `createRouta(config)`: preserves the app runtime configuration.
-- `defineRoute(config)`: defines methods and route-file middleware for one route file.
 - `createRoute(contract)`: preserves a method contract with typed input, responses, middleware, and handler output.
 - `createMiddleware(contract)`: defines middleware requirements, provided context, rejects, and runtime behavior.
-- `createRouteRoot(path)`: binds a route file to generated route context types.
+- `createRouteRoot(path)`: returns a path-bound `route(config)` helper that binds each method to its generated context type.
 - `createHonoApp(routes, options)`: creates the Hono runtime app from generated route metadata.
 
 <Aside type="note" title="Generated types">

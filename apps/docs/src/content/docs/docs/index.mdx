@@ -65,7 +65,9 @@ src/routes/users/$id/route.ts
 Each method is declared as a route contract:
 
 ```ts
-export default defineRoute({
+const route = createRouteRoot("/users");
+
+export default route({
 	post: createRoute({
 		input: {
 			body: CreateUserSchema,

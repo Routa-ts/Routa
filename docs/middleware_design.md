@@ -234,7 +234,7 @@ type → status → schema → OpenAPI
 Final route responses include:
 
 ```
-each method’s createRoute.responses (within defineRoute)
+each method’s createRoute.responses (within createRouteRoot(path)(config))
 + middleware.rejects (all levels)
 + global errors
 ```
@@ -347,27 +347,25 @@ export const routeTree = {
 
 ## Route-file Middleware
 
-A **`defineRoute`** export can attach middleware shared by every method in that route file. This is useful for resource loading or route-level guards that apply to all verbs on the same path.
+A **`createRouteRoot(path)(config)`** export can attach middleware shared by every method in that route file. This is useful for resource loading or route-level guards that apply to all verbs on the same path.
 
 ```ts
-export default defineRoute({
+export default createRouteRoot("/users/:userId")({
 	middleware: [loadUserResource()],
 
-	params: UserParams,
-
-	methods: {
-		get: createRoute({
-			run: async ({ ctx }) => {
-				ctx.state.userResource;
-			},
-		}),
-		patch: createRoute({
-			middleware: [requirePermission("users.update")],
-			run: async ({ ctx }) => {
-				ctx.state.userResource;
-			},
-		}),
-	},
+	get: createRoute({
+		input: { params: UserParams },
+		run: async ({ ctx }) => {
+			ctx.state.userResource;
+		},
+	}),
+	patch: createRoute({
+		input: { params: UserParams },
+		middleware: [requirePermission("users.update")],
+		run: async ({ ctx }) => {
+			ctx.state.userResource;
+		},
+	}),
 });
 ```
 
@@ -377,10 +375,10 @@ In this example, `loadUserResource()` runs for both `get` and `patch`. The `patc
 
 ## Method-level middleware
 
-A specific **`createRoute`** (one HTTP method on a path) can attach middleware; siblings on the same **`defineRoute`** export are unaffected unless they share file-level middleware.
+A specific **`createRoute`** (one HTTP method on a path) can attach middleware; siblings in the same **`createRouteRoot(path)(config)`** export are unaffected unless they share file-level middleware.
 
 ```ts
-export default defineRoute({
+export default createRouteRoot("/users")({
 	post: createRoute({
 		middleware: [requirePermission("users.create")],
 		// …`input`, `responses`, etc.

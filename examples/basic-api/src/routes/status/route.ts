@@ -2,11 +2,13 @@
 // Safe to edit, but regeneration may update this file after preview.
 // Source: openapi.yaml
 
-import { createRoute, defineRoute } from "@routa-ts/core";
+import { createRoute, createRouteRoot } from "@routa-ts/core";
 import type { z } from "zod";
 import { GetStatusResponse } from "./schemas.js";
 
-export default defineRoute({
+const route = createRouteRoot("/status");
+
+export default route({
 	get: createRoute({
 		responses: {
 			success: {

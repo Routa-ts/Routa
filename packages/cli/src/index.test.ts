@@ -141,7 +141,13 @@ export const requireAuth = createMiddleware({
 });
 `,
 		);
-		writeFileSync(join(cwd, "src/routes/(private)/users/route.ts"), "export default {};\n");
+		writeFileSync(
+			join(cwd, "src/routes/(private)/users/route.ts"),
+			`import { createRouteRoot } from "@routa-ts/core";
+
+export default createRouteRoot("/users")({});
+`,
+		);
 
 		const result = run(["generate"], { cwd });
 
@@ -166,9 +172,11 @@ export const requireAuth = createMiddleware({
 		mkdirSync(join(cwd, "src/routes/users"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/users/route.ts"),
-			`const userId: string = 1;
+			`import { createRouteRoot } from "@routa-ts/core";
 
-export default {};
+const userId: string = 1;
+
+export default createRouteRoot("/users")({});
 `,
 		);
 
@@ -202,10 +210,10 @@ export const withProjectPermissions = createMiddleware({
 		);
 		writeFileSync(
 			join(cwd, "src/routes/status/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
-export default defineRoute({
+export default createRouteRoot("/status")({
 \tget: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {
@@ -246,13 +254,13 @@ export const requireAuth = createMiddleware({
 		);
 		writeFileSync(
 			join(cwd, "src/routes/(private)/users/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 
 const requirePermission = createMiddleware({
 \trequires: ["user"],
 });
 
-export default defineRoute({
+export default createRouteRoot("/users")({
 \tmiddleware: [requirePermission],
 });
 `,
@@ -271,7 +279,7 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/users"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/users/route.ts"),
-			`import { createMiddleware, createRoute, defineRoute } from "@routa-ts/core";
+			`import { createMiddleware, createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
 const loadUserResource = createMiddleware({
@@ -282,7 +290,7 @@ const loadUserResource = createMiddleware({
 
 const commonMiddleware = [loadUserResource];
 
-export default defineRoute({
+export default createRouteRoot("/users")({
 \tmiddleware: [...commonMiddleware],
 \tget: createRoute({
 \t\tresponses: {
@@ -310,7 +318,7 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/users"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/users/route.ts"),
-			`import { createMiddleware, createRoute, defineRoute } from "@routa-ts/core";
+			`import { createMiddleware, createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
 const requireAuth = createMiddleware({
@@ -325,7 +333,7 @@ const requireAuth = createMiddleware({
 \t},
 });
 
-export default defineRoute({
+export default createRouteRoot("/users")({
 \tmiddleware: [requireAuth],
 \tget: createRoute({
 \t\tresponses: {
@@ -364,7 +372,7 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/users/$id"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/users/$id/route.ts"),
-			`import { createMiddleware, createRoute, defineRoute } from "@routa-ts/core";
+			`import { createMiddleware, createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
 const loadUserResource = createMiddleware({
@@ -380,7 +388,7 @@ const requirePermission = createMiddleware({
 \t},
 });
 
-export default defineRoute({
+export default createRouteRoot("/users/:id")({
 \tmiddleware: [loadUserResource],
 \tpatch: createRoute({
 \t\tmiddleware: [requirePermission],
@@ -413,7 +421,7 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/users/$id"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/users/$id/route.ts"),
-			`import { createMiddleware, createRoute, defineRoute } from "@routa-ts/core";
+			`import { createMiddleware, createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
 const loadUserResource = createMiddleware({
@@ -429,7 +437,7 @@ const requirePermission = createMiddleware({
 \t},
 });
 
-export default defineRoute({
+export default createRouteRoot("/users/:id")({
 \tpatch: createRoute({
 \t\tmiddleware: [requirePermission],
 \t\tresponses: {
@@ -460,7 +468,7 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/users"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/users/route.ts"),
-			`import { createMiddleware, createRoute, defineRoute } from "@routa-ts/core";
+			`import { createMiddleware, createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
 const loadUserResource = createMiddleware({
@@ -476,7 +484,7 @@ const requirePermission = createMiddleware({
 \t},
 });
 
-export default defineRoute({
+export default createRouteRoot("/users")({
 \tget: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {
@@ -618,7 +626,7 @@ export const withSession = createMiddleware({
 		);
 		writeFileSync(
 			join(cwd, "src/routes/(private)/users/route.ts"),
-			`import { createMiddleware, createRoute, defineRoute } from "@routa-ts/core";
+			`import { createMiddleware, createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
 const requireAuth = createMiddleware({
@@ -634,7 +642,7 @@ const requireAuth = createMiddleware({
 \t},
 });
 
-export default defineRoute({
+export default createRouteRoot("/users")({
 \tget: createRoute({
 \t\tmiddleware: [requireAuth],
 \t\tinput: {
@@ -683,10 +691,10 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/status/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
-export default defineRoute({
+export default createRouteRoot("/status")({
 \tget: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {
@@ -728,9 +736,9 @@ export default defineRoute({
 		);
 		writeFileSync(
 			join(cwd, "src/routes/users/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 
-export default defineRoute({
+export default createRouteRoot("/users")({
 \tget: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {
@@ -801,13 +809,13 @@ export const withTenant = createMiddleware({
 		);
 		writeFileSync(
 			join(cwd, "src/routes/users/route.ts"),
-			`import { createMiddleware, defineRoute } from "@routa-ts/core";
+			`import { createMiddleware, createRouteRoot } from "@routa-ts/core";
 
 const requireTenant = createMiddleware({
 \trequires: ["tenant"],
 });
 
-export default defineRoute({
+export default createRouteRoot("/users")({
 \tmiddleware: [requireTenant],
 });
 `,
@@ -952,10 +960,10 @@ export default route({
 		mkdirSync(join(cwd, "src/routes/search"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/search/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
-export default defineRoute({
+export default createRouteRoot("/search")({
 \tget: createRoute({
 \t\tinput: {
 \t\t\tquery: z.object({
@@ -994,8 +1002,12 @@ export default defineRoute({
 		createTypeScriptProject(cwd);
 		mkdirSync(join(cwd, "src/routes/users"), { recursive: true });
 		mkdirSync(join(cwd, "src/routes/(admin)/users"), { recursive: true });
-		writeFileSync(join(cwd, "src/routes/users/route.ts"), "export default {};\n");
-		writeFileSync(join(cwd, "src/routes/(admin)/users/route.ts"), "export default {};\n");
+		const routeSource = `import { createRouteRoot } from "@routa-ts/core";
+
+export default createRouteRoot("/users")({});
+`;
+		writeFileSync(join(cwd, "src/routes/users/route.ts"), routeSource);
+		writeFileSync(join(cwd, "src/routes/(admin)/users/route.ts"), routeSource);
 
 		const result = run(["build"], { cwd });
 
@@ -1010,10 +1022,10 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/status/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
-export default defineRoute({
+export default createRouteRoot("/status")({
 \tget: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {
@@ -1049,10 +1061,10 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/status/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
-export default defineRoute({
+export default createRouteRoot("/status")({
 \tget: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {
@@ -1085,10 +1097,10 @@ export const GetStatusResponse = z.object({ ok: z.boolean() });
 		);
 		writeFileSync(
 			join(cwd, "src/routes/status/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { GetStatusResponse } from "./schemas.js";
 
-export default defineRoute({
+export default createRouteRoot("/status")({
 \tget: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {
@@ -1120,16 +1132,35 @@ export default defineRoute({
 	it("stubs empty route files without overwriting user code", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-route-stub-"));
 		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/(private)/users/$userId"), { recursive: true });
 		mkdirSync(join(cwd, "src/routes/users"), { recursive: true });
 		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
+		writeFileSync(join(cwd, "src/routes/(private)/users/$userId/route.ts"), "");
+		writeFileSync(join(cwd, "src/routes/tasks.$taskId.ts"), "");
 		writeFileSync(join(cwd, "src/routes/users/route.ts"), "");
 		writeFileSync(join(cwd, "src/routes/status/route.ts"), "export default {};\n");
 
 		const written = stubEmptyRouteFiles(cwd);
 
-		expect(written).toEqual(["src/routes/users/route.ts"]);
+		expect(written).toHaveLength(3);
+		expect(written).toEqual(
+			expect.arrayContaining([
+				"src/routes/(private)/users/$userId/route.ts",
+				"src/routes/tasks.$taskId.ts",
+				"src/routes/users/route.ts",
+			]),
+		);
 		expect(readFileSync(join(cwd, "src/routes/users/route.ts"), "utf8")).toContain(
-			'import { createRoute, defineRoute } from "@routa-ts/core";',
+			'import { createRoute, createRouteRoot } from "@routa-ts/core";',
+		);
+		expect(readFileSync(join(cwd, "src/routes/users/route.ts"), "utf8")).toContain(
+			'const route = createRouteRoot("/users");',
+		);
+		expect(
+			readFileSync(join(cwd, "src/routes/(private)/users/$userId/route.ts"), "utf8"),
+		).toContain('const route = createRouteRoot("/users/:userId");');
+		expect(readFileSync(join(cwd, "src/routes/tasks.$taskId.ts"), "utf8")).toContain(
+			'const route = createRouteRoot("/tasks/:taskId");',
 		);
 		expect(readFileSync(join(cwd, "src/routes/users/route.ts"), "utf8")).toContain("responses: {}");
 		expect(readFileSync(join(cwd, "src/routes/status/route.ts"), "utf8")).toBe(
@@ -1158,9 +1189,9 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/users"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/users/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 
-export default defineRoute({
+export default createRouteRoot("/users")({
 \tget: createRoute({
 \t\tresponses: {},
 \t\trun: async () => ({ type: "success", data: null }),
@@ -1182,9 +1213,9 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/users"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/users/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 
-export default defineRoute({
+export default createRouteRoot("/users")({
 \tdelete: createRoute({
 \t\tresponses: {},
 \t\trun: async () => ({ type: "success", data: null }),
@@ -1206,10 +1237,10 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/users"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/users/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
-export default defineRoute({
+export default createRouteRoot("/users")({
 \tdelete: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {
@@ -1237,10 +1268,10 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/users"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/users/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
-export default defineRoute({
+export default createRouteRoot("/users")({
 \tget: createRoute({
 \t\tinput: {
 \t\t\theaders: z.object({ authorization: z.string() }),
@@ -1272,10 +1303,10 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/status/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
-export default defineRoute({
+export default createRouteRoot("/status")({
 \tget: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {
@@ -1301,10 +1332,10 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/status/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
-export default defineRoute({
+export default createRouteRoot("/status")({
 \tget: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {
@@ -1330,10 +1361,10 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/status/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
-export default defineRoute({
+export default createRouteRoot("/status")({
 \tget: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {
@@ -1361,10 +1392,10 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/status/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
-const route = defineRoute({
+const route = createRouteRoot("/status")({
 \tget: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {
@@ -1403,11 +1434,36 @@ export default route;
 		expect(result.stderr).toContain("ROUTA_ROUTE_CONFIG_UNRESOLVED");
 	});
 
+	it("rejects legacy route config helpers", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-legacy-route-config-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/status/route.ts"),
+			`const legacyRoute = (config: unknown) => config;
+
+export default legacyRoute({});
+`,
+		);
+
+		const result = run(["check"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("ROUTA_ROUTE_CONFIG_UNRESOLVED");
+		expect(result.stderr).toContain('createRouteRoot("/status")');
+	});
+
 	it("reports duplicate schema exports with Routa diagnostics", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-duplicate-schema-"));
 		createTypeScriptProject(cwd);
 		mkdirSync(join(cwd, "src/routes/users"), { recursive: true });
-		writeFileSync(join(cwd, "src/routes/users/route.ts"), "export default {};\n");
+		writeFileSync(
+			join(cwd, "src/routes/users/route.ts"),
+			`import { createRouteRoot } from "@routa-ts/core";
+
+export default createRouteRoot("/users")({});
+`,
+		);
 		writeFileSync(
 			join(cwd, "src/routes/users/schemas.ts"),
 			`export const UserResponse = {};
@@ -2168,10 +2224,10 @@ paths:
 		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/status/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
-export default defineRoute({
+export default createRouteRoot("/status")({
 \tget: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {
@@ -2198,10 +2254,10 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/status/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
-export default defineRoute({
+export default createRouteRoot("/status")({
 \tget: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {
@@ -2235,10 +2291,10 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/status/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
-export default defineRoute({
+export default createRouteRoot("/status")({
 \tget: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {
@@ -3019,11 +3075,11 @@ paths:
 		run(["scaffold", "openapi.yaml"], { cwd });
 		writeFileSync(
 			join(cwd, "src/routes/users/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import type { z } from "zod";
 import { ListUsersResponse } from "./schemas.js";
 
-export default defineRoute({
+export default createRouteRoot("/users")({
 \tget: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {
@@ -3051,11 +3107,11 @@ export default defineRoute({
 		run(["scaffold", "openapi.yaml"], { cwd });
 		writeFileSync(
 			join(cwd, "src/routes/users/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 import { CreateUserBody, CreateUserResponse, ListUsersResponse } from "./schemas.js";
 
-export default defineRoute({
+export default createRouteRoot("/users")({
 \tget: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {
@@ -3107,9 +3163,9 @@ export default defineRoute({
 		run(["scaffold", "openapi.yaml"], { cwd });
 		writeFileSync(
 			join(cwd, "src/routes/users/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 
-export default defineRoute({
+export default createRouteRoot("/users")({
 \tget: createRoute({
 \t\tresponses: {},
 \t\trun: async () => ({ type: "success", data: null }),
@@ -3130,10 +3186,10 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/users/$id"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/users/$id/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
-export default defineRoute({
+export default createRouteRoot("/users/:id")({
 \tpatch: createRoute({
 \t\tinput: {
 \t\t\tparams: z.object({ id: z.string() }),
@@ -3198,10 +3254,10 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes/users/$id"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/users/$id/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
-export default defineRoute({
+export default createRouteRoot("/users/:id")({
 \tdelete: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {
@@ -3255,10 +3311,10 @@ export default defineRoute({
 		run(["scaffold", "openapi.yaml"], { cwd });
 		writeFileSync(
 			join(cwd, "src/routes/users/route.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { ListUsersResponse } from "./schemas.js";
 
-export default defineRoute({
+export default createRouteRoot("/users")({
 \tget: createRoute({
 \t\tresponses: {
 \t\t\tsuccess: {
@@ -3286,14 +3342,14 @@ export default defineRoute({
 		mkdirSync(join(cwd, "src/routes"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/users.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
-export default defineRoute({ get: createRoute({ responses: {}, run: () => ({ type: "success", data: null }) }) });
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
+export default createRouteRoot("/users")({ get: createRoute({ responses: {}, run: () => ({ type: "success", data: null }) }) });
 `,
 		);
 		writeFileSync(
 			join(cwd, "src/routes/tasks.$id.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
-export default defineRoute({ get: createRoute({ responses: {}, run: () => ({ type: "success", data: null }) }) });
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
+export default createRouteRoot("/tasks/:id")({ get: createRoute({ responses: {}, run: () => ({ type: "success", data: null }) }) });
 `,
 		);
 
@@ -3356,8 +3412,8 @@ paths:
 			route,
 			readFileSync(route, "utf8")
 				.replace(
-					'import { createRoute, defineRoute } from "@routa-ts/core";',
-					'import { createMiddleware, createRoute, defineRoute } from "@routa-ts/core";\n\nconst requireAuth = createMiddleware({ openapi: { security: [{ bearerAuth: [] }], permissions: ["users.read"] } });',
+					'import { createRoute, createRouteRoot } from "@routa-ts/core";',
+					'import { createMiddleware, createRoute, createRouteRoot } from "@routa-ts/core";\n\nconst requireAuth = createMiddleware({ openapi: { security: [{ bearerAuth: [] }], permissions: ["users.read"] } });',
 				)
 				.replace("get: createRoute({", "get: createRoute({\n\t\tmiddleware: [requireAuth],"),
 		);
@@ -3394,14 +3450,14 @@ paths:
 		mkdirSync(join(cwd, "src/routes"), { recursive: true });
 		writeFileSync(
 			join(cwd, "src/routes/status.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
-export default defineRoute({ get: createRoute({ responses: {}, run: () => ({ type: "success", data: null }) }) });
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
+export default createRouteRoot("/status")({ get: createRoute({ responses: {}, run: () => ({ type: "success", data: null }) }) });
 `,
 		);
 		writeFileSync(
 			join(cwd, "src/routes/legacy.ts"),
-			`import { createRoute, defineRoute } from "@routa-ts/core";
-export default defineRoute({ get: createRoute({ deprecation: { replacement: "/missing" }, responses: {}, run: () => ({ type: "success", data: null }) }) });
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
+export default createRouteRoot("/legacy")({ get: createRoute({ deprecation: { replacement: "/missing" }, responses: {}, run: () => ({ type: "success", data: null }) }) });
 `,
 		);
 

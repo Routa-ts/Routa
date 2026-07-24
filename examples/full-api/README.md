@@ -28,7 +28,7 @@ pnpm dev
 | `Fields()` / `Sort()` query helpers (whitespace-trimmed fields)             | list projects query                                             |
 | Bodyless `DELETE` → **204**                                                 | `DELETE /tenants/:tenantId/projects/:projectId`                 |
 | Headers + cookies inputs                                                    | `x-request-id`, `session` cookie                                |
-| Hand-written `defineRoute` + Accept `*+json`                                | `GET /demo`                                                     |
+| Hand-written `createRouteRoot("/demo")` + Accept `*+json`                      | `GET /demo`                                                     |
 | OpenAPI scaffold + baseline drift check                                     | `openapi.yaml`, `pnpm openapi:check`                            |
 | Breaking-change checks for required inputs and tighter auth                 | `pnpm openapi:breaking`                                         |
 | OpenAPI security + permission visibility                                    | `requireAuth`, `withAdmin`, `withProjectPermissions` middleware |

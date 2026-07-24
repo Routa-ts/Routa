@@ -106,9 +106,12 @@ Example shape:
 // Safe to edit, but regeneration may update this file after preview.
 // Source: openapi.yaml
 
-import { defineRoute, createRoute } from "@routa-ts/core";
+import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { ListUsersQuery, UserListResponse } from "./schemas";
-export default defineRoute({
+
+const route = createRouteRoot("/users");
+
+export default route({
 	get: createRoute({
 		input: {
 			query: ListUsersQuery,

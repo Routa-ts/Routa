@@ -152,7 +152,7 @@ Rules:
 - Middleware declares `requires`, `provides`, `rejects`, and the HTTP `input` it reads.
 - Middleware-provided ctx belongs to the resolved route, not to one global application ctx.
 - Routa should avoid a giant `AppCtx` that gives every route fields provided only by protected or admin middleware.
-- Route-file middleware on `defineRoute` applies to every method in that route file.
+- Route-file middleware in `createRouteRoot(path)(config)` applies to every method in that route file.
 - Per-method middleware on `createRoute` applies only to that HTTP method and runs after route-file middleware.
 
 Middleware conventions:

@@ -38,7 +38,7 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 							<span>src/routes/users/route.ts</span><span>filesystem</span>
 						</div>
 						<pre
-						><code><span class="kw">export default</span> <span class="fn">defineRoute</span>({"{"}
+						><code><span class="kw">export default</span> <span class="fn">createRouteRoot</span>(<span class="str">"/users"</span>)({"{"}
   post: <span class="fn">createRoute</span>({"{"}
     input: {"{"} body: CreateUserSchema {"}"},
     responses: {"{"}

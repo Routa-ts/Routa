@@ -13,7 +13,7 @@ src/routes/users/$userId/route.ts
 Define the route contract before the handler:
 
 ```ts
-import { createRoute, defineRoute } from "@routa-ts/core";
+import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
 const UserSchema = z.object({
@@ -21,7 +21,9 @@ const UserSchema = z.object({
 	name: z.string(),
 });
 
-export default defineRoute({
+const route = createRouteRoot("/users");
+
+export default route({
 	get: createRoute({
 		responses: {
 			success: {

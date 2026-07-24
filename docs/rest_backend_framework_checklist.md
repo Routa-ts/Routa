@@ -155,7 +155,7 @@ Use this checklist to mark what the framework already covers and identify what i
 ## Framework Architecture
 
 - [x] Simple route declaration
-- [x] Resource route files (`defineRoute` with per-method `createRoute` per URL segment)
+- [x] Resource route files (`createRouteRoot(path)` with per-method `createRoute` per URL segment)
 - [x] Typed handlers
 - [x] Schema integration
 - [x] Middleware composition

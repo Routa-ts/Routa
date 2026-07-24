@@ -81,11 +81,11 @@ expected:
 
 ```yaml
 case: v0_route_file_middleware_runs_before_method_middleware
-intent: defineRoute middleware applies to all methods before createRoute middleware
+intent: route-file middleware applies to all methods before createRoute middleware
 input:
   route:
     file: routes/users/$id/route.ts
-    defineRoute:
+    routeRoot:
       middleware:
         - loadUserResource
       methods:

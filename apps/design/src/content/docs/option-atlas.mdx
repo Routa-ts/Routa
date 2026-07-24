@@ -144,7 +144,7 @@ Trail ochre for wayfinding; slate mist for atmosphere; soft frost for readable l
 
 	```ts
 	// src/routes/users/$userId/route.ts
-	export default defineRoute({
+	export default createRouteRoot("/users/:userId")({
 		get: createRoute({
 			input: { params: UserParams },
 			responses: {
@@ -210,7 +210,7 @@ Trail ochre for wayfinding; slate mist for atmosphere; soft frost for readable l
 ## Waypoint contract
 
 ```ts
-export default defineRoute({
+export default createRouteRoot("/tenants/:tenantId/projects/:projectId")({
 	get: createRoute({
 		input: { params: ProjectParams },
 		responses: {
