@@ -1,7 +1,7 @@
 import { type Context, Hono } from "hono";
 import { ZodError, type z } from "zod";
 import type { AnyRouteContract, HttpMethod, MiddlewareContract, RouteInput } from "./index.js";
-import type { RoutaLogger } from "./logger.js";
+import { createLogger, type RoutaLogger } from "./logger.js";
 
 type RuntimeResult = {
 	type: string;
@@ -48,6 +48,7 @@ export function createHonoApp(
 ): Hono {
 	const app = new Hono();
 	const methodsByPath = new Map<string, Set<string>>();
+	const routeLogger = options.logger ?? createLogger({ enabled: false });
 
 	if (options.logger) {
 		app.use("*", async (context, next) => {
@@ -118,7 +119,7 @@ export function createHonoApp(
 				const inputReader = new RequestInputReader(context);
 				const input = await inputReader.parse(contract.input);
 				const ctx = toRecord(route.createContext ? await route.createContext() : {});
-				const result = await runWithMiddleware(contract, input, ctx, inputReader);
+				const result = await runWithMiddleware(contract, input, ctx, inputReader, routeLogger);
 				const response = validateResult(contract, result);
 
 				return json(response.data, response.status, lifecycleHeaders(contract, options));
@@ -198,6 +199,7 @@ async function runWithMiddleware(
 	routeInput: Record<string, unknown>,
 	ctx: Record<string, unknown>,
 	inputReader: RequestInputReader,
+	logger: RoutaLogger,
 ): Promise<RuntimeResult> {
 	const middleware = contract.middleware ?? [];
 
@@ -205,7 +207,9 @@ async function runWithMiddleware(
 		const item = middleware[index];
 
 		if (!item) {
-			const result = await contract.run({ input: routeInput, ctx });
+			// Framework-owned context is applied last so middleware or a low-level
+			// createContext implementation cannot replace the configured logger.
+			const result = await contract.run({ input: routeInput, ctx: { ...ctx, logger } });
 
 			if (isRuntimeResult(result)) {
 				return result;

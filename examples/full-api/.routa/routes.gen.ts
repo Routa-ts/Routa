@@ -1653,6 +1653,102 @@ export const routaRoutes = [
 		]
 	},
 	{
+		"file": "src/routes/logger-showcase/route.ts",
+		"path": "/logger-showcase",
+		"methods": [
+			"POST"
+		],
+		"responses": {
+			"post": [
+				200,
+				403
+			]
+		},
+		"inputs": {
+			"post": {
+				"params": false,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": true
+			}
+		},
+		"middleware": [
+			{
+				"file": "src/middleware/context.ts",
+				"name": "withRequest",
+				"requires": [],
+				"provides": [
+					"requestId"
+				],
+				"providesTypes": {
+					"requestId": "string"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			},
+			{
+				"file": "src/middleware/context.ts",
+				"name": "withSession",
+				"requires": [
+					"requestId"
+				],
+				"provides": [
+					"session"
+				],
+				"providesTypes": {
+					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			}
+		],
+		"methodMiddleware": {
+			"post": [
+				{
+					"file": "src/middleware/context.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/middleware/context.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				}
+			]
+		},
+		"ctx": [
+			"requestId",
+			"session"
+		],
+		"groups": [],
+		"segments": [
+			"logger-showcase"
+		]
+	},
+	{
 		"file": "src/routes/showcase/$itemId/route.ts",
 		"path": "/showcase/:itemId",
 		"methods": [
@@ -1981,6 +2077,11 @@ export type LegacyIdCtx = {
 };
 
 export type LegacyCtx = {
+	"requestId": unknown;
+	"session": unknown;
+};
+
+export type LoggerShowcaseCtx = {
 	"requestId": unknown;
 	"session": unknown;
 };
@@ -2525,6 +2626,50 @@ export type RoutaRouteCtxByPath = {
 		};
 	};
 	"/legacy": {
+		get: {
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+		};
+		post: {
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+		};
+		put: {
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+		};
+		patch: {
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+		};
+		delete: {
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+		};
+		head: {
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+		};
+	};
+	"/logger-showcase": {
 		get: {
 			"requestId": string;
 			"session": {

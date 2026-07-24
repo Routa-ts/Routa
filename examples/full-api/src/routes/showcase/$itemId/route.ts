@@ -26,7 +26,12 @@ export default route({
 				schema: ShowcaseNotFound,
 			},
 		},
-		run: ({ input }) => {
+		run: ({ ctx, input }) => {
+			ctx.logger.debug("showcase.item_read", "Reading a showcase item.", {
+				itemId: input.params.itemId,
+				verbose: input.query.verbose,
+			});
+
 			if (input.params.itemId === "missing") {
 				return {
 					type: "notFound",

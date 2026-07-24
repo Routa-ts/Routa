@@ -3,7 +3,7 @@ title: Full API
 description: Walkthrough of the full Routa example.
 ---
 
-The `examples/full-api` package demonstrates middleware, tenant-scoped routes, admin routes, and a larger route graph.
+The `examples/full-api` package demonstrates the full public feature surface, including middleware, tenant-scoped routes, automatic `OPTIONS`, scaffold/OpenAPI workflows, and contextual logging.
 
 ## Run It
 
@@ -21,5 +21,15 @@ pnpm --filter full-api dev
 - `src/routes/tenants/$tenantId/middleware.ts`: segment-level tenant context
 - `src/middleware/*`: application-owned middleware helpers
 - `src/routes/**/route.ts`: route contracts using the accumulated context
+- `src/logger.ts`: an optional Pino adapter with `pino-pretty` development output
+- `src/routes/showcase/$itemId/route.ts`: a handler logging through backend-neutral `ctx.logger`
+- `src/routes/logger-showcase/route.ts`: an opt-in route covering every `RoutaLogger` method
+- `scripts/exercise-logger.mjs`: a local-only request sequence for the logger showcase
 
-Use this example to understand how middleware context becomes part of the route contract without moving business logic into Routa.
+Pino belongs to this example only; Routa core exposes its own structural logger contract and does not depend on Pino types or transports.
+
+## Logger Showcase
+
+The route is disabled by default because the comprehensive exercise includes deliberate `error` and `fatal` events. For local use, start with `ROUTA_DEMO_LOGGER_SHOWCASE=on LOG_LEVEL=trace`, then run `pnpm --filter full-api logger:exercise` in another terminal.
+
+The route calls `log`, every level method through `silent`, `child`, `bindings`, and `isLevelEnabled` from typed route context. Restarting with `ROUTA_DEMO_LOGGER=off` exercises the identical handler path through Routa's complete no-op implementation.

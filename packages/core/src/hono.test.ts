@@ -1128,6 +1128,76 @@ describe("createHonoApp", () => {
 		expect(events[0]?.data?.durationMs).toEqual(expect.any(Number));
 	});
 
+	it("provides the configured logger to route handlers", async () => {
+		const events: RoutaLogEvent[] = [];
+		let handlerLogger: unknown;
+		const logger = createLogger({
+			sink: (event) => events.push(event),
+		});
+		const app = createHonoApp(
+			[
+				{
+					method: "get",
+					path: "/status",
+					contract: createRoute({
+						responses: {
+							success: {
+								status: 200,
+								schema: z.object({ ok: z.boolean() }),
+							},
+						},
+						run: ({ ctx }) => {
+							handlerLogger = ctx.logger;
+							ctx.logger.info("status.checked", "Status checked from a handler.");
+							return { type: "success", data: { ok: true } };
+						},
+					}),
+					createContext: () => ({ logger: "cannot replace the runtime logger" }),
+				},
+			],
+			{ logger },
+		);
+
+		const response = await app.request("/status");
+
+		expect(response.status).toBe(200);
+		expect(handlerLogger).toBe(logger);
+		expect(events).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					level: "info",
+					event: "status.checked",
+					message: "Status checked from a handler.",
+				}),
+			]),
+		);
+	});
+
+	it("provides a no-op logger to route handlers when logging is not configured", async () => {
+		const app = createHonoApp([
+			{
+				method: "get",
+				path: "/status",
+				contract: createRoute({
+					responses: {
+						success: {
+							status: 200,
+							schema: z.object({ ok: z.boolean() }),
+						},
+					},
+					run: ({ ctx }) => {
+						ctx.logger.info("status.checked", "This event is disabled.");
+						return { type: "success", data: { ok: true } };
+					},
+				}),
+			},
+		]);
+
+		const response = await app.request("/status");
+
+		expect(response.status).toBe(200);
+	});
+
 	it("logs caught internal request errors", async () => {
 		const events: RoutaLogEvent[] = [];
 		const app = createHonoApp(

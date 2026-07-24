@@ -51,6 +51,15 @@ Business logic remains application-owned. Routa owns the HTTP boundary.
 - `createMiddleware(contract)`: defines middleware requirements, provided context, rejects, and runtime behavior.
 - `createRouteRoot(path)`: returns a path-bound `route(config)` helper that binds each method to its generated context type.
 - `createHonoApp(routes, options)`: creates the Hono runtime app from generated route metadata.
+- `createLogger(options)`: creates Routa's built-in backend-neutral structured logger.
+
+## Logger Contract
+
+`RoutaLogger` is a structural Routa type with no logging-package dependency. Its level methods are `trace`, `debug`, `info`, `warn`, `error`, `fatal`, and the `silent` no-op. It also provides `log(event)`, `child(bindings)`, `bindings()`, and `isLevelEnabled(level)`.
+
+Configure any implementation with `createRouta({ logger })`; route handlers receive that same implementation as `ctx.logger`. `logger: false` supplies the complete no-op contract instead.
+
+The full API example includes an opt-in route and local exercise script covering every method without making alert-level demonstration logs part of ordinary endpoint traffic.
 
 <Aside type="note" title="Generated types">
 	Generated `.routa/routes.gen.ts` files augment core types so route context can be inferred from middleware metadata.
