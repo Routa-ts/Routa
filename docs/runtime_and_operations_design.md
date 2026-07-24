@@ -111,7 +111,7 @@ logger.warn(
 ### Rationale
 
 - A small logger interface keeps Routa portable.
-- A built-in structured JSON logger gives usable defaults without forcing a dependency.
+- A built-in structured console logger gives usable defaults without forcing a dependency.
 - The portable interface is stylistically familiar to structured-logging users while allowing any logging strategy.
 - Always generating Routa's own request ID gives each handled request a trustworthy local trace handle.
 - Correlation IDs represent upstream or cross-service workflows, so Routa should preserve them when provided instead of inventing them.
