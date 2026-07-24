@@ -130,7 +130,7 @@ failure:
 
 - `GET` must not accept request body in v0.
 - `HEAD` may be derived from `GET`.
-- `OPTIONS` may be auto-handled.
+- `OPTIONS` is auto-handled from declared route methods and cannot be declared as a route contract.
 - Unsupported method on an existing path returns `405`.
 - Unsupported request content type returns `415`.
 - Unsupported response `Accept` returns `406`.

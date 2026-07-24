@@ -25,6 +25,8 @@ src/routes/users/$userId/posts/route.ts
 
 Each `route.ts` file owns the methods for one path. Keeping all verbs for one path together makes shared params, middleware, schemas, and metadata easier to maintain.
 
+Applications may declare `get`, `post`, `put`, `patch`, `delete`, and `head`. Do not declare `options`: Routa generates a `204 OPTIONS` response from the path's methods and keeps its `Allow` header in sync automatically.
+
 ## Contract Before Handler
 
 ```ts
@@ -46,6 +48,10 @@ export default route({
 			},
 		},
 		run: async ({ input, ctx }) => {
+			ctx.logger.info("users.create", "Creating a user.", {
+				actorId: ctx.auth.userId,
+			});
+
 			return {
 				type: "success",
 				data: await users.createUser({
@@ -59,6 +65,8 @@ export default route({
 ```
 
 Handlers return named outcomes from the declared response map. If a route did not declare an outcome, TypeScript should reject it.
+
+Every handler also receives the configured Routa logger as `ctx.logger`. The value implements Routa's backend-agnostic `RoutaLogger` contract and is the same logger used for runtime lifecycle events. It exposes `trace`, `debug`, `info`, `warn`, `error`, `fatal`, and a `silent` no-op, together with child bindings and level checks. If application configuration sets `logger: false`, Routa supplies a typed no-op logger with that complete surface so handler code remains configuration-independent.
 
 ## HTTP Boundary Only
 

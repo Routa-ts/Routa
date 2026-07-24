@@ -222,7 +222,6 @@ export type RoutaRouteCtxByPath = {
 		patch: { readonly __empty?: never };
 		delete: { readonly __empty?: never };
 		head: { readonly __empty?: never };
-		options: { readonly __empty?: never };
 	};
 	"/status": {
 		get: { readonly __empty?: never };
@@ -231,7 +230,6 @@ export type RoutaRouteCtxByPath = {
 		patch: { readonly __empty?: never };
 		delete: { readonly __empty?: never };
 		head: { readonly __empty?: never };
-		options: { readonly __empty?: never };
 	};
 	"/users/:userId/posts": {
 		get: { readonly __empty?: never };
@@ -240,7 +238,6 @@ export type RoutaRouteCtxByPath = {
 		patch: { readonly __empty?: never };
 		delete: { readonly __empty?: never };
 		head: { readonly __empty?: never };
-		options: { readonly __empty?: never };
 	};
 	"/users/:userId": {
 		get: { readonly __empty?: never };
@@ -249,7 +246,6 @@ export type RoutaRouteCtxByPath = {
 		patch: { readonly __empty?: never };
 		delete: { readonly __empty?: never };
 		head: { readonly __empty?: never };
-		options: { readonly __empty?: never };
 	};
 	"/users": {
 		get: { readonly __empty?: never };
@@ -258,7 +254,6 @@ export type RoutaRouteCtxByPath = {
 		patch: { readonly __empty?: never };
 		delete: { readonly __empty?: never };
 		head: { readonly __empty?: never };
-		options: { readonly __empty?: never };
 	};
 };
 

@@ -8,7 +8,7 @@ import {
 	routesMetadataSource,
 } from "./project.js";
 
-const httpMethods = ["get", "post", "put", "patch", "delete", "head", "options"] as const;
+const httpMethods = ["get", "post", "put", "patch", "delete", "head"] as const;
 
 type HttpMethod = (typeof httpMethods)[number];
 
@@ -565,6 +565,19 @@ function validateOpenApiDocument(document: OpenApiDocument): void {
 		for (const [method, operation] of Object.entries(pathItem)) {
 			if (isOpenApiPathItemMetadata(method)) {
 				continue;
+			}
+
+			if (method === "options") {
+				throw new Error(
+					scaffoldError(
+						"ROUTA_OPENAPI_OPTIONS_AUTOMATIC",
+						`OPTIONS ${path} must not be declared in scaffold input.`,
+						[
+							"Routa generates OPTIONS at runtime from the methods declared for the path.",
+							"Remove the options operation and keep only application-owned route methods.",
+						],
+					),
+				);
 			}
 
 			if (!httpMethods.includes(method as HttpMethod)) {
@@ -1377,6 +1390,12 @@ function zodForSchema(schema: OpenApiSchema | undefined): string {
 			return zodForSchema(schema.anyOf[0]);
 		}
 
+		const discriminator = discriminatorForAnyOf(schema.anyOf);
+
+		if (discriminator) {
+			return `z.discriminatedUnion(${JSON.stringify(discriminator)}, [${schema.anyOf.map((entry) => zodForSchema(entry)).join(", ")}])`;
+		}
+
 		return `z.union([${schema.anyOf.map((entry) => zodForSchema(entry)).join(", ")}])`;
 	}
 
@@ -1439,6 +1458,42 @@ function zodForSchema(schema: OpenApiSchema | undefined): string {
 	}
 
 	return "z.string()";
+}
+
+/**
+ * Finds a required property whose unique literal values discriminate every
+ * inline object variant in an OpenAPI `anyOf` schema.
+ *
+ * @param variants - The union variants to inspect.
+ * @returns The discriminator property name, or `undefined` when the union is not safely discriminated.
+ */
+function discriminatorForAnyOf(variants: OpenApiSchema[]): string | undefined {
+	const [first] = variants;
+
+	if (!first || !(first.type === "object" || first.properties)) {
+		return undefined;
+	}
+
+	for (const name of Object.keys(first.properties ?? {})) {
+		const values = variants.map((variant) => {
+			if (!(variant.type === "object" || variant.properties)) {
+				return undefined;
+			}
+
+			if (!variant.required?.includes(name)) {
+				return undefined;
+			}
+
+			const value = variant.properties?.[name]?.const;
+			return ["string", "number", "boolean"].includes(typeof value) ? value : undefined;
+		});
+
+		if (values.every((value) => value !== undefined) && new Set(values).size === variants.length) {
+			return name;
+		}
+	}
+
+	return undefined;
 }
 
 /**
@@ -1545,6 +1600,21 @@ function placeholderForSchema(
 
 	if (schema?.type === "boolean") {
 		return "false";
+	}
+
+	if (schema?.type === "string" && schema.format) {
+		const placeholders: Record<string, string> = {
+			email: '"example@example.com"',
+			uuid: '"00000000-0000-4000-8000-000000000000"',
+			uri: '"https://example.invalid"',
+			"date-time": '"2026-01-01T00:00:00.000Z"',
+			date: '"2026-01-01"',
+		};
+		const placeholder = placeholders[schema.format];
+
+		if (placeholder) {
+			return placeholder;
+		}
 	}
 
 	if (schema?.type === "string") {

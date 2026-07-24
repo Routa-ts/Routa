@@ -22,11 +22,13 @@ Scaffold creates route files under `src/routes`, schema files near those routes,
 
 ## Supported v0 Model
 
-- path operations for common HTTP methods
+- `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD` path operations
 - `operationId`
 - path, query, header, and cookie parameters
 - JSON request bodies
 - JSON responses
 - schemas from `components.schemas`
+
+Do not add `OPTIONS` operations to scaffold input. Routa generates OPTIONS at runtime from the application-owned methods on each path.
 
 Review generated source before committing. Generated handlers are stubs and business logic stays in your app.

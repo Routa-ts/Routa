@@ -14,6 +14,16 @@ Routa v0 runs on Hono.
 - unsupported `Accept` headers can produce `406 Not Acceptable`
 - unsupported body content type can produce `415 Unsupported Media Type`
 - paths with unsupported methods produce `405 Method Not Allowed` with an `Allow` header
+- `OPTIONS` is generated automatically for every known path; users declare only `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and optional explicit `HEAD`
+- automatic `OPTIONS` returns `204` and derives `Allow` from the path, including implicit `HEAD` for `GET` and automatic `OPTIONS`
+- CORS preflights receive the same derived `Access-Control-Allow-Methods` plus `Vary`; origin and request-header permission still require an explicit CORS policy
+- route handlers receive the configured runtime logger as `ctx.logger`; logging-disabled applications receive a no-op implementation with the same type
+
+## Logging
+
+`ctx.logger` implements Routa's backend-agnostic `RoutaLogger` contract. It provides `trace`, `debug`, `info`, `warn`, `error`, and `fatal`, plus a `silent` no-op, `child(bindings)`, `bindings()`, and `isLevelEnabled(level)`. The built-in logger and the `logger: false` no-op implement the same surface.
+
+The contract is structurally typed and does not depend on a logging package. Applications may provide an adapter for Pino, Winston, a hosted logging SDK, or their own sink through `createRouta({ logger })`.
 
 ## Responses
 

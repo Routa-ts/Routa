@@ -1,7 +1,7 @@
 import { type Context, Hono } from "hono";
 import { ZodError, type z } from "zod";
 import type { AnyRouteContract, HttpMethod, MiddlewareContract, RouteInput } from "./index.js";
-import type { RoutaLogger } from "./logger.js";
+import { createLogger, type RoutaLogger } from "./logger.js";
 
 type RuntimeResult = {
 	type: string;
@@ -48,6 +48,7 @@ export function createHonoApp(
 ): Hono {
 	const app = new Hono();
 	const methodsByPath = new Map<string, Set<string>>();
+	const routeLogger = options.logger ?? createLogger({ enabled: false });
 
 	if (options.logger) {
 		app.use("*", async (context, next) => {
@@ -68,6 +69,21 @@ export function createHonoApp(
 	const registeredRoutes = new Set<string>();
 
 	for (const route of routes) {
+		if ((route.method as string) === "options") {
+			throw new Error(
+				`OPTIONS ${route.path} cannot be declared explicitly. Routa generates OPTIONS from the path's route methods.`,
+			);
+		}
+	}
+
+	const registrationRoutes = [
+		...routes.filter((route) => route.method === "head"),
+		...routes.filter((route) => route.method !== "head"),
+	];
+
+	// Hono dispatches HEAD through its GET router. Register explicit HEAD contracts
+	// first as guarded GET handlers so they win without intercepting real GETs.
+	for (const route of registrationRoutes) {
 		const contract = route.contract as RuntimeRouteContract;
 		const method = route.method.toUpperCase();
 		const routeKey = `${method} ${route.path}`;
@@ -88,7 +104,13 @@ export function createHonoApp(
 		methods.add(method);
 		methodsByPath.set(route.path, methods);
 
-		app.on(method, route.path, async (context) => {
+		const honoMethod = route.method === "head" ? "GET" : method;
+
+		app.on(honoMethod, route.path, async (context, next) => {
+			if (route.method === "head" && context.req.raw.method !== "HEAD") {
+				return await next();
+			}
+
 			try {
 				if (!acceptsJson(context.req.raw)) {
 					return new Response("Not Acceptable", { status: 406 });
@@ -97,7 +119,7 @@ export function createHonoApp(
 				const inputReader = new RequestInputReader(context);
 				const input = await inputReader.parse(contract.input);
 				const ctx = toRecord(route.createContext ? await route.createContext() : {});
-				const result = await runWithMiddleware(contract, input, ctx, inputReader);
+				const result = await runWithMiddleware(contract, input, ctx, inputReader, routeLogger);
 				const response = validateResult(contract, result);
 
 				return json(response.data, response.status, lifecycleHeaders(contract, options));
@@ -110,17 +132,54 @@ export function createHonoApp(
 	}
 
 	for (const [path, methods] of methodsByPath) {
+		const allowedMethods = new Set(methods);
+
+		if (allowedMethods.has("GET")) {
+			allowedMethods.add("HEAD");
+		}
+
+		allowedMethods.add("OPTIONS");
+		const allow = Array.from(allowedMethods).sort().join(", ");
+
+		app.on("OPTIONS", path, (context) => {
+			return new Response(null, {
+				status: 204,
+				headers: automaticOptionsHeaders(context.req.raw, allow),
+			});
+		});
+
 		app.all(path, () => {
 			return new Response("Method Not Allowed", {
 				status: 405,
 				headers: {
-					allow: Array.from(methods).sort().join(", "),
+					allow,
 				},
 			});
 		});
 	}
 
 	return app;
+}
+
+/**
+ * Builds automatic OPTIONS headers without granting cross-origin access.
+ *
+ * `Allow` describes HTTP method support for every OPTIONS request. A browser
+ * preflight also receives the derived method list and cache variance metadata;
+ * an explicit CORS policy remains responsible for `Access-Control-Allow-Origin`
+ * and allowed request headers.
+ */
+function automaticOptionsHeaders(request: Request, allow: string): Headers {
+	const headers = new Headers({ allow });
+	const origin = request.headers.get("origin");
+	const requestedMethod = request.headers.get("access-control-request-method");
+
+	if (origin && requestedMethod) {
+		headers.set("access-control-allow-methods", allow);
+		headers.set("vary", "Origin, Access-Control-Request-Method, Access-Control-Request-Headers");
+	}
+
+	return headers;
 }
 
 /**
@@ -140,6 +199,7 @@ async function runWithMiddleware(
 	routeInput: Record<string, unknown>,
 	ctx: Record<string, unknown>,
 	inputReader: RequestInputReader,
+	logger: RoutaLogger,
 ): Promise<RuntimeResult> {
 	const middleware = contract.middleware ?? [];
 
@@ -147,7 +207,9 @@ async function runWithMiddleware(
 		const item = middleware[index];
 
 		if (!item) {
-			const result = await contract.run({ input: routeInput, ctx });
+			// Framework-owned context is applied last so middleware or a low-level
+			// createContext implementation cannot replace the configured logger.
+			const result = await contract.run({ input: routeInput, ctx: { ...ctx, logger } });
 
 			if (isRuntimeResult(result)) {
 				return result;

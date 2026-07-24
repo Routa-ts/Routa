@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { createMiddleware, createRouta, createRoute, createRouteRoot } from "./index.js";
+import type { RoutaLogger } from "./logger.js";
 
 declare module "./index.js" {
 	interface Register {
 		routeCtxByPath: {
+			"/logger-conflict": { get: { logger: string } };
 			"/status": { get: Record<never, never> };
 			"/users": { post: { user: { id: string } } };
 		};
@@ -40,12 +42,34 @@ describe("route contracts", () => {
 				middleware: [requireAuth],
 				run: ({ ctx }) => {
 					expectType<string>(ctx.user.id);
+					expectType<RoutaLogger>(ctx.logger);
 					return { type: "success", data: { id: "usr_1" } };
 				},
 			}),
 		});
 
 		expect(route.post.responses.success.status).toBe(201);
+
+		routeRoot({
+			// @ts-expect-error OPTIONS is generated from the declared route methods.
+			options: createRoute({
+				responses: {
+					success: { status: 204, schema: z.null() },
+				},
+				run: () => ({ type: "success", data: null }),
+			}),
+		});
+
+		const indirectOptions = {
+			options: createRoute({
+				responses: {
+					success: { status: 204, schema: z.null() },
+				},
+				run: () => ({ type: "success", data: null }),
+			}),
+		};
+		// @ts-expect-error Extra method keys are rejected even through an intermediate value.
+		routeRoot(indirectOptions);
 	});
 
 	it("preserves Routa app configuration", () => {
@@ -54,6 +78,24 @@ describe("route contracts", () => {
 		});
 
 		expect(app.port).toBe(3001);
+	});
+
+	it("keeps the framework logger authoritative in route context types", () => {
+		const route = createRouteRoot("/logger-conflict");
+
+		route({
+			get: createRoute({
+				responses: {
+					success: { status: 200, schema: z.object({ ok: z.boolean() }) },
+				},
+				run: ({ ctx }) => {
+					expectType<RoutaLogger>(ctx.logger);
+					// @ts-expect-error Framework-owned logger replaces conflicting application context types.
+					expectType<string>(ctx.logger);
+					return { type: "success", data: { ok: true } };
+				},
+			}),
+		});
 	});
 
 	it("typechecks local and external deprecation replacements", () => {

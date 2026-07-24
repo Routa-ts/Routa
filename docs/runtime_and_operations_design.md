@@ -9,27 +9,37 @@ This document records decisions for Group 5 in small parts.
 ### Decisions
 
 - Routa defines a small structured logger interface.
-- Routa ships a basic structured JSON logger by default.
-- Pino should be easy to plug in through a custom logger or adapter, but Routa does not require Pino.
+- Routa ships a basic structured console logger by default.
+- Logging backends should be easy to plug in through a custom logger or adapter; Routa's public contract does not depend on any logging package.
 - Custom loggers must implement Routa's logger interface.
 - The logger interface supports common levels:
-  - `debug`
-  - `info`
-  - `warn`
-  - `error`
+	- `trace`
+	- `debug`
+	- `info`
+	- `warn`
+	- `error`
+	- `fatal`
+- The logger interface includes a `silent` no-op for explicitly discarded events.
 - The logger interface supports child loggers with bindings.
-- `ctx.core.logger` is request-scoped.
-- Request-scoped loggers include request identity bindings.
+- The logger interface supports binding inspection and level checks.
+- `ctx.logger` exposes the configured runtime logger to route handlers.
+- Applications can derive child loggers when they need request or service bindings.
 
 Example interface shape:
 
 ```ts
 type RoutaLogger = {
-	debug(data: object, message?: string): void;
-	info(data: object, message?: string): void;
-	warn(data: object, message?: string): void;
-	error(data: object, message?: string): void;
+	log(event: RoutaLogEvent): void;
+	trace(event: string, message: string, data?: object): void;
+	debug(event: string, message: string, data?: object): void;
+	info(event: string, message: string, data?: object): void;
+	warn(event: string, message: string, data?: object): void;
+	error(event: string, message: string, data?: object): void;
+	fatal(event: string, message: string, data?: object): void;
+	silent(event: string, message: string, data?: object): void;
 	child(bindings: object): RoutaLogger;
+	bindings(): object;
+	isLevelEnabled(level: RoutaLogLevel | "silent"): boolean;
 };
 ```
 
@@ -67,13 +77,13 @@ Example invalid-header event:
 
 ```ts
 logger.debug(
+	"request_identity.invalid_correlation_id",
+	"Ignored invalid correlation id",
 	{
-		event: "request_identity.invalid_correlation_id",
 		header: "x-correlation-id",
 		reason: "too_long",
 		requestId,
 	},
-	"Ignored invalid correlation id",
 );
 ```
 
@@ -88,21 +98,21 @@ Example security event:
 
 ```ts
 logger.warn(
+	"security.auth.invalid_credentials",
+	"Invalid credentials",
 	{
-		event: "security.auth.invalid_credentials",
 		requestId,
 		correlationId,
 		authScheme: "bearer",
 	},
-	"Invalid credentials",
 );
 ```
 
 ### Rationale
 
 - A small logger interface keeps Routa portable.
-- A built-in structured JSON logger gives usable defaults without forcing a dependency.
-- Pino fits the interface naturally, but teams can use other logging systems.
+- A built-in structured console logger gives usable defaults without forcing a dependency.
+- The portable interface is stylistically familiar to structured-logging users while allowing any logging strategy.
 - Always generating Routa's own request ID gives each handled request a trustworthy local trace handle.
 - Correlation IDs represent upstream or cross-service workflows, so Routa should preserve them when provided instead of inventing them.
 - Using one logger for normal and security events keeps v1 simple while preserving routing options through custom logger implementations.

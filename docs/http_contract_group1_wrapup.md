@@ -369,9 +369,9 @@ Not included by default in v1:
 
 ### `OPTIONS`
 
-- `OPTIONS` is auto-handled by default.
+- `OPTIONS` is always auto-handled.
 - Routa should generate standard method and `Allow` behavior automatically.
-- A user-defined `options.ts` may override the automatic behavior when custom logic is needed.
+- Route contracts cannot declare `OPTIONS`; users declare only application-owned methods so generated method metadata cannot drift.
 
 ### Other Method Rules
 

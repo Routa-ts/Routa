@@ -1453,6 +1453,31 @@ export default legacyRoute({});
 		expect(result.stderr).toContain('createRouteRoot("/status")');
 	});
 
+	it("rejects explicit OPTIONS route contracts", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-explicit-options-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/status/route.ts"),
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/status")({
+	options: createRoute({
+		responses: { success: { status: 204, schema: z.null() } },
+		run: () => ({ type: "success", data: null }),
+	}),
+});
+`,
+		);
+
+		const result = run(["check"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("ROUTA_OPTIONS_AUTOMATIC");
+		expect(result.stderr).toContain("Remove the options contract");
+	});
+
 	it("reports duplicate schema exports with Routa diagnostics", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-duplicate-schema-"));
 		createTypeScriptProject(cwd);
@@ -2088,6 +2113,8 @@ paths:
                   - status
                   - labels
                   - contact
+                  - entityId
+                  - delivery
                   - createdAt
                 properties:
                   status:
@@ -2099,6 +2126,31 @@ paths:
                   contact:
                     type: string
                     format: email
+                  entityId:
+                    type: string
+                    format: uuid
+                  delivery:
+                    anyOf:
+                      - type: object
+                        required:
+                          - kind
+                          - email
+                        properties:
+                          kind:
+                            const: email
+                          email:
+                            type: string
+                            format: email
+                      - type: object
+                        required:
+                          - kind
+                          - callback
+                        properties:
+                          kind:
+                            const: webhook
+                          callback:
+                            type: string
+                            format: uri
                   nickname:
                     type:
                       - string
@@ -2120,9 +2172,19 @@ paths:
 		expect(schemas).toContain('status: z.literal("active")');
 		expect(schemas).toContain("labels: z.record(z.string(), z.string())");
 		expect(schemas).toContain("contact: z.email()");
+		expect(schemas).toContain("entityId: z.uuid()");
+		expect(schemas).toContain(
+			'z.discriminatedUnion("kind", [z.object({\n\tkind: z.literal("email")',
+		);
+		expect(schemas).toContain('kind: z.literal("webhook")');
+		expect(schemas).toContain("callback: z.url()");
 		expect(schemas).toContain("nickname: z.string().nullable().optional()");
 		expect(schemas).toContain("size: z.union([z.string(), z.int()]).optional()");
 		expect(schemas).toContain("createdAt: z.iso.datetime()");
+		const route = readFileSync(join(cwd, "src/routes/widgets/route.ts"), "utf8");
+		expect(route).toContain('contact: "example@example.com"');
+		expect(route).toContain('entityId: "00000000-0000-4000-8000-000000000000"');
+		expect(route).toContain('createdAt: "2026-01-01T00:00:00.000Z"');
 
 		const drift = run(["openapi", "check"], { cwd });
 		expect(drift.code).toBe(0);
@@ -2866,6 +2928,33 @@ paths:
 
 		expect(result.code).toBe(1);
 		expect(result.stderr).toContain("GET /users cannot declare a request body");
+		expect(existsSync(join(cwd, "src/routes/users/route.ts"))).toBe(false);
+	});
+
+	it("rejects explicit OPTIONS operations in scaffold input", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-scaffold-options-"));
+		createTypeScriptProject(cwd);
+		writeFileSync(
+			join(cwd, "openapi.yaml"),
+			`openapi: 3.1.0
+info:
+  title: Users API
+  version: 0.0.0
+paths:
+  /users:
+    options:
+      operationId: userOptions
+      responses:
+        "204":
+          description: Automatically generated
+`,
+		);
+
+		const result = run(["scaffold", "openapi.yaml"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("ROUTA_OPENAPI_OPTIONS_AUTOMATIC");
+		expect(result.stderr).toContain("Remove the options operation");
 		expect(existsSync(join(cwd, "src/routes/users/route.ts"))).toBe(false);
 	});
 

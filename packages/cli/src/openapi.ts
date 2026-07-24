@@ -594,6 +594,14 @@ class SchemaReader {
 			};
 		}
 
+		if (call === "discriminatedUnion" && ts.isArrayLiteralExpression(unwrapped.arguments[1])) {
+			return {
+				anyOf: unwrapped.arguments[1].elements.map((element) =>
+					this.schemaForExpression(element as ts.Expression, seen),
+				),
+			};
+		}
+
 		if (call === "record") {
 			const valueSchema = unwrapped.arguments[unwrapped.arguments.length - 1];
 			return {
@@ -1008,10 +1016,10 @@ function isOptionalCall(expression: ts.Expression): boolean {
  * Determines whether a value is an HTTP method name.
  *
  * @param value - The value to check
- * @returns `true` if `value` is `get`, `post`, `put`, `patch`, `delete`, `head`, or `options`, `false` otherwise.
+ * @returns `true` if `value` is an application-owned Routa method, `false` otherwise.
  */
 function isHttpMethod(value: string): boolean {
-	return ["get", "post", "put", "patch", "delete", "head", "options"].includes(value);
+	return ["get", "post", "put", "patch", "delete", "head"].includes(value);
 }
 
 /**

@@ -6,10 +6,12 @@ export type {
 	RoutaLogData,
 	RoutaLogEvent,
 	RoutaLogger,
+	RoutaLogLevel,
+	RoutaLogLevelWithSilent,
 } from "./logger.js";
 export { createLogger } from "./logger.js";
 
-export type HttpMethod = "get" | "post" | "put" | "patch" | "delete" | "head" | "options";
+export type HttpMethod = "get" | "post" | "put" | "patch" | "delete" | "head";
 
 export type SchemaInput<TSchema> = TSchema extends z.ZodTypeAny ? z.input<TSchema> : never;
 export type SchemaOutput<TSchema> = TSchema extends z.ZodTypeAny ? z.output<TSchema> : never;
@@ -163,9 +165,19 @@ export type InferInput<TInput extends RouteInput | undefined> = {
 
 export type InferResponse<TResponses extends RouteResponses> = RouteRunResult<TResponses>;
 
+/**
+ * Framework-owned values available to every route handler.
+ *
+ * `logger` is always present. When logging is disabled in Routa configuration,
+ * it is a no-op logger so handlers do not need configuration-dependent guards.
+ */
+export type RoutaRouteContext = {
+	readonly logger: RoutaLogger;
+};
+
 export type RouteHandlerArgs<TInput extends RouteInput | undefined, TCtx> = {
 	input: InferInput<TInput>;
-	ctx: TCtx;
+	ctx: Omit<TCtx, keyof RoutaRouteContext> & RoutaRouteContext;
 };
 
 export type RouteRun<
@@ -207,6 +219,8 @@ export type RouteRootConfigForCtx<TCtxByMethod extends Partial<Record<HttpMethod
 } & {
 	[K in HttpMethod]?: ContextualRouteContract<CtxForMethod<TCtxByMethod, K>>;
 };
+
+type NoExtraRouteKeys<TConfig> = Record<Exclude<keyof TConfig, HttpMethod | "middleware">, never>;
 
 type CtxForMethod<TCtxByMethod, TMethod extends HttpMethod> = TMethod extends keyof TCtxByMethod
 	? TCtxByMethod[TMethod]
@@ -275,7 +289,7 @@ export function createRouteRootFactory<
 >() {
 	return function createRouteRoot<const TPath extends keyof TCtxByPath & string>(_path: TPath) {
 		return function routeRoot<const TConfig extends RouteRootConfigForCtx<TCtxByPath[TPath]>>(
-			config: TConfig,
+			config: TConfig & NoExtraRouteKeys<TConfig>,
 		): TConfig {
 			return config;
 		};
@@ -293,7 +307,7 @@ export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPa
 ) {
 	return function routeRoot<
 		const TConfig extends RouteRootConfigForCtx<RegisteredRouteCtxByPath[TPath]>,
-	>(config: TConfig): TConfig {
+	>(config: TConfig & NoExtraRouteKeys<TConfig>): TConfig {
 		return config;
 	};
 }
