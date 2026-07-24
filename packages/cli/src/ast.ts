@@ -1,4 +1,4 @@
-import ts from "typescript";
+import * as ts from "./typescript.js";
 
 /**
  * Removes TypeScript wrapper expressions and returns the inner expression.

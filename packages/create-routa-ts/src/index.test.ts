@@ -57,6 +57,7 @@ describe("create-routa-ts", () => {
 		expect(packageJson).toContain('"test": "vitest run"');
 		expect(packageJson).not.toContain('"packageManager"');
 		expect(packageJson).toContain('"vitest"');
+		expect(packageJson).toContain('"typescript": "^7.0.2"');
 		expect(packageJson).toContain("@biomejs/biome");
 		// hono and zod are peer dependencies of @routa-ts/core, so the app declares them.
 		expect(packageJson).toContain('"hono"');
