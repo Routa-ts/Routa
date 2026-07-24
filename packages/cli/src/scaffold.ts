@@ -8,7 +8,7 @@ import {
 	routesMetadataSource,
 } from "./project.js";
 
-const httpMethods = ["get", "post", "put", "patch", "delete", "head", "options"] as const;
+const httpMethods = ["get", "post", "put", "patch", "delete", "head"] as const;
 
 type HttpMethod = (typeof httpMethods)[number];
 
@@ -565,6 +565,19 @@ function validateOpenApiDocument(document: OpenApiDocument): void {
 		for (const [method, operation] of Object.entries(pathItem)) {
 			if (isOpenApiPathItemMetadata(method)) {
 				continue;
+			}
+
+			if (method === "options") {
+				throw new Error(
+					scaffoldError(
+						"ROUTA_OPENAPI_OPTIONS_AUTOMATIC",
+						`OPTIONS ${path} must not be declared in scaffold input.`,
+						[
+							"Routa generates OPTIONS at runtime from the methods declared for the path.",
+							"Remove the options operation and keep only application-owned route methods.",
+						],
+					),
+				);
 			}
 
 			if (!httpMethods.includes(method as HttpMethod)) {

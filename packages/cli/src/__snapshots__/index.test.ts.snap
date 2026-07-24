@@ -122,7 +122,6 @@ export type RoutaRouteCtxByPath = {
 		patch: { readonly __empty?: never };
 		delete: { readonly __empty?: never };
 		head: { readonly __empty?: never };
-		options: { readonly __empty?: never };
 	};
 };
 

@@ -1453,6 +1453,31 @@ export default legacyRoute({});
 		expect(result.stderr).toContain('createRouteRoot("/status")');
 	});
 
+	it("rejects explicit OPTIONS route contracts", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-explicit-options-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/status/route.ts"),
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/status")({
+	options: createRoute({
+		responses: { success: { status: 204, schema: z.null() } },
+		run: () => ({ type: "success", data: null }),
+	}),
+});
+`,
+		);
+
+		const result = run(["check"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("ROUTA_OPTIONS_AUTOMATIC");
+		expect(result.stderr).toContain("Remove the options contract");
+	});
+
 	it("reports duplicate schema exports with Routa diagnostics", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-duplicate-schema-"));
 		createTypeScriptProject(cwd);
@@ -2866,6 +2891,33 @@ paths:
 
 		expect(result.code).toBe(1);
 		expect(result.stderr).toContain("GET /users cannot declare a request body");
+		expect(existsSync(join(cwd, "src/routes/users/route.ts"))).toBe(false);
+	});
+
+	it("rejects explicit OPTIONS operations in scaffold input", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-scaffold-options-"));
+		createTypeScriptProject(cwd);
+		writeFileSync(
+			join(cwd, "openapi.yaml"),
+			`openapi: 3.1.0
+info:
+  title: Users API
+  version: 0.0.0
+paths:
+  /users:
+    options:
+      operationId: userOptions
+      responses:
+        "204":
+          description: Automatically generated
+`,
+		);
+
+		const result = run(["scaffold", "openapi.yaml"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("ROUTA_OPENAPI_OPTIONS_AUTOMATIC");
+		expect(result.stderr).toContain("Remove the options operation");
 		expect(existsSync(join(cwd, "src/routes/users/route.ts"))).toBe(false);
 	});
 

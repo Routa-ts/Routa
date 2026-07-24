@@ -85,7 +85,7 @@ const generatedHeader =
 const routesRoot = join("src", "routes");
 const devPollMs = 300;
 const devRestartDebounceMs = 150;
-const httpMethods = new Set(["get", "post", "put", "patch", "delete", "head", "options"]);
+const httpMethods = new Set(["get", "post", "put", "patch", "delete", "head"]);
 const emptyRouteInputs: RouteMethodInputMetadata = {
 	params: false,
 	query: false,
@@ -933,6 +933,18 @@ function discoverRoutes(cwd: string, parser: ts.SourceFileParser): RouteDiscover
 			return [];
 		}
 
+		if (parsed.explicitOptions) {
+			diagnostics.push({
+				code: "ROUTA_OPTIONS_AUTOMATIC",
+				severity: "error",
+				message: `OPTIONS ${path} must not be declared explicitly.`,
+				file: relativeFile,
+				routePath: path,
+				suggestion:
+					"Remove the options contract. Routa generates OPTIONS and its Allow header from the path's declared methods.",
+			});
+		}
+
 		const contract = parsed.contract;
 		const ctx = Array.from(
 			new Set([
@@ -1034,6 +1046,7 @@ function parseRouteContract(
 	parser: ts.SourceFileParser,
 ): {
 	configFound: boolean;
+	explicitOptions: boolean;
 	contract: Record<
 		string,
 		{
@@ -1055,13 +1068,19 @@ function parseRouteContract(
 	> = {};
 	const sourceFile = parseTypeScriptFile(file, parser);
 	const routeConfig = routeConfigObject(sourceFile);
+	let explicitOptions = false;
 
 	if (!routeConfig) {
-		return { configFound: false, contract };
+		return { configFound: false, explicitOptions, contract };
 	}
 
 	for (const property of objectProperties(routeConfig)) {
 		const method = propertyName(property.name);
+
+		if (method === "options") {
+			explicitOptions = true;
+			continue;
+		}
 
 		if (!method || !httpMethods.has(method)) {
 			continue;
@@ -1081,7 +1100,7 @@ function parseRouteContract(
 		};
 	}
 
-	return { configFound: true, contract };
+	return { configFound: true, explicitOptions, contract };
 }
 
 function routeDeprecation(
@@ -2839,7 +2858,7 @@ function ctxByKeyType(routes: RouteMetadata[]): string {
 function routeMethodCtxMap(route: RouteMetadata): string {
 	const methods: string[] = [];
 
-	for (const method of ["get", "post", "put", "patch", "delete", "head", "options"]) {
+	for (const method of ["get", "post", "put", "patch", "delete", "head"]) {
 		methods.push(`\t\t${method}: ${routeCtxTypeNameForMiddleware(route, method)};`);
 	}
 

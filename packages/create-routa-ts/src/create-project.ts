@@ -139,7 +139,7 @@ function routesMetadataSource(): string {
 		},
 	];
 	const emptyCtx = "{ readonly __empty?: never }";
-	const methodCtxMap = `{\n${["get", "post", "put", "patch", "delete", "head", "options"]
+	const methodCtxMap = `{\n${["get", "post", "put", "patch", "delete", "head"]
 		.map((method) => `\t\t${method}: ${emptyCtx};`)
 		.join("\n")}\n\t}`;
 
