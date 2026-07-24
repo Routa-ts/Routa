@@ -1471,6 +1471,11 @@ export const routaRoutes = [
 				"body": false
 			}
 		},
+		"deprecations": {
+			"get": {
+				"replacement": "https://api.example.invalid/migrations/legacy-projects"
+			}
+		},
 		"middleware": [
 			{
 				"file": "src/middleware/context.ts",
@@ -1648,6 +1653,189 @@ export const routaRoutes = [
 		]
 	},
 	{
+		"file": "src/routes/showcase/$itemId/route.ts",
+		"path": "/showcase/:itemId",
+		"methods": [
+			"GET",
+			"PUT",
+			"HEAD"
+		],
+		"responses": {
+			"get": [
+				200,
+				404
+			],
+			"put": [
+				200
+			],
+			"head": [
+				204
+			]
+		},
+		"inputs": {
+			"get": {
+				"params": true,
+				"query": true,
+				"headers": false,
+				"cookies": false,
+				"body": false
+			},
+			"put": {
+				"params": true,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": true
+			},
+			"head": {
+				"params": true,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": false
+			}
+		},
+		"middleware": [
+			{
+				"file": "src/middleware/context.ts",
+				"name": "withRequest",
+				"requires": [],
+				"provides": [
+					"requestId"
+				],
+				"providesTypes": {
+					"requestId": "string"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			},
+			{
+				"file": "src/middleware/context.ts",
+				"name": "withSession",
+				"requires": [
+					"requestId"
+				],
+				"provides": [
+					"session"
+				],
+				"providesTypes": {
+					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			}
+		],
+		"methodMiddleware": {
+			"get": [
+				{
+					"file": "src/middleware/context.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/middleware/context.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				}
+			],
+			"put": [
+				{
+					"file": "src/middleware/context.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/middleware/context.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				}
+			],
+			"head": [
+				{
+					"file": "src/middleware/context.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/middleware/context.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				}
+			]
+		},
+		"ctx": [
+			"requestId",
+			"session"
+		],
+		"groups": [],
+		"segments": [
+			"showcase",
+			"$itemId"
+		]
+	},
+	{
 		"file": "src/routes/status/route.ts",
 		"path": "/status",
 		"methods": [
@@ -1797,6 +1985,11 @@ export type LegacyCtx = {
 	"session": unknown;
 };
 
+export type ShowcaseItemIdCtx = {
+	"requestId": unknown;
+	"session": unknown;
+};
+
 export type StatusCtx = {
 	"requestId": unknown;
 	"session": unknown;
@@ -1882,19 +2075,6 @@ export type RoutaRouteCtxByPath = {
 				readonly "userId"?: string | undefined;
 			};
 		};
-		options: {
-			"admin": {
-				readonly "role": "owner";
-			};
-			"auth": {
-				readonly "userId": string;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-		};
 	};
 	"/admin/reports": {
 		get: {
@@ -1963,19 +2143,6 @@ export type RoutaRouteCtxByPath = {
 			};
 		};
 		head: {
-			"admin": {
-				readonly "role": "owner";
-			};
-			"auth": {
-				readonly "userId": string;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-		};
-		options: {
 			"admin": {
 				readonly "role": "owner";
 			};
@@ -2089,24 +2256,6 @@ export type RoutaRouteCtxByPath = {
 			};
 		};
 		head: {
-			"auth": {
-				readonly "userId": string;
-			};
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		options: {
 			"auth": {
 				readonly "userId": string;
 			};
@@ -2242,24 +2391,6 @@ export type RoutaRouteCtxByPath = {
 				readonly "name": string;
 			};
 		};
-		options: {
-			"auth": {
-				readonly "userId": string;
-			};
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
 	};
 	"/auth/session": {
 		get: {
@@ -2298,13 +2429,6 @@ export type RoutaRouteCtxByPath = {
 			};
 		};
 		head: {
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-		};
-		options: {
 			"requestId": string;
 			"session": {
 				readonly "authenticated": boolean;
@@ -2355,13 +2479,6 @@ export type RoutaRouteCtxByPath = {
 				readonly "userId"?: string | undefined;
 			};
 		};
-		options: {
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-		};
 	};
 	"/legacy/:id": {
 		get: {
@@ -2400,13 +2517,6 @@ export type RoutaRouteCtxByPath = {
 			};
 		};
 		head: {
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-		};
-		options: {
 			"requestId": string;
 			"session": {
 				readonly "authenticated": boolean;
@@ -2457,7 +2567,44 @@ export type RoutaRouteCtxByPath = {
 				readonly "userId"?: string | undefined;
 			};
 		};
-		options: {
+	};
+	"/showcase/:itemId": {
+		get: {
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+		};
+		post: {
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+		};
+		put: {
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+		};
+		patch: {
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+		};
+		delete: {
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+		};
+		head: {
 			"requestId": string;
 			"session": {
 				readonly "authenticated": boolean;
@@ -2502,13 +2649,6 @@ export type RoutaRouteCtxByPath = {
 			};
 		};
 		head: {
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-		};
-		options: {
 			"requestId": string;
 			"session": {
 				readonly "authenticated": boolean;

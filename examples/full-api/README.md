@@ -1,142 +1,204 @@
-# examples/full-api
+# Routa full API showcase
 
-Routa monorepo example that exercises the framework fixes from the recent review: runtime middleware contracts, typed rejects, query helpers, bodyless DELETE, group middleware, and OpenAPI drift tooling.
+A runnable showcase of Routa's public application features. It combines a hand-owned runtime API with an isolated, reproducible OpenAPI scaffold fixture.
 
-Uses workspace-linked `@routa-ts/cli` and `@routa-ts/core` — run from the repository root.
+Run commands from the repository root unless a command starts with `cd examples/full-api`.
 
-## Development
+## Start the API
 
 ```sh
-pnpm install # from the repository root
+pnpm install
 cd examples/full-api
 export ROUTA_DEMO_SESSION_SECRET=dev-secret
 pnpm dev
 ```
 
-`pnpm dev` runs `routa dev`, which validates the route graph, regenerates `.routa/routes.gen.ts`, typechecks, and starts the server on port 3000.
+`pnpm dev` validates the route graph, regenerates `.routa/routes.gen.ts`, typechecks, and starts the server. The default config binds `127.0.0.1:3000`.
 
-## What this example shows
+Runtime configuration is executable and typed in `src/routa.ts`:
 
-| Feature                                                                     | Where                                                           |
-| --------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Global middleware (`withRequest` → `withSession`)                           | `src/routes/middleware.ts`                                      |
-| Group middleware `(private)` + app-owned `requireAuth`                      | `src/routes/(private)/middleware.ts`                            |
-| Segment middleware (`withAdmin`, `withTenant`)                              | `admin/middleware.ts`, `tenants/$tenantId/middleware.ts`        |
-| Route + method middleware                                                   | `projects/route.ts` (`withProjectScope`, `withProjectListMode`) |
-| Typed `rejects` (401/403) instead of raw `Response` throws                  | `withProjectPermissions`, `withAdmin`, `requireAuth`            |
-| Runtime `requires` / `provides` validation                                  | Missing `session` → 401 from `requireAuth`, not a 500           |
-| `Fields()` / `Sort()` query helpers (whitespace-trimmed fields)             | list projects query                                             |
-| Bodyless `DELETE` → **204**                                                 | `DELETE /tenants/:tenantId/projects/:projectId`                 |
-| Headers + cookies inputs                                                    | `x-request-id`, `session` cookie                                |
-| Hand-written `createRouteRoot("/demo")` + Accept `*+json`                      | `GET /demo`                                                     |
-| OpenAPI scaffold + baseline drift check                                     | `openapi.yaml`, `pnpm openapi:check`                            |
-| Breaking-change checks for required inputs and tighter auth                 | `pnpm openapi:breaking`                                         |
-| OpenAPI security + permission visibility                                    | `requireAuth`, `withAdmin`, `withProjectPermissions` middleware |
-| Flat and dynamic flat routes                                                 | `legacy.ts`, `legacy.$id.ts`                                    |
-| Deprecation metadata + lifecycle headers                                    | `GET /legacy`, `src/routa.ts`                                   |
+- `host` and `port` provide application defaults.
+- `HOST=0.0.0.0 PORT=4000 pnpm dev` demonstrates runtime environment overrides.
+- The default example logger uses `createLogger({ sink })` to emit structured JSON.
+- `ROUTA_DEMO_LOGGER=off pnpm dev` demonstrates `logger: false`.
+- `lifecycleHeaders: true` emits deprecation, sunset, and replacement headers.
+
+## Feature map
+
+| Public feature                                                          | Concrete example                                                                                     |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Typed route contracts and validated results                             | Every file in `src/routes`; `GET /showcase/:itemId` has route-owned `success` and `notFound` results |
+| GET, POST, PUT, PATCH, DELETE, HEAD                                    | Application-owned contracts; `src/routes/showcase/$itemId/route.ts` adds PUT and explicit HEAD       |
+| Automatic OPTIONS and derived `Allow`                                 | `OPTIONS /showcase/:itemId` advertises GET, HEAD, OPTIONS, and PUT                                   |
+| 200, 201, 204, 400, 401, 403, 404, 405, 406, 415                        | Runnable requests below                                                                              |
+| Params, query, headers, cookies, JSON body                              | Project, session, audit, and showcase routes                                                         |
+| Zod parsing and coercion                                                | `verbose` uses `z.stringbool()`; scaffold query parameters generate boolean/number coercion          |
+| Global, group, segment, route, and method middleware                    | `src/routes/middleware.ts`, `(private)`, `admin`, tenant, and project contracts                      |
+| Middleware `requires`, `provides`, typed rejects, security, permissions | `src/middleware` and private route graph                                                             |
+| `Fields()` and `Sort()` query helpers                                   | `GET /tenants/:tenantId/projects`                                                                    |
+| Directory, flat, dynamic-flat, group, and dynamic-segment routing       | `status/route.ts`, `legacy.ts`, `legacy.$id.ts`, `(private)`, `$tenantId`                            |
+| Local and absolute-URL deprecation replacements                         | `/legacy` points to `/status`; `/legacy/:id` points to a reserved `.invalid` external URL            |
+| Host, port, env overrides, disabled/custom logger                       | `src/routa.ts` and start commands above                                                              |
+| OpenAPI drift and breaking-change baseline                              | `.routa/openapi-baseline.json` and scripts below                                                     |
+| Safe scaffold preview/update with manifest ownership                    | `scaffold/openapi.yaml` and `scaffold/.routa/manifest.json`                                          |
+| Scaffolded formats, nullable values, maps, unions, const                | `scaffold/src/routes/catalog/items/$itemId/schemas.ts`                                               |
+| CLI validation, generation, build, route reference                      | `check`, `generate`, `build`, `routes`, and `routes:json` scripts                                    |
 
 ## Route layout
 
 ```txt
 src/routes/
-  middleware.ts                          # withRequest, withSession
-  status/route.ts                        # GET /status
-  auth/session/route.ts                  # GET /auth/session
-  demo/route.ts                          # GET /demo (hand-written)
-  legacy.ts                              # GET /legacy (flat, deprecated)
-  legacy.$id.ts                          # GET /legacy/:id (flat dynamic)
+  middleware.ts
+  status/route.ts
+  auth/session/route.ts
+  demo/route.ts
+  showcase/$itemId/route.ts              # GET, PUT, HEAD; OPTIONS is automatic
+  legacy.ts                               # flat route; local replacement
+  legacy.$id.ts                           # dynamic flat route; external replacement
   (private)/
-    middleware.ts                        # requireAuth (typed 401)
+    middleware.ts
     admin/
-      middleware.ts                      # withAdmin
-      audit-events/route.ts              # GET /admin/audit-events
-      reports.ts                          # GET /admin/reports (nested flat route)
+      middleware.ts
+      audit-events/route.ts
+      reports.ts                          # nested flat route
     tenants/$tenantId/
-      middleware.ts                      # withTenant
-      projects/route.ts                  # GET, POST /tenants/:tenantId/projects
-      projects/$projectId/route.ts       # GET, PATCH, DELETE .../:projectId
+      middleware.ts
+      projects/route.ts                   # GET, POST
+      projects/$projectId/route.ts        # GET, PATCH, DELETE
 ```
 
-## Scripts
+## Exercise the runtime
+
+Mint signed session cookies:
 
 ```sh
-pnpm dev
-pnpm start
+cd examples/full-api
+export ROUTA_DEMO_SESSION_SECRET=dev-secret
+SESSION=$(node scripts/mint-session.mjs admin)
+WRITER=$(node scripts/mint-session.mjs acme:writer)
+```
+
+Public routes, route-owned results, and content negotiation:
+
+```sh
+curl -s http://127.0.0.1:3000/status
+curl -s -H 'Accept: application/problem+json' http://127.0.0.1:3000/demo
+curl -s 'http://127.0.0.1:3000/showcase/item-1?verbose=true'       # 200 success
+curl -s -i http://127.0.0.1:3000/showcase/missing                  # 404 notFound
+```
+
+Normal PUT and HEAD contracts, plus framework-owned OPTIONS:
+
+```sh
+curl -s -X PUT -H 'Content-Type: application/json' \
+  -d '{"name":"Replacement","active":true}' \
+  http://127.0.0.1:3000/showcase/item-1
+curl -s -I http://127.0.0.1:3000/showcase/item-1
+curl -s -i -X OPTIONS http://127.0.0.1:3000/showcase/item-1
+```
+
+The automatic response is bodyless `204` with `Allow: GET, HEAD, OPTIONS, PUT`. Applications never declare an `options` contract, so the header cannot drift from the route.
+
+A CORS preflight receives the same derived method list without Routa silently granting an origin; origin and request-header permission remain an explicit CORS policy decision:
+
+```sh
+curl -s -i -X OPTIONS \
+  -H 'Origin: https://app.example.invalid' \
+  -H 'Access-Control-Request-Method: PUT' \
+  -H 'Access-Control-Request-Headers: content-type' \
+  http://127.0.0.1:3000/showcase/item-1
+```
+
+Framework-generated client errors:
+
+```sh
+curl -s -i 'http://127.0.0.1:3000/showcase/item-1?verbose=maybe'    # 400 validation
+curl -s -i -X PUT -H 'Content-Type: application/json' -d '{' \
+  http://127.0.0.1:3000/showcase/item-1                            # 400 invalid JSON
+curl -s -i -X PUT -H 'Content-Type: text/plain' -d 'name=test' \
+  http://127.0.0.1:3000/showcase/item-1                            # 415
+curl -s -i -H 'Accept: text/html' http://127.0.0.1:3000/showcase/item-1 # 406
+curl -s -i -X POST http://127.0.0.1:3000/showcase/item-1           # 405 + Allow
+```
+
+Middleware scopes, permissions, helpers, and bodyless DELETE:
+
+```sh
+curl -s -i http://127.0.0.1:3000/tenants/acme/projects             # typed 401
+curl -s -H "Cookie: session=$WRITER" \
+  'http://127.0.0.1:3000/tenants/acme/projects?fields=id,%20name&sort=-name'
+curl -s -i -X POST -H "Cookie: session=$SESSION" \
+  -H 'Content-Type: application/json' -d '{"name":"Nope"}' \
+  http://127.0.0.1:3000/tenants/acme/projects                     # typed 403
+curl -s -X POST -H "Cookie: session=$WRITER" \
+  -H 'Content-Type: application/json' -d '{"name":"Launch"}' \
+  http://127.0.0.1:3000/tenants/acme/projects                     # 201
+curl -s -i -X DELETE -H "Cookie: session=$WRITER" \
+  http://127.0.0.1:3000/tenants/acme/projects/project_1           # bodyless 204
+curl -s -H "Cookie: session=$SESSION" \
+  'http://127.0.0.1:3000/admin/audit-events?limit=2'
+curl -s -H "Cookie: session=$SESSION" http://127.0.0.1:3000/admin/reports
+```
+
+Deprecation lifecycle headers:
+
+```sh
+curl -s -i http://127.0.0.1:3000/legacy
+curl -s -i http://127.0.0.1:3000/legacy/old-project
+```
+
+The second response advertises `https://api.example.invalid/...` only as metadata. `.invalid` is reserved; the example never requires an external request.
+
+## Safe scaffolding workflow
+
+The runtime API is application-owned because its generated starting point was moved into middleware groups and gained business logic. It therefore has no scaffold manifest claiming ownership.
+
+`scaffold/` is a separate TypeScript Routa project used only to demonstrate regeneration. Its manifest paths exactly match its generated route, schema, metadata, and baseline files.
+
+```sh
+cd examples/full-api
+pnpm scaffold:preview    # read-only; every entry should be "= unchanged"
+pnpm scaffold:update     # explicit --yes regeneration after reviewing the preview
+```
+
+`scaffold/openapi.yaml` demonstrates:
+
+- path-level parameters and GET/PUT/HEAD generation (OPTIONS remains runtime-owned);
+- UUID, email, URL, and date-time formats;
+- nullable OpenAPI 3.1 type arrays;
+- `additionalProperties` maps;
+- `anyOf` unions and string `const` discriminants;
+- boolean and number wire-value coercion for query parameters.
+
+Routa deliberately rejects `oneOf`, `allOf`, OpenAPI 3.0 `nullable`, and other unsupported schema forms with scaffold diagnostics; this healthy fixture uses only supported public forms.
+
+Scaffold input also rejects explicit `OPTIONS` operations. The runtime derives OPTIONS from the generated application methods.
+
+## Validation and OpenAPI workflow
+
+```sh
+cd examples/full-api
 pnpm check
+pnpm generate
 pnpm build
 pnpm lint
-pnpm format
-pnpm scaffold              # routa scaffold openapi.yaml
+pnpm scaffold:preview
 pnpm openapi:check
 pnpm openapi:breaking
 pnpm routes
 pnpm routes:json
 ```
 
-## Try it
-
-Mint a signed session cookie (requires `ROUTA_DEMO_SESSION_SECRET`):
+After an intentional runtime contract change, review it and update the committed baseline explicitly:
 
 ```sh
-export ROUTA_DEMO_SESSION_SECRET=dev-secret
-SESSION=$(node scripts/mint-session.mjs admin)
-WRITER=$(node scripts/mint-session.mjs acme:writer)
-```
-
-```sh
-# Public status
-curl -s http://127.0.0.1:3000/status
-
-# Accept application/*+json (no longer 406)
-curl -s -H 'Accept: application/problem+json' http://127.0.0.1:3000/demo
-
-# Unauthenticated private route → typed 401 from requireAuth
-curl -s -i http://127.0.0.1:3000/tenants/acme/projects
-
-# Authenticated list with Fields/Sort (fields may include spaces)
-curl -s -H "Cookie: session=$WRITER" \
-  'http://127.0.0.1:3000/tenants/acme/projects?fields=id,%20name&sort=-name'
-
-# Write without permission → typed 403 from withProjectPermissions
-curl -s -i -X POST -H "Cookie: session=$SESSION" -H 'Content-Type: application/json' \
-  -d '{"name":"Nope"}' http://127.0.0.1:3000/tenants/acme/projects
-
-# Writer creates a project
-curl -s -X POST -H "Cookie: session=$WRITER" -H 'Content-Type: application/json' \
-  -d '{"name":"Launch"}' http://127.0.0.1:3000/tenants/acme/projects
-
-# Bodyless delete → 204
-curl -s -i -X DELETE -H "Cookie: session=$WRITER" \
-  http://127.0.0.1:3000/tenants/acme/projects/project_1
-
-# Admin audit feed
-curl -s -H "Cookie: session=$SESSION" \
-  'http://127.0.0.1:3000/admin/audit-events?limit=2'
-
-# Nested flat route: receives `(private)` auth and `admin` middleware context.
-curl -s -H "Cookie: session=$SESSION" http://127.0.0.1:3000/admin/reports
-
-# Deprecated flat route: generated lifecycle headers identify the successor.
-curl -s -i http://127.0.0.1:3000/legacy
-
-# Dynamic flat route
-curl -s http://127.0.0.1:3000/legacy/old-project
-```
-
-## OpenAPI
-
-- `openapi.yaml` is the scaffold source for generated routes/schemas.
-- `GET /demo` is hand-written on purpose (not scaffold-owned) and still appears in the live OpenAPI baseline after `routa check`.
-- Commit `.routa/` so drift and regeneration safety work across machines.
-
-```sh
+pnpm openapi:update
 pnpm openapi:check
-
-# Fails for removed operations, newly-required input, or public → authenticated changes.
 pnpm openapi:breaking
 ```
 
-The current baseline intentionally includes the private-route security metadata.
-To see the auth compatibility guard, remove `openapi.security` from
-`src/middleware/auth.ts`, update the baseline, then restore it and run
-`pnpm openapi:breaking`.
+The baseline keeps component names and metadata stable while Routa regenerates paths, inputs, middleware security/permissions, deprecations, and response contracts from source.
+
+## Deliberate scope
+
+This example covers public APIs that belong in a healthy application. It does not force invalid-project diagnostic branches, low-level Hono adapter plumbing, compile-time-only utility types, or the interactive project-creation wizard into runtime routes. Those surfaces are exercised by CLI/core tests and the dedicated creation flow; representing them as successful API endpoints would be misleading.

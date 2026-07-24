@@ -8,7 +8,15 @@
 	},
 	"files": {
 		"ignoreUnknown": true,
-		"includes": ["**", "!node_modules", "!dist", "!coverage", "!.routa"]
+		"includes": [
+			"**",
+			"!node_modules",
+			"!dist",
+			"!coverage",
+			"!.routa",
+			"!scaffold/.routa",
+			"!scaffold/src"
+		]
 	},
 	"formatter": {
 		"enabled": true,

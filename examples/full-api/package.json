@@ -10,9 +10,12 @@
 		"build": "routa build",
 		"lint": "biome check .",
 		"format": "biome check --write .",
-		"scaffold": "routa scaffold openapi.yaml",
+		"scaffold": "pnpm scaffold:preview",
+		"scaffold:preview": "cd scaffold && routa scaffold openapi.yaml --preview",
+		"scaffold:update": "cd scaffold && routa scaffold openapi.yaml --yes",
 		"openapi:check": "routa openapi check",
 		"openapi:breaking": "routa openapi breaking",
+		"openapi:update": "routa openapi breaking --update-baseline",
 		"routes": "routa routes",
 		"routes:json": "routa routes --format json",
 		"mint-session": "node scripts/mint-session.mjs"

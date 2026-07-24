@@ -6,6 +6,10 @@ const route = createRouteRoot("/legacy/:id");
 
 export default route({
 	get: createRoute({
+		deprecation: {
+			sunset: "2027-06-01",
+			replacement: "https://api.example.invalid/migrations/legacy-projects",
+		},
 		input: {
 			params: z.object({ id: z.string() }),
 		},

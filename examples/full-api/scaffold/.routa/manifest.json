@@ -1,0 +1,42 @@
+{
+	"version": 1,
+	"openapi": {
+		"baseline": ".routa/openapi-baseline.json"
+	},
+	"generated": [
+		{
+			"path": "src/routes/catalog/items/$itemId/route.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"getCatalogItem",
+				"replaceCatalogItem",
+				"inspectCatalogItem"
+			],
+			"kind": "route",
+			"sha256": "e4d94e5fb83ec6b9eb404c57a8088357f69c66b054a5900eccbc733174fc98e7"
+		},
+		{
+			"path": "src/routes/catalog/items/$itemId/schemas.ts",
+			"source": "openapi.yaml",
+			"operationIds": [
+				"getCatalogItem",
+				"replaceCatalogItem",
+				"inspectCatalogItem"
+			],
+			"kind": "schema",
+			"sha256": "a33611d9a583429bddbecd81515528b987053b45e7ef3f3e79e451fa2027770c"
+		},
+		{
+			"path": ".routa/routes.gen.ts",
+			"source": "openapi.yaml",
+			"kind": "route-metadata",
+			"sha256": "cfa033fc5fc7d2b060deb68d7d1e0158ce383a12fbeae20c22b749ddba5e307b"
+		},
+		{
+			"path": ".routa/openapi-baseline.json",
+			"source": "openapi.yaml",
+			"kind": "openapi-baseline",
+			"sha256": "b6f6835b484b8e7d6e56b72c0975917d4f01a3f5ce3357d059e83130541cffcf"
+		}
+	]
+}

@@ -25,6 +25,8 @@ src/routes/users/$userId/posts/route.ts
 
 Each `route.ts` file owns the methods for one path. Keeping all verbs for one path together makes shared params, middleware, schemas, and metadata easier to maintain.
 
+Applications may declare `get`, `post`, `put`, `patch`, `delete`, and `head`. Do not declare `options`: Routa generates a `204 OPTIONS` response from the path's methods and keeps its `Allow` header in sync automatically.
+
 ## Contract Before Handler
 
 ```ts

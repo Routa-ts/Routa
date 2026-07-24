@@ -291,7 +291,7 @@ responses: {
 - Development defaults are localhost-focused.
 - Production defaults deny cross-origin requests unless origins are explicitly configured.
 - Credentialed CORS requires explicit origins; wildcard origins with credentials are invalid and should trigger a guardrail.
-- Allowed methods should be inferred from declared route methods. Routa should auto-handle preflight `OPTIONS` unless the user defines custom `OPTIONS`.
+- Allowed methods should be inferred from declared route methods. Routa auto-handles preflight `OPTIONS`; route contracts cannot define custom `OPTIONS`.
 - Allowed headers should include common API headers by default, such as `content-type`, `authorization`, and `accept`, plus configured API key/auth headers. Applications may add more headers explicitly.
 - Exposed headers should be explicit; Routa may expose framework-relevant headers such as `retry-after` when rate limiting is enabled.
 

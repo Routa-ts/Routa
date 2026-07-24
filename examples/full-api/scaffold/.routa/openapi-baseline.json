@@ -1,0 +1,233 @@
+{
+	"openapi": "3.1.0",
+	"info": {
+		"title": "Routa Scaffold Feature Showcase",
+		"version": "0.0.0"
+	},
+	"paths": {
+		"/catalog/items/{itemId}": {
+			"parameters": [
+				{
+					"name": "itemId",
+					"in": "path",
+					"required": true,
+					"schema": {
+						"type": "string",
+						"format": "uuid"
+					}
+				}
+			],
+			"get": {
+				"operationId": "getCatalogItem",
+				"parameters": [
+					{
+						"name": "includeArchived",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "boolean"
+						}
+					},
+					{
+						"name": "confidence",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "number"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Catalog item",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CatalogItem"
+								}
+							}
+						}
+					}
+				}
+			},
+			"put": {
+				"operationId": "replaceCatalogItem",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CatalogItemInput"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Replaced catalog item",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CatalogItem"
+								}
+							}
+						}
+					}
+				}
+			},
+			"head": {
+				"operationId": "inspectCatalogItem",
+				"responses": {
+					"204": {
+						"description": "Catalog item exists"
+					}
+				}
+			}
+		}
+	},
+	"components": {
+		"schemas": {
+			"CatalogItemInput": {
+				"type": "object",
+				"required": [
+					"name",
+					"enabled",
+					"attributes",
+					"delivery"
+				],
+				"properties": {
+					"name": {
+						"type": "string"
+					},
+					"enabled": {
+						"type": "boolean"
+					},
+					"score": {
+						"type": [
+							"number",
+							"null"
+						]
+					},
+					"attributes": {
+						"type": "object",
+						"additionalProperties": {
+							"type": "string"
+						}
+					},
+					"delivery": {
+						"anyOf": [
+							{
+								"type": "object",
+								"required": [
+									"kind",
+									"email"
+								],
+								"properties": {
+									"kind": {
+										"const": "email"
+									},
+									"email": {
+										"type": "string",
+										"format": "email"
+									}
+								}
+							},
+							{
+								"type": "object",
+								"required": [
+									"kind",
+									"callback"
+								],
+								"properties": {
+									"kind": {
+										"const": "webhook"
+									},
+									"callback": {
+										"type": "string",
+										"format": "uri"
+									}
+								}
+							}
+						]
+					}
+				}
+			},
+			"CatalogItem": {
+				"type": "object",
+				"required": [
+					"id",
+					"name",
+					"enabled",
+					"score",
+					"attributes",
+					"delivery",
+					"createdAt"
+				],
+				"properties": {
+					"id": {
+						"type": "string",
+						"format": "uuid"
+					},
+					"name": {
+						"type": "string"
+					},
+					"enabled": {
+						"type": "boolean"
+					},
+					"score": {
+						"type": [
+							"number",
+							"null"
+						]
+					},
+					"attributes": {
+						"type": "object",
+						"additionalProperties": {
+							"type": "string"
+						}
+					},
+					"delivery": {
+						"anyOf": [
+							{
+								"type": "object",
+								"required": [
+									"kind",
+									"email"
+								],
+								"properties": {
+									"kind": {
+										"const": "email"
+									},
+									"email": {
+										"type": "string",
+										"format": "email"
+									}
+								}
+							},
+							{
+								"type": "object",
+								"required": [
+									"kind",
+									"callback"
+								],
+								"properties": {
+									"kind": {
+										"const": "webhook"
+									},
+									"callback": {
+										"type": "string",
+										"format": "uri"
+									}
+								}
+							}
+						]
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			}
+		}
+	}
+}
