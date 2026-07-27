@@ -129,7 +129,9 @@ missing from generated metadata produces a type error.
 ## `createRouteRootFactory`
 
 ```ts
-function createRouteRootFactory<TCtxByPath>(): <TPath extends keyof TCtxByPath & string>(
+function createRouteRootFactory<
+	TCtxByPath extends Record<string, Partial<Record<HttpMethod, unknown>>>,
+>(): <TPath extends keyof TCtxByPath & string>(
 	path: TPath,
 ) => <const TConfig extends RouteRootConfigForCtx<TCtxByPath[TPath]>>(
 	config: TConfig,

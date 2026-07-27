@@ -93,7 +93,8 @@ stays in the source document and is not approximated in TypeScript.
 <Aside type="caution" title="v0 status">
 	Scaffolding the supported JSON OpenAPI surface is implemented in v0; unsupported
 	OpenAPI features remain deferred. Scaffolding is a one-way import, not a live binding.
-	After the first run, route files are your source of truth.
+	After the first run, route files own route contracts. The baseline owns `info`, `servers`,
+	and `components.schemas`.
 </Aside>
 
 ## Next Steps

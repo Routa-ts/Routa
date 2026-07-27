@@ -85,9 +85,9 @@ generated one; Routa reads it during `routa scaffold` and never writes to it.
 
 ## Guarantees
 
-- `check`, `generate`, `build`, and `dev` write generated metadata only inside `.routa/`;
-  those commands never rewrite your source under `src/`. `create-routa-ts` and
-  `routa scaffold` intentionally create source files.
+- `check`, `generate`, and `build` write generated metadata only inside `.routa/`. `dev`
+  may also stub empty route files under `src/`. `create-routa-ts` and `routa scaffold`
+  intentionally create source files.
 - Validation runs before generation. A failing check leaves the previous metadata in place
   rather than writing a half-valid file.
 - Generated metadata is deterministic. The same source produces byte-identical output, so

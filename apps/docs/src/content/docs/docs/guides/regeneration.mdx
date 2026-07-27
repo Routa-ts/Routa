@@ -90,8 +90,8 @@ files with no user content.
 | A route you deleted from the document still serves traffic | Regeneration removed the file but metadata is stale. Run `routa generate`. |
 
 <Aside type="caution" title="v0 status">
-	Manifest-based preview, conflict detection, and safe regeneration are implemented in
-	v0. Keep `run` bodies to a service call and an outcome choice; when logic lives in
+	In v0, you can use manifest-based preview, conflict detection, and safe regeneration.
+	Keep `run` bodies to a service call and an outcome choice; when logic lives in
 	`src/services/`, reverting generated-file edits before regeneration is inexpensive.
 </Aside>
 

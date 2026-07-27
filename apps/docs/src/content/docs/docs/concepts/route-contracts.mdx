@@ -34,15 +34,25 @@ export default route({
 			},
 		},
 		run: async ({ input, ctx }) => {
+			const correlationId = randomUUID();
+
 			ctx.logger.info("users.create", "Creating a user.", {
-				correlationId: randomUUID(),
+				correlationId,
 			});
 
 			const created = await users.createUser(input.body);
 
 			if (!created) {
+				ctx.logger.warn("users.create_conflict", "Email is already in use.", {
+					correlationId,
+				});
 				return { type: "emailConflict", data: { message: "Email already in use." } };
 			}
+
+			ctx.logger.info("users.created", "User created.", {
+				correlationId,
+				userId: created.id,
+			});
 
 			return { type: "success", data: created };
 		},

@@ -46,7 +46,8 @@ Every other status comes from your contract.
 
 ## Error Response Shape
 
-Routa returns problem documents for the errors it generates:
+For most errors Routa generates, it returns problem documents. Responses with status 405
+or 406 are the plain-text exceptions:
 
 ```json
 {

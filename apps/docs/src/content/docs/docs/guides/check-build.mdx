@@ -77,7 +77,8 @@ disagree:
 <PackageManagers type="exec" args="generate" />
 
 ```sh
-git diff --exit-code .routa
+git diff --exit-code -- .routa
+test -z "$(git ls-files --others --exclude-standard -- .routa)"
 ```
 
 <PackageManagers type="exec" args="check" />
