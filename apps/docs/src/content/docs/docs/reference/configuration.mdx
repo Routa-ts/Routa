@@ -16,6 +16,7 @@ export default createRouta({
 	host: "127.0.0.1",
 	port: 3000,
 	lifecycleHeaders: true,
+	responseValidation: "always",
 });
 ```
 
@@ -76,9 +77,11 @@ runtime emits two startup lifecycle events and two request events:
 | `api.started` | `info` | `host`, `port`, `routes` |
 | `api.start_failed` | `error` | `error`, `host`, `port` |
 | `http.request` | `info` | `method`, `path`, `status`, `durationMs` |
-| `http.error` | `error` | `method`, `path`, `status`, `error`, `name`, `stack` |
+| `http.error` | `error` | `method`, `path`, `status`, `error`, `name`, `stack`, optional `issues` |
 
-`http.error` is emitted only for responses with a status of 500 or above.
+`http.error` is emitted only for responses with a status of 500 or above. When response
+or middleware context validation fails, `issues` contains only Zod `code` and `path`
+fields. Routa never logs the rejected response or context values.
 
 ## `lifecycleHeaders`
 
@@ -97,6 +100,36 @@ Whether to emit deprecation headers on routes that declare `deprecation`. Defaul
 
 Routes without `deprecation` are unaffected regardless of this setting.
 
+## `responseValidation`
+
+```ts
+responseValidation?: "development" | "always"
+```
+
+Controls when Routa parses handler responses and middleware reject responses through
+their declared Zod schemas. Defaults to `"development"`:
+
+| Value | `routa dev` | `routa start` |
+| --- | --- | --- |
+| `"development"` | Parse response data | Do not parse response data |
+| `"always"` | Parse response data | Parse response data |
+
+Routa always checks the result envelope and response type, selects the declared status,
+and performs JSON serialization. Skipping schema parsing also skips Zod transforms,
+defaults, and unknown-key stripping on response data. Set `"always"` when production must
+reject response drift or your response contract relies on Zod output transformations.
+
+```ts title="src/routa.ts"
+import { createRouta } from "@routa-ts/core";
+
+export default createRouta({
+	responseValidation: "always",
+});
+```
+
+This setting does not affect context passed through middleware `provides`. Routa always
+parses those values before adding them to downstream context.
+
 ## Environment Variables
 
 Environment variables are read at server start and take precedence over `src/routa.ts`.
@@ -106,8 +139,8 @@ Environment variables are read at server start and take precedence over `src/rou
 | `HOST` | `host` | `127.0.0.1` |
 | `PORT` | `port` | `3000` |
 
-There is no environment override for `logger` or `lifecycleHeaders`; branch on your own
-variables inside `src/routa.ts` instead.
+There is no environment override for `logger`, `lifecycleHeaders`, or
+`responseValidation`; branch on your own variables inside `src/routa.ts` instead.
 
 ## Precedence
 

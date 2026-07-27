@@ -23,11 +23,13 @@ For each matched route, in order:
    object.
 4. **Middleware chain.** Each middleware's `requires` keys are checked against the current
    context, then `run` executes. It either returns a reject outcome, ending the request, or
-   calls `next(ctx)` to continue.
+   calls `next(ctx)` to continue. Declared `provides` values are parsed before any are
+   merged, and undeclared top-level keys are omitted.
 5. **Handler.** `run` receives the parsed input and the accumulated context, with
    framework-owned values such as `logger` applied last so they cannot be replaced.
-6. **Response validation.** The returned `type` is looked up in the route's `responses`
-   and in every middleware `rejects` map, and `data` is parsed against that schema.
+6. **Response validation.** The returned result shape and `type` are checked against the
+   route's `responses` and every middleware `rejects` map. Its `data` is parsed according
+   to the configured response-validation policy.
 7. **Serialization.** The response is written as `application/json; charset=utf-8`, with
    lifecycle headers when enabled.
 
@@ -68,8 +70,9 @@ or 406 are the plain-text exceptions:
 | `…/problems/handler-output` | Invalid handler output | 500 |
 | `…/problems/internal` | Internal Server Error | 500 |
 
-Only validation problems include `issues`. Handler-output problems never leak the
-underlying message, since it may describe internal data.
+Only input validation problems include `issues` in the response. Handler-output problems
+never leak the underlying message or response values, since they may contain internal
+data.
 
 ## Methods
 
@@ -104,16 +107,30 @@ policy in your application.
 
 ## Response Serialization
 
-Handlers return `{ type, data }`. Routa looks up the status from the matching response
-definition, validates `data`, and serializes it. Statuses `204`, `205`, and `304` are
-emitted with no body, and data that cannot be serialized as JSON produces a handler-output
-problem rather than a partial response.
+Handlers and middleware rejects return `{ type, data }`. Routa always looks up the type
+and status from the matching response definition. With the default
+`responseValidation: "development"`, it parses `data` through that response schema in
+`routa dev` and skips the parse in `routa start`. Set `responseValidation: "always"` to
+parse in both modes. The CLI passes the mode explicitly; Routa does not infer it from
+`NODE_ENV`.
+
+When schema parsing is disabled, Zod transforms, defaults, and unknown-key stripping do
+not run. JSON serialization still runs. Statuses `204`, `205`, and `304` are emitted with
+no body, and data that cannot be serialized as JSON produces a handler-output problem
+rather than a partial response. See [Configuration](/docs/reference/configuration/) for
+the policy table.
+
+Return the declared result object from handlers and middleware. A raw `Response` is not a
+response escape hatch: returning one is invalid handler output, while throwing one is
+handled as an internal error. Both produce a generic `500` problem response.
 
 ## Logging
 
 When a logger is configured, `createHonoApp` records `http.request` at `info` for every
 completed request with `method`, `path`, `status`, and `durationMs`, and `http.error` at
-`error` for responses of 500 or above with the error message, name, and stack.
+`error` for responses of 500 or above with the error message, name, and stack. Response
+and middleware context schema failures also include structured `issues` containing only
+each Zod issue's `code` and `path`; rejected values are never logged.
 
 Handlers always receive `ctx.logger`. With logging disabled it is a complete no-op
 implementation of the same type.
@@ -134,7 +151,7 @@ implementation of the same type.
 	<LinkCard
 		title="Configuration"
 		href="/docs/reference/configuration/"
-		description="Logging and lifecycle header settings."
+		description="Logging, lifecycle headers, and response validation."
 	/>
 	<LinkCard
 		title="Testing"

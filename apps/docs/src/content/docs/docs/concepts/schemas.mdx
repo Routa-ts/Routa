@@ -47,9 +47,15 @@ Routa parses each declared input source with `schema.parse()` before the handler
 `input.body` is the schema's **output** type, not its input type. A schema with a
 `transform` or a default gives the handler the transformed value.
 
-On the way out, the returned `data` is parsed against the matching response schema before
-serialization. A handler that returns data the schema rejects produces a `500` with an
-`Invalid handler output` problem document rather than sending a malformed payload.
+On the way out, Routa always checks the result shape and looks up its `type` in the
+declared responses. By default, it parses `data` against the matching response schema in
+`routa dev`, so drift produces a generic `500` problem response before malformed data
+reaches a client. Production parsing is opt-in with `responseValidation: "always"`.
+
+If production response validation is disabled, Routa does not apply response-side Zod
+transforms, defaults, or unknown-key stripping. Middleware `provides` schemas remain
+active in both modes because their parsed values become downstream context. See
+[Configuration](/docs/reference/configuration/) for the full policy.
 
 ## Where Schemas Live
 
@@ -89,6 +95,8 @@ rejected. `Fields` splits a comma-separated list into a validated array, so
   what your domain considers valid; keep business rules in services.
 - Keep response schemas narrow. Anything the schema permits is something a client may
   receive and OpenAPI will advertise.
+- Use `responseValidation: "always"` when you need production drift detection or depend on
+  response-side Zod transforms and defaults.
 - Reuse a schema across routes by importing it. Routa deduplicates by exported name, not
   by structure.
 

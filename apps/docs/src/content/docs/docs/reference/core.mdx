@@ -34,6 +34,7 @@ the default export of `src/routa.ts`, which the runtime imports at boot.
 | `port` | `number` | `3000` |
 | `logger` | `RoutaLogger \| false` | Built-in console logger |
 | `lifecycleHeaders` | `boolean` | `false` |
+| `responseValidation` | `"development" \| "always"` | `"development"` |
 
 ```ts title="src/routa.ts"
 import { createRouta } from "@routa-ts/core";
@@ -42,6 +43,7 @@ export default createRouta({
 	host: "127.0.0.1",
 	port: 3000,
 	lifecycleHeaders: true,
+	responseValidation: "always",
 });
 ```
 
@@ -180,8 +182,11 @@ function createMiddleware<TRequires, TProvides, TRejects, TInput>(
 | `openapi` | `{ security?, permissions? }` | Metadata emitted into generated OpenAPI |
 | `run` | `({ input, ctx, next }) => …` | The implementation |
 
-`run` either returns a reject outcome or returns `next(providedCtx)`. Values passed to
-`next` are validated against `provides` before being merged into `ctx`.
+`run` either returns a reject outcome or returns `next(providedCtx)`. Routa parses every
+declared `provides` value before merging any of them into `ctx`, and downstream code
+receives the parsed output. Undeclared top-level keys are omitted. A normal `z.object()`
+schema strips unknown nested keys; use `.strict()` on that schema when unknown nested keys
+must reject the request instead.
 
 **Errors:** `next()` called more than once throws. A `provides` value that fails its
 schema produces an `Invalid handler output` response. Reject statuses must be 4xx or 5xx.
@@ -214,6 +219,8 @@ call it directly in tests.
 | `routes[].createContext` | `() => object` | Optional base context, must return a plain object |
 | `options.logger` | `RoutaLogger` | Enables `http.request` and `http.error` logging |
 | `options.lifecycleHeaders` | `boolean` | Emit `Deprecation`, `Sunset`, and `Link` |
+| `options.responseValidation` | `"development" \| "always"` | Response schema policy; defaults to `"development"` |
+| `options.runtimeMode` | `"dev" \| "start"` | Explicit mode; defaults to `"dev"` for direct use |
 
 Registration throws for an explicitly declared `options` method, a duplicate
 method-and-path pair, a `GET` or `HEAD` contract declaring a body, and duplicate reject
@@ -360,7 +367,7 @@ type UsersRouteConfig = RouteRootConfigForCtx<{
 `HttpMethod`, `RouteInput`, `RouteResponses`, `RouteContract`, `AnyRouteContract`,
 `RouteRun`, `RouteHandlerArgs`, `RoutaResult`, `RouteRunResult`, `InferInput`,
 `InferResponse`, `SchemaInput`, `SchemaOutput`, `RoutaRouteContext`, `RoutaConfig`,
-`RouteDeprecation`, `RouteDeprecationReplacement`, `RegisteredRoutePath`,
+`ResponseValidation`, `RouteDeprecation`, `RouteDeprecationReplacement`, `RegisteredRoutePath`,
 `ExternalApiUrl`, `ContextualRouteContract`, `RouteRootConfigForCtx`, `MiddlewareContract`,
 `AnyMiddlewareContract`, `MiddlewareRun`,
 `MiddlewareRunArgs`, `MiddlewareNext`, `MiddlewareProvidesSpec`, `MiddlewareProvidesKeys`,

@@ -228,30 +228,193 @@ describe("createHonoApp", () => {
 		});
 	});
 
-	it("returns problem details when handler response data fails its schema", async () => {
-		const app = createHonoApp([
+	it("validates responses in development and logs safe structured issue paths", async () => {
+		const events: RoutaLogEvent[] = [];
+		const app = createHonoApp(
+			[
+				{
+					method: "get",
+					path: "/status",
+					contract: createRoute({
+						responses: {
+							success: {
+								status: 200,
+								schema: z.object({ profile: z.object({ id: z.string() }) }),
+							},
+						},
+						run: () =>
+							({
+								type: "success",
+								data: { profile: { id: 123, secret: "database-secret" } },
+							}) as never,
+					}),
+				},
+			],
 			{
-				method: "get",
-				path: "/status",
+				runtimeMode: "dev",
+				logger: createLogger({ sink: (event) => events.push(event) }),
+			},
+		);
+
+		const response = await app.request("/status");
+		const body = await response.json();
+
+		expect(response.status).toBe(500);
+		expect(body).toEqual({
+			type: "https://routa-ts.dev/problems/handler-output",
+			title: "Invalid handler output",
+			status: 500,
+		});
+		expect(events).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					event: "http.error",
+					data: expect.objectContaining({
+						issues: [{ code: "invalid_type", path: ["profile", "id"] }],
+					}),
+				}),
+			]),
+		);
+		expect(JSON.stringify(events)).not.toContain("database-secret");
+	});
+
+	it("validates production responses when configured as always", async () => {
+		const app = createHonoApp(
+			[
+				{
+					method: "get",
+					path: "/status",
+					contract: createRoute({
+						responses: {
+							success: { status: 200, schema: z.object({ ok: z.boolean() }) },
+						},
+						run: () => ({ type: "success", data: { ok: "yes" } }) as never,
+					}),
+				},
+			],
+			{ runtimeMode: "start", responseValidation: "always" },
+		);
+
+		const response = await app.request("/status");
+
+		expect(response.status).toBe(500);
+	});
+
+	it("skips response schemas in production under the development policy", async () => {
+		const app = createHonoApp(
+			[
+				{
+					method: "get",
+					path: "/status",
+					contract: createRoute({
+						responses: {
+							success: { status: 200, schema: z.object({ ok: z.boolean() }) },
+						},
+						run: () => ({ type: "success", data: { ok: "yes" } }) as never,
+					}),
+				},
+			],
+			{ runtimeMode: "start", responseValidation: "development" },
+		);
+
+		const response = await app.request("/status");
+
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual({ ok: "yes" });
+	});
+
+	it("applies response transforms only when response validation is enabled", async () => {
+		const routes = [
+			{
+				method: "get" as const,
+				path: "/profile",
 				contract: createRoute({
 					responses: {
 						success: {
 							status: 200,
-							schema: z.object({ ok: z.boolean() }),
+							schema: z.object({ name: z.string().transform((name) => name.toUpperCase()) }),
 						},
 					},
-					run: () => ({ type: "success", data: { ok: "yes" } }) as never,
+					run: () => ({ type: "success", data: { name: "Jane" } }),
 				}),
 			},
-		]);
+		];
+		const developmentApp = createHonoApp(routes, { runtimeMode: "dev" });
+		const productionApp = createHonoApp(routes, {
+			runtimeMode: "start",
+			responseValidation: "development",
+		});
 
-		const response = await app.request("/status");
+		await expect((await developmentApp.request("/profile")).json()).resolves.toEqual({
+			name: "JANE",
+		});
+		await expect((await productionApp.request("/profile")).json()).resolves.toEqual({
+			name: "Jane",
+		});
+	});
+
+	it("validates middleware rejection responses", async () => {
+		const rejectInvalidData = createMiddleware({
+			rejects: {
+				unauthorized: {
+					status: 401,
+					schema: z.object({ message: z.string() }),
+				},
+			},
+			run: () => ({ type: "unauthorized", data: { message: 401 } }) as never,
+		});
+		const app = createHonoApp(
+			[
+				{
+					method: "get",
+					path: "/secure",
+					contract: createRoute({
+						middleware: [rejectInvalidData],
+						responses: {
+							success: { status: 200, schema: z.object({ ok: z.boolean() }) },
+						},
+						run: () => ({ type: "success", data: { ok: true } }),
+					}),
+				},
+			],
+			{ runtimeMode: "dev" },
+		);
+
+		const response = await app.request("/secure");
 
 		expect(response.status).toBe(500);
 		await expect(response.json()).resolves.toMatchObject({
 			title: "Invalid handler output",
 			status: 500,
 		});
+	});
+
+	it("does not pass through Response objects thrown by handlers", async () => {
+		const app = createHonoApp([
+			{
+				method: "get",
+				path: "/raw",
+				contract: createRoute({
+					responses: {
+						success: { status: 200, schema: z.object({ ok: z.boolean() }) },
+					},
+					run: () => {
+						throw new Response("sensitive raw body", { status: 418 });
+					},
+				}),
+			},
+		]);
+
+		const response = await app.request("/raw");
+		const body = await response.json();
+
+		expect(response.status).toBe(500);
+		expect(body).toEqual({
+			type: "https://routa-ts.dev/problems/internal",
+			title: "Internal Server Error",
+			status: 500,
+		});
+		expect(JSON.stringify(body)).not.toContain("sensitive raw body");
 	});
 
 	it("rejects unsupported request body media types", async () => {
@@ -954,24 +1117,81 @@ describe("createHonoApp", () => {
 		);
 	});
 
-	it("rejects middleware provides that fail schema validation", async () => {
-		const badProvides = createMiddleware({
+	it("projects middleware context through declared schemas", async () => {
+		const withoutProvides = createMiddleware({
+			run: ({ next }) => next({ rootLeak: "discarded" }),
+		});
+		const projectedProvides = createMiddleware({
 			provides: {
 				user: z.object({ id: z.string() }),
+				role: z.string().transform((value) => value.toUpperCase()),
 			},
-			run: ({ next }) => next({ user: { id: 123 } }),
+			run: ({ next }) =>
+				next({
+					user: { id: "user_1", secret: "discarded" },
+					role: "admin",
+					undeclared: "discarded",
+				} as never),
 		});
 		const app = createHonoApp([
 			{
 				method: "get",
 				path: "/me",
 				contract: createRoute({
-					middleware: [badProvides],
+					middleware: [withoutProvides, projectedProvides],
 					responses: {
 						success: {
 							status: 200,
-							schema: z.object({ id: z.string() }),
+							schema: z.object({
+								id: z.string(),
+								role: z.string(),
+								hasSecret: z.boolean(),
+								hasUndeclared: z.boolean(),
+								hasRootLeak: z.boolean(),
+							}),
 						},
+					},
+					run: ({ ctx }) => ({
+						type: "success",
+						data: {
+							id: ctx.user.id,
+							role: ctx.role,
+							hasSecret: "secret" in ctx.user,
+							hasUndeclared: "undeclared" in ctx,
+							hasRootLeak: "rootLeak" in ctx,
+						},
+					}),
+				}),
+			},
+		]);
+
+		const response = await app.request("/me");
+
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual({
+			id: "user_1",
+			role: "ADMIN",
+			hasSecret: false,
+			hasUndeclared: false,
+			hasRootLeak: false,
+		});
+	});
+
+	it("honors strict middleware-provided object schemas", async () => {
+		const strictProvides = createMiddleware({
+			provides: {
+				user: z.object({ id: z.string() }).strict(),
+			},
+			run: ({ next }) => next({ user: { id: "user_1", secret: "rejected" } } as never),
+		});
+		const app = createHonoApp([
+			{
+				method: "get",
+				path: "/me",
+				contract: createRoute({
+					middleware: [strictProvides],
+					responses: {
+						success: { status: 200, schema: z.object({ id: z.string() }) },
 					},
 					run: ({ ctx }) => ({ type: "success", data: { id: ctx.user.id } }),
 				}),
@@ -985,6 +1205,90 @@ describe("createHonoApp", () => {
 			title: "Invalid handler output",
 			status: 500,
 		});
+	});
+
+	it("validates middleware provides in production and logs safe prefixed issue paths", async () => {
+		const events: RoutaLogEvent[] = [];
+		const badProvides = createMiddleware({
+			provides: {
+				user: z.object({ id: z.string() }),
+			},
+			run: ({ next }) => next({ user: { id: 123, secret: "middleware-secret" } }),
+		});
+		const app = createHonoApp(
+			[
+				{
+					method: "get",
+					path: "/me",
+					contract: createRoute({
+						middleware: [badProvides],
+						responses: {
+							success: {
+								status: 200,
+								schema: z.object({ id: z.string() }),
+							},
+						},
+						run: ({ ctx }) => ({ type: "success", data: { id: ctx.user.id } }),
+					}),
+				},
+			],
+			{
+				runtimeMode: "start",
+				responseValidation: "development",
+				logger: createLogger({ sink: (event) => events.push(event) }),
+			},
+		);
+
+		const response = await app.request("/me");
+		const body = await response.json();
+
+		expect(response.status).toBe(500);
+		expect(body).toEqual({
+			type: "https://routa-ts.dev/problems/handler-output",
+			title: "Invalid handler output",
+			status: 500,
+		});
+		expect(events).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					event: "http.error",
+					data: expect.objectContaining({
+						issues: [{ code: "invalid_type", path: ["user", "id"] }],
+					}),
+				}),
+			]),
+		);
+		expect(JSON.stringify(events)).not.toContain("middleware-secret");
+	});
+
+	it("does not partially mutate context when middleware provides validation fails", async () => {
+		const initialContext: Record<string, unknown> = { first: "original" };
+		const partiallyInvalid = createMiddleware({
+			provides: {
+				first: z.string(),
+				second: z.string(),
+			},
+			run: ({ next }) => next({ first: "changed", second: 123 }),
+		});
+		const app = createHonoApp([
+			{
+				method: "get",
+				path: "/context",
+				createContext: () => initialContext,
+				contract: createRoute({
+					middleware: [partiallyInvalid],
+					responses: {
+						success: { status: 200, schema: z.object({ ok: z.boolean() }) },
+					},
+					run: () => ({ type: "success", data: { ok: true } }),
+				}),
+			},
+		]);
+
+		const response = await app.request("/context");
+
+		expect(response.status).toBe(500);
+		expect(initialContext).toEqual({ first: "original" });
 	});
 
 	it("returns 405 for unsupported methods on known paths", async () => {
