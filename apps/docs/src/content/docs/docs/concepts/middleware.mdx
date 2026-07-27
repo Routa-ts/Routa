@@ -73,7 +73,7 @@ export const withRequest = createMiddleware({
 
 ## Where Middleware Applies
 
-### Folder inheritance
+### Folder Inheritance
 
 A `middleware.ts` file applies to every route in its folder and below. Export or re-export
 middleware contracts from it; the export order is the execution order.
@@ -101,7 +101,7 @@ place to attach a chain:
           - route.ts sees requestId, session, auth, tenant
 </FileTree>
 
-### Per route and per method
+### Per Route and Per Method
 
 A route file can add middleware for all of its methods, or one method can add its own:
 

@@ -39,6 +39,19 @@ which parts of an API Routa is responsible for.
 
 </Steps>
 
+## Verify
+
+Check the sent message before disclosure. A complete report has a private recipient and
+enough evidence for the maintainers to reproduce the issue:
+
+```txt
+To: security@routa-ts.dev
+Affected package or workflow: present
+Routa version or commit: present
+Reproduction steps: present
+Impact: present
+```
+
 ## What Routa Secures
 
 Routa owns the HTTP boundary, so these are Routa's responsibility:
@@ -69,7 +82,16 @@ implements any of it. These remain entirely yours:
 	check.
 </Aside>
 
-## Related
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| The issue may be in application code | Reduce the reproduction to Routa's HTTP boundary before reporting it as a framework vulnerability. |
+| The report contains secrets or production data | Replace them with synthetic values and revoke any credential that was exposed. |
+| Email is unavailable | Do not disclose publicly; use the private contact method in the repository security policy when one is listed. |
+| You have not received an acknowledgement | Follow up on the same private thread so context and attachments stay together. |
+
+## Next Steps
 
 <CardGrid>
 	<LinkCard

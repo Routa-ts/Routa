@@ -75,12 +75,26 @@ registry.
 `Invalid handler output` problem response. Result objects may contain only `type` and
 `data`.
 
+```ts
+import { createRoute } from "@routa-ts/core";
+import { z } from "zod";
+
+export const getStatus = createRoute({
+	responses: {
+		success: { status: 200, schema: z.object({ ok: z.boolean() }) },
+	},
+	run: () => ({ type: "success", data: { ok: true } }),
+});
+```
+
 ## `createRouteRoot`
 
 ```ts
 function createRouteRoot<const TPath extends RegisteredRoutePath>(
 	path: TPath,
-): (config: RouteRootConfig) => RouteRootConfig
+): <const TConfig extends RouteRootConfigForCtx<Register["routeCtxByPath"][TPath]>>(
+	config: TConfig,
+) => TConfig
 ```
 
 Binds a file to a URL path and returns the helper used as the file's default export. The
@@ -88,11 +102,23 @@ returned helper accepts `get`, `post`, `put`, `patch`, `delete`, `head`, and `mi
 and rejects every other key. `options` is never accepted.
 
 ```ts title="src/routes/users/$userId/route.ts"
+import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+import { withAudit } from "../../../middleware/audit.js";
+
 const route = createRouteRoot("/users/:userId");
 
 export default route({
 	middleware: [withAudit],
-	get: createRoute({ /* ... */ }),
+	get: createRoute({
+		responses: {
+			success: {
+				status: 200,
+				schema: z.object({ id: z.string() }),
+			},
+		},
+		run: () => ({ type: "success", data: { id: "usr_1" } }),
+	}),
 });
 ```
 
@@ -103,14 +129,39 @@ missing from generated metadata produces a type error.
 ## `createRouteRootFactory`
 
 ```ts
-function createRouteRootFactory<TCtxByPath>(): <TPath extends keyof TCtxByPath & string>(
+function createRouteRootFactory<
+	TCtxByPath extends Record<string, Partial<Record<HttpMethod, unknown>>>,
+>(): <TPath extends keyof TCtxByPath & string>(
 	path: TPath,
-) => (config: RouteRootConfig) => RouteRootConfig
+) => <const TConfig extends RouteRootConfigForCtx<TCtxByPath[TPath]>>(
+	config: TConfig,
+) => TConfig
 ```
 
 Returns a `createRouteRoot` bound to an explicit context map instead of the generated
 `Register` augmentation. Use it in tests, libraries, or tooling that must work without a
 generated project. Prefer `createRouteRoot` in application code.
+
+```ts
+import { createRoute, createRouteRootFactory } from "@routa-ts/core";
+import { z } from "zod";
+
+type TestContextByPath = {
+	"/health": { get: Record<never, never> };
+};
+
+const createTestRouteRoot = createRouteRootFactory<TestContextByPath>();
+const route = createTestRouteRoot("/health");
+
+export default route({
+	get: createRoute({
+		responses: {
+			success: { status: 200, schema: z.object({ ok: z.boolean() }) },
+		},
+		run: () => ({ type: "success", data: { ok: true } }),
+	}),
+});
+```
 
 ## `createMiddleware`
 
@@ -134,6 +185,17 @@ function createMiddleware<TRequires, TProvides, TRejects, TInput>(
 
 **Errors:** `next()` called more than once throws. A `provides` value that fails its
 schema produces an `Invalid handler output` response. Reject statuses must be 4xx or 5xx.
+
+```ts
+import { randomUUID } from "node:crypto";
+import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+
+export const withRequestId = createMiddleware({
+	provides: { requestId: z.string().uuid() },
+	run: ({ next }) => next({ requestId: randomUUID() }),
+});
+```
 
 ## `createHonoApp`
 
@@ -172,6 +234,15 @@ function isBodylessStatus(status: number): boolean
 
 Returns `true` for `204`, `205`, and `304`. Routa uses it to emit those responses without
 a JSON body, since the `Response` constructor rejects one.
+
+```ts
+import { isBodylessStatus } from "@routa-ts/core/hono";
+
+export function responseFor(status: number, data: unknown): Response {
+	const body = isBodylessStatus(status) ? null : JSON.stringify(data);
+	return new Response(body, { status });
+}
+```
 
 ## `createLogger`
 
@@ -230,6 +301,7 @@ optional leading `-` for descending order, and produces
 
 ```ts
 import { Sort } from "@routa-ts/core/query/helpers";
+import { z } from "zod";
 
 const query = z.object({ sort: Sort(["name", "createdAt"]).optional() });
 // ?sort=-createdAt -> { field: "createdAt", direction: "desc" }
@@ -246,9 +318,41 @@ trims each entry, drops empties, and validates the result against `fields`.
 
 ```ts
 import { Fields } from "@routa-ts/core/query/helpers";
+import { z } from "zod";
 
 const query = z.object({ fields: Fields(["id", "name", "email"]).optional() });
 // ?fields=id, name -> ["id", "name"]
+```
+
+## `RouteRootConfigForCtx`
+
+```ts
+type RouteRootConfigForCtx<
+	TCtxByMethod extends Partial<Record<HttpMethod, unknown>>,
+> = {
+	middleware?: readonly AnyMiddlewareContract[];
+} & {
+	[K in HttpMethod]?: ContextualRouteContract<
+		K extends keyof TCtxByMethod ? TCtxByMethod[K] : unknown
+	>;
+}
+```
+
+Describes the route-level middleware and HTTP method contracts accepted by a path-bound
+route helper. The context map can provide a distinct handler context for each method.
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `middleware` | `readonly AnyMiddlewareContract[]` | Middleware shared by every declared method |
+| `get`, `post`, `put`, `patch`, `delete`, `head` | `ContextualRouteContract` | Contract typed with that method's context |
+
+```ts
+import type { RouteRootConfigForCtx } from "@routa-ts/core";
+
+type UsersRouteConfig = RouteRootConfigForCtx<{
+	get: { requestId: string };
+	post: { requestId: string; auth: { userId: string } };
+}>;
 ```
 
 ## Exported Types
@@ -257,7 +361,8 @@ const query = z.object({ fields: Fields(["id", "name", "email"]).optional() });
 `RouteRun`, `RouteHandlerArgs`, `RoutaResult`, `RouteRunResult`, `InferInput`,
 `InferResponse`, `SchemaInput`, `SchemaOutput`, `RoutaRouteContext`, `RoutaConfig`,
 `RouteDeprecation`, `RouteDeprecationReplacement`, `RegisteredRoutePath`,
-`ExternalApiUrl`, `MiddlewareContract`, `AnyMiddlewareContract`, `MiddlewareRun`,
+`ExternalApiUrl`, `ContextualRouteContract`, `RouteRootConfigForCtx`, `MiddlewareContract`,
+`AnyMiddlewareContract`, `MiddlewareRun`,
 `MiddlewareRunArgs`, `MiddlewareNext`, `MiddlewareProvidesSpec`, `MiddlewareProvidesKeys`,
 `MiddlewareProvidedCtx`, `MiddlewareProvides`, `MiddlewareRejectsSpec`,
 `MiddlewareRejectResult`, `MiddlewareOpenApi`, `InferMiddlewareCtx`, and `Register`.
@@ -271,7 +376,7 @@ From `@routa-ts/core/hono`: `HonoRoute`, `CreateHonoAppOptions`. From
 	per path. Keep `.routa/**/*.ts` in the `include` array of `tsconfig.json`.
 </Aside>
 
-## Related
+## Next Steps
 
 <CardGrid>
 	<LinkCard

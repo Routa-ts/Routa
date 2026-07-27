@@ -62,9 +62,9 @@ a removal — which is what makes `routa scaffold --preview` trustworthy.
 
 The OpenAPI contract your team has accepted. `routa openapi check` compares the freshly
 generated document against it to detect drift, and `routa openapi breaking` uses it to
-detect removed operations and newly required inputs. It also supplies `info` and
-`components.schemas` to generation, so those sections are edited here rather than derived
-from source.
+detect removed operations and newly required inputs. It supplies `info` and
+`components.schemas` to generation. It retains `servers` as baseline-owned metadata, but
+the v0 generator does not emit that field.
 
 ## Rules
 
@@ -86,6 +86,11 @@ with the code in front of you, run `routa generate` first.
 	`routa check`, `routa build`, and `routa dev` all synchronize `routes.gen.ts` after a
 	successful validation. In CI, run `routa generate` and fail the job if `git status`
 	reports changes, rather than assuming checks are read-only.
+</Aside>
+
+<Aside type="caution" title="v0 status">
+	In v0, commit `routes.gen.ts`, `manifest.json`, and `openapi-baseline.json`. After you
+	change source, refresh generated metadata; Routa does not run a remote metadata service.
 </Aside>
 
 ## Next Steps

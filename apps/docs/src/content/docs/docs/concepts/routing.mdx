@@ -26,7 +26,7 @@ diagnostic when the two disagree.
 
 ## File Conventions
 
-### Directory style
+### Directory Style
 
 A folder per segment, with the endpoint in `route.ts`. This is what the scaffolder
 generates and what the examples use.
@@ -41,7 +41,7 @@ generates and what the examples use.
         - route.ts `/users/:userId/posts`
 </FileTree>
 
-### Flat style
+### Flat Style
 
 Dots in a filename separate segments. Useful for shallow endpoints where a folder per
 segment adds more nesting than it is worth.
@@ -56,12 +56,15 @@ segment adds more nesting than it is worth.
 Both styles can be mixed in one project, and a flat file can live inside a directory:
 `src/routes/admin/audit.$eventId.ts` serves `/admin/audit/:eventId`.
 
-### Dynamic segments
+### Dynamic Segments
 
 A segment beginning with `$` becomes a path parameter. `$userId` produces `:userId`, which
 is the key you receive in `input.params` after parsing:
 
 ```ts title="src/routes/users/$userId/route.ts"
+import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
 const route = createRouteRoot("/users/:userId");
 
 export default route({
@@ -77,7 +80,7 @@ export default route({
 Declaring `params` is what makes the value validated and typed. A dynamic segment without
 a matching schema is still routable, but its value never reaches `input`.
 
-### Route groups
+### Route Groups
 
 A folder wrapped in parentheses organizes files without contributing a URL segment.
 `src/routes/(admin)/audit/route.ts` serves `/audit`, not `/admin/audit`.
@@ -97,7 +100,7 @@ Groups are the tool for applying one middleware chain to a set of routes that do
 a URL prefix. The group name is recorded in generated metadata and in `routa routes`
 output, so it stays visible even though it is invisible in the URL.
 
-### Reserved file names
+### Reserved File Names
 
 Inside `src/routes`, three names are never treated as routes:
 

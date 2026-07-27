@@ -68,7 +68,8 @@ Because `RoutaLogger` is a structural type, any object implementing its members 
 including an adapter over Pino, Winston, or a hosted logging SDK. See
 [Core reference](/docs/reference/core/) for the full member list.
 
-Request logging is enabled only when a logger is present. Two events are emitted:
+Routa enables logging when a logger is configured. Set `logger: false` to disable it. The
+runtime emits two startup lifecycle events and two request events:
 
 | Event | Level | Data |
 | --- | --- | --- |
@@ -120,7 +121,7 @@ environment variable  >  src/routa.ts  >  Routa default
 	process never re-reads them.
 </Aside>
 
-## Related
+## Next Steps
 
 <CardGrid>
 	<LinkCard

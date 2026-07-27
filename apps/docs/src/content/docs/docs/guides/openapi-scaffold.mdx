@@ -90,9 +90,11 @@ stays in the source document and is not approximated in TypeScript.
 | `ROUTA_SCAFFOLD_UNMANAGED_FILE` | A file exists where Routa wants to generate one, and the manifest does not track it. Move or rename yours. |
 | `ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE` | You edited a generated file. Move the edits into application-owned code, or accept losing them. |
 
-<Aside type="caution" title="Generated source is yours">
-	Scaffolding is a one-way import, not a live binding. After the first run, the route
-	files are your source of truth and the document is regenerated from them.
+<Aside type="caution" title="v0 status">
+	Scaffolding the supported JSON OpenAPI surface is implemented in v0; unsupported
+	OpenAPI features remain deferred. Scaffolding is a one-way import, not a live binding.
+	After the first run, route files own route contracts. The baseline owns `info`, `servers`,
+	and `components.schemas`.
 </Aside>
 
 ## Next Steps

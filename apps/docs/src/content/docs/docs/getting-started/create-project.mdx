@@ -23,6 +23,12 @@ the committed `.routa/` metadata that Routa checks against.
 
 	<PackageManagers type="create" />
 
+	A successful run ends with the target directory it created:
+
+	```txt
+	Your Routa app is ready in 'routa-app'.
+	```
+
 2. Answer the prompts. Every prompt has a matching flag if you would rather not be asked.
 
 	| Prompt | Flags | Default |
@@ -37,15 +43,37 @@ the committed `.routa/` metadata that Routa checks against.
 
 	```sh
 	cd routa-app
+	pwd
+	```
+
+	```txt
+	…/routa-app
 	```
 
 4. Install dependencies if you declined the install prompt.
 
 	<PackageManagers type="install" />
 
+	Confirm the install produced the dependency tree:
+
+	```sh
+	test -d node_modules && echo "Dependencies installed."
+	```
+
+	```txt
+	Dependencies installed.
+	```
+
 5. Start the development server.
 
 	<PackageManagers type="run" args="dev" />
+
+	A successful start emits the `api.started` lifecycle event with the bound host and
+	port:
+
+	```txt
+	INFO api.started Routa API started. {"host":"127.0.0.1","port":3000,"routes":1}
+	```
 
 </Steps>
 
@@ -90,8 +118,14 @@ Without it, run `routa generate` once to produce route metadata.
 
 In CI or a script, pass every flag so the scaffolder never prompts:
 
-```sh
-npm create routa-ts@latest my-api -- --yes --no-git --no-install
+<PackageManagers
+	type="create"
+	target="my-api"
+	args="--yes --no-git --no-install"
+/>
+
+```txt
+Your Routa app is ready in 'my-api'.
 ```
 
 ## Troubleshooting
@@ -114,7 +148,7 @@ npm create routa-ts@latest my-api -- --yes --no-git --no-install
 	<LinkCard
 		title="Project anatomy"
 		href="/docs/getting-started/project-anatomy/"
-		description="Understand every file the scaffolder just wrote."
+		description="Understand every file the scaffolder wrote."
 	/>
 	<LinkCard
 		title="First route"

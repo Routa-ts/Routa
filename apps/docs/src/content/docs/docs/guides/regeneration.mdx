@@ -25,9 +25,11 @@ rather than silently discarding work.
 
 	<PackageManagers type="exec" args="scaffold openapi.yaml --preview" />
 
-2. Read every entry marked `~ update`. These are tracked files whose generated content
-   changed. Your handler bodies live in these files, so confirm you are ready to lose
-   anything you added inside a generated region.
+2. Read every entry marked `~ update`. These are tracked files whose current content still
+   matches the manifest and whose newly generated content would change. A tracked file
+   that you edited instead triggers `ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE`; `--yes`
+   never discards those edits. Move logic into application-owned code or revert the
+   generated-file edits before regenerating.
 
 3. Resolve entries marked `! conflict`. Routa will not write over a file it does not
    track. Move your version aside, or restore the manifest if the file really was
@@ -50,6 +52,17 @@ rather than silently discarding work.
 
 `git diff` should contain only files that appeared in the preview. A change to a file the
 preview did not mention means the manifest is out of date with reality.
+
+```sh
+git diff --name-only
+```
+
+```txt
+.routa/manifest.json
+.routa/openapi-baseline.json
+.routa/routes.gen.ts
+src/routes/users/route.ts
+```
 
 ## How Routa Decides
 
@@ -76,10 +89,10 @@ files with no user content.
 | Preview shows everything as `conflict` | The manifest is missing. Restore it from git rather than deleting your source. |
 | A route you deleted from the document still serves traffic | Regeneration removed the file but metadata is stale. Run `routa generate`. |
 
-<Aside type="tip" title="Keep handlers thin">
-	The teams that regenerate most comfortably keep `run` bodies to a service call and an
-	outcome choice. When the logic lives in `src/services/`, a regenerated route file costs
-	nothing to accept.
+<Aside type="caution" title="v0 status">
+	In v0, you can use manifest-based preview, conflict detection, and safe regeneration.
+	Keep `run` bodies to a service call and an outcome choice; when logic lives in
+	`src/services/`, reverting generated-file edits before regeneration is inexpensive.
 </Aside>
 
 ## Next Steps

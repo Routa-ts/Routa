@@ -23,6 +23,16 @@ Creates a new Routa app. Shares its implementation with `create-routa-ts`.
 routa create [dir]
 ```
 
+Example output when npm is detected:
+
+```txt
+Your Routa app is ready in 'routa-app'.
+
+Use the following commands to start your app:
+cd routa-app
+npm run dev
+```
+
 | Flag | Effect | Default |
 | --- | --- | --- |
 | `--yes`, `-y` | Skip the final confirmation prompt | Prompt when interactive |
@@ -43,6 +53,15 @@ Generates route files, schema modules, and `.routa/` metadata from an OpenAPI do
 
 ```sh
 routa scaffold <openapi.yaml|openapi.yml|openapi.json>
+```
+
+```txt
+Scaffolded 1 Routa route file(s).
+src/routes/status/route.ts
+src/routes/status/schemas.ts
+.routa/openapi-baseline.json
+.routa/manifest.json
+.routa/routes.gen.ts
 ```
 
 | Flag | Effect |
@@ -68,6 +87,10 @@ metadata, and restarts the runtime when one changes.
 routa dev
 ```
 
+```txt
+INFO api.started Routa API started. {"host":"127.0.0.1","port":3000,"routes":4}
+```
+
 Empty route files are stubbed with a valid contract before validation, and each stubbed
 path is printed. Validation failures print diagnostics and leave the previous process
 running.
@@ -82,6 +105,10 @@ not typecheck and does not compile.
 
 ```sh
 routa start
+```
+
+```txt
+INFO api.started Routa API started. {"host":"127.0.0.1","port":3000,"routes":4}
 ```
 
 Before starting, Routa checks that every runtime source file has a compiled counterpart in
@@ -142,6 +169,24 @@ chain.
 routa routes [--format json|markdown]
 ```
 
+```txt
+# Routa Route Reference
+
+## /status
+
+File: `src/routes/status/route.ts`
+
+### GET
+
+Inputs: none
+Responses: 200
+Context: none
+Rejects: none
+
+Middleware:
+- none
+```
+
 | Flag | Values | Default |
 | --- | --- | --- |
 | `--format` | `markdown`, `json` | `markdown` |
@@ -194,7 +239,11 @@ OpenAPI breaking check passed. No breaking changes detected.
 
 <PackageManagers type="create" />
 
-## Related
+```txt
+Your Routa app is ready in 'routa-app'.
+```
+
+## Next Steps
 
 <CardGrid>
 	<LinkCard

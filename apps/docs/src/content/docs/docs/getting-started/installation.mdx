@@ -18,6 +18,10 @@ into an existing project. For a new project, the scaffolder installs everything 
   node --version
   ```
 
+  ```txt
+  v24.x.x
+  ```
+
 - Any of npm, pnpm, Yarn, or Bun. Routa does not write a lockfile or a `packageManager`
   field, so dependency tooling stays under your team's control.
 - New projects include `.nvmrc` so version managers select the supported runtime.
@@ -30,9 +34,17 @@ into an existing project. For a new project, the scaffolder installs everything 
 
 	<PackageManagers type="add" args="@routa-ts/cli @routa-ts/core hono zod" />
 
+	```txt
+	@routa-ts/cli, @routa-ts/core, hono, and zod added to dependencies.
+	```
+
 2. Install the development dependencies used by generated Routa apps.
 
 	<PackageManagers type="add-dev" args="@biomejs/biome @types/node tsx typescript vitest" />
+
+	```txt
+	@biomejs/biome, @types/node, tsx, typescript, and vitest added to devDependencies.
+	```
 
 3. Add the scripts that generated apps use.
 
