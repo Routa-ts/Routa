@@ -58,7 +58,7 @@ Every page uses this frame, regardless of which structure it follows.
   symbol appears on the page.
 - Add a `title` to code fences that represent a file:
 
-  ````
+  ````md
   ```ts title="src/routes/users/route.ts"
   ````
 
@@ -82,7 +82,7 @@ Supported `type` values:
 
 | `type`    | Purpose                        | Example props                                     |
 | --------- | ------------------------------ | ------------------------------------------------- |
-| `create`  | Scaffold a new Routa project   | `<PackageManagers type="create" />`                |
+| `create`  | Scaffold a new Routa project   | `<PackageManagers type="create" target="my-api" args="--yes" />` |
 | `install` | Install existing dependencies  | `<PackageManagers type="install" />`               |
 | `add`     | Add runtime dependencies       | `<PackageManagers type="add" args="hono zod" />`   |
 | `add-dev` | Add dev dependencies           | `<PackageManagers type="add-dev" args="vitest" />` |
@@ -90,6 +90,8 @@ Supported `type` values:
 | `exec`    | Run the `routa` binary         | `<PackageManagers type="exec" args="check" />`     |
 
 Use `env` for a leading environment prefix: `<PackageManagers type="run" args="start" env="HOST=0.0.0.0 PORT=3000" />`.
+For `type="create"`, use `target` for the project directory and `args` for flags; the
+component inserts npm's required `--` separator.
 
 All tabs share `syncKey="pkg"`, so a reader picks their package manager once per site visit.
 

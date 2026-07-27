@@ -1,5 +1,10 @@
 ---
 import { Code, TabItem, Tabs } from "@astrojs/starlight/components";
+import {
+	createCommandsByPackageManager,
+	type PackageManager,
+	packageManagers,
+} from "../lib/package-manager-commands";
 
 type CommandType = "create" | "install" | "add" | "add-dev" | "run" | "exec";
 
@@ -7,20 +12,17 @@ type Props = {
 	type: CommandType;
 	args?: string;
 	env?: string;
+	target?: string;
 };
 
-const { type, args = "", env } = Astro.props;
-
-const packageManagers = ["npm", "pnpm", "yarn", "bun"] as const;
-
-type PackageManager = (typeof packageManagers)[number];
+const { type, args = "", env, target } = Astro.props;
 
 const templates: Record<CommandType, Record<PackageManager, (value: string) => string>> = {
 	create: {
-		npm: () => "npm create routa-ts@latest",
-		pnpm: () => "pnpm create routa-ts@latest",
-		yarn: () => "yarn create routa-ts",
-		bun: () => "bun create routa-ts@latest",
+		npm: () => createCommandsByPackageManager.npm,
+		pnpm: () => createCommandsByPackageManager.pnpm,
+		yarn: () => createCommandsByPackageManager.yarn,
+		bun: () => createCommandsByPackageManager.bun,
 	},
 	install: {
 		npm: () => "npm install",
@@ -61,6 +63,15 @@ const templates: Record<CommandType, Record<PackageManager, (value: string) => s
  * of scripts without repeating the tab markup.
  */
 function commandFor(packageManager: PackageManager): string {
+	if (type === "create") {
+		const command = [createCommandsByPackageManager[packageManager], target]
+			.filter(Boolean)
+			.join(" ");
+		const withArgs = args ? `${command}${packageManager === "npm" ? " --" : ""} ${args}` : command;
+
+		return env ? `${env} ${withArgs}` : withArgs;
+	}
+
 	const build = templates[type][packageManager];
 	const lines = args.includes("\n") ? args.split("\n") : [args];
 

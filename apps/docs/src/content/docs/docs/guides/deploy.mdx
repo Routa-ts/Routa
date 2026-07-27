@@ -31,7 +31,10 @@ correct for local development and wrong inside a container.
 
 3. Accept a platform-assigned port when your host provides one.
 
-	<PackageManagers type="run" args="start" env="HOST=0.0.0.0 PORT=8080" />
+	Leave `PORT` unset so the platform can inject its assigned value. For example, if the
+	platform supplies `PORT=8080`, start with only the host override:
+
+	<PackageManagers type="run" args="start" env="HOST=0.0.0.0" />
 
 </Steps>
 
@@ -63,7 +66,7 @@ This is also why generated apps keep `@routa-ts/cli` in `dependencies` rather th
 Use a build stage to install every dependency and run the build, then copy source,
 metadata, output, and production dependencies into the runtime stage:
 
-```dockerfile
+```dockerfile title="Dockerfile"
 FROM node:24-slim AS build
 WORKDIR /app
 COPY . .
@@ -98,8 +101,9 @@ Environment variables win over `src/routa.ts`, which wins over Routa's defaults:
 | `Compiled runtime output for … is stale.` | Source files were copied after the build. Copy `src/` and `dist/` from the same stage. |
 | `ROUTA_PROJECT_REQUIRED` at startup | `src/` or `src/routa.ts` is missing from the image. Validation needs the source. |
 
-<Aside type="caution" title="Never run dev in production">
-	`routa dev` compiles on the fly and supervises restarts. Use `routa build` at image
+<Aside type="caution" title="v0 status">
+	Production builds and `routa start` are implemented in v0 for Node.js deployments.
+	`routa dev` compiles on the fly and supervises restarts, so use `routa build` at image
 	build time and `routa start` as the container command.
 </Aside>
 

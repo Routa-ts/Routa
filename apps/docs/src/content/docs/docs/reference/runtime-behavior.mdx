@@ -61,6 +61,8 @@ Routa returns problem documents for the errors it generates:
 | --- | --- | --- |
 | `…/problems/validation` | Validation failed | 400 |
 | `…/problems/invalid-json` | Invalid JSON body | 400 |
+| Plain text (no problem type) | Method Not Allowed | 405 |
+| Plain text (no problem type) | Not Acceptable | 406 |
 | `…/problems/unsupported-media-type` | Unsupported Media Type | 415 |
 | `…/problems/handler-output` | Invalid handler output | 500 |
 | `…/problems/internal` | Internal Server Error | 500 |
@@ -120,7 +122,7 @@ implementation of the same type.
 	responses, file uploads, and content negotiation beyond JSON are deferred.
 </Aside>
 
-## Related
+## Next Steps
 
 <CardGrid>
 	<LinkCard

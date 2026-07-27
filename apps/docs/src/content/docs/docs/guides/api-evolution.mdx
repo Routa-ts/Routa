@@ -29,12 +29,28 @@ breaking?" and a deliberate step for accepting the change when it is intentional
    the route contract.
 
 	```ts title="src/routes/legacy/users/route.ts"
-	createRoute({
-		deprecation: {
-			sunset: "2027-01-01",
-			replacement: "/users",
-		},
-		// ...
+	import { createRoute, createRouteRoot } from "@routa-ts/core";
+	import { z } from "zod";
+
+	const route = createRouteRoot("/legacy/users");
+
+	export default route({
+		get: createRoute({
+			deprecation: {
+				sunset: "2027-01-01",
+				replacement: "/users",
+			},
+			responses: {
+				success: {
+					status: 200,
+					schema: z.object({ message: z.string() }),
+				},
+			},
+			run: () => ({
+				type: "success",
+				data: { message: "Use GET /users instead." },
+			}),
+		}),
 	});
 	```
 
@@ -102,6 +118,8 @@ Middleware can describe the security an operation requires without Routa impleme
 of it:
 
 ```ts title="src/middleware/auth.ts"
+import { createMiddleware } from "@routa-ts/core";
+
 createMiddleware({
 	openapi: {
 		security: [{ bearerAuth: [] }],
@@ -119,15 +137,16 @@ document, an operation that was public becoming authenticated is reported by
 
 | Problem | Fix |
 | --- | --- |
-| `Missing .routa/openapi-baseline.json. Run routa scaffold first.` | The project has no accepted contract. Scaffold from a document, or create the baseline with `--update-baseline`. |
+| `Missing .routa/openapi-baseline.json. Run routa scaffold first.` | The project has no accepted contract. Run `routa scaffold` against the reviewed OpenAPI document first. |
 | `ROUTA_DEPRECATION_REPLACEMENT_ROUTE_NOT_FOUND` | The local replacement path is not a route in this project. Check the path, or run `routa generate` if metadata is stale. |
 | `ROUTA_DEPRECATION_REPLACEMENT_URL_INVALID` | Use `/local-path` for this API or an absolute `http(s)` URL for another. |
 | Lifecycle headers do not appear | `lifecycleHeaders` defaults to off. Enable it in `createRouta()`, and confirm the route declares `deprecation`. |
 | The baseline changes on every run | Generation is deterministic. A repeating diff means the source really is changing, often from stale `.routa/routes.gen.ts`. |
 
-<Aside type="caution" title="Update the baseline deliberately">
-	`--update-baseline` overwrites the accepted contract with whatever the source currently
-	produces, including changes nobody reviewed. Run it as its own reviewed commit.
+<Aside type="caution" title="v0 status">
+	Breaking-change checks, deprecation metadata, replacement validation, and lifecycle
+	headers are implemented in v0. `--update-baseline` overwrites the accepted contract
+	with the current source, so run it only as its own reviewed commit.
 </Aside>
 
 ## Next Steps

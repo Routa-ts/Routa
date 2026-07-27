@@ -23,13 +23,30 @@ checks Routa expects before you ship. The generated app already contains a worki
 
 	<PackageManagers type="create" />
 
+	```txt
+	Your Routa app is ready in 'routa-app'.
+	```
+
 2. Enter the project. Install dependencies if you answered no to the install prompt.
 
 	```sh
 	cd routa-app
+	pwd
+	```
+
+	```txt
+	…/routa-app
 	```
 
 	<PackageManagers type="install" />
+
+	```sh
+	test -d node_modules && echo "Dependencies installed."
+	```
+
+	```txt
+	Dependencies installed.
+	```
 
 3. Start development mode.
 
@@ -38,6 +55,10 @@ checks Routa expects before you ship. The generated app already contains a worki
 	`routa dev` validates the route graph, writes `.routa/routes.gen.ts`, typechecks the
 	project, and starts the server on `http://127.0.0.1:3000`.
 
+	```txt
+	INFO api.started Routa API started. {"host":"127.0.0.1","port":3000,"routes":1}
+	```
+
 4. Run the checks used before shipping.
 
 	<PackageManagers type="run" args={`generate
@@ -45,6 +66,14 @@ check
 build
 test
 openapi:check`} />
+
+	```txt
+	Generated .routa/routes.gen.ts for 1 route file(s).
+	Routa check passed.
+	Routa build passed for 1 route file(s).
+	Test Files  1 passed (1)
+	OpenAPI check passed. No drift detected.
+	```
 
 </Steps>
 

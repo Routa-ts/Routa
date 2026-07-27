@@ -3,9 +3,12 @@ import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 
+const site = "https://routa-ts.dev";
+const ogImage = new URL("/og.png", site).href;
+
 // https://astro.build/config
 export default defineConfig({
-	site: "https://routa-ts.dev",
+	site,
 	trailingSlash: "always",
 	integrations: [
 		starlight({
@@ -19,7 +22,7 @@ export default defineConfig({
 				// Starlight emits og:title/description/url but no image or Twitter card.
 				{
 					tag: "meta",
-					attrs: { property: "og:image", content: "https://routa-ts.dev/og.png" },
+					attrs: { property: "og:image", content: ogImage },
 				},
 				{
 					tag: "meta",
@@ -42,7 +45,7 @@ export default defineConfig({
 				},
 				{
 					tag: "meta",
-					attrs: { name: "twitter:image", content: "https://routa-ts.dev/og.png" },
+					attrs: { name: "twitter:image", content: ogImage },
 				},
 				{
 					tag: "link",

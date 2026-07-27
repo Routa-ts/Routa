@@ -3,17 +3,39 @@ title: Routa
 description: Schema-first, OpenAPI-aware REST framework for new TypeScript APIs.
 ---
 
-import { Aside, Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
+import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
 import PackageManagers from "@components/PackageManagers.astro";
 
-Routa is a schema-first, OpenAPI-aware REST framework for new TypeScript APIs. Route files
-declare inputs, responses, middleware, and metadata in one place, and Routa derives typed
-handlers, runtime validation, and OpenAPI from that declaration. It can also read an
-existing OpenAPI document and scaffold the first version of the source contract.
+Routa is a schema-first, OpenAPI-aware REST framework for new TypeScript APIs. Choose your
+entry point based on whether you want a generated starter, need to add Routa to an
+existing TypeScript API, or already have an OpenAPI contract.
+
+## Options
+
+### Start From a Generated Project
+
+Use the scaffolder when you want the fastest path to a working Routa application:
 
 <PackageManagers type="create" />
 
-## A Route in Full
+You receive a status route, tests, configuration, and committed `.routa/` metadata. The
+tradeoff is adopting Routa's generated project shape before you have chosen each file.
+
+### Add Routa to an Existing API
+
+Follow [Installation](/docs/getting-started/installation/) when you already have a
+TypeScript codebase and want to migrate one HTTP boundary at a time. You keep control of
+the surrounding application, but you must add the scripts, configuration entry point,
+and generated metadata yourself.
+
+### Start From OpenAPI
+
+Use [Scaffold from OpenAPI](/docs/guides/openapi-scaffold/) when a reviewed OpenAPI
+document is the starting contract. Routa generates the first source representation and a
+baseline; after that import, route files become the source of truth and regeneration must
+be previewed.
+
+## What Routa Does
 
 Routes are filesystem-backed. Folders map to URL segments, and each `route.ts` file owns
 every method for that path.
@@ -43,8 +65,6 @@ export default route({
 });
 ```
 
-## How It Works
-
 `input` describes what the request must contain. Routa parses `params`, `query`,
 `headers`, `cookies`, and `body` through those Zod schemas before the handler runs, so
 `input.body` is already validated and typed.
@@ -56,11 +76,17 @@ data that does not match the schema is caught at runtime before it reaches the c
 Everything else is derived. The CLI reads these files to generate route metadata, produce
 OpenAPI, and check that the contract has not drifted from its committed baseline.
 
-## Limits
+## Consequences
 
-Business logic does not belong in `run`. Routa owns the HTTP boundary — routing,
-validation, middleware context, typed responses, and OpenAPI — while services, use cases,
-domain models, and persistence stay in your application code.
+- One route contract drives TypeScript types, runtime validation, generated metadata, and
+  OpenAPI, so contract changes appear in several reviewable outputs.
+- Filesystem paths and `createRouteRoot(path)` must agree; moving a route is an API change.
+- Business logic does not belong in `run`. Routa owns routing, validation, middleware
+  context, typed responses, and OpenAPI, while services, domain models, and persistence
+  stay application-owned.
+- `.routa/` is committed source-derived state, not a disposable build artifact.
+
+## When This Changes
 
 <Aside type="caution" title="v0 status">
 	Routa is at a v0 implementation baseline: Hono runtime, Zod schemas, JSON request and
@@ -68,26 +94,14 @@ domain models, and persistence stay in your application code.
 	between what ships and what is deferred.
 </Aside>
 
-## Start Here
-
-<CardGrid>
-	<Card title="Quickstart" icon="rocket">
-		[Create a project](/docs/start/quickstart/) and run your first Routa API locally.
-	</Card>
-	<Card title="Project anatomy" icon="document">
-		[Learn which files](/docs/getting-started/project-anatomy/) you own and which files Routa owns.
-	</Card>
-	<Card title="Route contracts" icon="open-book">
-		[Read the model](/docs/concepts/route-contracts/) behind every Routa HTTP boundary.
-	</Card>
-	<Card title="Scaffold from OpenAPI" icon="seti:yml">
-		[Generate route files](/docs/guides/openapi-scaffold/) from an existing OpenAPI document.
-	</Card>
-</CardGrid>
-
 ## Next Steps
 
 <CardGrid>
+	<LinkCard
+		title="Quickstart"
+		href="/docs/start/quickstart/"
+		description="Create a project and run the generated status route."
+	/>
 	<LinkCard
 		title="Why Routa"
 		href="/docs/start/why-routa/"
@@ -99,8 +113,8 @@ domain models, and persistence stay in your application code.
 		description="Add Routa to a new or existing TypeScript API."
 	/>
 	<LinkCard
-		title="CLI reference"
-		href="/docs/reference/cli/"
-		description="Every command and flag the routa binary accepts."
+		title="Route contracts"
+		href="/docs/concepts/route-contracts/"
+		description="Read the model behind every Routa HTTP boundary."
 	/>
 </CardGrid>

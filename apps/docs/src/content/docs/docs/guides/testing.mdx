@@ -126,9 +126,10 @@ openapi:check`} />
 | Type errors on `route.get.run` | Metadata is stale. Run `routa generate`. |
 | Vitest picks up files under `.routa/` | Generated metadata contains no tests; narrow `include` in the Vitest config if a glob is too broad. |
 
-<Aside type="note" title="No test helper package in v0">
-	Routa does not ship a dedicated testing utility yet. The examples above use only Vitest,
-	`createHonoApp`, and your route modules.
+<Aside type="caution" title="v0 status">
+	Schema, handler, and HTTP-boundary testing are implemented with public APIs in v0. A
+	dedicated Routa test-helper package is deferred; the examples above use only Vitest,
+	`createHonoApp`, and route modules.
 </Aside>
 
 ## Next Steps

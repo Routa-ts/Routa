@@ -4,6 +4,7 @@
  * Docs live under /docs/.
  */
 import "../styles/landing.css";
+import { createCommandsByPackageManager, packageManagers } from "../lib/package-manager-commands";
 
 const title = "Routa — Schema-first REST for TypeScript";
 const description =
@@ -11,16 +12,10 @@ const description =
 const canonical = new URL("/", Astro.site).href;
 const ogImage = new URL("/og.png", Astro.site).href;
 
-/**
- * `create` commands mirror the `PackageManagers` component used across the docs
- * so the landing page and the docs never drift on install syntax.
- */
-const createCommands = [
-	{ id: "npm", command: "npm create routa-ts@latest" },
-	{ id: "pnpm", command: "pnpm create routa-ts@latest" },
-	{ id: "yarn", command: "yarn create routa-ts" },
-	{ id: "bun", command: "bun create routa-ts@latest" },
-] as const;
+const createCommands = packageManagers.map((id) => ({
+	id,
+	command: createCommandsByPackageManager[id],
+}));
 ---
 
 <!doctype html>
@@ -121,7 +116,7 @@ const createCommands = [
 							<code
 								id="pm-panel"
 								role="tabpanel"
-								aria-labelledby="pm-tab-npm"
+								aria-labelledby={`pm-tab-${createCommands[0].id}`}
 								data-cmd={createCommands[0].command}
 							>
 								<span aria-hidden="true">$</span>
@@ -221,14 +216,10 @@ const createCommands = [
 			</section>
 		</main>
 		<script>
-		type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
-
-		const COMMANDS: Record<PackageManager, string> = {
-			npm: "npm create routa-ts@latest",
-			pnpm: "pnpm create routa-ts@latest",
-			yarn: "yarn create routa-ts",
-			bun: "bun create routa-ts@latest",
-		};
+		import {
+			createCommandsByPackageManager as COMMANDS,
+			type PackageManager,
+		} from "../lib/package-manager-commands";
 
 		/**
 		 * Starlight persists synced tab selections under this key, so the choice made

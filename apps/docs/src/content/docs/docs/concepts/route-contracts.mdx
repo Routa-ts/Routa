@@ -11,6 +11,7 @@ It is the source of truth from which Routa derives types, runtime validation, ge
 metadata, and OpenAPI.
 
 ```ts title="src/routes/users/route.ts"
+import { randomUUID } from "node:crypto";
 import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { CreateUserSchema, EmailConflictSchema, UserSchema } from "./schemas.js";
 import * as users from "../../services/users.js";
@@ -33,7 +34,9 @@ export default route({
 			},
 		},
 		run: async ({ input, ctx }) => {
-			ctx.logger.info("users.create", "Creating a user.", { email: input.body.email });
+			ctx.logger.info("users.create", "Creating a user.", {
+				correlationId: randomUUID(),
+			});
 
 			const created = await users.createUser(input.body);
 

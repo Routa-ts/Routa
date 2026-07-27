@@ -6,9 +6,10 @@ description: Run a Routa project in development and in production.
 import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
 import PackageManagers from "@components/PackageManagers.astro";
 
-Routa has two ways to run a project. `routa dev` compiles nothing and restarts on every
-source change, and `routa start` runs the JavaScript you already built. Both validate the
-route graph first, so a broken contract never reaches the server.
+Routa has two ways to run a project. `routa dev` runs TypeScript through `tsx` and
+restarts on every source change, but it does not emit the production `dist/` build.
+`routa start` runs the JavaScript you already built. Both validate the route graph first,
+so a broken contract never reaches the server.
 
 ## Before You Start
 
@@ -81,9 +82,10 @@ Stubbed src/routes/reports/route.ts
 | The dev server keeps serving old behavior after an edit | Validation failed. The diagnostics are printed and the previous process keeps running until source validates again. |
 | The server exits immediately with no diagnostics | The port is in use. `api.start_failed` is logged at `error` with the host and port. |
 
-<Aside type="caution" title="Do not run dev in production">
-	`routa dev` runs TypeScript through `tsx` and supervises a restart loop. Production
-	deployments should run `routa build` at image build time and `routa start` at runtime.
+<Aside type="caution" title="v0 status">
+	Development supervision and the built `start` runtime are implemented in v0. `routa
+	dev` runs TypeScript through `tsx` and supervises a restart loop, so production
+	deployments should build first and run `routa start`.
 </Aside>
 
 ## Next Steps

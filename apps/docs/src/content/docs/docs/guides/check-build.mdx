@@ -74,12 +74,15 @@ Because a successful validation rewrites `.routa/routes.gen.ts`, treat a dirty w
 tree after generation as a failure. That catches a commit where source and metadata
 disagree:
 
+<PackageManagers type="exec" args="generate" />
+
 ```sh
-routa generate
 git diff --exit-code .routa
-routa check
-routa openapi breaking
 ```
+
+<PackageManagers type="exec" args="check" />
+
+<PackageManagers type="exec" args="openapi breaking" />
 
 ## Troubleshooting
 
@@ -90,10 +93,10 @@ routa openapi breaking
 | `routa build` reports no errors but `dist/` is empty | `tsconfig.json` sets `noEmit`. Generated projects keep emit enabled for the build. |
 | Validation passes locally and fails in CI | `.routa/` was not committed. It is required, not a build artifact. |
 
-<Aside type="note" title="Checks touch the working tree">
-	`check`, `generate`, `build`, and `routes` all refresh `.routa/routes.gen.ts` after a
-	clean validation. This is intentional, and it is why the CI snippet above compares the
-	diff instead of assuming the commands are read-only.
+<Aside type="caution" title="v0 status">
+	Validation, metadata generation, TypeScript checks, builds, and route-table output are
+	implemented in v0. These commands refresh `.routa/routes.gen.ts` after a clean
+	validation, so CI must compare the generated diff.
 </Aside>
 
 ## Next Steps
