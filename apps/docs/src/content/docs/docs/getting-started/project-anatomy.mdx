@@ -1,39 +1,124 @@
 ---
 title: Project Anatomy
-description: Files in a generated Routa project.
+description: The files in a Routa project and who owns each one.
 ---
 
-import { FileTree } from "@astrojs/starlight/components";
+import { Aside, CardGrid, FileTree, LinkCard } from "@astrojs/starlight/components";
 
-A Routa project separates user-owned source files from Routa-owned generated metadata.
+A Routa project has a clean split: files under `src/` are yours to write, and files under
+`.routa/` are derived from them. Knowing which side a file is on tells you whether to edit
+it, review it, or regenerate it.
+
+## The Model
+
+Routa reads your source, validates it, and writes what it learned into `.routa/`. Nothing
+flows the other way — `.routa/` never changes your source. That is why generated files are
+safe to delete and regenerate, and why they still belong in version control: they let
+checks, the runtime, and CI agree on the contract without re-deriving it.
 
 <FileTree>
 - src/
-  - routa.ts
+  - routa.ts application configuration, required
   - routes/
+    - middleware.ts optional, applies to everything below
     - status/
       - route.ts
       - schemas.ts
+      - route.test.ts
 - .routa/
+  - routes.gen.ts
   - manifest.json
   - openapi-baseline.json
-  - routes.gen.ts
 - openapi.yaml
 - package.json
 - tsconfig.json
+- biome.json
 </FileTree>
 
-## User-Owned Files
+## Anatomy
 
-- `src/routa.ts`: application entry point and Routa config.
-- `src/routes/**/route.ts`: route contracts for filesystem paths.
-- `src/routes/**/schemas.ts`: Zod schemas used by nearby route contracts.
-- `openapi.yaml`: source OpenAPI document when scaffolding from a contract.
+### `src/routa.ts`
 
-## Routa-Owned Files
+The application configuration, exported as a default `createRouta()` call. It sets the
+host, port, logger, and lifecycle-header behavior. Routa treats a missing `src/routa.ts`
+as a fatal project error, so the file must exist even when it sets no options.
 
-- `.routa/manifest.json`: tracks generated files and hashes for regeneration safety.
-- `.routa/openapi-baseline.json`: saved OpenAPI contract used for drift and breaking checks.
-- `.routa/routes.gen.ts`: generated route metadata and type augmentation.
+### `src/routes/**/route.ts`
 
-Commit `.routa/` files so checks and regeneration safety work across machines.
+One file per URL path, owning every HTTP method for that path. The directory structure
+maps to URL segments. See [Routing](/docs/concepts/routing/) for the full set of file
+naming conventions.
+
+### `src/routes/**/schemas.ts`
+
+Zod schemas for the routes beside them. Routa treats `schemas.ts` as a schema module
+rather than a route, and it checks that exported schema names are unique across the
+project so generated OpenAPI component names never collide.
+
+### `src/routes/**/middleware.ts`
+
+Middleware that applies to every route in that folder and below. A `middleware.ts` at
+`src/routes/` covers the whole API; one at `src/routes/admin/` covers only that subtree.
+
+### `.routa/routes.gen.ts`
+
+Generated route metadata: paths, methods, middleware chains, provided context keys, reject
+outcomes, groups, and segments. It also augments core types so `createRouteRoot("/users")`
+knows the context available at that path.
+
+### `.routa/manifest.json`
+
+A record of every file Routa generated, with its source operation ID, kind, and content
+hash. Scaffolding compares against this to tell whether regenerating a file would be an
+update, a no-op, a conflict with your edits, or a removal.
+
+### `.routa/openapi-baseline.json`
+
+The accepted OpenAPI contract. `routa openapi check` compares the current generated
+document against it to detect drift, and `routa openapi breaking` uses it to detect
+removed operations and newly required inputs.
+
+### `openapi.yaml`
+
+Present when you scaffold from a contract. It is a source document you own, not a
+generated one; Routa reads it during `routa scaffold` and never writes to it.
+
+## Guarantees
+
+- Routa only writes inside `.routa/`. Your source under `src/` is never rewritten by
+  `check`, `generate`, `build`, or `dev`.
+- Validation runs before generation. A failing check leaves the previous metadata in place
+  rather than writing a half-valid file.
+- Generated metadata is deterministic. The same source produces byte-identical output, so
+  a `.routa/` diff always means a real contract change.
+
+## What You Own
+
+Services, use cases, domain models, persistence, authentication logic, authorization
+rules, and configuration all live in your application. Routa has no opinion about where
+you put them; the examples use `src/services/` and `src/middleware/` only as a convention.
+
+<Aside type="caution" title="Commit the .routa directory">
+	`.routa/` is not a build artifact. Committing it is what makes drift checks, breaking
+	change detection, and regeneration safety work across machines and in CI.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Generated files"
+		href="/docs/concepts/generated-files/"
+		description="When each generated file is written and how to keep it fresh."
+	/>
+	<LinkCard
+		title="Routing"
+		href="/docs/concepts/routing/"
+		description="How file paths become URL paths."
+	/>
+	<LinkCard
+		title="Configuration"
+		href="/docs/reference/configuration/"
+		description="Every option src/routa.ts accepts."
+	/>
+</CardGrid>

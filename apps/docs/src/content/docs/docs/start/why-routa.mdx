@@ -1,22 +1,97 @@
 ---
 title: Why Routa
-description: The problem Routa is built to solve.
+description: The problem Routa solves and the tradeoffs it accepts to solve it.
 ---
 
-Backend APIs should not require a maze of controllers, decorators, registries, adapters, and hand-written docs to answer one question:
+import { CardGrid, LinkCard } from "@astrojs/starlight/components";
 
-> What does this route accept, what can it return, and what context is available when it runs?
+Every REST codebase eventually needs an answer to one question: what does this route
+accept, what can it return, and what context is available when it runs? Routa exists
+because most TypeScript backends answer that question in three places at once, and those
+places drift apart.
 
-Routa puts the HTTP contract in source:
+> What does this route accept, what can it return, and what context is available when it
+> runs?
+
+## Options
+
+A team building a TypeScript REST API generally picks one of these.
+
+### Hand-written routes plus hand-written OpenAPI
+
+The fastest thing to start. The contract lives in a YAML file that nothing enforces, so
+the document describes the API you meant to build rather than the one you deployed.
+
+### Decorators and a class-based framework
+
+Metadata sits next to the handler, which keeps them together. The tradeoff is a runtime
+reflection layer, a dependency-injection container, and a stack trace that goes through
+framework internals before it reaches your code.
+
+### Generate types from OpenAPI, write handlers by hand
+
+The document stays authoritative and types follow it. The tradeoff is that the source no
+longer tells you what a route does; you read generated `.d.ts` files, and any change
+begins in YAML rather than in the editor where you are already working.
+
+### Write the contract in TypeScript and derive everything from it
+
+Types, validation, and OpenAPI all come from one declaration. The tradeoff is that the
+framework has to be opinionated about the shape of a route, and you accept its shape.
+
+## What Routa Does
+
+Routa takes the last option. The route contract in source is the single source of truth,
+and everything else is derived from it:
 
 ```txt
 schemas -> routes -> handlers -> OpenAPI -> docs/checks
 ```
 
-When a team starts from an API contract, Routa can also run the first step in reverse:
+For teams that start from an agreed API contract, Routa runs the first step in reverse
+once, then hands the source back to you:
 
 ```txt
 openapi.yaml/json -> schemas -> route files -> handler stubs
 ```
 
-Routa is opinionated at the HTTP boundary: routing, validation, context, middleware, responses, and OpenAPI. It does not own your database, services, models, policies, or application architecture.
+Routa is opinionated at the HTTP boundary: routing, validation, context, middleware,
+responses, and OpenAPI. It does not own your database, services, models, policies, or
+application architecture.
+
+## Consequences
+
+- **You write contracts before handlers.** A route declares its inputs and its full set of
+  named responses. Returning something undeclared is a type error, not a runtime surprise.
+- **Generated files are committed.** `.routa/` holds route metadata, the OpenAPI baseline,
+  and a regeneration manifest. They belong in review, like a lockfile.
+- **Zod and Hono are not swappable in v0.** Routa v0 targets one schema library and one
+  runtime so the contract model can be validated end to end before it is generalized.
+- **Business logic stays yours.** Routa gives handlers typed input and typed context, then
+  gets out of the way. Services, persistence, and domain rules live in your modules.
+
+## When This Changes
+
+Routa is at a v0 implementation baseline. Additional runtime adapters, non-Zod schema
+support, SDK generation, and a plugin system are deferred rather than rejected. See
+[v0 Scope & Status](/docs/start/v0-scope/) for the current line between the two.
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Quickstart"
+		href="/docs/start/quickstart/"
+		description="Create and run a Routa API in under five minutes."
+	/>
+	<LinkCard
+		title="v0 Scope & Status"
+		href="/docs/start/v0-scope/"
+		description="See exactly what ships today and what is deferred."
+	/>
+	<LinkCard
+		title="Route contracts"
+		href="/docs/concepts/route-contracts/"
+		description="Read the model this whole argument rests on."
+	/>
+</CardGrid>

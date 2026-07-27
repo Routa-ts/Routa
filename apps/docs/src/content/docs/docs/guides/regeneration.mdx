@@ -1,26 +1,103 @@
 ---
 title: Regenerate Safely
-description: Use Routa preview and manifest tracking before accepting generated changes.
+description: Re-run scaffolding without losing edits to generated files.
 ---
 
-Regeneration should be reviewed before writing changes.
+import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
+import PackageManagers from "@components/PackageManagers.astro";
 
-```sh
-pnpm exec routa scaffold openapi.yaml --preview
-```
+The second scaffold run is riskier than the first, because generated files now contain
+your handler code. Routa tracks a hash of everything it wrote in `.routa/manifest.json`
+and refuses to overwrite a file that no longer matches, so regeneration fails loudly
+rather than silently discarding work.
 
-Preview output marks changes as:
+## Before You Start
 
-- `add`: new generated file
-- `update`: generated file would change
-- `unchanged`: generated file matches current content
-- `conflict`: existing file cannot be safely overwritten
-- `remove`: previously generated file is no longer part of the OpenAPI source
+- A committed working tree. Review is easier when the only diff is the regeneration.
+- The updated OpenAPI document.
+- `.routa/manifest.json` present. Without it, Routa treats every existing file as unmanaged.
 
-After reviewing, run:
+## Steps
 
-```sh
-pnpm exec routa scaffold openapi.yaml --yes
-```
+<Steps>
+1. Preview. Routa requires this or an explicit `--yes` once a manifest exists, so a second
+   run can never be accidental.
 
-Routa uses `.routa/manifest.json` and file hashes to avoid blind overwrites. If a generated file has been manually edited, review the preview carefully before accepting regeneration.
+	<PackageManagers type="exec" args="scaffold openapi.yaml --preview" />
+
+2. Read every entry marked `~ update`. These are tracked files whose generated content
+   changed. Your handler bodies live in these files, so confirm you are ready to lose
+   anything you added inside a generated region.
+
+3. Resolve entries marked `! conflict`. Routa will not write over a file it does not
+   track. Move your version aside, or restore the manifest if the file really was
+   generated.
+
+4. Decide about entries marked `- remove`. These correspond to operations no longer in the
+   document. Routa deletes tracked files it generated; anything you created stays.
+
+5. Apply.
+
+	<PackageManagers type="exec" args="scaffold openapi.yaml --yes" />
+
+6. Validate and review the diff before committing.
+
+	<PackageManagers type="run" args="check" />
+
+</Steps>
+
+## Verify
+
+`git diff` should contain only files that appeared in the preview. A change to a file the
+preview did not mention means the manifest is out of date with reality.
+
+## How Routa Decides
+
+For each file it is about to write, Routa compares three things: whether the file exists,
+whether the manifest tracks it, and whether its current hash matches the recorded one.
+
+| Exists | Tracked | Hash matches | Result |
+| --- | --- | --- | --- |
+| No | — | — | `add` |
+| Yes | Yes | Yes | `update` or `unchanged` |
+| Yes | Yes | No | `ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE` |
+| Yes | No | — | `conflict`, then `ROUTA_SCAFFOLD_UNMANAGED_FILE` |
+
+Framework-owned metadata under `.routa/` is exempt. Routa always rewrites
+`routes.gen.ts`, `manifest.json`, and `openapi-baseline.json`, because those are derived
+files with no user content.
+
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| `Refusing to overwrite modified generated file` | Move your edits into an application-owned module, then re-run. Handler logic belongs in services, which is what makes routes regenerable. |
+| `Refusing to overwrite unmanaged file` | Rename your file, or restore `.routa/manifest.json` from version control if it was lost. |
+| Preview shows everything as `conflict` | The manifest is missing. Restore it from git rather than deleting your source. |
+| A route you deleted from the document still serves traffic | Regeneration removed the file but metadata is stale. Run `routa generate`. |
+
+<Aside type="tip" title="Keep handlers thin">
+	The teams that regenerate most comfortably keep `run` bodies to a service call and an
+	outcome choice. When the logic lives in `src/services/`, a regenerated route file costs
+	nothing to accept.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Generated files"
+		href="/docs/concepts/generated-files/"
+		description="What the manifest records and why."
+	/>
+	<LinkCard
+		title="Scaffold from OpenAPI"
+		href="/docs/guides/openapi-scaffold/"
+		description="The first-run workflow in full."
+	/>
+	<LinkCard
+		title="Check and build"
+		href="/docs/guides/check-build/"
+		description="Validate the result before committing."
+	/>
+</CardGrid>

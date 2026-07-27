@@ -1,0 +1,84 @@
+---
+import { Code, TabItem, Tabs } from "@astrojs/starlight/components";
+
+type CommandType = "create" | "install" | "add" | "add-dev" | "run" | "exec";
+
+type Props = {
+	type: CommandType;
+	args?: string;
+	env?: string;
+};
+
+const { type, args = "", env } = Astro.props;
+
+const packageManagers = ["npm", "pnpm", "yarn", "bun"] as const;
+
+type PackageManager = (typeof packageManagers)[number];
+
+const templates: Record<CommandType, Record<PackageManager, (value: string) => string>> = {
+	create: {
+		npm: () => "npm create routa-ts@latest",
+		pnpm: () => "pnpm create routa-ts@latest",
+		yarn: () => "yarn create routa-ts",
+		bun: () => "bun create routa-ts@latest",
+	},
+	install: {
+		npm: () => "npm install",
+		pnpm: () => "pnpm install",
+		yarn: () => "yarn install",
+		bun: () => "bun install",
+	},
+	add: {
+		npm: (value) => `npm install ${value}`,
+		pnpm: (value) => `pnpm add ${value}`,
+		yarn: (value) => `yarn add ${value}`,
+		bun: (value) => `bun add ${value}`,
+	},
+	"add-dev": {
+		npm: (value) => `npm install --save-dev ${value}`,
+		pnpm: (value) => `pnpm add --save-dev ${value}`,
+		yarn: (value) => `yarn add --dev ${value}`,
+		bun: (value) => `bun add --dev ${value}`,
+	},
+	run: {
+		npm: (value) => `npm run ${value}`,
+		pnpm: (value) => `pnpm run ${value}`,
+		yarn: (value) => `yarn run ${value}`,
+		bun: (value) => `bun run ${value}`,
+	},
+	exec: {
+		npm: (value) => `npx routa ${value}`,
+		pnpm: (value) => `pnpm exec routa ${value}`,
+		yarn: (value) => `yarn exec routa ${value}`,
+		bun: (value) => `bunx routa ${value}`,
+	},
+};
+
+/**
+ * Builds the displayed command list for one package manager.
+ *
+ * Multi-line `args` produce one command per line so a tab can show a sequence
+ * of scripts without repeating the tab markup.
+ */
+function commandFor(packageManager: PackageManager): string {
+	const build = templates[type][packageManager];
+	const lines = args.includes("\n") ? args.split("\n") : [args];
+
+	return lines
+		.map((line) => line.trim())
+		.filter((line) => line.length > 0 || !args)
+		.map((line) => {
+			const command = build(line);
+			return env ? `${env} ${command}` : command;
+		})
+		.join("\n");
+}
+---
+
+<Tabs syncKey="pkg">
+	{packageManagers.map((packageManager) => (
+		<TabItem label={packageManager}>
+			<Code code={commandFor(packageManager)} lang="sh" />
+		</TabItem>
+	))}
+</Tabs>

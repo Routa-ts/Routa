@@ -1,36 +1,124 @@
 ---
 title: Deploy
-description: Build and run a Routa API in production.
+description: Build a Routa API and run it in a production environment.
 ---
 
-Build before starting the production server:
+import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
+import PackageManagers from "@components/PackageManagers.astro";
 
-```sh
-<package-manager> run build
-<package-manager> run start
+Deploying Routa is compiling to `dist/` and running `routa start`. The one setting that
+almost always needs changing is the host: Routa binds to `127.0.0.1` by default, which is
+correct for local development and wrong inside a container.
+
+## Before You Start
+
+- A project that passes `routa check`.
+- Node.js 24 or later in the runtime environment.
+- Knowing whether your platform assigns a port through `PORT`.
+
+## Steps
+
+<Steps>
+1. Build. Validation runs first, so a contract error stops the deploy before it produces
+   an artifact.
+
+	<PackageManagers type="run" args="build" />
+
+2. Bind to all interfaces. Set `HOST` in the environment rather than in `src/routa.ts`, so
+   local development keeps its safe default.
+
+	<PackageManagers type="run" args="start" env="HOST=0.0.0.0" />
+
+3. Accept a platform-assigned port when your host provides one.
+
+	<PackageManagers type="run" args="start" env="HOST=0.0.0.0 PORT=8080" />
+
+</Steps>
+
+## Verify
+
+The start log confirms the bound address:
+
+```txt
+[2026-01-01T00:00:00.000Z] INFO api.started Routa API started. {"host":"0.0.0.0","port":8080,"routes":4}
 ```
 
-Replace `<package-manager>` with npm, pnpm, Yarn, Bun, or another compatible package
-manager.
+## What the Runtime Image Needs
 
-`routa start` runs the JavaScript in `dist/`. It checks that the compiled output is
-present and newer than the source; if not, it reports the file that needs rebuilding.
-Keep `src/`, `.routa/`, `dist/`, and production dependencies in the runtime image.
+`routa start` reads compiled JavaScript from `dist/`, but it still validates the route
+graph from source before starting. Keep all four in the image:
 
-## Host and Port
+| Path | Why |
+| --- | --- |
+| `src/` | Route validation reads the TypeScript source |
+| `.routa/` | Route metadata and the baseline used by validation |
+| `dist/` | The JavaScript that actually runs |
+| `node_modules/` | Production dependencies, including `@routa-ts/cli` |
 
-Routa listens on `127.0.0.1:3000` by default for safe local development. Most Docker
-and hosted environments require listening on all interfaces. Set `HOST=0.0.0.0` and let
-the platform provide `PORT` when applicable:
-
-```sh
-HOST=0.0.0.0 PORT=3000 <package-manager> run start
-```
-
-Environment variables take precedence over `host` and `port` in `src/routa.ts`.
+This is also why generated apps keep `@routa-ts/cli` in `dependencies` rather than
+`devDependencies`.
 
 ## Container Shape
 
-Use a build stage to run your package manager's `run build`, then copy the source,
-generated metadata, `dist/`, and production dependencies into the runtime stage. Run its
-`run start` command; do not use the development command in production.
+Use a build stage to install every dependency and run the build, then copy source,
+metadata, output, and production dependencies into the runtime stage:
+
+```dockerfile
+FROM node:24-slim AS build
+WORKDIR /app
+COPY . .
+RUN npm ci && npm run build
+
+FROM node:24-slim
+WORKDIR /app
+ENV HOST=0.0.0.0
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/src ./src
+COPY --from=build /app/.routa ./.routa
+COPY --from=build /app/dist ./dist
+RUN npm ci --omit=dev
+CMD ["npm", "run", "start"]
+```
+
+## Configuration Precedence
+
+Environment variables win over `src/routa.ts`, which wins over Routa's defaults:
+
+| Setting | Environment | Config | Default |
+| --- | --- | --- | --- |
+| Host | `HOST` | `host` | `127.0.0.1` |
+| Port | `PORT` | `port` | `3000` |
+
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| Health checks fail although the container is running | The server bound to `127.0.0.1`. Set `HOST=0.0.0.0`. |
+| `Missing compiled runtime output for … Run routa build first.` | `dist/` was not copied into the runtime stage, or the build stage was skipped. |
+| `Compiled runtime output for … is stale.` | Source files were copied after the build. Copy `src/` and `dist/` from the same stage. |
+| `ROUTA_PROJECT_REQUIRED` at startup | `src/` or `src/routa.ts` is missing from the image. Validation needs the source. |
+
+<Aside type="caution" title="Never run dev in production">
+	`routa dev` compiles on the fly and supervises restarts. Use `routa build` at image
+	build time and `routa start` as the container command.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Configuration"
+		href="/docs/reference/configuration/"
+		description="Every option and environment variable Routa reads."
+	/>
+	<LinkCard
+		title="Run and start"
+		href="/docs/guides/run-start/"
+		description="How start differs from dev."
+	/>
+	<LinkCard
+		title="API evolution"
+		href="/docs/guides/api-evolution/"
+		description="Gate deploys on contract compatibility."
+	/>
+</CardGrid>

@@ -1,20 +1,107 @@
 ---
 title: Run and Start
-description: Run Routa projects in development and production mode.
+description: Run a Routa project in development and in production.
 ---
 
-Use development mode while editing routes:
+import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
+import PackageManagers from "@components/PackageManagers.astro";
 
-```sh
-pnpm exec routa dev
+Routa has two ways to run a project. `routa dev` compiles nothing and restarts on every
+source change, and `routa start` runs the JavaScript you already built. Both validate the
+route graph first, so a broken contract never reaches the server.
+
+## Before You Start
+
+- A project that passes `routa check`.
+- For `start`, a completed `routa build`.
+
+## Steps
+
+<Steps>
+1. Run in development while editing. Routa validates routes, writes
+   `.routa/routes.gen.ts`, typechecks, and starts the server through `tsx`.
+
+	<PackageManagers type="run" args="dev" />
+
+2. Edit any file under `src/`. The supervisor detects the change, revalidates, and
+   restarts the runtime.
+
+	```txt
+	Restarting Routa dev server...
+	```
+
+3. Build before running in production mode.
+
+	<PackageManagers type="run" args="build" />
+
+4. Start the built runtime. This runs `dist/`, does not typecheck, and does not compile.
+
+	<PackageManagers type="run" args="start" />
+
+</Steps>
+
+## Verify
+
+The default logger reports a successful start:
+
+```txt
+[2026-01-01T00:00:00.000Z] INFO api.started Routa API started. {"host":"127.0.0.1","port":3000,"routes":4}
 ```
 
-`routa dev` validates routes, writes generated metadata, typechecks, and starts the internal development server. In dev mode, empty route files can be stubbed before validation.
+Each completed request is logged at `info`, so a `curl` should produce a second line:
 
-Use start mode for a built or deployable app:
-
-```sh
-pnpm exec routa start
+```txt
+[2026-01-01T00:00:00.000Z] INFO http.request Request completed. {"method":"GET","path":"/status","status":200,"durationMs":1.42}
 ```
 
-Both commands prepare the project server before launching the runtime. Validation diagnostics stop the server from starting.
+## Development Versus Production
+
+| | `routa dev` | `routa start` |
+| --- | --- | --- |
+| Source | `src/` through `tsx` | `dist/` JavaScript |
+| Typecheck | Yes, before starting | No |
+| Restart on change | Yes | No |
+| Empty route files | Stubbed with a valid contract | Not stubbed |
+| Requires a build | No | Yes |
+
+Creating an empty `route.ts` in development is deliberate: Routa fills it with a valid
+stub contract so the file compiles while you decide what it should contain. It prints the
+path it stubbed.
+
+```txt
+Stubbed src/routes/reports/route.ts
+```
+
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| `Missing compiled runtime output for src/routes/users/route.ts. Run routa build first.` | `start` compares each source file against its `dist/` output. Build first. |
+| `Compiled runtime output for … is stale. Run routa build first.` | A source file is newer than its compiled output. Rebuild. |
+| The dev server keeps serving old behavior after an edit | Validation failed. The diagnostics are printed and the previous process keeps running until source validates again. |
+| The server exits immediately with no diagnostics | The port is in use. `api.start_failed` is logged at `error` with the host and port. |
+
+<Aside type="caution" title="Do not run dev in production">
+	`routa dev` runs TypeScript through `tsx` and supervises a restart loop. Production
+	deployments should run `routa build` at image build time and `routa start` at runtime.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Deploy"
+		href="/docs/guides/deploy/"
+		description="Host, port, and container shape for a production run."
+	/>
+	<LinkCard
+		title="Configuration"
+		href="/docs/reference/configuration/"
+		description="Set host, port, logger, and lifecycle headers."
+	/>
+	<LinkCard
+		title="Runtime behavior"
+		href="/docs/reference/runtime-behavior/"
+		description="Exact request and response semantics."
+	/>
+</CardGrid>

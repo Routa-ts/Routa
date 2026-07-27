@@ -1,0 +1,141 @@
+---
+title: Configuration
+description: Every option src/routa.ts accepts and every environment variable Routa reads.
+---
+
+import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
+
+Routa reads its runtime configuration from the default export of `src/routa.ts`. The file
+is required — Routa reports `ROUTA_PROJECT_REQUIRED` without it — even when it sets no
+options.
+
+```ts title="src/routa.ts"
+import { createRouta } from "@routa-ts/core";
+
+export default createRouta({
+	host: "127.0.0.1",
+	port: 3000,
+	lifecycleHeaders: true,
+});
+```
+
+## `host`
+
+```ts
+host?: string
+```
+
+The interface the server binds to. Defaults to `127.0.0.1`, which accepts local
+connections only. Container and platform deployments generally need `0.0.0.0`; set that
+through the `HOST` environment variable so local development keeps the safer default.
+
+**Overridden by:** `HOST`.
+
+## `port`
+
+```ts
+port?: number
+```
+
+The TCP port to listen on. Defaults to `3000`. When the port is unavailable the server
+logs `api.start_failed` at `error` level and sets a non-zero exit code.
+
+**Overridden by:** `PORT`.
+
+## `logger`
+
+```ts
+logger?: RoutaLogger | false
+```
+
+The logger instance used for runtime lifecycle events, request logging, and `ctx.logger`
+in every handler. Defaults to `createLogger()`, the built-in console logger at `info`
+level.
+
+Set `false` to disable logging entirely. Handlers still receive `ctx.logger`, implemented
+as a complete no-op with the same type, so handler code never needs a configuration guard.
+
+```ts title="src/routa.ts"
+import { createRouta } from "@routa-ts/core";
+import { createLogger } from "@routa-ts/core/logger";
+
+export default createRouta({
+	logger: process.env.NODE_ENV === "test" ? false : createLogger({ level: "debug" }),
+});
+```
+
+Because `RoutaLogger` is a structural type, any object implementing its members is valid,
+including an adapter over Pino, Winston, or a hosted logging SDK. See
+[Core reference](/docs/reference/core/) for the full member list.
+
+Request logging is enabled only when a logger is present. Two events are emitted:
+
+| Event | Level | Data |
+| --- | --- | --- |
+| `api.started` | `info` | `host`, `port`, `routes` |
+| `api.start_failed` | `error` | `error`, `host`, `port` |
+| `http.request` | `info` | `method`, `path`, `status`, `durationMs` |
+| `http.error` | `error` | `method`, `path`, `status`, `error`, `name`, `stack` |
+
+`http.error` is emitted only for responses with a status of 500 or above.
+
+## `lifecycleHeaders`
+
+```ts
+lifecycleHeaders?: boolean
+```
+
+Whether to emit deprecation headers on routes that declare `deprecation`. Defaults to
+`false`. When enabled, a deprecated operation responds with:
+
+| Header | Emitted when |
+| --- | --- |
+| `Deprecation: true` | The route declares any `deprecation` |
+| `Sunset: <date>` | `deprecation.sunset` is set |
+| `Link: <target>; rel="successor-version"` | `deprecation.replacement` is set |
+
+Routes without `deprecation` are unaffected regardless of this setting.
+
+## Environment Variables
+
+Environment variables are read at server start and take precedence over `src/routa.ts`.
+
+| Variable | Overrides | Default |
+| --- | --- | --- |
+| `HOST` | `host` | `127.0.0.1` |
+| `PORT` | `port` | `3000` |
+
+There is no environment override for `logger` or `lifecycleHeaders`; branch on your own
+variables inside `src/routa.ts` instead.
+
+## Precedence
+
+```txt
+environment variable  >  src/routa.ts  >  Routa default
+```
+
+<Aside type="caution" title="Configuration is read at boot">
+	`src/routa.ts` is imported once when the server starts. `routa dev` restarts the process
+	on changes under `src/`, so config edits take effect there, but a running `routa start`
+	process never re-reads them.
+</Aside>
+
+## Related
+
+<CardGrid>
+	<LinkCard
+		title="Deploy"
+		href="/docs/guides/deploy/"
+		description="Setting host and port for a container."
+	/>
+	<LinkCard
+		title="Core reference"
+		href="/docs/reference/core/"
+		description="createRouta and createLogger signatures."
+	/>
+	<LinkCard
+		title="API evolution"
+		href="/docs/guides/api-evolution/"
+		description="Where lifecycleHeaders comes from."
+	/>
+</CardGrid>

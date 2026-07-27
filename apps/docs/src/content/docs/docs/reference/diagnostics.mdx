@@ -1,27 +1,205 @@
 ---
 title: Diagnostics
-description: Routa validation errors and checks.
+description: Every ROUTA_ diagnostic code, its cause, and how to fix it.
 ---
 
-Routa diagnostics are designed to fail before TypeScript emits generic or late errors.
+import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
 
-Current validation covers:
+Routa validates the route graph before TypeScript runs, so contract mistakes surface as
+named codes instead of deep inference errors. Every command that touches a project —
+`check`, `generate`, `build`, `routes`, `dev`, `start`, and both `openapi` subcommands —
+runs the same validation and reports the same codes.
 
-- missing project structure
-- duplicate route paths and methods
-- route methods without a `success` response
-- duplicate schema names
-- middleware order problems
-- invalid OpenAPI graph state during OpenAPI checks
-- drift from `.routa/openapi-baseline.json`
-- removed OpenAPI operations
+Diagnostics are printed as the code, the file, the message, and a suggestion:
 
-Run:
-
-```sh
-pnpm exec routa check
-pnpm exec routa openapi check
-pnpm exec routa openapi breaking
+```txt
+ROUTA_MIDDLEWARE_ORDER: src/routes/admin/middleware.ts: withAdmin requires ctx.auth before it is provided.
+Suggestion: Move middleware that provides auth before withAdmin.
 ```
 
-Use diagnostics to fix source route contracts or intentionally update the OpenAPI baseline when the contract change is accepted.
+Any diagnostic fails the command with exit code `1`, and no metadata is written.
+
+## Project Structure
+
+### `ROUTA_PROJECT_REQUIRED`
+
+A required file or directory is missing: `package.json`, `tsconfig.json`, `src/`, or
+`src/routa.ts`.
+
+**Fix:** run the command from the project root. If you are adding Routa to an existing
+project, create `src/routa.ts` with a default `createRouta()` export.
+
+## Route Discovery
+
+### `ROUTA_ROUTE_CONFIG_UNRESOLVED`
+
+The route file has no default export that Routa can statically resolve to a
+`createRouteRoot(path)` result.
+
+**Fix:** export the helper call directly. Routa analyzes source without executing it, so
+building the config through a variable, a function, or a conditional cannot be resolved.
+
+```ts
+// Resolvable
+export default route({ get: createRoute({ /* ... */ }) });
+```
+
+### `ROUTA_DUPLICATE_ROUTE`
+
+Two route files resolve to the same URL path. The usual cause is a directory-style file
+and a flat-style file describing the same path.
+
+**Fix:** rename or move one of them. The message names both files.
+
+### `ROUTA_OPTIONS_AUTOMATIC`
+
+A route file declares an `options` method.
+
+**Fix:** remove it. Routa generates `OPTIONS` for every path and keeps its `Allow` header
+in sync with the declared methods.
+
+## Contracts
+
+### `ROUTA_MISSING_SUCCESS_RESPONSE`
+
+A method declares no response with a 2xx status.
+
+**Fix:** add one. `204` counts, which is the usual answer for `DELETE`.
+
+### `ROUTA_RESULT_TYPE`
+
+A handler or middleware returns a `type` that is not declared in `responses` or in any
+middleware `rejects` map for that method. The message lists the valid names.
+
+**Fix:** correct the name, or declare the outcome.
+
+### `ROUTA_RESULT_SHAPE`
+
+A returned result object contains a field other than `type` and `data`.
+
+**Fix:** remove the extra field. Results are limited to those two so every response can be
+described in OpenAPI. Move anything else into `data`.
+
+### `ROUTA_DUPLICATE_SCHEMA_NAME`
+
+Two modules export a schema with the same name. Exported schema names become OpenAPI
+component names, so they must be unique across the project.
+
+**Fix:** rename one to something contract-specific, such as `CreateUserResponse`.
+
+## Middleware
+
+### `ROUTA_MIDDLEWARE_ORDER`
+
+A middleware requires a context key that nothing earlier in the chain provides.
+
+**Fix:** move the providing middleware earlier. Chain order is folder middleware, then
+route-level, then method-level, and within a `middleware.ts` file it is export order.
+
+### `ROUTA_MIDDLEWARE_REJECT_STATUS`
+
+A middleware `rejects` entry uses a status outside the 4xx and 5xx ranges.
+
+**Fix:** use an error status. A middleware that needs to return a success response is a
+handler concern, not a reject.
+
+### `ROUTA_MIDDLEWARE_UNRESOLVED`
+
+A middleware reference could not be resolved statically, usually because the array spreads
+another array or computes an entry.
+
+**Fix:** list each middleware as a direct identifier of a `createMiddleware` export.
+Unresolvable middleware would run without contract checks, so Routa refuses it.
+
+## Deprecation
+
+### `ROUTA_DEPRECATION_REPLACEMENT_ROUTE_NOT_FOUND`
+
+`deprecation.replacement` starts with `/` but does not match a route in this project.
+
+**Fix:** correct the path, or run `routa generate` if the target route is new and metadata
+is stale.
+
+### `ROUTA_DEPRECATION_REPLACEMENT_URL_INVALID`
+
+`deprecation.replacement` is neither a local path beginning with `/` nor an absolute
+`http:` or `https:` URL.
+
+**Fix:** use `/new-route` for this API, or `https://api.example.com/new-route` for another.
+
+## OpenAPI
+
+### `ROUTA_OPENAPI_UNSUPPORTED_ZOD`
+
+A schema uses a Zod construct Routa cannot represent in OpenAPI. This is a warning, not a
+failure: it appears under `x-routa-schema-warnings` in the generated document, and the
+schema still validates at runtime.
+
+**Fix:** simplify the schema if the operation must be fully described in OpenAPI, or accept
+the warning.
+
+### `ROUTA_OPENAPI_UNSUPPORTED_EXTENSION`
+
+`routa scaffold` received a file that is not `.yaml`, `.yml`, or `.json`.
+
+### `ROUTA_OPENAPI_FILE_NOT_FOUND`
+
+The OpenAPI file path does not exist relative to the project root.
+
+## Scaffolding
+
+### `ROUTA_SCAFFOLD_UNMANAGED_FILE`
+
+A file already exists where scaffolding wants to write, and `.routa/manifest.json` does not
+track it.
+
+**Fix:** move or rename your file. If Routa did generate it and the manifest was lost,
+restore the manifest from version control.
+
+### `ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE`
+
+A tracked generated file no longer matches its recorded hash, so regenerating would discard
+your edits.
+
+**Fix:** move the edits into application-owned modules, then regenerate. Run with
+`--preview` first to see the full list.
+
+## Non-Coded Failures
+
+Some conditions fail without a `ROUTA_*` code because they are detected at registration or
+in the OpenAPI commands rather than during route validation:
+
+| Message | Meaning |
+| --- | --- |
+| `Missing .routa/openapi-baseline.json. Run routa scaffold first.` | No accepted contract exists yet |
+| `Regeneration requires preview or confirmation.` | Scaffolding again without `--preview` or `--yes` |
+| `Duplicate middleware reject key "…"` | Two middleware in one chain declare the same reject name |
+| `Duplicate route registration: …` | The same method and path registered twice at runtime |
+| `Middleware requires ctx.… but it was not provided.` | A required context key was missing at request time |
+| `Missing compiled runtime output for …` | `routa start` without a current `routa build` |
+
+<Aside type="note" title="Generated documents carry diagnostics">
+	When OpenAPI generation runs against a project that does not validate, the output
+	contains `x-routa-diagnostics` with the same codes instead of a partial contract. Fix
+	the diagnostics before trusting the document.
+</Aside>
+
+## Related
+
+<CardGrid>
+	<LinkCard
+		title="Check and build"
+		href="/docs/guides/check-build/"
+		description="The commands that emit these codes."
+	/>
+	<LinkCard
+		title="Middleware"
+		href="/docs/concepts/middleware/"
+		description="Rules behind the middleware diagnostics."
+	/>
+	<LinkCard
+		title="Regenerate safely"
+		href="/docs/guides/regeneration/"
+		description="Avoid the scaffolding conflicts above."
+	/>
+</CardGrid>

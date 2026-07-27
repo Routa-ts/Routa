@@ -16,6 +16,34 @@ export default defineConfig({
 			},
 			social: [{ icon: "github", label: "GitHub", href: "https://github.com/Routa-ts/Routa" }],
 			head: [
+				// Starlight emits og:title/description/url but no image or Twitter card.
+				{
+					tag: "meta",
+					attrs: { property: "og:image", content: "https://routa-ts.dev/og.png" },
+				},
+				{
+					tag: "meta",
+					attrs: { property: "og:image:width", content: "1200" },
+				},
+				{
+					tag: "meta",
+					attrs: { property: "og:image:height", content: "630" },
+				},
+				{
+					tag: "meta",
+					attrs: {
+						property: "og:image:alt",
+						content: "Routa — filesystem routes with contracts. Schema-first REST for TypeScript.",
+					},
+				},
+				{
+					tag: "meta",
+					attrs: { name: "twitter:card", content: "summary_large_image" },
+				},
+				{
+					tag: "meta",
+					attrs: { name: "twitter:image", content: "https://routa-ts.dev/og.png" },
+				},
 				{
 					tag: "link",
 					attrs: {
@@ -63,6 +91,7 @@ export default defineConfig({
 					label: "Concepts",
 					items: [
 						{ label: "Route contracts", slug: "docs/concepts/route-contracts" },
+						{ label: "Routing", slug: "docs/concepts/routing" },
 						{ label: "Schemas", slug: "docs/concepts/schemas" },
 						{ label: "OpenAPI", slug: "docs/concepts/openapi" },
 						{ label: "Middleware", slug: "docs/concepts/middleware" },
@@ -86,6 +115,7 @@ export default defineConfig({
 					items: [
 						{ label: "CLI", slug: "docs/reference/cli" },
 						{ label: "Core", slug: "docs/reference/core" },
+						{ label: "Configuration", slug: "docs/reference/configuration" },
 						{ label: "Runtime behavior", slug: "docs/reference/runtime-behavior" },
 						{ label: "Diagnostics", slug: "docs/reference/diagnostics" },
 					],

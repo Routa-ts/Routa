@@ -1,38 +1,141 @@
 ---
 title: Runtime Behavior
-description: Current Hono runtime behavior in Routa v0.
+description: Exactly how the Routa v0 Hono runtime handles a request and builds a response.
 ---
 
-Routa v0 runs on Hono.
+import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
 
-## Request Handling
+Routa v0 runs on Hono. This page documents the request pipeline, every status Routa
+produces on its own, and the shape of its error responses. Behavior described here comes
+from `createHonoApp` and applies to `routa dev`, `routa start`, and any app you build
+directly.
 
-- route params, query, headers, cookies, and body are parsed through declared Zod schemas
-- JSON request bodies require a JSON content type
-- invalid JSON bodies produce an error response
-- `GET` routes cannot declare request bodies
-- unsupported `Accept` headers can produce `406 Not Acceptable`
-- unsupported body content type can produce `415 Unsupported Media Type`
-- paths with unsupported methods produce `405 Method Not Allowed` with an `Allow` header
-- `OPTIONS` is generated automatically for every known path; users declare only `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and optional explicit `HEAD`
-- automatic `OPTIONS` returns `204` and derives `Allow` from the path, including implicit `HEAD` for `GET` and automatic `OPTIONS`
-- CORS preflights receive the same derived `Access-Control-Allow-Methods` plus `Vary`; origin and request-header permission still require an explicit CORS policy
-- route handlers receive the configured runtime logger as `ctx.logger`; logging-disabled applications receive a no-op implementation with the same type
+## Request Pipeline
+
+For each matched route, in order:
+
+1. **Accept negotiation.** A request whose `Accept` header cannot be satisfied by JSON
+   receives `406 Not Acceptable`. A missing `Accept` header is treated as acceptable.
+2. **Input parsing.** Declared `params`, `query`, `headers`, `cookies`, and `body` are
+   parsed with their Zod schemas. The body is read at most once per request and shared
+   between middleware and the handler.
+3. **Context creation.** `createContext()` runs if provided. It must return a plain
+   object.
+4. **Middleware chain.** Each middleware's `requires` keys are checked against the current
+   context, then `run` executes. It either returns a reject outcome, ending the request, or
+   calls `next(ctx)` to continue.
+5. **Handler.** `run` receives the parsed input and the accumulated context, with
+   framework-owned values such as `logger` applied last so they cannot be replaced.
+6. **Response validation.** The returned `type` is looked up in the route's `responses`
+   and in every middleware `rejects` map, and `data` is parsed against that schema.
+7. **Serialization.** The response is written as `application/json; charset=utf-8`, with
+   lifecycle headers when enabled.
+
+## Status Codes Routa Produces
+
+| Status | Cause |
+| --- | --- |
+| `204` | Automatic `OPTIONS` response |
+| `400` | Input failed schema validation, or the JSON body could not be parsed |
+| `405` | The path exists but does not declare the requested method |
+| `406` | The `Accept` header cannot be satisfied by JSON |
+| `415` | The request body's content type is not a JSON media type |
+| `500` | A handler or middleware returned output that does not match its contract |
+
+Every other status comes from your contract.
+
+## Error Response Shape
+
+Routa returns problem documents for the errors it generates:
+
+```json
+{
+	"type": "https://routa-ts.dev/problems/validation",
+	"title": "Validation failed",
+	"status": 400,
+	"issues": [{ "path": ["body", "email"], "message": "Invalid email address" }]
+}
+```
+
+| `type` | Title | Status |
+| --- | --- | --- |
+| `…/problems/validation` | Validation failed | 400 |
+| `…/problems/invalid-json` | Invalid JSON body | 400 |
+| `…/problems/unsupported-media-type` | Unsupported Media Type | 415 |
+| `…/problems/handler-output` | Invalid handler output | 500 |
+| `…/problems/internal` | Internal Server Error | 500 |
+
+Only validation problems include `issues`. Handler-output problems never leak the
+underlying message, since it may describe internal data.
+
+## Methods
+
+Applications declare `get`, `post`, `put`, `patch`, `delete`, and optionally `head`.
+
+- **`OPTIONS` is automatic.** Every known path answers `OPTIONS` with `204` and an `Allow`
+  header derived from that path's methods, including the implicit `HEAD` for `GET` and
+  `OPTIONS` itself. Declaring `options` is a registration error.
+- **`HEAD` is implicit for `GET`.** Declare `head` explicitly only when it needs its own
+  contract; explicit `HEAD` contracts are registered ahead of `GET` so they win without
+  intercepting real `GET` requests.
+- **`GET` and `HEAD` cannot declare a body.** Registration throws.
+- **Unsupported methods return `405`** with the same `Allow` header.
+
+## CORS Preflight
+
+A preflight carrying both `Origin` and `Access-Control-Request-Method` receives the derived
+method list as `Access-Control-Allow-Methods`, plus
+`Vary: Origin, Access-Control-Request-Method, Access-Control-Request-Headers`. Routa never
+sets `Access-Control-Allow-Origin`, so cross-origin access still requires an explicit CORS
+policy in your application.
+
+## Input Parsing Details
+
+| Source | Behavior |
+| --- | --- |
+| `params` | Values from dynamic path segments |
+| `query` | The query string as a flat record; repeated keys collapse to the last value |
+| `headers` | All request headers, lowercased |
+| `cookies` | Parsed from the `Cookie` header and URI-decoded, falling back to the raw value on malformed encoding |
+| `body` | Requires `application/json` or a `+json` media type, otherwise `415` |
+
+## Response Serialization
+
+Handlers return `{ type, data }`. Routa looks up the status from the matching response
+definition, validates `data`, and serializes it. Statuses `204`, `205`, and `304` are
+emitted with no body, and data that cannot be serialized as JSON produces a handler-output
+problem rather than a partial response.
 
 ## Logging
 
-`ctx.logger` implements Routa's backend-agnostic `RoutaLogger` contract. It provides `trace`, `debug`, `info`, `warn`, `error`, and `fatal`, plus a `silent` no-op, `child(bindings)`, `bindings()`, and `isLevelEnabled(level)`. The built-in logger and the `logger: false` no-op implement the same surface.
+When a logger is configured, `createHonoApp` records `http.request` at `info` for every
+completed request with `method`, `path`, `status`, and `durationMs`, and `http.error` at
+`error` for responses of 500 or above with the error message, name, and stack.
 
-The contract is structurally typed and does not depend on a logging package. Applications may provide an adapter for Pino, Winston, a hosted logging SDK, or their own sink through `createRouta({ logger })`.
+Handlers always receive `ctx.logger`. With logging disabled it is a complete no-op
+implementation of the same type.
 
-## Responses
+<Aside type="caution" title="v0 status">
+	JSON is the only supported content type at the request and response boundary. Streaming
+	responses, file uploads, and content negotiation beyond JSON are deferred.
+</Aside>
 
-Handlers and middleware return named results:
+## Related
 
-```ts
-return { type: "success", data };
-```
-
-Routa validates that the returned type exists in the route response map and serializes the matching HTTP response.
-
-Bodyless status codes are emitted without JSON response bodies.
+<CardGrid>
+	<LinkCard
+		title="Route contracts"
+		href="/docs/concepts/route-contracts/"
+		description="The declaration this pipeline executes."
+	/>
+	<LinkCard
+		title="Configuration"
+		href="/docs/reference/configuration/"
+		description="Logging and lifecycle header settings."
+	/>
+	<LinkCard
+		title="Testing"
+		href="/docs/guides/testing/"
+		description="Assert this behavior with createHonoApp."
+	/>
+</CardGrid>

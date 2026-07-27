@@ -1,0 +1,153 @@
+---
+title: Routing
+description: How Routa turns files under src/routes into URL paths.
+---
+
+import { Aside, CardGrid, FileTree, LinkCard } from "@astrojs/starlight/components";
+
+Routa routing is filesystem-based. The location of a file under `src/routes` determines
+its URL, and the file owns every HTTP method for that URL. There is no route registry to
+maintain and no import order that affects matching.
+
+```txt
+src/routes/users/route.ts            ->  /users
+src/routes/users/$userId/route.ts    ->  /users/:userId
+src/routes/(admin)/audit/route.ts    ->  /audit
+src/routes/users.$userId.posts.ts    ->  /users/:userId/posts
+```
+
+## How It Works
+
+Routa walks `src/routes`, converts each route file's location into a list of segments, and
+applies three rules to those segments: `$name` becomes the dynamic parameter `:name`,
+`(name)` is removed from the URL and recorded as a group, and everything else is used
+literally. The resulting path is what you pass to `createRouteRoot()`, and Routa reports a
+diagnostic when the two disagree.
+
+## File Conventions
+
+### Directory style
+
+A folder per segment, with the endpoint in `route.ts`. This is what the scaffolder
+generates and what the examples use.
+
+<FileTree>
+- src/routes/
+  - users/
+    - route.ts `/users`
+    - $userId/
+      - route.ts `/users/:userId`
+      - posts/
+        - route.ts `/users/:userId/posts`
+</FileTree>
+
+### Flat style
+
+Dots in a filename separate segments. Useful for shallow endpoints where a folder per
+segment adds more nesting than it is worth.
+
+<FileTree>
+- src/routes/
+  - users.ts `/users`
+  - users.$userId.ts `/users/:userId`
+  - users.$userId.posts.ts `/users/:userId/posts`
+</FileTree>
+
+Both styles can be mixed in one project, and a flat file can live inside a directory:
+`src/routes/admin/audit.$eventId.ts` serves `/admin/audit/:eventId`.
+
+### Dynamic segments
+
+A segment beginning with `$` becomes a path parameter. `$userId` produces `:userId`, which
+is the key you receive in `input.params` after parsing:
+
+```ts title="src/routes/users/$userId/route.ts"
+const route = createRouteRoot("/users/:userId");
+
+export default route({
+	get: createRoute({
+		input: {
+			params: z.object({ userId: z.string() }),
+		},
+		// ...
+	}),
+});
+```
+
+Declaring `params` is what makes the value validated and typed. A dynamic segment without
+a matching schema is still routable, but its value never reaches `input`.
+
+### Route groups
+
+A folder wrapped in parentheses organizes files without contributing a URL segment.
+`src/routes/(admin)/audit/route.ts` serves `/audit`, not `/admin/audit`.
+
+<FileTree>
+- src/routes/
+  - (public)/
+    - status/
+      - route.ts `/status`
+  - (internal)/
+    - middleware.ts applies to `/audit` only
+    - audit/
+      - route.ts `/audit`
+</FileTree>
+
+Groups are the tool for applying one middleware chain to a set of routes that do not share
+a URL prefix. The group name is recorded in generated metadata and in `routa routes`
+output, so it stays visible even though it is invisible in the URL.
+
+### Reserved file names
+
+Inside `src/routes`, three names are never treated as routes:
+
+| File | Role |
+| --- | --- |
+| `middleware.ts` | Middleware applied to that folder and everything below it |
+| `schemas.ts` | Zod schemas for nearby routes |
+| `*.test.ts` | Tests, ignored by route discovery |
+
+Any other `.ts` file is a route file.
+
+## Rules
+
+- One path may be served by exactly one file. Two files resolving to the same path is a
+  `ROUTA_DUPLICATE_ROUTE` error, which is the usual way a directory-style and flat-style
+  file collide.
+- The path passed to `createRouteRoot()` uses `:name` for parameters, while the filesystem
+  uses `$name`.
+- `OPTIONS` is never declared. Routa generates it for every known path and derives the
+  `Allow` header from the methods that path declares.
+- `HEAD` is implicit for any path with a `GET`. Declare `head` explicitly only when it
+  needs its own contract.
+
+## Limits
+
+Routa v0 has no catch-all or optional segments, no regex constraints in path syntax, and
+no explicit route priority. Constrain a parameter with its Zod schema instead. Matching is
+handled by Hono's router, so static segments take precedence over dynamic ones.
+
+<Aside type="caution" title="v0 status">
+	Directory style, flat style, dynamic segments, and route groups are all implemented in
+	v0. Catch-all and optional segments are deferred.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Route contracts"
+		href="/docs/concepts/route-contracts/"
+		description="What goes inside a route file once its path is settled."
+	/>
+	<LinkCard
+		title="Middleware"
+		href="/docs/concepts/middleware/"
+		description="How middleware.ts inheritance follows the folder tree."
+	/>
+	<LinkCard
+		title="CLI reference"
+		href="/docs/reference/cli/"
+		description="Use routa routes to print the resolved route table."
+	/>
+</CardGrid>

@@ -1,66 +1,292 @@
 ---
 title: Core Reference
-description: Core Routa framework APIs.
+description: Every export of the @routa-ts/core entry points.
 ---
 
-import { Aside } from "@astrojs/starlight/components";
+import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
+import PackageManagers from "@components/PackageManagers.astro";
 
-`@routa-ts/core` provides the route definition helpers and runtime primitives used by Routa applications and generated code.
+`@routa-ts/core` holds the helpers you write against and the runtime primitives generated
+code uses. It exposes four entry points, and `hono` and `zod` are peer dependencies rather
+than bundled.
 
-## Install
+<PackageManagers type="add" args="@routa-ts/core hono zod" />
 
-```sh
-pnpm add @routa-ts/core hono zod
-```
+| Entry point | Contents |
+| --- | --- |
+| `@routa-ts/core` | `createRouta`, `createRoute`, `createRouteRoot`, `createRouteRootFactory`, `createMiddleware`, and the contract types |
+| `@routa-ts/core/hono` | `createHonoApp`, `isBodylessStatus` |
+| `@routa-ts/core/logger` | `createLogger` and the logger types |
+| `@routa-ts/core/query/helpers` | `Sort`, `Fields` |
 
-## Basic Usage
+## `createRouta`
 
 ```ts
-import { createRoute, createRouteRoot } from "@routa-ts/core";
-import { z } from "zod";
+function createRouta<const TConfig extends RoutaConfig>(config: TConfig): TConfig & RoutaConfig
+```
 
-const route = createRouteRoot("/status");
+Preserves an application configuration object with Routa's typing. Export the result as
+the default export of `src/routa.ts`, which the runtime imports at boot.
+
+| Option | Type | Default |
+| --- | --- | --- |
+| `host` | `string` | `"127.0.0.1"` |
+| `port` | `number` | `3000` |
+| `logger` | `RoutaLogger \| false` | Built-in console logger |
+| `lifecycleHeaders` | `boolean` | `false` |
+
+```ts title="src/routa.ts"
+import { createRouta } from "@routa-ts/core";
+
+export default createRouta({
+	host: "127.0.0.1",
+	port: 3000,
+	lifecycleHeaders: true,
+});
+```
+
+See [Configuration](/docs/reference/configuration/) for environment precedence.
+
+## `createRoute`
+
+```ts
+function createRoute<TInput, TResponses, TMiddleware>(
+	contract: RouteContract<TInput, TResponses, TCtx, TMiddleware>,
+): RouteContract<TInput, TResponses, TCtx, TMiddleware>
+```
+
+Declares one HTTP method. The function returns its argument unchanged; its purpose is to
+capture literal types so `run` receives typed `input` and `ctx` and is constrained to the
+declared outcomes.
+
+| Field | Type | Required |
+| --- | --- | --- |
+| `input` | `{ params?, query?, headers?, cookies?, body? }` of Zod schemas | No |
+| `responses` | `Record<string, { status: number; schema: ZodType }>` | Yes |
+| `middleware` | `readonly MiddlewareContract[]` | No |
+| `deprecation` | `{ sunset?: string; replacement?: string }` | No |
+| `run` | `({ input, ctx }) => { type, data }` | Yes |
+
+`deprecation.replacement` accepts a registered route path beginning with `/` or an
+absolute `http:`/`https:` URL. Local paths are checked against the generated route
+registry.
+
+**Errors:** returning an undeclared `type` is a compile error and, at runtime, an
+`Invalid handler output` problem response. Result objects may contain only `type` and
+`data`.
+
+## `createRouteRoot`
+
+```ts
+function createRouteRoot<const TPath extends RegisteredRoutePath>(
+	path: TPath,
+): (config: RouteRootConfig) => RouteRootConfig
+```
+
+Binds a file to a URL path and returns the helper used as the file's default export. The
+returned helper accepts `get`, `post`, `put`, `patch`, `delete`, `head`, and `middleware`,
+and rejects every other key. `options` is never accepted.
+
+```ts title="src/routes/users/$userId/route.ts"
+const route = createRouteRoot("/users/:userId");
 
 export default route({
-	get: createRoute({
-		responses: {
-			success: {
-				status: 200,
-				schema: z.object({
-					ok: z.boolean(),
-				}),
-			},
-		},
-		run: async () => {
-			return { type: "success", data: { ok: true } };
-		},
+	middleware: [withAudit],
+	get: createRoute({ /* ... */ }),
+});
+```
+
+The path must use `:name` for dynamic segments even though the filesystem uses `$name`.
+Context types come from the `Register` augmentation in `.routa/routes.gen.ts`, so a path
+missing from generated metadata produces a type error.
+
+## `createRouteRootFactory`
+
+```ts
+function createRouteRootFactory<TCtxByPath>(): <TPath extends keyof TCtxByPath & string>(
+	path: TPath,
+) => (config: RouteRootConfig) => RouteRootConfig
+```
+
+Returns a `createRouteRoot` bound to an explicit context map instead of the generated
+`Register` augmentation. Use it in tests, libraries, or tooling that must work without a
+generated project. Prefer `createRouteRoot` in application code.
+
+## `createMiddleware`
+
+```ts
+function createMiddleware<TRequires, TProvides, TRejects, TInput>(
+	contract: MiddlewareContract<TRequires, TProvides, TRejects, TInput>,
+): MiddlewareContract<TRequires, TProvides, TRejects, TInput>
+```
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `requires` | `readonly string[]` | Context keys that must already exist |
+| `provides` | `Record<string, ZodType>` | Context keys this middleware adds |
+| `rejects` | `Record<string, { status: number; schema: ZodType }>` | Early responses it can return |
+| `input` | Same shape as a route `input` | Request data the middleware needs |
+| `openapi` | `{ security?, permissions? }` | Metadata emitted into generated OpenAPI |
+| `run` | `({ input, ctx, next }) => …` | The implementation |
+
+`run` either returns a reject outcome or returns `next(providedCtx)`. Values passed to
+`next` are validated against `provides` before being merged into `ctx`.
+
+**Errors:** `next()` called more than once throws. A `provides` value that fails its
+schema produces an `Invalid handler output` response. Reject statuses must be 4xx or 5xx.
+
+## `createHonoApp`
+
+```ts
+function createHonoApp(routes: readonly HonoRoute[], options?: CreateHonoAppOptions): Hono
+```
+
+Builds the Hono application from route definitions. The CLI runtime calls this for you;
+call it directly in tests.
+
+| Parameter | Type | Purpose |
+| --- | --- | --- |
+| `routes[].method` | `HttpMethod` | Lowercase method name |
+| `routes[].path` | `string` | Hono path with `:name` parameters |
+| `routes[].contract` | `AnyRouteContract` | The `createRoute` result |
+| `routes[].createContext` | `() => object` | Optional base context, must return a plain object |
+| `options.logger` | `RoutaLogger` | Enables `http.request` and `http.error` logging |
+| `options.lifecycleHeaders` | `boolean` | Emit `Deprecation`, `Sunset`, and `Link` |
+
+Registration throws for an explicitly declared `options` method, a duplicate
+method-and-path pair, a `GET` or `HEAD` contract declaring a body, and duplicate reject
+keys within one chain.
+
+```ts
+import { createHonoApp } from "@routa-ts/core/hono";
+import route from "./routes/users/route.js";
+
+const app = createHonoApp([{ method: "post", path: "/users", contract: route.post }]);
+```
+
+## `isBodylessStatus`
+
+```ts
+function isBodylessStatus(status: number): boolean
+```
+
+Returns `true` for `204`, `205`, and `304`. Routa uses it to emit those responses without
+a JSON body, since the `Response` constructor rejects one.
+
+## `createLogger`
+
+```ts
+function createLogger(options?: CreateLoggerOptions): RoutaLogger
+```
+
+| Option | Type | Default |
+| --- | --- | --- |
+| `enabled` | `boolean` | `true` |
+| `level` | `"trace" \| "debug" \| "info" \| "warn" \| "error" \| "fatal" \| "silent"` | `"info"` |
+| `sink` | `(event: RoutaLogEvent) => void` | Console writer |
+| `now` | `() => Date` | `() => new Date()` |
+
+`enabled: false` forces the level to `"silent"`, which is how the no-op logger is built.
+`now` exists so tests can produce deterministic timestamps.
+
+The returned `RoutaLogger` is structural and depends on no logging package:
+
+| Member | Signature |
+| --- | --- |
+| `trace`, `debug`, `info`, `warn`, `error`, `fatal` | `(event: string, message: string, data?: object) => void` |
+| `silent` | Same signature, always a no-op |
+| `log` | `(event: RoutaLogEvent) => void` |
+| `child` | `(bindings: object) => RoutaLogger` |
+| `bindings` | `() => object` |
+| `isLevelEnabled` | `(level) => boolean` |
+
+Every log event carries `level`, `event`, `message`, `timestamp`, and optional `data`.
+Child bindings are merged into `data` on each write.
+
+```ts title="src/routa.ts"
+import { createRouta } from "@routa-ts/core";
+import { createLogger } from "@routa-ts/core/logger";
+
+export default createRouta({
+	logger: createLogger({
+		level: "debug",
+		sink: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),
 	}),
 });
 ```
 
-## Model
+Because the contract is structural, any object with these members works — an adapter over
+Pino, Winston, or a hosted SDK needs no Routa-specific package.
 
-Route contracts keep HTTP behavior explicit in source: inputs, responses, middleware, metadata, and handler boundaries live together.
+## `Sort`
 
-Business logic remains application-owned. Routa owns the HTTP boundary.
+```ts
+function Sort<const TFields extends readonly [string, ...string[]]>(fields: TFields): ZodType
+```
 
-## Main APIs
+Builds a schema for a sort query parameter. Accepts a field name from `fields`, with an
+optional leading `-` for descending order, and produces
+`{ field: TFields[number]; direction: "asc" | "desc" }`. Any other field is rejected.
 
-- `createRouta(config)`: preserves the app runtime configuration.
-- `createRoute(contract)`: preserves a method contract with typed input, responses, middleware, and handler output.
-- `createMiddleware(contract)`: defines middleware requirements, provided context, rejects, and runtime behavior.
-- `createRouteRoot(path)`: returns a path-bound `route(config)` helper that binds each method to its generated context type.
-- `createHonoApp(routes, options)`: creates the Hono runtime app from generated route metadata.
-- `createLogger(options)`: creates Routa's built-in backend-neutral structured logger.
+```ts
+import { Sort } from "@routa-ts/core/query/helpers";
 
-## Logger Contract
+const query = z.object({ sort: Sort(["name", "createdAt"]).optional() });
+// ?sort=-createdAt -> { field: "createdAt", direction: "desc" }
+```
 
-`RoutaLogger` is a structural Routa type with no logging-package dependency. Its level methods are `trace`, `debug`, `info`, `warn`, `error`, `fatal`, and the `silent` no-op. It also provides `log(event)`, `child(bindings)`, `bindings()`, and `isLevelEnabled(level)`.
+## `Fields`
 
-Configure any implementation with `createRouta({ logger })`; route handlers receive that same implementation as `ctx.logger`. `logger: false` supplies the complete no-op contract instead.
+```ts
+function Fields<const TFields extends readonly [string, ...string[]]>(fields: TFields): ZodType
+```
 
-The full API example includes an opt-in route and local exercise script covering every method without making alert-level demonstration logs part of ordinary endpoint traffic.
+Builds a schema for a sparse-fieldset query parameter. Splits a comma-separated string,
+trims each entry, drops empties, and validates the result against `fields`.
 
-<Aside type="note" title="Generated types">
-	Generated `.routa/routes.gen.ts` files augment core types so route context can be inferred from middleware metadata.
+```ts
+import { Fields } from "@routa-ts/core/query/helpers";
+
+const query = z.object({ fields: Fields(["id", "name", "email"]).optional() });
+// ?fields=id, name -> ["id", "name"]
+```
+
+## Exported Types
+
+`HttpMethod`, `RouteInput`, `RouteResponses`, `RouteContract`, `AnyRouteContract`,
+`RouteRun`, `RouteHandlerArgs`, `RoutaResult`, `RouteRunResult`, `InferInput`,
+`InferResponse`, `SchemaInput`, `SchemaOutput`, `RoutaRouteContext`, `RoutaConfig`,
+`RouteDeprecation`, `RouteDeprecationReplacement`, `RegisteredRoutePath`,
+`ExternalApiUrl`, `MiddlewareContract`, `AnyMiddlewareContract`, `MiddlewareRun`,
+`MiddlewareRunArgs`, `MiddlewareNext`, `MiddlewareProvidesSpec`, `MiddlewareProvidesKeys`,
+`MiddlewareProvidedCtx`, `MiddlewareProvides`, `MiddlewareRejectsSpec`,
+`MiddlewareRejectResult`, `MiddlewareOpenApi`, `InferMiddlewareCtx`, and `Register`.
+
+From `@routa-ts/core/hono`: `HonoRoute`, `CreateHonoAppOptions`. From
+`@routa-ts/core/logger`: `RoutaLogger`, `RoutaLogLevel`, `RoutaLogLevelWithSilent`,
+`RoutaLogEvent`, `RoutaLogData`, `CreateLoggerOptions`.
+
+<Aside type="note" title="Generated type augmentation">
+	`.routa/routes.gen.ts` augments the `Register` interface so route context can be inferred
+	per path. Keep `.routa/**/*.ts` in the `include` array of `tsconfig.json`.
 </Aside>
+
+## Related
+
+<CardGrid>
+	<LinkCard
+		title="Route contracts"
+		href="/docs/concepts/route-contracts/"
+		description="How these helpers fit together in a route file."
+	/>
+	<LinkCard
+		title="Configuration"
+		href="/docs/reference/configuration/"
+		description="Every createRouta option in detail."
+	/>
+	<LinkCard
+		title="Runtime behavior"
+		href="/docs/reference/runtime-behavior/"
+		description="What createHonoApp does with a request."
+	/>
+</CardGrid>
