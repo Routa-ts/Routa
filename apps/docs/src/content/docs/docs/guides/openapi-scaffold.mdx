@@ -1,34 +1,116 @@
 ---
 title: Scaffold from OpenAPI
-description: Generate Routa route files from an OpenAPI document.
+description: Generate Routa route files and schemas from an OpenAPI document.
 ---
 
-Routa can scaffold the first HTTP layer from an OpenAPI document:
+import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
+import PackageManagers from "@components/PackageManagers.astro";
 
-```sh
-pnpm exec routa scaffold openapi.yaml --preview
-pnpm exec routa scaffold openapi.yaml --yes
+`routa scaffold` reads an OpenAPI document and writes the source contract it describes:
+one route file per path, a schema module beside it, and the `.routa/` metadata that later
+checks compare against. Run it when you have an agreed API contract and want the
+TypeScript source to match it.
+
+## Before You Start
+
+- A Routa project. Scaffolding refuses to run outside one.
+- An OpenAPI document with a `.yaml`, `.yml`, or `.json` extension in the project.
+- No `OPTIONS` operations in the document. Routa generates those at runtime.
+
+## Steps
+
+<Steps>
+1. Preview the changes. Nothing is written in preview mode, so run this first every time.
+
+	<PackageManagers type="exec" args="scaffold openapi.yaml --preview" />
+
+2. Read the change list. Each generated path is marked with what would happen to it.
+
+	| Marker | Meaning |
+	| --- | --- |
+	| `+ add` | New file that does not exist yet |
+	| `~ update` | Tracked generated file whose content would change |
+	| `= unchanged` | Generated file already matches |
+	| `! conflict` | A file exists at that path that Routa does not track |
+	| `- remove` | Previously generated file no longer described by the document |
+
+3. Resolve every conflict before continuing. Move or rename any file marked `! conflict`
+   that you want to keep, since Routa refuses to overwrite files it did not generate.
+
+4. Apply the changes.
+
+	<PackageManagers type="exec" args="scaffold openapi.yaml --yes" />
+
+5. Validate and typecheck the generated source.
+
+	<PackageManagers type="run" args="check" />
+
+</Steps>
+
+## Verify
+
+Scaffolding reports what it wrote:
+
+```txt
+Scaffolded 4 Routa route file(s).
+src/routes/users/route.ts
+src/routes/users/schemas.ts
+src/routes/users/$userId/route.ts
+src/routes/users/$userId/schemas.ts
+.routa/openapi-baseline.json
+.routa/manifest.json
+.routa/routes.gen.ts
 ```
 
-Supported input extensions:
+Generated handlers are stubs. They satisfy the contract and return placeholder data, so
+`routa check` passes immediately and you can fill in the service calls one route at a time.
 
-- `.yaml`
-- `.yml`
-- `.json`
+## What Gets Generated
 
-## Generated Output
+| From the document | Into source |
+| --- | --- |
+| Path and method | `src/routes/**/route.ts` with a `createRoute` per method |
+| Parameters | `input.params`, `input.query`, `input.headers`, `input.cookies` |
+| JSON request body | `input.body` |
+| JSON responses | Entries in `responses`, named from status and `operationId` |
+| `components.schemas` | Shared schema modules referenced by routes |
+| The whole document | `.routa/openapi-baseline.json` |
 
-Scaffold creates route files under `src/routes`, schema files near those routes, `.routa/manifest.json`, `.routa/openapi-baseline.json`, and `.routa/routes.gen.ts`.
+Supported input is deliberately narrow: paths, methods, `operationId`, path/query/header/
+cookie parameters, JSON bodies, JSON responses, and `components.schemas`. Anything else
+stays in the source document and is not approximated in TypeScript.
 
-## Supported v0 Model
+## Troubleshooting
 
-- `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD` path operations
-- `operationId`
-- path, query, header, and cookie parameters
-- JSON request bodies
-- JSON responses
-- schemas from `components.schemas`
+| Problem | Fix |
+| --- | --- |
+| `ROUTA_OPENAPI_UNSUPPORTED_EXTENSION` | Rename the document to `.yaml`, `.yml`, or `.json`. |
+| `ROUTA_OPENAPI_FILE_NOT_FOUND` | Run from the project root, or pass the path relative to it. |
+| `Regeneration requires preview or confirmation.` | A manifest already exists. Re-run with `--preview`, then with `--yes`. |
+| `ROUTA_SCAFFOLD_UNMANAGED_FILE` | A file exists where Routa wants to generate one, and the manifest does not track it. Move or rename yours. |
+| `ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE` | You edited a generated file. Move the edits into application-owned code, or accept losing them. |
 
-Do not add `OPTIONS` operations to scaffold input. Routa generates OPTIONS at runtime from the application-owned methods on each path.
+<Aside type="caution" title="Generated source is yours">
+	Scaffolding is a one-way import, not a live binding. After the first run, the route
+	files are your source of truth and the document is regenerated from them.
+</Aside>
 
-Review generated source before committing. Generated handlers are stubs and business logic stays in your app.
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Regenerate safely"
+		href="/docs/guides/regeneration/"
+		description="Re-run scaffolding after the document changes."
+	/>
+	<LinkCard
+		title="OpenAPI"
+		href="/docs/concepts/openapi/"
+		description="How generation works in the other direction."
+	/>
+	<LinkCard
+		title="API evolution"
+		href="/docs/guides/api-evolution/"
+		description="Keep the contract compatible as it changes."
+	/>
+</CardGrid>

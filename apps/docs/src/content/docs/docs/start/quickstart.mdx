@@ -1,47 +1,109 @@
 ---
 title: Quickstart
-description: Create and run a Routa API.
+description: Create a Routa API and run it locally in under five minutes.
 ---
 
-import { Steps } from "@astrojs/starlight/components";
+import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
+import PackageManagers from "@components/PackageManagers.astro";
+
+This guide creates a new Routa project, starts it in development mode, and runs the same
+checks Routa expects before you ship. The generated app already contains a working
+`/status` route, so you have a request to make at the end of step three.
+
+## Before You Start
+
+- Node.js 24 or later. Check with `node --version`.
+- npm, pnpm, Yarn, or Bun. Routa does not write a lockfile or a `packageManager` field.
+
+## Steps
 
 <Steps>
-1. Create a Routa project.
+1. Create a Routa project. The scaffolder asks for a project name and whether to include a
+   starter OpenAPI file, a git repository, and installed dependencies.
 
-	```sh
-	<package-manager> create routa-ts@latest
-	```
+	<PackageManagers type="create" />
 
-2. Enter the project and install dependencies if the create command did not install them.
+2. Enter the project. Install dependencies if you answered no to the install prompt.
 
 	```sh
 	cd routa-app
-	<package-manager> install
 	```
+
+	<PackageManagers type="install" />
 
 3. Start development mode.
 
-	```sh
-	<package-manager> run dev
-	```
+	<PackageManagers type="run" args="dev" />
+
+	`routa dev` validates the route graph, writes `.routa/routes.gen.ts`, typechecks the
+	project, and starts the server on `http://127.0.0.1:3000`.
 
 4. Run the checks used before shipping.
 
-	```sh
-	<package-manager> run generate
-	<package-manager> run check
-	<package-manager> run build
-	<package-manager> run test
-	<package-manager> run openapi:check
-	```
+	<PackageManagers type="run" args={`generate
+check
+build
+test
+openapi:check`} />
 
 </Steps>
 
-Replace `<package-manager>` with npm, pnpm, Yarn, Bun, or another compatible package
-manager. `<package-manager> run dev` runs `routa dev`, which validates the route graph,
-writes `.routa/routes.gen.ts`, typechecks the project, and starts the internal development server.
+## Verify
 
-After a route-structure change, run `<package-manager> run generate`, review the `.routa/` diff, and
-commit it with the source change.
+Request the generated status route in a second terminal:
 
-Use `src/routes` as the source of truth for the HTTP contract.
+```sh
+curl http://127.0.0.1:3000/status
+```
+
+```json
+{ "ok": true }
+```
+
+A successful `routa check` reports the validated route count and exits with code `0`:
+
+```txt
+Routa validation passed for 1 route file(s).
+Running TypeScript check: tsc -p tsconfig.json --noEmit
+TypeScript check passed.
+Routa check passed.
+```
+
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| `Routa commands must run inside a TypeScript Routa project.` | Run the command from the project root, the directory holding `package.json` and `src/routes`. |
+| The server starts on a port already in use. | Set `PORT` for one run, or change `port` in `src/routa.ts`. |
+| `routa openapi check` reports missing `.routa/openapi-baseline.json`. | You created the project without the starter OpenAPI file. Run `routa scaffold openapi.yaml` or skip the OpenAPI check. |
+| Editing a route does not change the response. | `routa dev` restarts on changes under `src/`. If validation failed, the diagnostics appear in the dev output and the previous server keeps running. |
+
+<Aside type="caution" title="v0 status">
+	Routa is at a v0 implementation baseline. Everything in this quickstart is implemented
+	today. See [v0 Scope & Status](/docs/start/v0-scope/) for what is deferred.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Project anatomy"
+		href="/docs/getting-started/project-anatomy/"
+		description="Learn which files you own and which files Routa owns."
+	/>
+	<LinkCard
+		title="First route"
+		href="/docs/getting-started/first-route/"
+		description="Write your own route contract from scratch."
+	/>
+	<LinkCard
+		title="Route contracts"
+		href="/docs/concepts/route-contracts/"
+		description="Understand the model behind every Routa HTTP boundary."
+	/>
+	<LinkCard
+		title="CLI reference"
+		href="/docs/reference/cli/"
+		description="Every command and flag the routa binary accepts."
+	/>
+</CardGrid>

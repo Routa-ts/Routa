@@ -1,28 +1,90 @@
 ---
 title: Security
-description: How to report Routa security issues.
+description: Report a Routa vulnerability privately and understand what Routa secures.
 ---
 
-Please do not report security vulnerabilities through public GitHub issues.
+import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
 
-## Reporting
+Routa takes vulnerability reports through private email rather than public issues, so a
+fix can ship before the problem is widely known. This page covers how to report one and
+which parts of an API Routa is responsible for.
 
-Email security reports to:
+## Before You Start
 
-```txt
-security@routa-ts.dev
-```
+- Do not open a public GitHub issue, discussion, or pull request describing the issue.
+- Confirm the problem is in Routa itself rather than in an application built with it.
 
-Include enough detail to reproduce and evaluate the issue:
+## Steps
 
-- affected package or workflow
-- Routa version or commit
-- reproduction steps
-- impact
-- suggested mitigation, if known
+<Steps>
+1. Email the report.
 
-## Public Policy
+	```txt
+	security@routa-ts.dev
+	```
 
-Read the repository security policy for the current process:
+2. Include enough detail to reproduce and assess it.
 
-[Routa security policy](https://github.com/Routa-ts/Routa/blob/main/SECURITY.md)
+	| Include | Why |
+	| --- | --- |
+	| Affected package or workflow | Narrows it to core, the CLI, or the scaffolder |
+	| Routa version or commit | Determines whether it is already fixed |
+	| Reproduction steps | Makes triage possible |
+	| Impact | Sets severity |
+	| Suggested mitigation | Optional, always welcome |
+
+3. Wait for acknowledgement before disclosing. The repository
+   [security policy](https://github.com/Routa-ts/Routa/blob/main/SECURITY.md) describes the
+   current process and timelines.
+
+</Steps>
+
+## What Routa Secures
+
+Routa owns the HTTP boundary, so these are Routa's responsibility:
+
+- Parsing and validating every declared input before a handler runs.
+- Validating handler output against its declared schema before serialization.
+- Not leaking internal error messages; runtime failures return generic problem documents.
+- Refusing to overwrite files it does not track during scaffolding.
+- Rejecting middleware it cannot statically verify.
+
+## What Your Application Secures
+
+Routa makes security *visible* in the contract and in generated OpenAPI. It never
+implements any of it. These remain entirely yours:
+
+- Authentication, credential verification, and session handling.
+- Authorization rules and policy correctness. `openapi.permissions` is documentation, not
+  enforcement.
+- Secret storage and rotation.
+- CORS policy. Routa answers preflights with the derived method list but never sets
+  `Access-Control-Allow-Origin`.
+- Rate limiting, request size limits, and denial-of-service protection.
+- Transport security and anything the reverse proxy or platform in front of Routa provides.
+
+<Aside type="caution" title="Permissions are metadata">
+	Declaring `openapi: { permissions: ["users.read"] }` on middleware documents a
+	requirement in the generated contract. Your middleware `run` must still perform the
+	check.
+</Aside>
+
+## Related
+
+<CardGrid>
+	<LinkCard
+		title="Middleware"
+		href="/docs/concepts/middleware/"
+		description="Where authentication and authorization attach."
+	/>
+	<LinkCard
+		title="Runtime behavior"
+		href="/docs/reference/runtime-behavior/"
+		description="Error responses and CORS preflight handling."
+	/>
+	<LinkCard
+		title="Contributing"
+		href="/docs/community/contributing/"
+		description="Non-security changes go through the public process."
+	/>
+</CardGrid>

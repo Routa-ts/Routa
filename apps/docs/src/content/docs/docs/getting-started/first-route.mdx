@@ -1,41 +1,161 @@
 ---
 title: First Route
-description: Define a Routa route contract.
+description: Write, generate, and call your first Routa route contract.
 ---
 
-Routa route files map to URL paths. A `route.ts` file owns the HTTP methods for that path.
+import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
+import PackageManagers from "@components/PackageManagers.astro";
+
+This guide adds a `GET /users/:userId` endpoint to an existing Routa project. By the end
+you will have a validated path parameter, a typed response, and a route that appears in
+generated metadata and OpenAPI.
+
+## Before You Start
+
+- A Routa project created with `create-routa-ts`, or an existing project set up through
+  [Installation](/docs/getting-started/installation/).
+- The development server stopped. You will restart it in the last step.
+
+## Steps
+
+<Steps>
+1. Create the schema module. Keeping schemas beside the route is the default convention,
+   and exported names become OpenAPI component names.
+
+	```ts title="src/routes/users/$userId/schemas.ts"
+	import { z } from "zod";
+
+	export const GetUserParams = z.object({
+		userId: z.string().min(1),
+	});
+
+	export const GetUserResponse = z.object({
+		id: z.string(),
+		name: z.string(),
+	});
+
+	export const UserNotFoundResponse = z.object({
+		message: z.string(),
+	});
+	```
+
+2. Create the route file. The folder path becomes the URL path, and `$userId` becomes the
+   `:userId` parameter.
+
+	```ts title="src/routes/users/$userId/route.ts"
+	import { createRoute, createRouteRoot } from "@routa-ts/core";
+	import { GetUserParams, GetUserResponse, UserNotFoundResponse } from "./schemas.js";
+
+	const route = createRouteRoot("/users/:userId");
+
+	export default route({
+		get: createRoute({
+			input: {
+				params: GetUserParams,
+			},
+			responses: {
+				success: {
+					status: 200,
+					schema: GetUserResponse,
+				},
+				notFound: {
+					status: 404,
+					schema: UserNotFoundResponse,
+				},
+			},
+			run: async ({ input }) => {
+				if (input.params.userId !== "usr_1") {
+					return { type: "notFound", data: { message: "User not found." } };
+				}
+
+				return { type: "success", data: { id: input.params.userId, name: "Ada" } };
+			},
+		}),
+	});
+	```
+
+3. Generate route metadata so the new path is registered and typed.
+
+	<PackageManagers type="run" args="generate" />
+
+4. Start the development server.
+
+	<PackageManagers type="run" args="dev" />
+
+</Steps>
+
+## Verify
+
+Both declared outcomes are reachable, and each returns its declared status:
+
+```sh
+curl -i http://127.0.0.1:3000/users/usr_1
+```
 
 ```txt
-src/routes/users/route.ts
-src/routes/users/$userId/route.ts
+HTTP/1.1 200 OK
+content-type: application/json; charset=utf-8
+
+{"id":"usr_1","name":"Ada"}
 ```
 
-Define the route contract before the handler:
-
-```ts
-import { createRoute, createRouteRoot } from "@routa-ts/core";
-import { z } from "zod";
-
-const UserSchema = z.object({
-	id: z.string(),
-	name: z.string(),
-});
-
-const route = createRouteRoot("/users");
-
-export default route({
-	get: createRoute({
-		responses: {
-			success: {
-				status: 200,
-				schema: UserSchema,
-			},
-		},
-		run: async () => {
-			return { type: "success", data: { id: "usr_1", name: "Ada" } };
-		},
-	}),
-});
+```sh
+curl -i http://127.0.0.1:3000/users/usr_2
 ```
 
-The handler returns a named response from the declared response map. If the handler returns an undeclared response type or incompatible data, TypeScript should catch it.
+```txt
+HTTP/1.1 404 Not Found
+content-type: application/json; charset=utf-8
+
+{"message":"User not found."}
+```
+
+## What Just Happened
+
+`createRouteRoot("/users/:userId")` binds the file to a path and gives the methods inside
+it the context type generated for that path. `createRoute` declares one method. Routa
+parses `input.params` through `GetUserParams` before `run` executes, so `input.params.userId`
+is a validated `string` rather than `string | undefined`.
+
+The handler returns `{ type, data }` where `type` is a key of `responses`. TypeScript
+rejects any other name, and at runtime Routa validates `data` against that outcome's
+schema before serializing it with the declared status.
+
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| `ROUTA_ROUTE_CONFIG_UNRESOLVED` | The file must have a default export produced by the `createRouteRoot(path)` helper. Assigning the config to a variable that is exported later cannot be resolved statically. |
+| `ROUTA_MISSING_SUCCESS_RESPONSE` | Every method needs at least one response with a 2xx status. |
+| `ROUTA_RESULT_TYPE` | The handler returned a name that is not a key of `responses`. Check for a typo or add the outcome. |
+| The route returns 404 for every request. | Metadata is stale. Run `routa generate` and restart the server. |
+
+<Aside type="tip" title="Contract first">
+	Write `input` and `responses` before writing `run`. Once both are declared, the handler
+	body is the only part TypeScript cannot infer for you.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Route contracts"
+		href="/docs/concepts/route-contracts/"
+		description="Every field a route contract accepts and why."
+	/>
+	<LinkCard
+		title="Routing"
+		href="/docs/concepts/routing/"
+		description="Dynamic segments, flat files, and route groups."
+	/>
+	<LinkCard
+		title="Middleware"
+		href="/docs/concepts/middleware/"
+		description="Add typed context and early responses to this route."
+	/>
+	<LinkCard
+		title="Testing"
+		href="/docs/guides/testing/"
+		description="Cover the contract you just wrote."
+	/>
+</CardGrid>

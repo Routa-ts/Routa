@@ -1,36 +1,117 @@
 ---
 title: Check and Build
-description: Validate Routa contracts before emitting JavaScript.
+description: Validate route contracts and compile a Routa project.
 ---
 
-Use `routa check` before shipping changes:
+import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
+import PackageManagers from "@components/PackageManagers.astro";
 
-```sh
-pnpm exec routa check
+Routa validates the route graph before TypeScript ever runs, so contract mistakes surface
+as named diagnostics instead of deep inference errors. This guide covers the four commands
+that validate, generate, and compile, and when to reach for each.
+
+## Before You Start
+
+- A project that installs cleanly, since `check` and `build` shell out to `tsc`.
+- `.routa/**/*.ts` included in `tsconfig.json`, or generated context types will not resolve.
+
+## Steps
+
+<Steps>
+1. Validate the route graph and typecheck. This is the command to run before every commit.
+
+	<PackageManagers type="run" args="check" />
+
+2. Refresh generated metadata on its own when you changed route structure and want the
+   `.routa/` diff as a separate reviewable step.
+
+	<PackageManagers type="run" args="generate" />
+
+3. Compile to JavaScript when you are ready to deploy.
+
+	<PackageManagers type="run" args="build" />
+
+4. Print the resolved route table when you want to see what Routa actually registered.
+
+	<PackageManagers type="exec" args="routes" />
+
+</Steps>
+
+## Verify
+
+`routa check` reports both phases and exits `0`:
+
+```txt
+Routa validation passed for 4 route file(s).
+Running TypeScript check: tsc -p tsconfig.json --noEmit
+TypeScript check passed.
+Routa check passed.
 ```
 
-`routa check`:
+`routa build` emits JavaScript only after validation passes:
 
-- validates project structure
-- discovers route files
-- detects duplicate routes
-- detects missing `success` responses
-- detects duplicate schema names
-- checks middleware ordering
-- writes generated route metadata when validation passes
-- runs `tsc -p tsconfig.json --noEmit`
-
-Use `routa generate` when you want to deliberately refresh committed metadata after a
-route-structure change:
-
-```sh
-pnpm exec routa generate
+```txt
+Routa build passed for 4 route file(s).
 ```
 
-Use `routa build` to validate and compile:
+## What Each Command Does
+
+| Command | Validates | Writes `routes.gen.ts` | Runs TypeScript |
+| --- | --- | --- | --- |
+| `routa check` | Yes | On success | `tsc --noEmit` |
+| `routa generate` | Yes | On success | No |
+| `routa build` | Yes | On success | `tsc` with emit |
+| `routa routes` | Yes | On success | No |
+
+Validation is the same in all four. It covers project structure, route discovery,
+duplicate paths, missing 2xx responses, duplicate schema names, handler result shapes,
+middleware ordering, middleware reject statuses, and deprecation replacement targets. See
+[Diagnostics](/docs/reference/diagnostics/) for every code these can produce.
+
+## In Continuous Integration
+
+Because a successful validation rewrites `.routa/routes.gen.ts`, treat a dirty working
+tree after generation as a failure. That catches a commit where source and metadata
+disagree:
 
 ```sh
-pnpm exec routa build
+routa generate
+git diff --exit-code .routa
+routa check
+routa openapi breaking
 ```
 
-If Routa validation fails, build does not emit JavaScript.
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| `ROUTA_PROJECT_REQUIRED` | Run the command from the project root. Routa requires `package.json`, `tsconfig.json`, `src/`, and `src/routa.ts`. |
+| TypeScript errors about `ctx` properties that should exist | Metadata is stale. Run `routa generate` and typecheck again. |
+| `routa build` reports no errors but `dist/` is empty | `tsconfig.json` sets `noEmit`. Generated projects keep emit enabled for the build. |
+| Validation passes locally and fails in CI | `.routa/` was not committed. It is required, not a build artifact. |
+
+<Aside type="note" title="Checks touch the working tree">
+	`check`, `generate`, `build`, and `routes` all refresh `.routa/routes.gen.ts` after a
+	clean validation. This is intentional, and it is why the CI snippet above compares the
+	diff instead of assuming the commands are read-only.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Diagnostics"
+		href="/docs/reference/diagnostics/"
+		description="Every validation error, its cause, and its fix."
+	/>
+	<LinkCard
+		title="Run and start"
+		href="/docs/guides/run-start/"
+		description="Move from a passing build to a running server."
+	/>
+	<LinkCard
+		title="Testing"
+		href="/docs/guides/testing/"
+		description="Cover behavior that validation cannot check."
+	/>
+</CardGrid>

@@ -1,28 +1,30 @@
 ---
 title: Schemas
-description: Zod schemas define Routa inputs and responses.
+description: Zod schemas define every Routa input, context value, and response.
 ---
 
-Routa v0 uses Zod schemas for route inputs, middleware inputs, provided context, and response payloads.
+import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
 
-```ts
+Routa uses Zod for everything that crosses a boundary: route inputs, middleware inputs,
+context values middleware provides, and response payloads. A schema is simultaneously the
+runtime validator, the TypeScript type, and the OpenAPI definition.
+
+```ts title="src/routes/users/schemas.ts"
 import { z } from "zod";
 
 export const CreateUserSchema = z.object({
-	email: z.string().email(),
-	name: z.string(),
+	email: z.email(),
+	name: z.string().min(1),
 });
 
 export const UserSchema = z.object({
 	id: z.string(),
-	email: z.string().email(),
+	email: z.email(),
 	name: z.string(),
 });
 ```
 
-Use schemas in route contracts:
-
-```ts
+```ts title="src/routes/users/route.ts"
 createRoute({
 	input: {
 		body: CreateUserSchema,
@@ -34,9 +36,89 @@ createRoute({
 		},
 	},
 	run: async ({ input }) => {
-		return users.create(input.body);
+		return { type: "success", data: await users.create(input.body) };
 	},
 });
 ```
 
-Scaffolded projects keep route-local schemas near the route by default. Shared component schemas are generated when OpenAPI declares reusable `components.schemas`.
+## How It Works
+
+Routa parses each declared input source with `schema.parse()` before the handler runs, so
+`input.body` is the schema's **output** type, not its input type. A schema with a
+`transform` or a default gives the handler the transformed value.
+
+On the way out, the returned `data` is parsed against the matching response schema before
+serialization. A handler that returns data the schema rejects produces a `500` with an
+`Invalid handler output` problem document rather than sending a malformed payload.
+
+## Where Schemas Live
+
+Route-local schemas in a sibling `schemas.ts` are the default, and scaffolding generates
+them that way. When an OpenAPI document declares reusable `components.schemas`, scaffolding
+generates a shared module instead and references it from each route.
+
+Exported schema names must be unique across the project. Routa reports
+`ROUTA_DUPLICATE_SCHEMA_NAME` for collisions, because those names become OpenAPI component
+names. Prefer contract-purpose names like `CreateUserResponse` over generic ones like
+`Response`.
+
+## Query Helpers
+
+Query strings arrive as strings, so common list parameters need a parse step. Routa ships
+two helpers for the two most common cases:
+
+```ts title="src/routes/users/schemas.ts"
+import { Fields, Sort } from "@routa-ts/core/query/helpers";
+import { z } from "zod";
+
+export const ListUsersQuery = z.object({
+	sort: Sort(["name", "createdAt"]).optional(),
+	fields: Fields(["id", "name", "email"]).optional(),
+});
+```
+
+`Sort` accepts a field name with an optional `-` prefix and produces
+`{ field, direction }`. A request for `?sort=-createdAt` gives the handler
+`{ field: "createdAt", direction: "desc" }`, and any field outside the allowed list is
+rejected. `Fields` splits a comma-separated list into a validated array, so
+`?fields=id,name` becomes `["id", "name"]`.
+
+## Rules
+
+- Validate at the boundary only. A schema describes what the HTTP contract accepts, not
+  what your domain considers valid; keep business rules in services.
+- Keep response schemas narrow. Anything the schema permits is something a client may
+  receive and OpenAPI will advertise.
+- Reuse a schema across routes by importing it. Routa deduplicates by exported name, not
+  by structure.
+
+## Limits
+
+Zod is the only supported schema library in v0. Constructs Routa cannot represent in
+OpenAPI are still enforced at runtime, but generation records a
+`ROUTA_OPENAPI_UNSUPPORTED_ZOD` warning under `x-routa-schema-warnings` in the generated
+document instead of guessing at a definition.
+
+<Aside type="caution" title="v0 status">
+	Zod schemas are fully implemented. Adapters for other validation libraries are deferred.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Route contracts"
+		href="/docs/concepts/route-contracts/"
+		description="Where schemas attach to inputs and responses."
+	/>
+	<LinkCard
+		title="OpenAPI"
+		href="/docs/concepts/openapi/"
+		description="How schemas become OpenAPI components."
+	/>
+	<LinkCard
+		title="Core reference"
+		href="/docs/reference/core/"
+		description="Signatures for the Sort and Fields helpers."
+	/>
+</CardGrid>

@@ -1,35 +1,20 @@
 ---
 title: Route Contracts
-description: Routa route files define the HTTP contract in source.
+description: The declaration that defines one HTTP method in Routa.
 ---
 
-Routa is built around one source of truth:
+import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
 
-```txt
-schemas -> routes -> handlers -> OpenAPI -> docs/checks
-```
+A route contract is a single object that declares what one HTTP method accepts, every
+outcome it can produce, which middleware runs before it, and where its handler begins.
+It is the source of truth from which Routa derives types, runtime validation, generated
+metadata, and OpenAPI.
 
-Route files may use either directory style (`routes/users/route.ts`) or flat style (`routes/users.ts`). Dynamic flat files use `$`, for example `routes/users.$id.ts` maps to `/users/:id`; both styles can be mixed in one project.
+```ts title="src/routes/users/route.ts"
+import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { CreateUserSchema, EmailConflictSchema, UserSchema } from "./schemas.js";
+import * as users from "../../services/users.js";
 
-Route files define what each HTTP method accepts, what it can return, which middleware applies, and where the handler boundary begins.
-
-## File-Based APIs
-
-Folders map to URL segments:
-
-```txt
-src/routes/users/route.ts
-src/routes/users/$userId/route.ts
-src/routes/users/$userId/posts/route.ts
-```
-
-Each `route.ts` file owns the methods for one path. Keeping all verbs for one path together makes shared params, middleware, schemas, and metadata easier to maintain.
-
-Applications may declare `get`, `post`, `put`, `patch`, `delete`, and `head`. Do not declare `options`: Routa generates a `204 OPTIONS` response from the path's methods and keeps its `Allow` header in sync automatically.
-
-## Contract Before Handler
-
-```ts
 const route = createRouteRoot("/users");
 
 export default route({
@@ -48,26 +33,115 @@ export default route({
 			},
 		},
 		run: async ({ input, ctx }) => {
-			ctx.logger.info("users.create", "Creating a user.", {
-				actorId: ctx.auth.userId,
-			});
+			ctx.logger.info("users.create", "Creating a user.", { email: input.body.email });
 
-			return {
-				type: "success",
-				data: await users.createUser({
-					body: input.body,
-					actorId: ctx.auth.userId,
-				}),
-			};
+			const created = await users.createUser(input.body);
+
+			if (!created) {
+				return { type: "emailConflict", data: { message: "Email already in use." } };
+			}
+
+			return { type: "success", data: created };
 		},
 	}),
 });
 ```
 
-Handlers return named outcomes from the declared response map. If a route did not declare an outcome, TypeScript should reject it.
+## How It Works
 
-Every handler also receives the configured Routa logger as `ctx.logger`. The value implements Routa's backend-agnostic `RoutaLogger` contract and is the same logger used for runtime lifecycle events. It exposes `trace`, `debug`, `info`, `warn`, `error`, `fatal`, and a `silent` no-op, together with child bindings and level checks. If application configuration sets `logger: false`, Routa supplies a typed no-op logger with that complete surface so handler code remains configuration-independent.
+`createRouteRoot(path)` binds a file to a URL path and returns a helper for that path. The
+helper accepts an object whose keys are HTTP methods, and it rejects any other key. Because
+the path is a literal, Routa can look up the context type generated for that path and give
+each method the right `ctx` type.
 
-## HTTP Boundary Only
+`createRoute(contract)` declares one method. It accepts four fields.
 
-Routa owns routing, validation, middleware context, typed responses, and OpenAPI. Your application owns services, use cases, domain models, persistence, and business logic.
+### `input`
+
+An optional map of request sources to Zod schemas. Each source is parsed independently
+before the handler runs:
+
+| Source | Parsed from |
+| --- | --- |
+| `params` | Dynamic path segments |
+| `query` | The URL query string |
+| `headers` | Request headers, lowercased |
+| `cookies` | The `Cookie` header, URI-decoded |
+| `body` | The JSON request body |
+
+Only the sources you declare appear on `input`, and each one arrives as the schema's parsed
+output type. A parse failure returns `400` with a problem document listing the failing
+paths, and `run` never executes.
+
+### `responses`
+
+A required map of outcome names to a status and a schema. Names are yours to choose;
+`success`, `notFound`, and `emailConflict` are conventions, not keywords. Every method
+must declare at least one outcome with a 2xx status.
+
+### `middleware`
+
+An optional ordered array of middleware contracts that run before the handler. Middleware
+declared here applies to this method only, in addition to anything inherited from
+`middleware.ts` files. See [Middleware](/docs/concepts/middleware/).
+
+### `run`
+
+The handler. It receives `{ input, ctx }` and returns `{ type, data }`, where `type` is a
+key of `responses` or of any middleware `rejects` map. Results may contain only those two
+fields; Routa rejects extra fields so that responses stay describable in OpenAPI.
+
+## Handler Context
+
+Every handler receives `ctx.logger`, Routa's structural `RoutaLogger`, regardless of
+configuration. When logging is disabled, `ctx.logger` is a complete no-op implementation
+of the same type, so handler code never needs a configuration guard. Middleware adds its
+own typed keys to `ctx` on top of that.
+
+## Rules
+
+- Declare `get`, `post`, `put`, `patch`, `delete`, and `head`. Never declare `options`;
+  Routa generates it from the path's methods.
+- `GET` and `HEAD` contracts cannot declare `input.body`.
+- Response type names must be unique across the method's own `responses` and the `rejects`
+  of every middleware in its chain.
+- Middleware `rejects` must use 4xx or 5xx statuses.
+- The route config must be the direct default export of the file. Routa resolves it
+  statically, so indirection through a variable exported later cannot be analyzed.
+
+## Limits
+
+Routa owns the HTTP boundary: routing, validation, middleware context, typed responses,
+and OpenAPI. Your application owns services, use cases, domain models, persistence, and
+business rules. A `run` body that grows past orchestrating a service call and choosing an
+outcome is usually holding logic that belongs outside the route.
+
+<Aside type="caution" title="v0 status">
+	Route contracts are fully implemented in v0 against Zod and the Hono runtime. JSON is
+	the only supported request and response content type.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Routing"
+		href="/docs/concepts/routing/"
+		description="How file names become the paths you pass to createRouteRoot."
+	/>
+	<LinkCard
+		title="Middleware"
+		href="/docs/concepts/middleware/"
+		description="Add typed context and early responses to a contract."
+	/>
+	<LinkCard
+		title="Schemas"
+		href="/docs/concepts/schemas/"
+		description="Write the Zod schemas that inputs and responses reference."
+	/>
+	<LinkCard
+		title="Core reference"
+		href="/docs/reference/core/"
+		description="Full signatures for createRoute and createRouteRoot."
+	/>
+</CardGrid>
