@@ -12,18 +12,32 @@ type RoutaConfig = {
 	port?: number;
 	logger?: ReturnType<typeof createLogger> | false;
 	lifecycleHeaders?: boolean;
+	responseValidation?: "development" | "always";
 };
+
+type RuntimeMode = "dev" | "start";
 
 /**
  * Starts the Routa API server for a working directory.
  *
  * @param cwd - The working directory that contains the Routa project files.
+ * @param runtimeRoot - The directory containing source or compiled runtime modules.
+ * @param runtimeMode - The explicit `dev` or `start` command mode.
  */
-export async function startRuntime(cwd: string, runtimeRoot = cwd): Promise<void> {
+export async function startRuntime(
+	cwd: string,
+	runtimeRoot: string,
+	runtimeMode: RuntimeMode,
+): Promise<void> {
 	const routes = await loadRoutes(cwd, runtimeRoot);
 	const routa = await loadRoutaConfig(cwd, runtimeRoot);
 	const logger = routa.logger === false ? undefined : (routa.logger ?? createLogger());
-	const app = createHonoApp(routes, { logger, lifecycleHeaders: routa.lifecycleHeaders });
+	const app = createHonoApp(routes, {
+		logger,
+		lifecycleHeaders: routa.lifecycleHeaders,
+		responseValidation: routa.responseValidation,
+		runtimeMode,
+	});
 	const hostname = process.env.HOST ?? routa.host ?? "127.0.0.1";
 	const port = Number(process.env.PORT ?? routa.port ?? 3000);
 	const server = serve({ fetch: app.fetch, hostname, port }, () => {
@@ -177,5 +191,11 @@ function runtimePath(cwd: string, runtimeRoot: string, file: string): string {
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 	const cwd = process.argv[2] ?? process.cwd();
 	const runtimeRoot = process.argv[3] ?? cwd;
-	await startRuntime(cwd, runtimeRoot);
+	const runtimeMode = process.argv[4];
+
+	if (runtimeMode !== "dev" && runtimeMode !== "start") {
+		throw new Error('Routa runtime mode must be explicitly set to "dev" or "start".');
+	}
+
+	await startRuntime(cwd, runtimeRoot, runtimeMode);
 }

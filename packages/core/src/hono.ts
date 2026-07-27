@@ -1,11 +1,24 @@
 import { type Context, Hono } from "hono";
 import { ZodError, type z } from "zod";
-import type { AnyRouteContract, HttpMethod, MiddlewareContract, RouteInput } from "./index.js";
+import type {
+	AnyRouteContract,
+	HttpMethod,
+	MiddlewareContract,
+	ResponseValidation,
+	RouteInput,
+} from "./index.js";
 import { createLogger, type RoutaLogger } from "./logger.js";
 
 type RuntimeResult = {
 	type: string;
 	data: unknown;
+};
+
+type RuntimeMode = "dev" | "start";
+
+type HandlerOutputIssue = {
+	code: string;
+	path: readonly PropertyKey[];
 };
 
 type RuntimeRouteContract = AnyRouteContract & {
@@ -34,6 +47,10 @@ export type HonoRoute<TCtx = unknown> = {
 export type CreateHonoAppOptions = {
 	logger?: RoutaLogger;
 	lifecycleHeaders?: boolean;
+	/** Defaults to `"development"`. */
+	responseValidation?: ResponseValidation;
+	/** Explicit runtime command mode. Defaults to `"dev"` for direct low-level use. */
+	runtimeMode?: RuntimeMode;
 };
 
 /**
@@ -49,6 +66,7 @@ export function createHonoApp(
 	const app = new Hono();
 	const methodsByPath = new Map<string, Set<string>>();
 	const routeLogger = options.logger ?? createLogger({ enabled: false });
+	const validateResponses = shouldValidateResponses(options);
 
 	if (options.logger) {
 		app.use("*", async (context, next) => {
@@ -120,7 +138,7 @@ export function createHonoApp(
 				const input = await inputReader.parse(contract.input);
 				const ctx = toRecord(route.createContext ? await route.createContext() : {});
 				const result = await runWithMiddleware(contract, input, ctx, inputReader, routeLogger);
-				const response = validateResult(contract, result);
+				const response = validateResult(contract, result, validateResponses);
 
 				return json(response.data, response.status, lifecycleHeaders(contract, options));
 			} catch (error) {
@@ -302,18 +320,14 @@ class RequestInputReader {
  *
  * @param request - The incoming request
  * @returns The parsed JSON value
- * @throws {Response} When the request content type is not JSON
+ * @throws {UnsupportedMediaTypeError} When the request content type is not JSON
  * @throws {InvalidJsonBodyError} When the body cannot be parsed as JSON
  */
 async function parseBody(request: Request): Promise<unknown> {
 	const contentType = request.headers.get("content-type") ?? "";
 
 	if (!isJsonMediaType(contentType)) {
-		throw problem(
-			"https://routa-ts.dev/problems/unsupported-media-type",
-			"Unsupported Media Type",
-			415,
-		);
+		throw new UnsupportedMediaTypeError();
 	}
 
 	try {
@@ -356,30 +370,27 @@ function assertMiddlewareRequires(
  *
  * @param provides - Middleware `provides` schemas
  * @param providedCtx - Context values passed to `next()`
- * @returns The provided context with schema-validated `provides` values
+ * @returns Parsed declared values; context keys absent from `provides` are omitted
  */
 function parseMiddlewareProvides(
 	provides: Record<string, z.ZodTypeAny> | undefined,
 	providedCtx: Record<string, unknown>,
 ): Record<string, unknown> {
-	if (!provides) {
-		return providedCtx;
-	}
+	const validated: Record<string, unknown> = {};
 
-	const validated: Record<string, unknown> = { ...providedCtx };
-
-	try {
-		for (const [key, schema] of Object.entries(provides)) {
+	for (const [key, schema] of Object.entries(provides ?? {})) {
+		try {
 			validated[key] = parseSchema(schema, providedCtx[key]);
-		}
-	} catch (error) {
-		if (error instanceof ZodError) {
-			throw new InvalidHandlerOutputError(
-				"Middleware provided context that does not match schema.",
-			);
-		}
+		} catch (error) {
+			if (error instanceof ZodError) {
+				throw new InvalidHandlerOutputError(
+					"Middleware provided context that does not match schema.",
+					handlerOutputIssues(error, [key]),
+				);
+			}
 
-		throw error;
+			throw error;
+		}
 	}
 
 	return validated;
@@ -536,11 +547,13 @@ function problem(
  *
  * @param contract - The route contract that defines allowed response types and schemas.
  * @param result - The value returned by a handler.
+ * @param validateResponse - Whether to parse response data through its declared schema.
  * @returns A validated runtime result with the corresponding HTTP status.
  */
 function validateResult(
 	contract: RuntimeRouteContract,
 	result: unknown,
+	validateResponse: boolean,
 ): RuntimeResult & { status: number } {
 	if (!isRuntimeResult(result)) {
 		throw new InvalidHandlerOutputError("Handler returned invalid output.");
@@ -550,6 +563,14 @@ function validateResult(
 
 	if (!response) {
 		throw new InvalidHandlerOutputError(`Handler returned unknown response type "${result.type}".`);
+	}
+
+	if (!validateResponse) {
+		return {
+			type: result.type,
+			data: result.data,
+			status: response.status,
+		};
 	}
 
 	try {
@@ -562,11 +583,28 @@ function validateResult(
 		if (error instanceof ZodError) {
 			throw new InvalidHandlerOutputError(
 				"Handler returned response data that does not match schema.",
+				handlerOutputIssues(error),
 			);
 		}
 
 		throw error;
 	}
+}
+
+function handlerOutputIssues(
+	error: ZodError,
+	prefix: readonly PropertyKey[] = [],
+): HandlerOutputIssue[] {
+	return error.issues.map((issue) => ({
+		code: issue.code,
+		path: [...prefix, ...issue.path],
+	}));
+}
+
+function shouldValidateResponses(options: CreateHonoAppOptions): boolean {
+	const policy = options.responseValidation ?? "development";
+	const runtimeMode = options.runtimeMode ?? "dev";
+	return policy === "always" || runtimeMode === "dev";
 }
 
 function middlewareResponses(
@@ -706,19 +744,23 @@ export function isBodylessStatus(status: number): boolean {
 /**
  * Converts an error into an HTTP response.
  *
- * @returns A response that preserves `Response` values and maps known error types to problem JSON responses.
+ * @returns A response that maps known error types to problem JSON responses.
  */
 function errorResponse(error: unknown): Response {
-	if (error instanceof Response) {
-		return error;
-	}
-
 	if (error instanceof InvalidHandlerOutputError) {
 		return problem("https://routa-ts.dev/problems/handler-output", "Invalid handler output", 500);
 	}
 
 	if (error instanceof InvalidJsonBodyError) {
 		return problem("https://routa-ts.dev/problems/invalid-json", "Invalid JSON body", 400);
+	}
+
+	if (error instanceof UnsupportedMediaTypeError) {
+		return problem(
+			"https://routa-ts.dev/problems/unsupported-media-type",
+			"Unsupported Media Type",
+			415,
+		);
 	}
 
 	if (error instanceof ZodError) {
@@ -773,6 +815,9 @@ function errorLogData(error: unknown): Record<string, unknown> {
 			error: error.message,
 			name: error.name,
 			stack: error.stack,
+			...(error instanceof InvalidHandlerOutputError && error.issues
+				? { issues: error.issues }
+				: {}),
 		};
 	}
 
@@ -781,6 +826,15 @@ function errorLogData(error: unknown): Record<string, unknown> {
 	};
 }
 
-class InvalidHandlerOutputError extends Error {}
+class InvalidHandlerOutputError extends Error {
+	constructor(
+		message: string,
+		readonly issues?: readonly HandlerOutputIssue[],
+	) {
+		super(message);
+	}
+}
 
 class InvalidJsonBodyError extends Error {}
+
+class UnsupportedMediaTypeError extends Error {}

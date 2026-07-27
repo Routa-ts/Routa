@@ -43,14 +43,18 @@ export const withAuth = createMiddleware({
 so a middleware that requires `session` before anything provides it fails
 `routa check` with `ROUTA_MIDDLEWARE_ORDER` rather than at request time.
 
-`provides` maps new context keys to schemas. Calling `next({ auth })` validates the value
-against that schema and merges it into `ctx` for everything downstream. Handlers then see
-`ctx.auth.userId` as a typed `string`.
+`provides` maps new context keys to schemas. Calling `next({ auth })` parses every declared
+value before Routa merges any of them into `ctx`, so handlers receive transformed schema
+outputs and never a partial update. Undeclared top-level keys are omitted. A normal
+`z.object()` strips unknown keys inside its value; add `.strict()` when those nested keys
+must be rejected. This validation runs in both `routa dev` and `routa start`, independent
+of the response-validation policy.
 
 `rejects` declares early responses. Returning `{ type: "unauthorized", data }` ends the
 request with the declared status and skips the rest of the chain, including the handler.
 Those outcomes are merged into the route's response map, so they are type-checked in
-handlers and included in generated OpenAPI.
+handlers and included in generated OpenAPI. Their response data follows the same runtime
+response-validation policy as handler responses.
 
 `input` is optional and works exactly like a route's `input`. It lets middleware read
 validated headers, cookies, or query values without the route declaring them:
