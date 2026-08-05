@@ -1,35 +1,123 @@
 ---
 title: Full API
-description: Walkthrough of the full Routa example.
+description: A Routa example exercising middleware, groups, deprecation, and logging.
 ---
 
-The `examples/full-api` package demonstrates the full public feature surface, including middleware, tenant-scoped routes, automatic `OPTIONS`, scaffold/OpenAPI workflows, and contextual logging.
+import { Aside, CardGrid, FileTree, LinkCard } from "@astrojs/starlight/components";
 
-## Run It
-
-From the repository root:
+`examples/full-api` in the Routa repository exercises the whole public surface: layered
+middleware, route groups, tenant-scoped context, flat and directory routing, deprecation
+metadata, automatic `OPTIONS`, scaffold workflows, and a custom logger adapter.
 
 ```sh
 pnpm install
 pnpm --filter full-api dev
 ```
 
+## What Is Inside
+
+<FileTree>
+- src/
+  - routa.ts host, port, logger, lifecycleHeaders
+  - logger.ts optional Pino adapter
+  - middleware/ application-owned middleware
+  - routes/
+    - middleware.ts `withRequest`, `withSession`
+    - status/
+    - legacy.ts flat route with deprecation
+    - legacy.$id.ts flat route with a dynamic segment
+    - (private)/
+      - middleware.ts `withAuth`
+      - admin/
+        - middleware.ts `withAdmin`
+        - audit-events/
+        - reports.ts
+      - tenants/
+        - $tenantId/
+          - middleware.ts `withTenant`
+          - projects/
+    - showcase/
+      - $itemId/
+        - route.ts
+    - logger-showcase/
+      - route.ts
+</FileTree>
+
+## How It Works
+
+The middleware chain accumulates down the tree. `src/routes/middleware.ts` provides
+`requestId` and `session` for everything. `(private)/middleware.ts` adds `auth`, and
+`(private)/admin/middleware.ts` adds `admin` on top of it. By the time
+`audit-events/route.ts` runs, `ctx` carries all four keys and each one is typed.
+
+`(private)` is a route group: it shapes the middleware tree without appearing in any URL.
+`/admin/audit-events` is the real path, not `/private/admin/audit-events`.
+
+`src/routes/legacy.ts` and `legacy.$id.ts` use flat routing in the same project as the
+directory-style routes, which is the clearest demonstration that the two styles mix.
+
+Each `middleware.ts` re-exports contracts from `src/middleware/`, keeping the routing tree
+declarative while the implementations live in application-owned modules.
+
 ## What to Study
 
-- `src/routes/middleware.ts`: root route middleware
-- `src/routes/admin/middleware.ts`: group-level middleware
-- `src/routes/tenants/$tenantId/middleware.ts`: segment-level tenant context
-- `src/middleware/*`: application-owned middleware helpers
-- `src/routes/**/route.ts`: route contracts using the accumulated context
-- `src/logger.ts`: an optional Pino adapter with `pino-pretty` development output
-- `src/routes/showcase/$itemId/route.ts`: a handler logging through backend-neutral `ctx.logger`
-- `src/routes/logger-showcase/route.ts`: an opt-in route covering every `RoutaLogger` method
-- `scripts/exercise-logger.mjs`: a local-only request sequence for the logger showcase
+| File | Shows |
+| --- | --- |
+| `src/routes/middleware.ts` | Root middleware applied to every route |
+| `src/middleware/context.ts` | Middleware `input` reading headers and cookies |
+| `src/middleware/admin.ts` | `requires`, `provides`, `rejects`, and `openapi.permissions` together |
+| `src/routes/(private)/tenants/$tenantId/middleware.ts` | Context derived from a path parameter |
+| `src/routes/legacy.ts` | Deprecation metadata with a replacement |
+| `src/logger.ts` | Adapting Pino to the `RoutaLogger` contract |
+| `src/routes/showcase/$itemId/route.ts` | Logging from a handler through `ctx.logger` |
 
-Pino belongs to this example only; Routa core exposes its own structural logger contract and does not depend on Pino types or transports.
+## The Logger Showcase
 
-## Logger Showcase
+`src/routes/logger-showcase/route.ts` calls every `RoutaLogger` member: `log`, each level
+through `silent`, `child`, `bindings`, and `isLevelEnabled`. It is disabled by default
+because the sequence deliberately emits `error` and `fatal` events that would otherwise
+pollute normal output.
 
-The route is disabled by default because the comprehensive exercise includes deliberate `error` and `fatal` events. For local use, start with `ROUTA_DEMO_LOGGER_SHOWCASE=on LOG_LEVEL=trace`, then run `pnpm --filter full-api logger:exercise` in another terminal.
+To run it, start the example with the showcase enabled and exercise it from a second
+terminal:
 
-The route calls `log`, every level method through `silent`, `child`, `bindings`, and `isLevelEnabled` from typed route context. Restarting with `ROUTA_DEMO_LOGGER=off` exercises the identical handler path through Routa's complete no-op implementation.
+```sh
+ROUTA_DEMO_LOGGER_SHOWCASE=on LOG_LEVEL=trace pnpm --filter full-api dev
+pnpm --filter full-api logger:exercise
+```
+
+Restarting with `ROUTA_DEMO_LOGGER=off` runs the identical handler through Routa's
+complete no-op logger, which is the point: handler code does not change when logging is
+disabled.
+
+## Limits
+
+Pino belongs to this example only. `@routa-ts/core` exposes a structural logger contract
+and depends on no logging package, so the adapter in `src/logger.ts` is a demonstration
+rather than a requirement.
+
+<Aside type="caution" title="Demonstration credentials">
+	The session middleware in this example verifies a signed demo token from an environment
+	variable. It illustrates where authentication attaches, and it is not an authentication
+	implementation to copy.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Middleware"
+		href="/docs/concepts/middleware/"
+		description="The model these chains implement."
+	/>
+	<LinkCard
+		title="Routing"
+		href="/docs/concepts/routing/"
+		description="Groups and flat files as used here."
+	/>
+	<LinkCard
+		title="API evolution"
+		href="/docs/guides/api-evolution/"
+		description="The deprecation workflow the legacy routes show."
+	/>
+</CardGrid>

@@ -355,7 +355,7 @@ function runProjectServer(
 
 	const server = spawnSync(
 		process.execPath,
-		runtimeArgs(result.runtimeFile, cwd, result.runtimeRoot, result.useTsx),
+		runtimeArgs(result.runtimeFile, cwd, result.runtimeRoot, result.useTsx, mode),
 		{
 			cwd,
 			encoding: "utf8",
@@ -508,15 +508,19 @@ function writeCommandResult(result: { stdout?: string; stderr?: string }): void 
  *
  * @param runtimeFile - The runtime script to execute
  * @param cwd - The project directory passed to the runtime
+ * @param runtimeRoot - The source or compiled project root passed to the runtime
+ * @param useTsx - Whether Node should load the TypeScript runtime hook
+ * @param mode - The explicit command mode passed to the runtime
  * @returns The argument list for the Node process
  */
-function runtimeArgs(
+export function runtimeArgs(
 	runtimeFile: string,
 	cwd: string,
 	runtimeRoot: string,
 	useTsx: boolean,
+	mode: "dev" | "start",
 ): string[] {
-	return [...(useTsx ? ["--import", "tsx"] : []), runtimeFile, cwd, runtimeRoot];
+	return [...(useTsx ? ["--import", "tsx"] : []), runtimeFile, cwd, runtimeRoot, mode];
 }
 
 /**
@@ -623,7 +627,7 @@ function waitForChildExit(child: ChildProcess): Promise<void> {
  * @returns The spawned child process
  */
 function startRuntimeProcess(cwd: string, runtimeFile: string): ChildProcess {
-	return spawn(process.execPath, runtimeArgs(runtimeFile, cwd, cwd, true), {
+	return spawn(process.execPath, runtimeArgs(runtimeFile, cwd, cwd, true, "dev"), {
 		cwd,
 		stdio: "inherit",
 	});

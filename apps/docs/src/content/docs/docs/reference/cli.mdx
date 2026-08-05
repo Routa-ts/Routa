@@ -1,66 +1,264 @@
 ---
 title: CLI Reference
-description: Routa command-line workflows.
+description: Every command and flag the routa binary accepts.
 ---
 
-import { Aside } from "@astrojs/starlight/components";
+import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
+import PackageManagers from "@components/PackageManagers.astro";
 
-The `routa` command checks route contracts, builds generated route metadata, runs the development server, and scaffolds projects from OpenAPI files.
+The `routa` binary ships in `@routa-ts/cli`. It validates route contracts, generates
+metadata and OpenAPI, runs the development and production servers, and scaffolds projects
+from OpenAPI documents. Running it with no arguments, `--help`, or `-h` prints the command
+list.
 
-Install it as a dependency (generated apps keep the CLI in `dependencies` so `routa start` is available at runtime):
+<PackageManagers type="add" args="@routa-ts/cli" />
+
+Generated apps keep the CLI in `dependencies` so `routa start` is available at runtime.
+
+## `routa create`
+
+Creates a new Routa app. Shares its implementation with `create-routa-ts`.
 
 ```sh
-pnpm add @routa-ts/cli
+routa create [dir]
 ```
 
-## Commands
+Example output when npm is detected:
+
+```txt
+Your Routa app is ready in 'routa-app'.
+
+Use the following commands to start your app:
+cd routa-app
+npm run dev
+```
+
+| Flag | Effect | Default |
+| --- | --- | --- |
+| `--yes`, `-y` | Skip the final confirmation prompt | Prompt when interactive |
+| `--openapi`, `--no-openapi` | Include or omit the starter OpenAPI document | Include |
+| `--git`, `--no-git` | Initialize or skip a git repository | Initialize when interactive |
+| `--install`, `--no-install` | Run or skip dependency installation | Install when interactive |
+
+`dir` defaults to `routa-app`. The package manager is detected from
+`npm_config_user_agent` and used for installation and for the printed next-step commands
+only; it is never written into the generated project.
+
+**Exit codes:** `0` on success or user cancellation, `1` when creation, `git init`, or
+installation fails.
+
+## `routa scaffold`
+
+Generates route files, schema modules, and `.routa/` metadata from an OpenAPI document.
 
 ```sh
-pnpm exec routa create [dir]
-pnpm exec routa scaffold <openapi.yaml|openapi.yml|openapi.json>
-pnpm exec routa scaffold openapi.yaml --preview
-pnpm exec routa scaffold openapi.yaml --yes
-pnpm exec routa dev
-pnpm exec routa start
-pnpm exec routa check
-pnpm exec routa generate
-pnpm exec routa build
-pnpm exec routa routes [--format json|markdown]
-pnpm exec routa openapi check
-pnpm exec routa openapi breaking
-pnpm exec routa openapi breaking --update-baseline
+routa scaffold <openapi.yaml|openapi.yml|openapi.json>
 ```
 
-## Command Behavior
+```txt
+Scaffolded 1 Routa route file(s).
+src/routes/status/route.ts
+src/routes/status/schemas.ts
+.routa/openapi-baseline.json
+.routa/manifest.json
+.routa/routes.gen.ts
+```
 
-- `routa create [dir]`: creates a new Routa app. Flags:
-  - `--yes` / `-y`: skip the final confirmation prompt when settings were chosen interactively
-  - `--openapi` / `--no-openapi`: include or omit the starter OpenAPI file (default: include)
-  - `--git` / `--no-git`: initialize or skip a git repository
-	- `--install` / `--no-install`: run or skip installation with the package manager that invoked the scaffolder
-- `routa scaffold <file>`: generates route and schema files from OpenAPI. Use `--preview` before writing changes and `--yes` to approve scaffold changes.
-- `routa routes [--format json|markdown]`: prints a route reference for the project. Defaults to markdown when `--format` is omitted.
-- `routa dev`: validates routes, writes metadata, typechecks, and starts the development server.
-- `routa start`: validates routes and starts the previously built runtime. It does not typecheck or compile.
-- `routa check`: validates Routa route graph and runs `tsc -p tsconfig.json --noEmit`.
-- `routa generate`: validates the route graph and writes `.routa/routes.gen.ts`.
-- `routa build`: validates Routa route graph and runs TypeScript emit.
-- `routa openapi check`: compares generated OpenAPI against `.routa/openapi-baseline.json`.
-- `routa openapi breaking`: fails when operations were removed from the baseline.
-- `routa openapi breaking --update-baseline`: writes the current generated OpenAPI as the new baseline.
+| Flag | Effect |
+| --- | --- |
+| `--preview` | Print the change list without writing anything |
+| `--yes` | Confirm writing when a manifest already exists |
+
+The first run needs neither flag. Once `.routa/manifest.json` exists, Routa requires
+`--preview` or `--yes` so regeneration is never accidental.
+
+Preview markers are `+ add`, `~ update`, `= unchanged`, `! conflict`, and `- remove`.
+
+**Errors:** `ROUTA_OPENAPI_UNSUPPORTED_EXTENSION`, `ROUTA_OPENAPI_FILE_NOT_FOUND`,
+`ROUTA_SCAFFOLD_UNMANAGED_FILE`, `ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE`.
+
+## `routa dev`
+
+Validates the route graph, writes `.routa/routes.gen.ts`, typechecks, and starts the
+development server through `tsx`. Watches every `.ts` file under `src/` plus the generated
+metadata, and restarts the runtime when one changes.
+
+```sh
+routa dev
+```
+
+```txt
+INFO api.started Routa API started. {"host":"127.0.0.1","port":3000,"routes":4}
+```
+
+Empty route files are stubbed with a valid contract before validation, and each stubbed
+path is printed. Validation failures print diagnostics and leave the previous process
+running.
+
+`--print` resolves the runtime entry point, prints its path, and exits without starting a
+server. It exists for tooling and tests.
+
+## `routa start`
+
+Validates the route graph and starts the previously built runtime from `dist/`. It does
+not typecheck and does not compile.
+
+```sh
+routa start
+```
+
+```txt
+INFO api.started Routa API started. {"host":"127.0.0.1","port":3000,"routes":4}
+```
+
+Before starting, Routa checks that every runtime source file has a compiled counterpart in
+`dist/` that is not older than its source, and reports the first file that fails.
+`--print` behaves as it does for `dev`.
+
+## `routa check`
+
+Validates the Routa route graph, writes metadata on success, then runs
+`tsc -p tsconfig.json --noEmit`.
+
+```sh
+routa check
+```
+
+```txt
+Routa validation passed for 4 route file(s).
+Running TypeScript check: tsc -p tsconfig.json --noEmit
+TypeScript check passed.
+Routa check passed.
+```
+
+**Exit codes:** `0` when both phases pass, `1` on Routa diagnostics, and the TypeScript
+exit code when typechecking fails.
+
+## `routa generate`
+
+Validates the route graph and writes `.routa/routes.gen.ts`. No TypeScript involved.
+
+```sh
+routa generate
+```
+
+```txt
+Generated .routa/routes.gen.ts for 4 route file(s).
+```
+
+## `routa build`
+
+Validates the route graph, writes metadata, then runs `tsc -p tsconfig.json` with emit.
+Nothing is emitted when validation fails.
+
+```sh
+routa build
+```
+
+```txt
+Routa build passed for 4 route file(s).
+```
+
+## `routa routes`
+
+Prints a route reference built from validated metadata: path, file, groups, segments, and
+for each method its inputs, response statuses, context keys, rejects, and middleware
+chain.
+
+```sh
+routa routes [--format json|markdown]
+```
+
+```txt
+# Routa Route Reference
+
+## /status
+
+File: `src/routes/status/route.ts`
+
+### GET
+
+Inputs: none
+Responses: 200
+Context: none
+Rejects: none
+
+Middleware:
+- none
+```
+
+| Flag | Values | Default |
+| --- | --- | --- |
+| `--format` | `markdown`, `json` | `markdown` |
+
+Both `--format json` and `--format=json` are accepted. An unrecognized value exits `1`
+with `Invalid routes format. Use --format json or --format markdown.`
+
+## `routa openapi check`
+
+Generates OpenAPI from source and compares it against `.routa/openapi-baseline.json`. Any
+difference is a failure.
+
+```sh
+routa openapi check
+```
+
+```txt
+OpenAPI check passed. No drift detected.
+```
+
+Fails with `Missing .routa/openapi-baseline.json. Run routa scaffold first.` when no
+baseline exists.
+
+## `routa openapi breaking`
+
+Compares against the baseline and fails only for removed operations and inputs that became
+required. This is the check to gate merges on.
+
+```sh
+routa openapi breaking [--update-baseline]
+```
+
+| Flag | Effect |
+| --- | --- |
+| `--update-baseline` | Write the current generated document as the new baseline and exit `0` |
+
+```txt
+OpenAPI breaking check passed. No breaking changes detected.
+```
 
 <Aside type="caution" title="Baseline updates">
-	Only run `--update-baseline` when the current contract is intentionally accepted. It updates `.routa/openapi-baseline.json`.
+	`--update-baseline` accepts the current contract unconditionally, including changes it
+	would otherwise report. Run it only after review.
 </Aside>
 
-## New Projects
+## Creating New Projects
 
-```sh
-pnpm create routa-ts@latest
+`create-routa-ts` is the standalone scaffolder and accepts the same flags as
+`routa create`.
+
+<PackageManagers type="create" />
+
+```txt
+Your Routa app is ready in 'routa-app'.
 ```
 
-`create-routa-ts` accepts the same create flags as `routa create` (`--yes` / `-y`, `--openapi` / `--no-openapi`, `--git` / `--no-git`, `--install` / `--no-install`).
+## Next Steps
 
-## Status
-
-The CLI is part of the v0 implementation baseline. Keep generated behavior aligned with the repository acceptance specs as the framework evolves.
+<CardGrid>
+	<LinkCard
+		title="Diagnostics"
+		href="/docs/reference/diagnostics/"
+		description="Every ROUTA_* code these commands can emit."
+	/>
+	<LinkCard
+		title="Check and build"
+		href="/docs/guides/check-build/"
+		description="These commands inside a real workflow."
+	/>
+	<LinkCard
+		title="Configuration"
+		href="/docs/reference/configuration/"
+		description="What the dev and start servers read at boot."
+	/>
+</CardGrid>

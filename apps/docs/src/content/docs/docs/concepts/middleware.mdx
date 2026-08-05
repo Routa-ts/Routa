@@ -1,21 +1,20 @@
 ---
 title: Middleware
-description: Routa middleware carries typed context through the HTTP boundary.
+description: Typed middleware that declares the context it needs, provides, and rejects.
 ---
 
-import { Aside, FileTree } from "@astrojs/starlight/components";
+import { Aside, CardGrid, FileTree, LinkCard } from "@astrojs/starlight/components";
 
-Middleware in Routa is part of the route contract. Auth, permissions, tenant loading, and request enrichment should not disappear into invisible side effects.
+Routa middleware is part of the contract, not a side effect. Each middleware declares the
+context keys it requires, the context it provides, and the early responses it can return.
+Auth, tenant loading, and request enrichment stay visible in types, in generated metadata,
+and in OpenAPI.
 
-## Context
-
-Middleware declares what context it requires and what context it provides. Route handlers receive typed `ctx` from the middleware chain.
-
-```ts
-import { createMiddleware, createRoute, createRouteRoot } from "@routa-ts/core";
+```ts title="src/middleware/auth.ts"
+import { createMiddleware } from "@routa-ts/core";
 import { z } from "zod";
 
-const withAuth = createMiddleware({
+export const withAuth = createMiddleware({
 	requires: ["session"],
 	provides: {
 		auth: z.object({
@@ -30,62 +29,159 @@ const withAuth = createMiddleware({
 	},
 	run: ({ ctx, next }) => {
 		if (!ctx.session.authenticated || !ctx.session.userId) {
-			return { type: "unauthorized", data: { message: "Authentication required" } };
+			return { type: "unauthorized", data: { message: "Authentication required." } };
 		}
 
 		return next({ auth: { userId: ctx.session.userId } });
 	},
 });
+```
 
-const route = createRouteRoot("/users/me");
+## How It Works
 
+`requires` lists context keys that must already exist. Routa checks the order statically,
+so a middleware that requires `session` before anything provides it fails
+`routa check` with `ROUTA_MIDDLEWARE_ORDER` rather than at request time.
+
+`provides` maps new context keys to schemas. Calling `next({ auth })` parses every declared
+value before Routa merges any of them into `ctx`, so handlers receive transformed schema
+outputs and never a partial update. Undeclared top-level keys are omitted. A normal
+`z.object()` strips unknown keys inside its value; add `.strict()` when those nested keys
+must be rejected. This validation runs in both `routa dev` and `routa start`, independent
+of the response-validation policy.
+
+`rejects` declares early responses. Returning `{ type: "unauthorized", data }` ends the
+request with the declared status and skips the rest of the chain, including the handler.
+Those outcomes are merged into the route's response map, so they are type-checked in
+handlers and included in generated OpenAPI. Their response data follows the same runtime
+response-validation policy as handler responses.
+
+`input` is optional and works exactly like a route's `input`. It lets middleware read
+validated headers, cookies, or query values without the route declaring them:
+
+```ts title="src/middleware/context.ts"
+export const withRequest = createMiddleware({
+	input: {
+		headers: z.object({
+			"x-request-id": z.string().optional(),
+		}),
+	},
+	provides: {
+		requestId: z.string(),
+	},
+	run: async ({ input, next }) => {
+		return next({ requestId: input.headers["x-request-id"] ?? "local-request" });
+	},
+});
+```
+
+## Where Middleware Applies
+
+### Folder Inheritance
+
+A `middleware.ts` file applies to every route in its folder and below. Export or re-export
+middleware contracts from it; the export order is the execution order.
+
+```ts title="src/routes/middleware.ts"
+export { withRequest, withSession } from "../middleware/context.js";
+```
+
+Context accumulates as routing gets more specific, which is why a group folder is a useful
+place to attach a chain:
+
+<FileTree>
+- src/routes/
+  - middleware.ts `withRequest`, `withSession`
+  - (private)/
+    - middleware.ts `withAuth`
+    - admin/
+      - middleware.ts `withAdmin`
+      - audit-events/
+        - route.ts sees requestId, session, auth, admin
+    - tenants/
+      - $tenantId/
+        - middleware.ts `withTenant`
+        - projects/
+          - route.ts sees requestId, session, auth, tenant
+</FileTree>
+
+### Per Route and Per Method
+
+A route file can add middleware for all of its methods, or one method can add its own:
+
+```ts title="src/routes/reports/route.ts"
 export default route({
+	middleware: [withRateLimit],
 	get: createRoute({
-		middleware: [withAuth],
-		responses: {
-			success: {
-				status: 200,
-				schema: UserSchema,
-			},
-		},
-		run: async ({ ctx }) => {
-			return {
-				type: "success",
-				data: await users.getCurrentUser(ctx.auth.userId),
-			};
-		},
+		middleware: [withReportAccess],
+		// ...
+	}),
+	post: createRoute({
+		// runs withRateLimit, but not withReportAccess
+		// ...
 	}),
 });
 ```
 
-## Early Responses
+The full chain for a method is folder middleware, then route-level middleware, then
+method-level middleware.
 
-Middleware can also produce early HTTP responses, such as authentication failures or permission denials. Those responses should remain visible to the route contract and generated OpenAPI.
+## Security Visibility
 
-## Where Middleware Lives
+Middleware can describe what an operation requires without Routa implementing any of it:
 
-Routa reads middleware from route files and folder middleware files. This lets context grow as routing becomes more specific.
+```ts
+createMiddleware({
+	openapi: {
+		security: [{ bearerAuth: [] }],
+		permissions: ["audit.read"],
+	},
+	// Application-owned credential and permission logic in run.
+});
+```
 
-<FileTree>
-- src/routes/
-  - middleware.ts
-  - admin/
-    - middleware.ts
-    - audit-events/
-      - route.ts
-  - tenants/
-    - $tenantId/
-      - middleware.ts
-      - projects/
-        - route.ts
-</FileTree>
+Routa emits `security` and `x-routa-authz` on every operation the middleware covers, and
+`routa openapi breaking` reports when a previously public operation becomes authenticated.
 
-Generated route metadata tracks middleware order, required context keys, provided context keys, reject outcomes, groups, and route segments.
+## Rules
 
-## v0 Scope
+- Every reject name must be unique across a method's whole chain. Two middleware both
+  declaring `forbidden` on the same route is a registration error.
+- Reject statuses must be 4xx or 5xx (`ROUTA_MIDDLEWARE_REJECT_STATUS`).
+- Always `await` or return `next()`. Calling it without awaiting drops the downstream
+  result and can leave the request hanging.
+- `next()` may be called at most once per middleware invocation.
+- Middleware must be referenced as a direct identifier of a `createMiddleware` export.
+  Spreading an array or computing the value at runtime produces
+  `ROUTA_MIDDLEWARE_UNRESOLVED`, because Routa could not check the contract.
 
-Routa v0 includes a minimal typed middleware surface. Broader security integrations and operational features are deferred beyond v0.
+## Limits
 
-<Aside type="caution" title="Security ownership">
-	Routa can make security context and early responses visible at the HTTP boundary. Your application still owns authorization rules, policy correctness, and secret handling.
+Routa makes security context and early responses visible at the HTTP boundary. Your
+application still owns authorization rules, policy correctness, credential handling, and
+secrets. Routa never authenticates a request for you.
+
+<Aside type="caution" title="v0 status">
+	The typed middleware surface described here is implemented in v0. Built-in auth provider
+	integrations, rate limiting, and caching middleware are deferred.
 </Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Route contracts"
+		href="/docs/concepts/route-contracts/"
+		description="How middleware context reaches a handler."
+	/>
+	<LinkCard
+		title="API evolution"
+		href="/docs/guides/api-evolution/"
+		description="Track security changes as breaking changes."
+	/>
+	<LinkCard
+		title="Diagnostics"
+		href="/docs/reference/diagnostics/"
+		description="Every middleware error Routa can report."
+	/>
+</CardGrid>

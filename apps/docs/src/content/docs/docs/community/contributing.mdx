@@ -1,28 +1,108 @@
 ---
 title: Contributing
-description: How to contribute to Routa.
+description: Set up the Routa repository and land a change.
 ---
 
-Routa is open source under the MIT License.
+import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
 
-## Start Here
+Routa is open source under the MIT License. The repository is a pnpm workspace holding
+three published packages, two example applications, and this documentation site, wired
+together with Turborepo.
 
-- Read the repository README.
-- Review the v0 requirements and acceptance specs.
-- Use the existing package and example structure before adding new patterns.
-- Keep behavior aligned with specs or update the specs intentionally.
+## Before You Start
 
-## Local Development
+- Node.js 24 or later, matching `.nvmrc`.
+- pnpm. The repository uses workspace protocol links between packages.
+- A read of the v0 requirements and acceptance specs under `docs/`, so a change either
+  matches a spec or updates it deliberately.
+
+## Steps
+
+<Steps>
+1. Install dependencies from the repository root.
+
+	```sh
+	pnpm install
+	```
+
+2. Run the full check suite before making changes, so you know the baseline is green.
+
+	```sh
+	pnpm check
+	pnpm typecheck
+	pnpm build
+	pnpm test
+	```
+
+	`pnpm check` runs Biome formatting and lint checks. The other three run through
+	Turborepo across every workspace package.
+
+3. Make the change in the package that owns the behavior.
+
+	| Path | Owns |
+	| --- | --- |
+	| `packages/core` | Route, middleware, config, logger, and query helpers |
+	| `packages/cli` | Validation, generation, OpenAPI, scaffolding, and the servers |
+	| `packages/create-routa-ts` | The project scaffolder |
+	| `apps/docs` | This documentation site |
+	| `examples/*` | Runnable demonstrations of the public surface |
+
+4. Verify against a real project. The examples run the `routa` binary, so build and link
+   the local CLI before checking them.
+
+	```sh
+	pnpm prepare:local-cli
+	pnpm --filter full-api check
+	pnpm --filter full-api dev
+	```
+
+5. Add a changeset for any change to a published package.
+
+	```sh
+	pnpm changeset
+	```
+
+6. Update the documentation in the same pull request. Read `apps/docs/AGENTS.md` first; it
+   defines the required page frame, the package-manager command component, and the
+   structure each section uses.
+
+</Steps>
+
+## Verify
+
+`pnpm verify` runs the complete gate: lint, typecheck, tests, generated-file drift, example
+checks, OpenAPI checks, the scaffold error smoke test, and a packaging check. A change is
+ready when it passes and the docs site builds.
 
 ```sh
-pnpm install
-pnpm check
-pnpm typecheck
-pnpm build
-pnpm test
+pnpm verify
+pnpm --filter @routa-ts/docs build
 ```
 
-`pnpm check` runs Biome formatting and lint checks. `pnpm typecheck`, `pnpm build`, and `pnpm test` run through Turborepo.
+## Documentation Expectations
+
+Every new feature needs all four of these, which is what the coverage rules in
+`apps/docs/AGENTS.md` enforce:
+
+- A reference entry with its signature, options, and one example.
+- A mention in at least one guide showing it in a real workflow.
+- An entry in Diagnostics for any new `ROUTA_*` code.
+- A line in the implemented table on [v0 Scope & Status](/docs/start/v0-scope/).
+
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| Workspace packages resolve to published versions | Run `pnpm install` from the root, not from inside a package. |
+| An example fails after a core change | Rebuild first. Examples consume built output, so run `pnpm build`. |
+| Biome reports formatting differences | Run `pnpm format` to apply them. |
+| The docs build fails on a slug | A sidebar entry in `astro.config.mjs` points at a page that does not exist. |
+
+<Aside type="note" title="Specs are the contract">
+	Behavior changes should match the acceptance specs under `docs/specs/`, or update those
+	specs in the same change. Leaving the two out of sync is the one thing that consistently
+	blocks review.
+</Aside>
 
 ## Community Links
 
@@ -32,3 +112,23 @@ pnpm test
 - [Contributing guide](https://github.com/Routa-ts/Routa/blob/main/CONTRIBUTING.md)
 - [Governance](https://github.com/Routa-ts/Routa/blob/main/GOVERNANCE.md)
 - [Code of Conduct](https://github.com/Routa-ts/Routa/blob/main/CODE_OF_CONDUCT.md)
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="v0 Scope & Status"
+		href="/docs/start/v0-scope/"
+		description="Find something deferred that you want to build."
+	/>
+	<LinkCard
+		title="Security"
+		href="/docs/community/security/"
+		description="Report a vulnerability privately instead."
+	/>
+	<LinkCard
+		title="Full API example"
+		href="/docs/examples/full-api/"
+		description="The app to test a change against."
+	/>
+</CardGrid>

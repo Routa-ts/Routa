@@ -1,35 +1,103 @@
 ---
 title: v0 Scope & Status
-description: What Routa v0 supports today and what is deferred.
+description: What Routa v0 implements today and what is deliberately deferred.
 ---
 
-import { Aside } from "@astrojs/starlight/components";
+import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
 
-Routa has a v0 implementation baseline. Public docs should describe this baseline clearly and avoid presenting future design notes as shipped behavior.
+Routa is at a v0 implementation baseline. This page is the authoritative line between
+behavior that ships today and design work that does not exist yet. Everything documented
+elsewhere on this site is v0 behavior unless a page says otherwise.
 
-## Supported in v0
+## Options
 
-- Hono runtime adapter
-- Zod schemas
-- OpenAPI `.yaml`, `.yml`, and `.json` input
-- OpenAPI-to-source scaffolding
-- generated route metadata in `.routa/routes.gen.ts`
-- manifest and baseline files in `.routa/`
-- `routa check`, `routa build`, `routa dev`, and `routa start`
-- OpenAPI drift and removed-operation checks
-- typed route responses
-- minimal typed middleware context
+A pre-1.0 framework can present its scope in one of three ways.
 
-## Deferred
+### Document the roadmap as if it shipped
+
+Reads well and wins evaluations. It also destroys trust the first time a reader follows a
+page and the feature is not there.
+
+### Document only what is stable
+
+Safe, but leaves working features undiscoverable and makes the project look smaller than
+it is.
+
+### Document what ships and name what does not
+
+Requires maintaining an explicit deferred list, and it makes gaps visible in a way that
+looks worse in a feature comparison.
+
+## What Routa Does
+
+Routa takes the third option. Every feature page states its status, and this page holds
+the complete list.
+
+### Implemented
+
+| Area | v0 behavior |
+| --- | --- |
+| Runtime | Hono, served through `@hono/node-server` |
+| Schemas | Zod for inputs, middleware context, rejects, and responses |
+| Routing | Directory style, flat style, dynamic `$` segments, and `(group)` folders |
+| Methods | `get`, `post`, `put`, `patch`, `delete`, and explicit `head`; `OPTIONS` is automatic |
+| Middleware | Typed `requires` / `provides` / `rejects`, folder inheritance, per-method chains |
+| OpenAPI in | Scaffolding source from `.yaml`, `.yml`, and `.json` documents |
+| OpenAPI out | Generation from route contracts, drift checks, and breaking-change checks |
+| Generated files | `.routa/routes.gen.ts`, `.routa/manifest.json`, `.routa/openapi-baseline.json` |
+| CLI | `create`, `scaffold`, `dev`, `start`, `check`, `generate`, `build`, `routes`, `openapi check`, `openapi breaking` |
+| Logging | Backend-neutral `RoutaLogger` contract with a built-in console implementation |
+| Lifecycle | Route `deprecation` metadata with optional `Deprecation`, `Sunset`, and `Link` headers |
+| Query helpers | `Sort` and `Fields` parsers from `@routa-ts/core/query/helpers` |
+
+### Deferred
 
 - Fastify, Express, or other runtime adapters
-- non-Zod schema adapters
-- SDK generation
-- plugin system
-- broad auth provider integrations
-- broad observability, caching, rate limiting, and operations features
-- generated hosted API reference UI
+- Non-Zod schema adapters
+- Client SDK generation
+- A plugin system
+- Built-in auth provider integrations; v0 makes security *visible* in OpenAPI but never
+  implements authentication
+- Response caching, rate limiting, and broad observability features
+- A generated hosted API reference UI
+- Content types other than JSON at the request and response boundary
 
-<Aside type="caution" title="Design docs">
-	The repository contains v1 and design-planning documents. Those are useful for contributors, but they are not a promise that the feature exists in v0.
+## Consequences
+
+- Reading a v1 or design document in the repository tells you what contributors are
+  considering, not what your project can call today.
+- A feature absent from the implemented table above should be treated as absent from the
+  framework, even if an internal spec describes it in detail.
+- Deferred does not mean rejected. Most items are sequenced behind proving the contract
+  model on a single runtime.
+
+## When This Changes
+
+Scope moves when a feature lands in `@routa-ts/core`, `@routa-ts/cli`, or
+`create-routa-ts` with acceptance coverage. At that point it moves into the implemented
+table and gets a page in Concepts, Guides, or Reference.
+
+<Aside type="caution" title="Design documents">
+	The repository contains v1 and design-planning documents under `docs/`. They are useful
+	for contributors, and they are not a promise that the feature exists in v0.
 </Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Quickstart"
+		href="/docs/start/quickstart/"
+		description="Run the implemented surface end to end."
+	/>
+	<LinkCard
+		title="Runtime behavior"
+		href="/docs/reference/runtime-behavior/"
+		description="Exact request and response semantics in v0."
+	/>
+	<LinkCard
+		title="Contributing"
+		href="/docs/community/contributing/"
+		description="Move something from deferred to implemented."
+	/>
+</CardGrid>
