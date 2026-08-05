@@ -32,6 +32,7 @@ export type RouteResponses = Record<
 	}
 >;
 export type ExternalApiUrl = `http://${string}` | `https://${string}`;
+export type ResponseValidation = "development" | "always";
 export type RegisteredRoutePath = keyof RegisteredRouteCtxByPath & `/${string}`;
 export type RouteDeprecationReplacement = RegisteredRoutePath | ExternalApiUrl;
 export type RouteDeprecation = {
@@ -242,6 +243,8 @@ export type RoutaConfig = {
 	port?: number;
 	logger?: RoutaLogger | false;
 	lifecycleHeaders?: boolean;
+	/** Defaults to `"development"`, which skips response schema parsing during `routa start`. */
+	responseValidation?: ResponseValidation;
 };
 
 /**

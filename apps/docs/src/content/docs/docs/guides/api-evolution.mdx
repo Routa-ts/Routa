@@ -1,29 +1,125 @@
 ---
-title: API evolution
-description: Keep Routa API contracts compatible as they change.
+title: API Evolution
+description: Change a Routa API contract without breaking its clients.
 ---
 
-Routa keeps a committed OpenAPI baseline in `.routa/openapi-baseline.json`.
+import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
+import PackageManagers from "@components/PackageManagers.astro";
 
-## Check compatibility
+Routa keeps an accepted contract in `.routa/openapi-baseline.json` and compares every
+generated document against it. That gives you a mechanical answer to "is this change
+breaking?" and a deliberate step for accepting the change when it is intentional.
 
-```sh
-routa openapi breaking
+## Before You Start
+
+- A committed `.routa/openapi-baseline.json`, written by `routa scaffold`.
+- A project that passes `routa check`.
+
+## Steps
+
+<Steps>
+1. Check compatibility after changing a contract. Run this in CI on every pull request.
+
+	<PackageManagers type="exec" args="openapi breaking" />
+
+	The command fails for removed operations and for inputs that became required, whether
+	the input is a query parameter, header, cookie, path parameter, or request body.
+
+2. Deprecate rather than delete when an operation must go away. Declare the deprecation on
+   the route contract.
+
+	```ts title="src/routes/legacy/users/route.ts"
+	import { createRoute, createRouteRoot } from "@routa-ts/core";
+	import { z } from "zod";
+
+	const route = createRouteRoot("/legacy/users");
+
+	export default route({
+		get: createRoute({
+			deprecation: {
+				sunset: "2027-01-01",
+				replacement: "/users",
+			},
+			responses: {
+				success: {
+					status: 200,
+					schema: z.object({ message: z.string() }),
+				},
+			},
+			run: () => ({
+				type: "success",
+				data: { message: "Use GET /users instead." },
+			}),
+		}),
+	});
+	```
+
+	Routa marks the operation deprecated in the generated OpenAPI. For a replacement inside
+	the same API, use a leading `/` and Routa verifies the target route exists. For another
+	API, use an absolute `http:` or `https:` URL such as
+	`https://api.example.com/v2/users`.
+
+3. Emit lifecycle headers if clients should learn about the deprecation at runtime.
+
+	```ts title="src/routa.ts"
+	import { createRouta } from "@routa-ts/core";
+
+	export default createRouta({
+		lifecycleHeaders: true,
+	});
+	```
+
+	Deprecated operations then respond with `Deprecation: true`, plus `Sunset` and a `Link`
+	with `rel="successor-version"` when those are declared.
+
+4. Accept the change once it has been reviewed. This is the only command that rewrites the
+   baseline.
+
+	<PackageManagers type="exec" args="openapi breaking --update-baseline" />
+
+</Steps>
+
+## Verify
+
+A compatible change:
+
+```txt
+OpenAPI breaking check passed. No breaking changes detected.
 ```
 
-The command fails for removed operations and for inputs that become required: query, header, cookie, path, or request body. Use it in CI before accepting a contract change.
+Accepting an intentional change:
 
-When a change is intentional, review it and then update the baseline explicitly:
-
-```sh
-routa openapi breaking --update-baseline
+```txt
+OpenAPI baseline updated.
 ```
 
-## Security visibility
+A deprecated operation with `lifecycleHeaders` enabled:
 
-Middleware may describe its API-facing security without implementing authentication for your app:
+```txt
+HTTP/1.1 200 OK
+deprecation: true
+sunset: 2027-01-01
+link: </users>; rel="successor-version"
+```
 
-```ts
+## Which Check to Use
+
+| Command | Fails on | Use it |
+| --- | --- | --- |
+| `routa openapi check` | Any difference from the baseline | Locally, to see that a change was noticed |
+| `routa openapi breaking` | Removed operations and newly required inputs | In CI, as a merge gate |
+
+`openapi check` is strict by design: adding an optional field trips it. That makes it a
+good local signal and a poor merge gate, which is what `openapi breaking` is for.
+
+## Security Changes Are Contract Changes
+
+Middleware can describe the security an operation requires without Routa implementing any
+of it:
+
+```ts title="src/middleware/auth.ts"
+import { createMiddleware } from "@routa-ts/core";
+
 createMiddleware({
 	openapi: {
 		security: [{ bearerAuth: [] }],
@@ -33,26 +129,42 @@ createMiddleware({
 });
 ```
 
-Routa emits this as OpenAPI `security` and `x-routa-authz`. A public operation becoming authenticated is reported by `routa openapi breaking`.
+Routa emits these as OpenAPI `security` and `x-routa-authz`. Because they are part of the
+document, an operation that was public becoming authenticated is reported by
+`routa openapi breaking` like any other breaking change.
 
-## Deprecate an operation
+## Troubleshooting
 
-```ts
-createRoute({
-	deprecation: {
-		sunset: "2027-01-01",
-		replacement: "/users",
-	},
-	// ...
-});
-```
+| Problem | Fix |
+| --- | --- |
+| `Missing .routa/openapi-baseline.json. Run routa scaffold first.` | The project has no accepted contract. Run `routa scaffold` against the reviewed OpenAPI document first. |
+| `ROUTA_DEPRECATION_REPLACEMENT_ROUTE_NOT_FOUND` | The local replacement path is not a route in this project. Check the path, or run `routa generate` if metadata is stale. |
+| `ROUTA_DEPRECATION_REPLACEMENT_URL_INVALID` | Use `/local-path` for this API or an absolute `http(s)` URL for another. |
+| Lifecycle headers do not appear | `lifecycleHeaders` defaults to off. Enable it in `createRouta()`, and confirm the route declares `deprecation`. |
+| The baseline changes on every run | Generation is deterministic. A repeating diff means the source really is changing, often from stale `.routa/routes.gen.ts`. |
 
-The generated OpenAPI marks the operation as deprecated. Set `lifecycleHeaders: true` in `createRouta()` to add `Deprecation`, `Sunset`, and `Link` headers at runtime.
+<Aside type="caution" title="v0 status">
+	In v0, you can use breaking-change checks, deprecation metadata, replacement validation,
+	and lifecycle headers. `--update-baseline` overwrites the accepted contract with the
+	current source, so run it only as its own reviewed commit.
+</Aside>
 
-For a replacement in the same API, use a leading `/`; Routa checks that the
-target route exists. Otherwise, provide an absolute `http:` or `https:` URL to
-another API, such as `https://api.example.com/v2/users`.
+## Next Steps
 
-The generated route registry also exposes local paths to TypeScript, so invalid
-literal replacements appear in the IDE. `routa check` remains the authoritative
-validation when generated metadata is stale or a value is constructed dynamically.
+<CardGrid>
+	<LinkCard
+		title="OpenAPI"
+		href="/docs/concepts/openapi/"
+		description="What generation includes and what it cannot model."
+	/>
+	<LinkCard
+		title="Middleware"
+		href="/docs/concepts/middleware/"
+		description="Declare security metadata on a chain."
+	/>
+	<LinkCard
+		title="CLI reference"
+		href="/docs/reference/cli/"
+		description="Full behavior of the openapi subcommands."
+	/>
+</CardGrid>

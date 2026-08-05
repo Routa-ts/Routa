@@ -8,8 +8,10 @@
 	--muted: #8b93a4;
 	--edge: #0d9488;
 	--node: #5eead4;
+	--node-bright: #99f6e4;
 	--line: #2a303c;
 	--ink: #042f2e;
+	--code-dim: #7c8496;
 	--font: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
 	--mono: "Space Mono", ui-monospace, monospace;
 	--ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -50,7 +52,7 @@ code,
 	left: -9999px;
 	top: 0;
 	padding: 0.5rem 0.75rem;
-	background: var(--edge);
+	background: var(--node);
 	color: var(--ink);
 	z-index: 100;
 }
@@ -58,6 +60,22 @@ code,
 .skip:focus {
 	left: 0.75rem;
 	top: 0.75rem;
+}
+
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+:where(a, button):focus-visible {
+	outline: 2px solid var(--node);
+	outline-offset: 3px;
 }
 
 .brand-mark {
@@ -137,14 +155,16 @@ code,
 		border-color 0.2s var(--ease);
 }
 
+/* `--node` rather than `--edge`: teal-600 on `--ink` only reaches 3.86:1. */
 .btn-primary {
-	background: var(--edge);
+	background: var(--node);
+	border-color: var(--node);
 	color: var(--ink);
 }
 
 .btn-primary:hover {
-	background: var(--node);
-	border-color: var(--node);
+	background: var(--node-bright);
+	border-color: var(--node-bright);
 }
 
 .btn-ghost:hover {
@@ -154,21 +174,62 @@ code,
 
 .cli {
 	display: inline-flex;
-	align-items: center;
-	gap: 0.65rem;
+	flex-direction: column;
+	align-items: stretch;
 	max-width: 100%;
-	padding: 0.65rem 0.85rem;
 	border: 1px solid var(--line);
 	background: var(--elevated);
 	font-family: var(--mono);
-	font-size: 0.75rem;
+}
+
+.cli-tabs {
+	display: flex;
+	border-bottom: 1px solid var(--line);
+}
+
+.cli-tabs button {
+	padding: 0.5rem 0.85rem;
+	border: 0;
+	border-bottom: 2px solid transparent;
+	background: transparent;
+	color: var(--muted);
+	font-family: var(--mono);
+	font-size: 0.7rem;
+	letter-spacing: 0.06em;
+	cursor: pointer;
+}
+
+.cli-tabs button:hover {
+	color: var(--text);
+}
+
+.cli-tabs button[aria-selected="true"] {
+	border-bottom-color: var(--node);
 	color: var(--node);
+}
+
+.cli-body {
+	display: flex;
+	align-items: center;
+	gap: 0.65rem;
+	padding: 0.65rem 0.85rem;
 	overflow-x: auto;
 }
 
-.cli button {
+.cli-body code {
+	display: flex;
+	gap: 0.5rem;
+	color: var(--node);
+	font-size: 0.75rem;
+	white-space: nowrap;
+}
+
+.cli-copy {
 	flex-shrink: 0;
 	margin-left: auto;
+	min-width: 2.75rem;
+	min-height: 1.75rem;
+	padding: 0.25rem 0.4rem;
 	border: 0;
 	background: transparent;
 	color: var(--muted);
@@ -179,7 +240,7 @@ code,
 	cursor: pointer;
 }
 
-.cli button:hover {
+.cli-copy:hover {
 	color: var(--node);
 }
 
@@ -341,20 +402,11 @@ code,
 }
 
 .code-panel .cm {
-	color: #555d6e;
+	color: var(--code-dim);
 }
 
 .code-panel .fn {
 	color: #eceff4;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	*,
-	*::before,
-	*::after {
-		animation: none;
-		transition: none;
-	}
 }
 
 /* Schematic composition */
@@ -376,22 +428,26 @@ code,
 	pointer-events: none;
 }
 
+/*
+ * Paths carry `pathLength="1"`, so the dash covers the whole edge regardless of
+ * its real length. A fixed dasharray left the longer edges visibly broken.
+ */
 .lp-schematic .map .edge {
 	fill: none;
 	stroke: color-mix(in oklab, var(--edge) 55%, var(--line));
 	stroke-width: 1.25;
-	stroke-dasharray: 220;
-	stroke-dashoffset: 220;
-	animation: draw-edge 1.8s var(--ease) forwards;
+	stroke-dasharray: 1;
+	stroke-dashoffset: 1;
+	animation: draw-edge 1.2s var(--ease) forwards;
 }
 
-.lp-schematic .map .edge:nth-child(2) {
+.lp-schematic .map .edge:nth-of-type(2) {
 	animation-delay: 0.2s;
 }
-.lp-schematic .map .edge:nth-child(3) {
+.lp-schematic .map .edge:nth-of-type(3) {
 	animation-delay: 0.4s;
 }
-.lp-schematic .map .edge:nth-child(4) {
+.lp-schematic .map .edge:nth-of-type(4) {
 	animation-delay: 0.6s;
 }
 
@@ -414,20 +470,37 @@ code,
 	stroke: var(--node);
 }
 
-.lp-schematic .map .node:nth-of-type(1) {
-	animation-delay: 0.5s;
+/*
+ * One rule per circle: with only five, the last two nodes fell back to a zero
+ * delay and appeared before the sequence they are meant to conclude.
+ */
+.lp-schematic .map .node:nth-of-type(1),
+.lp-schematic .map text:nth-of-type(1) {
+	animation-delay: 0.35s;
 }
-.lp-schematic .map .node:nth-of-type(2) {
-	animation-delay: 0.7s;
+.lp-schematic .map .node:nth-of-type(2),
+.lp-schematic .map text:nth-of-type(2) {
+	animation-delay: 0.45s;
 }
-.lp-schematic .map .node:nth-of-type(3) {
-	animation-delay: 0.9s;
+.lp-schematic .map .node:nth-of-type(3),
+.lp-schematic .map text:nth-of-type(3) {
+	animation-delay: 0.55s;
 }
-.lp-schematic .map .node:nth-of-type(4) {
-	animation-delay: 1.1s;
+.lp-schematic .map .node:nth-of-type(4),
+.lp-schematic .map text:nth-of-type(4) {
+	animation-delay: 0.65s;
 }
-.lp-schematic .map .node:nth-of-type(5) {
-	animation-delay: 1.3s;
+.lp-schematic .map .node:nth-of-type(5),
+.lp-schematic .map text:nth-of-type(5) {
+	animation-delay: 0.75s;
+}
+.lp-schematic .map .node:nth-of-type(6),
+.lp-schematic .map text:nth-of-type(6) {
+	animation-delay: 0.85s;
+}
+.lp-schematic .map .node:nth-of-type(7),
+.lp-schematic .map text:nth-of-type(7) {
+	animation-delay: 0.95s;
 }
 
 @keyframes node-in {
@@ -441,9 +514,10 @@ code,
 	font-family: var(--mono);
 	font-size: 11px;
 	letter-spacing: 0.06em;
+	text-anchor: middle;
 	text-transform: uppercase;
 	opacity: 0;
-	animation: node-in 0.4s var(--ease) 1.2s forwards;
+	animation: node-in 0.4s var(--ease) forwards;
 }
 
 .lp-schematic .hero-copy {
@@ -474,14 +548,44 @@ code,
 	}
 }
 
-.lp-schematic .compare .code-panel:first-child {
-	opacity: 0.55;
+/*
+ * The "without Routa" panel is de-emphasised by dropping syntax colour rather
+ * than by lowering opacity, which previously pushed its text to 1.66:1.
+ */
+.lp-schematic .compare .code-panel:first-child pre {
+	color: var(--muted);
 }
 
-.lp-schematic .compare .code-panel:first-child .code-panel__bar {
-	color: #6b7384;
+.lp-schematic .compare .code-panel:first-child :is(.kw, .str, .fn) {
+	color: inherit;
 }
 
 .lp-schematic .compare .code-panel:last-child {
 	border-color: color-mix(in oklab, var(--edge) 45%, var(--line));
+}
+
+/*
+ * Declared last and marked `!important`: the previous universal-selector reset
+ * lost to every class-based rule, so nothing was actually reduced. Keeping a
+ * near-zero duration rather than `none` preserves each animation's end state.
+ */
+@media (prefers-reduced-motion: reduce) {
+	html {
+		scroll-behavior: auto;
+	}
+
+	*,
+	*::before,
+	*::after {
+		/* biome-ignore lint/complexity/noImportantStyles: must outrank class-based animation rules */
+		animation-delay: 0ms !important;
+		/* biome-ignore lint/complexity/noImportantStyles: must outrank class-based animation rules */
+		animation-duration: 0.01ms !important;
+		/* biome-ignore lint/complexity/noImportantStyles: must outrank class-based animation rules */
+		animation-iteration-count: 1 !important;
+		/* biome-ignore lint/complexity/noImportantStyles: must outrank class-based animation rules */
+		scroll-behavior: auto !important;
+		/* biome-ignore lint/complexity/noImportantStyles: must outrank class-based animation rules */
+		transition-duration: 0.01ms !important;
+	}
 }

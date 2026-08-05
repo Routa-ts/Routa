@@ -75,9 +75,15 @@ describe("route contracts", () => {
 	it("preserves Routa app configuration", () => {
 		const app = createRouta({
 			port: 3001,
+			responseValidation: "always",
 		});
 
 		expect(app.port).toBe(3001);
+		expect(app.responseValidation).toBe("always");
+		createRouta({
+			// @ts-expect-error Response validation supports only development or always.
+			responseValidation: "never",
+		});
 	});
 
 	it("keeps the framework logger authoritative in route context types", () => {

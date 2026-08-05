@@ -1,31 +1,96 @@
 ---
 title: Basic API
-description: Walkthrough of the basic Routa example.
+description: A minimal Routa example covering routes, schemas, and generated metadata.
 ---
 
-The `examples/basic-api` package shows the generated app shape for a simple Routa API.
+import { Aside, CardGrid, FileTree, LinkCard } from "@astrojs/starlight/components";
 
-## Run It
-
-From the repository root:
+`examples/basic-api` in the Routa repository is the smallest complete project: a handful
+of routes, route-local schemas, and committed `.routa/` metadata. It is the shape the
+scaffolder produces, with enough routes to show nesting and dynamic segments.
 
 ```sh
 pnpm install
 pnpm --filter basic-api dev
 ```
 
-## Routes
-
-```txt
-src/routa.ts
-src/routes/status/route.ts
-src/routes/status/schemas.ts
-src/routes/users/route.ts
-src/routes/users/schemas.ts
-src/routes/users/$userId/route.ts
-src/routes/users/$userId/schemas.ts
-src/routes/users/$userId/posts/route.ts
-src/routes/users/$userId/posts/schemas.ts
+```sh
+curl http://127.0.0.1:3000/users/usr_1
 ```
 
-Use this example to learn the baseline route-file pattern, route-local schemas, and generated metadata in `.routa/`.
+## What Is Inside
+
+<FileTree>
+- src/
+  - routa.ts
+  - routes/
+    - status/
+      - route.ts
+      - schemas.ts
+    - users/
+      - route.ts
+      - schemas.ts
+      - $userId/
+        - route.ts
+        - schemas.ts
+        - posts/
+          - route.ts
+          - schemas.ts
+    - demo/
+      - route.ts
+</FileTree>
+
+## How It Works
+
+`src/routes/users/route.ts` and `src/routes/users/$userId/route.ts` show the two halves of
+a collection resource: one file owns `/users`, another owns `/users/:userId`. Neither
+knows about the other, because the URL comes from the file's location rather than from a
+registry.
+
+Every route keeps its Zod schemas in a sibling `schemas.ts`. That is the default
+convention, and it is what makes a route directory a self-contained unit you can move.
+
+`src/routes/users/$userId/posts/route.ts` demonstrates that nesting continues past a
+dynamic segment: the parent parameter is still available in `input.params` because it is
+part of the resolved path.
+
+## What to Study
+
+| File | Shows |
+| --- | --- |
+| `src/routa.ts` | The minimum configuration a project needs |
+| `src/routes/status/route.ts` | The smallest possible contract |
+| `src/routes/users/route.ts` | A collection with more than one method |
+| `src/routes/users/$userId/route.ts` | A validated path parameter |
+| `.routa/routes.gen.ts` | What Routa derived from all of the above |
+
+## Limits
+
+This example has no middleware, no authentication, and no persistence. Handlers return
+in-memory data so the HTTP boundary stays legible. For middleware chains, route groups,
+and OpenAPI workflows, read the [Full API example](/docs/examples/full-api/).
+
+<Aside type="note" title="Repository only">
+	Both examples live in the Routa repository rather than on npm. Clone the repository to
+	run them.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Full API"
+		href="/docs/examples/full-api/"
+		description="Middleware, groups, deprecation, and logging."
+	/>
+	<LinkCard
+		title="First route"
+		href="/docs/getting-started/first-route/"
+		description="Build this shape yourself."
+	/>
+	<LinkCard
+		title="Routing"
+		href="/docs/concepts/routing/"
+		description="Why these files map to those URLs."
+	/>
+</CardGrid>

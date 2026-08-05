@@ -1,22 +1,53 @@
 ---
 title: OpenAPI
-description: Routa keeps OpenAPI aligned with route contracts.
+description: Routa generates OpenAPI from route contracts and scaffolds contracts from OpenAPI.
 ---
 
-Routa supports OpenAPI in both directions:
+import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
+
+Routa treats OpenAPI as a projection of the route contract rather than a document you
+maintain by hand. It works in both directions: scaffold source from an existing document
+once, then generate and check the document from source forever after.
 
 ```txt
-openapi.yaml/json -> schemas -> route files -> handler stubs
-routes -> OpenAPI -> checks
+openapi.yaml/json -> schemas -> route files -> handler stubs   (once, via scaffold)
+routes -> OpenAPI -> baseline checks                           (every build)
 ```
+
+## How It Works
+
+Generation reads validated route metadata and each route file's contract. For every
+method it produces an operation containing the parameters and request body from `input`,
+a response per entry in `responses`, plus every middleware `rejects` outcome in that
+method's chain. Middleware `openapi` metadata contributes `security` and `x-routa-authz`,
+and route `deprecation` metadata marks the operation deprecated.
+
+The result is compared against `.routa/openapi-baseline.json`, the contract your team has
+accepted. Nothing is written to that file unless you ask for it.
+
+## Checking the Contract
+
+```sh
+routa openapi check
+```
+
+```txt
+OpenAPI check passed. No drift detected.
+```
+
+`openapi check` fails when the generated document differs from the baseline in any way,
+which catches an accidental contract change during review. `openapi breaking` is narrower:
+it fails only for removed operations and for inputs that became required, so it is the
+check to run in CI on every pull request.
 
 ## OpenAPI to Source
 
-Routa v0 accepts OpenAPI `.yaml`, `.yml`, and `.json` files and scaffolds matching source structure for a new API.
+Scaffolding accepts `.yaml`, `.yml`, and `.json` documents and generates route files,
+schema modules, and the initial `.routa/` metadata. Generated source is meant to be
+reviewed, edited, and committed — Routa does not ask you to trust a generated contract
+blindly.
 
-Generated source is meant to be reviewed, edited, and committed. Routa does not ask teams to blindly trust generated contracts.
-
-Supported v0 input is intentionally narrow:
+Supported input is deliberately narrow:
 
 - HTTP paths and methods
 - `operationId`
@@ -25,18 +56,57 @@ Supported v0 input is intentionally narrow:
 - JSON responses
 - reusable schemas from `components.schemas`
 
-Unsupported OpenAPI features should stay in the source document until Routa can model them safely.
+Anything else stays in the source document untouched rather than being approximated in
+TypeScript.
 
-## Source to OpenAPI
+## Generated Extensions
 
-The route contract is the documentation model. Inputs, outputs, middleware rejects, and metadata can contribute to the generated OpenAPI spec.
+Routa adds three vendor extensions so information that has no standard field is still
+visible in the document:
 
-## Check Workflow
+| Extension | Meaning |
+| --- | --- |
+| `x-routa-authz` | Permission strings declared by middleware `openapi.permissions` |
+| `x-routa-diagnostics` | Validation errors that prevented a complete document |
+| `x-routa-schema-warnings` | Zod constructs Routa could not represent, as `ROUTA_OPENAPI_UNSUPPORTED_ZOD` |
 
-Use the CLI to check whether route contracts and OpenAPI are aligned:
+A document containing `x-routa-diagnostics` means generation ran against a project that
+does not validate. Fix the diagnostics before trusting the output.
 
-```sh
-pnpm exec routa openapi check
-```
+## Limits
 
-Use `routa openapi breaking` to catch removed operations against the saved baseline. Use `--update-baseline` only when you intentionally accept the current contract as the new baseline.
+`info`, `servers`, and `components.schemas` are carried from the baseline rather than
+derived from source, so edit them in the baseline document. Content types other than JSON
+are not modeled in v0.
+
+<Aside type="caution" title="Baseline updates">
+	`routa openapi breaking --update-baseline` overwrites
+	`.routa/openapi-baseline.json` with the current contract. Run it only when the change
+	has been reviewed and accepted.
+</Aside>
+
+<Aside type="caution" title="v0 status">
+	In v0, you can generate OpenAPI, check drift and breaking changes, and scaffold the
+	supported JSON contract surface. You cannot use non-JSON content or OpenAPI features
+	outside the supported scaffolding list yet.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Scaffold from OpenAPI"
+		href="/docs/guides/openapi-scaffold/"
+		description="Generate source from an existing document."
+	/>
+	<LinkCard
+		title="API evolution"
+		href="/docs/guides/api-evolution/"
+		description="Deprecate operations and accept contract changes."
+	/>
+	<LinkCard
+		title="CLI reference"
+		href="/docs/reference/cli/"
+		description="Exact behavior of the openapi subcommands."
+	/>
+</CardGrid>
