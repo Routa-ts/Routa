@@ -1,4 +1,7 @@
 .vscode
+
+# Local agent task state
+.dex/
 node_modules/
 **/node_modules/
 .pnpm-store/
