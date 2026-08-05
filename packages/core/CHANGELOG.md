@@ -1,5 +1,11 @@
 # @routa-ts/core
 
+## 0.3.0
+
+### Minor Changes
+
+- e0914d8: Add configurable runtime response validation, validate responses by default in development, preserve opt-in production validation, project middleware context through declared schemas, log safe structured schema issue paths, and reject thrown raw `Response` bypasses.
+
 ## 0.2.0
 
 ### Minor Changes
