@@ -4,6 +4,18 @@
  * Docs live under /docs/.
  */
 import "../styles/landing.css";
+import { createCommandsByPackageManager, packageManagers } from "../lib/package-manager-commands";
+
+const title = "Routa — Schema-first REST for TypeScript";
+const description =
+	"Filesystem routes with Zod contracts and OpenAPI in lockstep. Schema-first REST for new TypeScript APIs.";
+const canonical = new URL("/", Astro.site).href;
+const ogImage = new URL("/og.png", Astro.site).href;
+
+const createCommands = packageManagers.map((id) => ({
+	id,
+	command: createCommandsByPackageManager[id],
+}));
 ---
 
 <!doctype html>
@@ -11,11 +23,26 @@ import "../styles/landing.css";
 	<head>
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
-		<title>Routa — Schema-first REST for TypeScript</title>
+		<title>{title}</title>
+		<meta name="description" content={description}>
+		<link rel="canonical" href={canonical}>
+		<meta property="og:type" content="website">
+		<meta property="og:site_name" content="Routa">
+		<meta property="og:locale" content="en">
+		<meta property="og:url" content={canonical}>
+		<meta property="og:title" content={title}>
+		<meta property="og:description" content={description}>
+		<meta property="og:image" content={ogImage}>
+		<meta property="og:image:width" content="1200">
+		<meta property="og:image:height" content="630">
 		<meta
-			name="description"
-			content="Filesystem routes with Zod contracts and OpenAPI in lockstep. Schema-first REST for new TypeScript APIs."
+			property="og:image:alt"
+			content="Routa — filesystem routes with contracts. Schema-first REST for TypeScript."
 		>
+		<meta name="twitter:card" content="summary_large_image">
+		<meta name="twitter:title" content={title}>
+		<meta name="twitter:description" content={description}>
+		<meta name="twitter:image" content={ogImage}>
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 		<link rel="preconnect" href="https://fonts.googleapis.com">
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -34,24 +61,24 @@ import "../styles/landing.css";
 					preserveAspectRatio="xMidYMid slice"
 					aria-hidden="true"
 				>
-					<path class="edge" d="M180 420 L420 280 L660 360"></path>
-					<path class="edge" d="M420 280 L520 140 L780 180"></path>
-					<path class="edge" d="M660 360 L820 480 L980 320"></path>
-					<path class="edge" d="M520 140 L660 360 L820 480"></path>
-					<circle class="node" cx="180" cy="420" r="8"></circle>
-					<circle class="node lit" cx="420" cy="280" r="9"></circle>
-					<circle class="node" cx="520" cy="140" r="8"></circle>
-					<circle class="node lit" cx="660" cy="360" r="9"></circle>
-					<circle class="node" cx="820" cy="480" r="8"></circle>
-					<circle class="node" cx="780" cy="180" r="7"></circle>
-					<circle class="node lit" cx="980" cy="320" r="8"></circle>
-					<text x="150" y="455">route</text>
-					<text x="390" y="255">schema</text>
-					<text x="500" y="120">middleware</text>
-					<text x="640" y="395">handler</text>
-					<text x="800" y="515">response</text>
-					<text x="760" y="160">openapi</text>
-					<text x="960" y="300">check</text>
+					<path class="edge" d="M140 270 L350 180 L560 100" pathLength="1"></path>
+					<path class="edge" d="M560 100 L720 240 L920 320" pathLength="1"></path>
+					<path class="edge" d="M560 100 L800 100" pathLength="1"></path>
+					<path class="edge" d="M800 100 L1060 190 L920 320" pathLength="1"></path>
+					<circle class="node" cx="140" cy="270" r="8"></circle>
+					<circle class="node lit" cx="350" cy="180" r="9"></circle>
+					<circle class="node" cx="560" cy="100" r="8"></circle>
+					<circle class="node lit" cx="720" cy="240" r="9"></circle>
+					<circle class="node" cx="920" cy="320" r="8"></circle>
+					<circle class="node" cx="800" cy="100" r="7"></circle>
+					<circle class="node lit" cx="1060" cy="190" r="8"></circle>
+					<text x="140" y="248">route</text>
+					<text x="350" y="158">schema</text>
+					<text x="560" y="78">middleware</text>
+					<text x="720" y="218">handler</text>
+					<text x="920" y="298">response</text>
+					<text x="800" y="78">openapi</text>
+					<text x="1060" y="168">check</text>
 				</svg>
 
 				<div class="hero-copy">
@@ -69,9 +96,35 @@ import "../styles/landing.css";
 						<a class="btn btn-primary" href="/docs/">Get started</a>
 						<a class="btn btn-ghost" href="https://github.com/Routa-ts/Routa">GitHub</a>
 					</div>
-					<div class="cli" data-cmd="pnpm create routa-ts@latest">
-						<span>$ pnpm create routa-ts@latest</span>
-						<button type="button">Copy</button>
+					<div class="cli">
+						<div class="cli-tabs" role="tablist" aria-label="Package manager">
+							{createCommands.map(({ id }, index) => (
+									<button
+										type="button"
+										role="tab"
+										id={`pm-tab-${id}`}
+										aria-controls="pm-panel"
+										aria-selected={index === 0 ? "true" : "false"}
+										tabindex={index === 0 ? 0 : -1}
+										data-pm={id}
+									>
+										{id}
+									</button>
+								))}
+						</div>
+						<div class="cli-body">
+							<code
+								id="pm-panel"
+								role="tabpanel"
+								aria-labelledby={`pm-tab-${createCommands[0].id}`}
+								data-cmd={createCommands[0].command}
+							>
+								<span aria-hidden="true">$</span>
+								<span data-cmd-text>{createCommands[0].command}</span>
+							</code>
+							<button type="button" class="cli-copy">Copy</button>
+							<span class="visually-hidden" role="status" data-copy-status></span>
+						</div>
 					</div>
 				</div>
 			</section>
@@ -110,8 +163,10 @@ import "../styles/landing.css";
     responses: {"{"}
       success: {"{"} status: <span class="str">201</span>, schema: UserSchema {"}"},
     {"}"},
-    run: <span class="kw">async</span> ({"{"} input, ctx {"}"}) =>
-      users.createUser(input.body, ctx),
+    run: <span class="kw">async</span> ({"{"} input {"}"}) => ({"{"}
+      type: <span class="str">"success"</span>,
+      data: <span class="kw">await</span> users.createUser(input.body),
+    {"}"}),
   {"}"}),
 {"}"});</code></pre>
 						</div>
@@ -161,21 +216,86 @@ import "../styles/landing.css";
 			</section>
 		</main>
 		<script>
-		document.querySelectorAll(".cli[data-cmd]").forEach((el) => {
-			const btn = el.querySelector("button");
-			const cmd = el.getAttribute("data-cmd");
-			btn?.addEventListener("click", async () => {
-				if (!cmd) return;
-				try {
-					await navigator.clipboard.writeText(cmd);
-					btn.textContent = "Copied";
-					setTimeout(() => {
-						btn.textContent = "Copy";
-					}, 1400);
-				} catch {
-					btn.textContent = "Fail";
-				}
+		import {
+			createCommandsByPackageManager as COMMANDS,
+			type PackageManager,
+		} from "../lib/package-manager-commands";
+
+		/**
+		 * Starlight persists synced tab selections under this key, so the choice made
+		 * here carries into every `<PackageManagers>` block in the docs and back.
+		 */
+		const STORAGE_KEY = "starlight-synced-tabs__pkg";
+
+		const cli = document.querySelector(".cli");
+		const tabs = [...document.querySelectorAll<HTMLButtonElement>(".cli-tabs [data-pm]")];
+		const panel = document.querySelector<HTMLElement>("#pm-panel");
+		const commandText = document.querySelector<HTMLElement>("[data-cmd-text]");
+		const copyButton = document.querySelector<HTMLButtonElement>(".cli-copy");
+		const copyStatus = document.querySelector<HTMLElement>("[data-copy-status]");
+
+		function isPackageManager(value: string | null): value is PackageManager {
+			return value !== null && value in COMMANDS;
+		}
+
+		function select(manager: PackageManager, { focus = false } = {}) {
+			if (!panel || !commandText) return;
+
+			for (const tab of tabs) {
+				const selected = tab.dataset.pm === manager;
+				tab.setAttribute("aria-selected", String(selected));
+				tab.tabIndex = selected ? 0 : -1;
+				if (selected && focus) tab.focus();
+			}
+
+			commandText.textContent = COMMANDS[manager];
+			panel.dataset.cmd = COMMANDS[manager];
+			panel.setAttribute("aria-labelledby", `pm-tab-${manager}`);
+		}
+
+		if (cli && panel && commandText) {
+			const stored = localStorage.getItem(STORAGE_KEY);
+			if (isPackageManager(stored)) select(stored);
+
+			for (const tab of tabs) {
+				tab.addEventListener("click", () => {
+					const manager = tab.dataset.pm;
+					if (!isPackageManager(manager ?? null)) return;
+					select(manager as PackageManager);
+					localStorage.setItem(STORAGE_KEY, manager as PackageManager);
+				});
+			}
+
+			cli.querySelector(".cli-tabs")?.addEventListener("keydown", (event) => {
+				const key = (event as KeyboardEvent).key;
+				const step = key === "ArrowRight" ? 1 : key === "ArrowLeft" ? -1 : 0;
+				if (step === 0) return;
+				event.preventDefault();
+
+				const current = tabs.findIndex((tab) => tab.getAttribute("aria-selected") === "true");
+				const next = tabs[(current + step + tabs.length) % tabs.length];
+				const manager = next?.dataset.pm;
+				if (!isPackageManager(manager ?? null)) return;
+				select(manager as PackageManager, { focus: true });
+				localStorage.setItem(STORAGE_KEY, manager as PackageManager);
 			});
+		}
+
+		copyButton?.addEventListener("click", async () => {
+			const command = panel?.dataset.cmd;
+			if (!command) return;
+			try {
+				await navigator.clipboard.writeText(command);
+				copyButton.textContent = "Copied";
+				if (copyStatus) copyStatus.textContent = `Copied ${command} to clipboard`;
+				setTimeout(() => {
+					copyButton.textContent = "Copy";
+					if (copyStatus) copyStatus.textContent = "";
+				}, 1400);
+			} catch {
+				copyButton.textContent = "Failed";
+				if (copyStatus) copyStatus.textContent = "Copy failed";
+			}
 		});
 		</script>
 	</body>

@@ -15,6 +15,7 @@ import { describe, expect, it } from "vitest";
 import { run } from "./index.js";
 import { generateOpenApi } from "./openapi.js";
 import {
+	runtimeArgs,
 	sourceSnapshot,
 	sourceSnapshotChanged,
 	stubEmptyRouteFiles,
@@ -26,6 +27,23 @@ import { shouldUseColor } from "./ui.js";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 describe("routa cli", () => {
+	it("passes explicit dev and start modes to the runtime", () => {
+		expect(runtimeArgs("/runtime.js", "/app", "/app", true, "dev")).toEqual([
+			"--import",
+			"tsx",
+			"/runtime.js",
+			"/app",
+			"/app",
+			"dev",
+		]);
+		expect(runtimeArgs("/runtime.js", "/app", "/app/dist", false, "start")).toEqual([
+			"/runtime.js",
+			"/app",
+			"/app/dist",
+			"start",
+		]);
+	});
+
 	it("prints help by default", () => {
 		const result = run([]);
 

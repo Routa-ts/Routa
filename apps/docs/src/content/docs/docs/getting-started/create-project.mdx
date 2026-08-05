@@ -1,69 +1,163 @@
 ---
 title: Create a Project
-description: Generate a Routa starter project.
+description: Scaffold a complete Routa starter application.
 ---
 
-import { FileTree, Steps } from "@astrojs/starlight/components";
+import { Aside, CardGrid, FileTree, LinkCard, Steps } from "@astrojs/starlight/components";
+import PackageManagers from "@components/PackageManagers.astro";
 
-Run the official project creation command:
+`create-routa-ts` generates a complete TypeScript Routa application: a working route with
+schemas and a test, Biome and TypeScript configuration, an OpenAPI starter document, and
+the committed `.routa/` metadata that Routa checks against.
 
-```sh
-<package-manager> create routa-ts@latest
-```
+## Before You Start
 
-By default, the scaffolder creates a TypeScript Routa app with route examples, Biome configuration, OpenAPI baseline files, and scripts for checking, building, and running the API.
+- Node.js 24 or later.
+- A directory where the new project folder can be created.
 
-## What It Creates
-
-- TypeScript app structure
-- Routa route examples
-- Vitest setup and a starter route test
-- Biome configuration
-- Scripts for checking and building the API
-- OpenAPI baseline and generated metadata files
-
-## After Creation
+## Steps
 
 <Steps>
-1. Enter the project directory.
+1. Run the scaffolder. It detects the package manager that invoked it and uses that one
+   for installation and for the commands it prints at the end.
+
+	<PackageManagers type="create" />
+
+	A successful run ends with the target directory it created:
+
+	```txt
+	Your Routa app is ready in 'routa-app'.
+	```
+
+2. Answer the prompts. Every prompt has a matching flag if you would rather not be asked.
+
+	| Prompt | Flags | Default |
+	| --- | --- | --- |
+	| Project name | positional argument | `routa-app` |
+	| Include a starter OpenAPI file? | `--openapi` / `--no-openapi` | include |
+	| Initialize a new git repository? | `--git` / `--no-git` | yes when interactive |
+	| Install dependencies? | `--install` / `--no-install` | yes when interactive |
+	| Continue with these settings? | `--yes` / `-y` skips it | — |
+
+3. Enter the project directory.
 
 	```sh
 	cd routa-app
+	pwd
 	```
 
-2. Install dependencies if you did not pass `--install`.
-
-	```sh
-	<package-manager> install
+	```txt
+	…/routa-app
 	```
 
-3. Run the development server.
+4. Install dependencies if you declined the install prompt.
+
+	<PackageManagers type="install" />
+
+	Confirm the install produced the dependency tree:
 
 	```sh
-	<package-manager> run dev
+	test -d node_modules && echo "Dependencies installed."
+	```
+
+	```txt
+	Dependencies installed.
+	```
+
+5. Start the development server.
+
+	<PackageManagers type="run" args="dev" />
+
+	A successful start emits the `api.started` lifecycle event with the bound host and
+	port:
+
+	```txt
+	INFO api.started Routa API started. {"host":"127.0.0.1","port":3000,"routes":1}
 	```
 
 </Steps>
 
-Generated apps follow this shape:
+## Verify
+
+The generated `/status` route responds immediately:
+
+```sh
+curl http://127.0.0.1:3000/status
+```
+
+```json
+{ "ok": true }
+```
+
+## What It Creates
 
 <FileTree>
+- .nvmrc
+- .gitignore
 - biome.json
+- package.json
+- tsconfig.json
+- openapi.yaml starter document, omitted with `--no-openapi`
 - src/
   - routa.ts
   - routes/
     - status/
       - route.ts
       - schemas.ts
+      - route.test.ts
 - .routa/
   - manifest.json
   - openapi-baseline.json
   - routes.gen.ts
-- openapi.yaml
-- package.json
-- .nvmrc
-- tsconfig.json
 </FileTree>
 
-Replace `<package-manager>` with npm, pnpm, Yarn, Bun, or another compatible package
-manager. Use the generated routes as the starting point for your HTTP contract.
+The `.routa/` files are only generated when the starter OpenAPI document is included.
+Without it, run `routa generate` once to produce route metadata.
+
+## Non-Interactive Use
+
+In CI or a script, pass every flag so the scaffolder never prompts:
+
+<PackageManagers
+	type="create"
+	target="my-api"
+	args="--yes --no-git --no-install"
+/>
+
+```txt
+Your Routa app is ready in 'my-api'.
+```
+
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| `Command "<manager> install" did not run successfully.` | The project files were still written. Enter the directory and install manually. |
+| `git init failed.` | Git is missing or the directory is inside an existing repository. The project itself is fine; re-run `git init` yourself if you want one. |
+| The wrong package manager appears in the output. | Detection reads `npm_config_user_agent`. Invoke the scaffolder through the `create` command of the manager you want. |
+| The target directory already exists and is not empty. | Choose a different project name, or clear the directory first. |
+
+<Aside type="note" title="No package manager lock-in">
+	The detected package manager is used for installation and for the printed next-step
+	commands only. It is never written into the generated project.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Project anatomy"
+		href="/docs/getting-started/project-anatomy/"
+		description="Understand every file the scaffolder wrote."
+	/>
+	<LinkCard
+		title="First route"
+		href="/docs/getting-started/first-route/"
+		description="Add your own route beside the generated one."
+	/>
+	<LinkCard
+		title="Scaffold from OpenAPI"
+		href="/docs/guides/openapi-scaffold/"
+		description="Generate routes from a real OpenAPI document."
+	/>
+</CardGrid>

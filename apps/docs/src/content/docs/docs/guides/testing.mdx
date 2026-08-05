@@ -1,33 +1,153 @@
 ---
 title: Testing
-description: Test Routa route contracts and application logic.
+description: Test Routa route contracts, handlers, and the running HTTP boundary.
 ---
 
-New Routa projects include Vitest, a `test` script, and a nearby starter test for
-the status route.
+import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
+import PackageManagers from "@components/PackageManagers.astro";
 
-Replace `<package-manager>` with npm, pnpm, Yarn, Bun, or another compatible package
-manager.
+New Routa projects ship with Vitest, a `test` script, and a starter test beside the
+generated `/status` route. This guide covers the three levels worth testing and where
+Routa's own checks already cover you.
 
-```sh
-<package-manager> run test
-```
+## Before You Start
 
-Keep business logic in application-owned services and test it independently. For route
-contracts, test the schemas and handler outcomes that form the HTTP boundary:
+- A project created by `create-routa-ts`, or Vitest installed and a `test` script added.
+- A passing `routa check`. Contract errors are cheaper to find there than in a test run.
 
-```ts
-import { describe, expect, it } from "vitest";
-import { GetStatusResponse } from "./schemas.js";
+## Steps
 
-describe("GET /status", () => {
-	it("accepts the documented success response", () => {
-		expect(GetStatusResponse.safeParse({ ok: true }).success).toBe(true);
+<Steps>
+1. Run the existing tests.
+
+	<PackageManagers type="run" args="test" />
+
+2. Test a schema directly when you want to pin the shape of a payload. This is what the
+   generated starter test does.
+
+	```ts title="src/routes/status/route.test.ts"
+	import { describe, expect, it } from "vitest";
+	import { GetStatusResponse } from "./schemas.js";
+
+	describe("GET /status", () => {
+		it("accepts the documented success response", () => {
+			expect(GetStatusResponse.safeParse({ ok: true }).success).toBe(true);
+		});
 	});
-});
+	```
+
+3. Test a handler by calling its `run` directly. It is a plain function, so pass `input`
+   and `ctx` and assert on the outcome name.
+
+	```ts title="src/routes/users/$userId/route.test.ts"
+	import { createLogger } from "@routa-ts/core/logger";
+	import { describe, expect, it } from "vitest";
+	import route from "./route.js";
+
+	const ctx = { logger: createLogger({ enabled: false }) };
+
+	describe("GET /users/:userId", () => {
+		it("returns notFound for an unknown user", async () => {
+			const result = await route.get.run({ input: { params: { userId: "nope" } }, ctx });
+
+			expect(result.type).toBe("notFound");
+		});
+	});
+	```
+
+4. Test the full boundary when middleware, parsing, and serialization all matter. Build
+   the Hono app from your routes and use its `fetch`.
+
+	```ts title="src/routes/users/route.http.test.ts"
+	import { createHonoApp } from "@routa-ts/core/hono";
+	import { describe, expect, it } from "vitest";
+	import route from "./route.js";
+
+	const app = createHonoApp([{ method: "post", path: "/users", contract: route.post }]);
+
+	describe("POST /users", () => {
+		it("rejects a body that fails validation", async () => {
+			const response = await app.request("/users", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ name: "" }),
+			});
+
+			expect(response.status).toBe(400);
+		});
+	});
+	```
+
+</Steps>
+
+## Verify
+
+```txt
+ ✓ src/routes/status/route.test.ts (1 test) 3ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
 ```
 
-Use `<package-manager> run check` to catch contract and TypeScript errors, and
-`<package-manager> run openapi:check` to
-detect OpenAPI drift. Add endpoint-level tests with your preferred HTTP test client when
-you need to exercise middleware, validation, and serialization together.
+## What to Test Where
+
+| Level | Use it for | Do not use it for |
+| --- | --- | --- |
+| Schema | Payload shapes, coercion, optionality | Anything requiring a request |
+| Handler | Outcome selection and service orchestration | Validation and status mapping, which Routa owns |
+| HTTP | Middleware chains, parsing, status codes, content negotiation | Business rules better tested in services |
+
+Business logic belongs in application-owned services and should be tested there, without
+Routa in the picture at all. A route test that needs a database is usually testing the
+wrong layer.
+
+## What You Do Not Need to Test
+
+Routa's own checks already cover these, so tests asserting them only duplicate the
+framework:
+
+- That an undeclared response type is rejected — `routa check` reports `ROUTA_RESULT_TYPE`.
+- That every method declares a 2xx response — `ROUTA_MISSING_SUCCESS_RESPONSE`.
+- That middleware ordering satisfies `requires` — `ROUTA_MIDDLEWARE_ORDER`.
+- That the OpenAPI document matches the source — `routa openapi check`.
+
+Run those as part of the same pipeline:
+
+<PackageManagers type="run" args={`check
+test
+openapi:check`} />
+
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| Imports fail with `ERR_MODULE_NOT_FOUND` | Use `.js` extensions in relative imports. Generated projects are ESM. |
+| A handler test cannot construct `ctx` | Pass the keys the route's middleware provides, plus a logger. `createLogger({ enabled: false })` keeps test output clean. |
+| Type errors on `route.get.run` | Metadata is stale. Run `routa generate`. |
+| Vitest picks up files under `.routa/` | Generated metadata contains no tests; narrow `include` in the Vitest config if a glob is too broad. |
+
+<Aside type="caution" title="v0 status">
+	Schema, handler, and HTTP-boundary testing are implemented with public APIs in v0. A
+	dedicated Routa test-helper package is deferred; the examples above use only Vitest,
+	`createHonoApp`, and route modules.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Check and build"
+		href="/docs/guides/check-build/"
+		description="The validation that runs before your tests."
+	/>
+	<LinkCard
+		title="Core reference"
+		href="/docs/reference/core/"
+		description="Signatures for createHonoApp and createLogger."
+	/>
+	<LinkCard
+		title="Runtime behavior"
+		href="/docs/reference/runtime-behavior/"
+		description="The status codes an HTTP test should expect."
+	/>
+</CardGrid>

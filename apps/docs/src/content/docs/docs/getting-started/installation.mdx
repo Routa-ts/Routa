@@ -1,86 +1,148 @@
 ---
 title: Installation
-description: Install Routa packages in an existing TypeScript API.
+description: Install the Routa packages in a new or existing TypeScript API.
 ---
 
-import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
+import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
+import PackageManagers from "@components/PackageManagers.astro";
 
-Use the project scaffolder for new applications:
+Routa ships as three packages: a core library of route helpers, a CLI that validates and
+runs projects, and a scaffolder for new applications. This page covers installing them
+into an existing project. For a new project, the scaffolder installs everything for you.
 
-```sh
-<package-manager> create routa-ts@latest
+## Before You Start
+
+- Node.js 24 or later:
+
+  ```sh
+  node --version
+  ```
+
+  ```txt
+  v24.x.x
+  ```
+
+- Any of npm, pnpm, Yarn, or Bun. Routa does not write a lockfile or a `packageManager`
+  field, so dependency tooling stays under your team's control.
+- New projects include `.nvmrc` so version managers select the supported runtime.
+
+## Steps
+
+<Steps>
+1. Install the runtime dependencies. `hono` and `zod` are peer dependencies of
+   `@routa-ts/core`, so install them alongside it.
+
+	<PackageManagers type="add" args="@routa-ts/cli @routa-ts/core hono zod" />
+
+	```txt
+	@routa-ts/cli, @routa-ts/core, hono, and zod added to dependencies.
+	```
+
+2. Install the development dependencies used by generated Routa apps.
+
+	<PackageManagers type="add-dev" args="@biomejs/biome @types/node tsx typescript vitest" />
+
+	```txt
+	@biomejs/biome, @types/node, tsx, typescript, and vitest added to devDependencies.
+	```
+
+3. Add the scripts that generated apps use.
+
+	```json title="package.json"
+	{
+		"scripts": {
+			"dev": "routa dev",
+			"start": "routa start",
+			"generate": "routa generate",
+			"check": "routa check",
+			"build": "routa build",
+			"test": "vitest run",
+			"scaffold": "routa scaffold openapi.yaml",
+			"openapi:check": "routa openapi check"
+		}
+	}
+	```
+
+4. Create the Routa configuration entry point. Routa requires this file to exist, even
+   when it is empty of options.
+
+	```ts title="src/routa.ts"
+	import { createRouta } from "@routa-ts/core";
+
+	export default createRouta({
+		port: 3000,
+	});
+	```
+
+5. Include both source and generated metadata in TypeScript compilation.
+
+	```json title="tsconfig.json"
+	{
+		"include": ["src/**/*.ts", ".routa/**/*.ts"]
+	}
+	```
+
+</Steps>
+
+## Verify
+
+Run a check. Routa validates the project layout before it looks at any route file, so this
+confirms the install even with no routes yet.
+
+<PackageManagers type="exec" args="check" />
+
+```txt
+Routa validation passed for 0 route file(s).
+Running TypeScript check: tsc -p tsconfig.json --noEmit
+TypeScript check passed.
+Routa check passed.
 ```
 
-## Requirements
+## The Packages
 
-Routa v0 requires Node.js 24 or later. New projects include `.nvmrc` to help
-version managers select the supported runtime.
+| Package | Role |
+| --- | --- |
+| `@routa-ts/core` | Route, middleware, config, logger, and query helpers used by your source and by generated code. |
+| `@routa-ts/cli` | The `routa` binary for checks, generation, builds, scaffolding, and the dev server. |
+| `create-routa-ts` | Project scaffolder invoked through your package manager's `create` command. |
 
-```sh
-node --version
-```
+## Troubleshooting
 
-Use npm, pnpm, Yarn, Bun, or another compatible package manager. Routa does not write a
-lockfile or package-manager field, so your project stays under your team's control.
+| Problem | Fix |
+| --- | --- |
+| `ROUTA_PROJECT_REQUIRED: Missing src/routa.ts.` | Create `src/routa.ts` with a default `createRouta()` export, as in step four. |
+| TypeScript cannot find `.routa/routes.gen.ts` types. | Add `.routa/**/*.ts` to `include` in `tsconfig.json`, then run `routa generate`. |
+| Peer dependency warnings for `hono` or `zod`. | Install both explicitly. `@routa-ts/core` declares them as peers rather than bundling them. |
 
-For an existing application, install the same runtime set used by generated Routa apps:
-
-```sh
-<package-manager> add @routa-ts/cli @routa-ts/core hono zod
-<package-manager> add --dev @biomejs/biome @types/node tsx typescript vitest
-```
-
-<Aside type="note" title="CLI dependency">
-	Generated Routa apps currently keep `@routa-ts/cli` in `dependencies` so `routa start` is available in deployed environments. If your deployment provides build/start tooling another way, you can choose a stricter dependency split later.
+<Aside type="note" title="CLI in dependencies">
+	Generated Routa apps keep `@routa-ts/cli` in `dependencies` rather than
+	`devDependencies` so `routa start` is available in a deployed environment. If your
+	deployment supplies start tooling another way, you can move it later.
 </Aside>
 
-## Packages
+## Adding Routa to an Existing Hono App
 
-- `@routa-ts/core`: route definition helpers and runtime primitives.
-- `@routa-ts/cli`: `routa` command for checks, builds, scaffolding, and dev server workflows.
-- `create-routa-ts`: project scaffolder for your package manager's `create` command.
+Routa owns the HTTP route tree and the server lifecycle, so it replaces your Hono
+bootstrap rather than mounting beside it. Migrate one endpoint at a time: move the
+handler's HTTP concerns into a route contract under `src/routes/`, and leave services,
+persistence, and domain logic where they are.
 
-## Scripts
+## Next Steps
 
-Add scripts that mirror generated Routa apps:
-
-<Tabs>
-	<TabItem label="package.json">
-
-```json
-{
-	"scripts": {
-		"dev": "routa dev",
-		"start": "routa start",
-		"generate": "routa generate",
-		"check": "routa check",
-		"build": "routa build",
-		"test": "vitest run",
-		"scaffold": "routa scaffold openapi.yaml",
-		"openapi:check": "routa openapi check"
-	}
-}
-```
-
-	</TabItem>
-</Tabs>
-
-## Existing Hono Apps
-
-Routa owns the HTTP route tree and server lifecycle. Start by adding `src/routa.ts`,
-then move one endpoint into `src/routes/` and keep services, persistence, and domain
-logic in your existing application modules.
-
-```ts
-import { createRouta } from "@routa-ts/core";
-
-export default createRouta({
-	port: 3000,
-});
-```
-
-See [First route](/docs/getting-started/first-route/) for the smallest route contract.
-
-## Next Step
-
-Create a starter project with the scaffolder or add route contracts to an existing app.
+<CardGrid>
+	<LinkCard
+		title="Create a project"
+		href="/docs/getting-started/create-project/"
+		description="Skip manual setup and scaffold a complete starter app."
+	/>
+	<LinkCard
+		title="First route"
+		href="/docs/getting-started/first-route/"
+		description="Write the smallest useful route contract."
+	/>
+	<LinkCard
+		title="Configuration"
+		href="/docs/reference/configuration/"
+		description="Every option src/routa.ts accepts."
+	/>
+</CardGrid>
