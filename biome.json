@@ -18,6 +18,7 @@
 			"!**/.turbo",
 			"!**/.pnpm-store",
 			"!**/.routa",
+			"!**/skills-lock.json",
 			"!pnpm-lock.yaml"
 		]
 	},
