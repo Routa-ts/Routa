@@ -12,6 +12,10 @@ _Avoid_: Business layer, application architecture
 Developer-owned services, use cases, domain models, persistence, authentication, and authorization called from the HTTP boundary.
 _Avoid_: Routa service layer, framework-owned business logic
 
+**Injected service**:
+An application-owned dependency optionally wired through Routa for typed access and test replacement; Routa does not own its business behavior.
+_Avoid_: Routa service, framework service, required service layer
+
 **Route file**:
 A source module that owns one URL path and all HTTP methods declared for that path.
 _Avoid_: Controller, one file per verb

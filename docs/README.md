@@ -124,9 +124,9 @@ That is the essence of the framework: make the API boundary explicit, typed, and
 
 ## Current Status
 
-Routa has a v0 implementation baseline in this repository. These docs describe the product direction, core architecture, middleware model, and behavior contracts that keep the implementation aligned.
+Routa has a complete v0 implementation baseline in this repository. Implementation, tests, and public documentation define that shipped behavior.
 
-The next milestone is a v0 proof of concept that proves the core loop:
+The proven v0 core loop is:
 
 ```txt
 openapi.yaml/json -> Zod schemas -> Hono-backed route files -> HTTP handler stub -> OpenAPI check
@@ -148,12 +148,14 @@ Deferred beyond v0:
 - Broad security integrations
 - Broad operational feature set
 
+The next milestone is V1. Active priorities, specifications, and tickets are rebuilt in the project-local Dex tracker; the design documents below are source material, not an ordered backlog.
+
 ## Design Notes
 
 The deeper architecture notes live here:
 
 - [v0 requirements](./v0_requirements.md)
-- [Acceptance specs](./specs/README.md)
+- [Local issue tracker](./agents/issue-tracker.md)
 - [Backend framework design](./backend_framework_design.md)
 - [Middleware system design](./middleware_design.md)
 - [Testing strategy](./testing_strategy.md)
