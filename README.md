@@ -55,9 +55,8 @@ Handlers return named outcomes from the declared response map. Business logic st
 ## Repo Layout
 
 ```txt
-docs/                 Planning, design, and acceptance specs
-docs/specs/v0/        v0 behavior contracts
-docs/specs/v1/        deferred target behavior
+docs/                 Domain decisions and historical design material
+.dex/                 Local V1 maps, specifications, and tickets (gitignored)
 packages/core/        @routa-ts/core framework API
 packages/cli/         @routa-ts/cli routa command
 packages/create-routa-ts/ create-routa-ts package for pnpm create routa-ts
@@ -85,7 +84,7 @@ for formatting, typechecking, and unit tests; Turborepo caches repeated work.
 
 - [Framework overview](./docs/README.md)
 - [v0 requirements](./docs/v0_requirements.md)
-- [Acceptance specs](./docs/specs/README.md)
+- [Local issue tracker](./docs/agents/issue-tracker.md)
 - [Backend framework design](./docs/backend_framework_design.md)
 - [Middleware design](./docs/middleware_design.md)
 - [Testing strategy](./docs/testing_strategy.md)
@@ -102,9 +101,9 @@ for formatting, typechecking, and unit tests; Turborepo caches repeated work.
 
 ## Development Status
 
-Routa has a v0 implementation baseline in this repo. The acceptance specs in `docs/specs/v0/` are the behavior contract for keeping v0 honest as the framework evolves.
+Routa has a complete v0 implementation baseline in this repo. Implementation, tests, and public documentation define shipped behavior.
 
-When implementation behavior conflicts with a spec, either update the spec intentionally or reject the implementation.
+Active V1 priorities, specifications, and implementation tickets live in the project-local Dex tracker. Permanent product language and architectural decisions remain in `CONTEXT.md` and `docs/adr/`.
 
 ## License
 

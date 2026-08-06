@@ -6,7 +6,8 @@ Routa is an MIT-licensed project. By contributing, you agree that your contribut
 
 - Use issues for bugs, regressions, and small improvements.
 - Use discussions or an issue proposal for large features, public API changes, or behavior changes.
-- Keep v0 changes aligned with the specs in `docs/specs/v0/`.
+- Keep shipped behavior aligned across implementation, tests, and public documentation.
+- Coordinate planned V1 work through the project-local Dex tracker described in `docs/agents/issue-tracker.md`.
 
 ## Local Setup
 

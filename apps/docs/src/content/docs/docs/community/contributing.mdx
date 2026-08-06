@@ -13,8 +13,8 @@ together with Turborepo.
 
 - Node.js 24 or later, matching `.nvmrc`.
 - pnpm. The repository uses workspace protocol links between packages.
-- A read of the v0 requirements and acceptance specs under `docs/`, so a change either
-  matches a spec or updates it deliberately.
+- A read of the v0 requirements and current public scope. Maintainers coordinate planned
+  V1 work through the project-local tracker described in `docs/agents/issue-tracker.md`.
 
 ## Steps
 
@@ -98,10 +98,9 @@ Every new feature needs all four of these, which is what the coverage rules in
 | Biome reports formatting differences | Run `pnpm format` to apply them. |
 | The docs build fails on a slug | A sidebar entry in `astro.config.mjs` points at a page that does not exist. |
 
-<Aside type="note" title="Specs are the contract">
-	Behavior changes should match the acceptance specs under `docs/specs/`, or update those
-	specs in the same change. Leaving the two out of sync is the one thing that consistently
-	blocks review.
+<Aside type="note" title="Keep the contract aligned">
+	Shipped behavior must agree across implementation, tests, and public documentation.
+	Planned V1 work should come from an approved local Dex specification and ticket.
 </Aside>
 
 ## Community Links

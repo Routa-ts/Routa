@@ -12,10 +12,13 @@ Routa v0 is schema-source-first:
 - Route contracts generate OpenAPI for docs and checks.
 - Security configuration is made visible and documented; Routa does not solve application security.
 
-The v0 validation scope lives in:
+The shipped v0 validation scope lives in:
 
 - `v0_requirements.md`
-- `specs/README.md`
+- implementation and tests
+- `apps/docs/src/content/docs/docs/start/v0-scope.mdx`
+
+Active V1 prioritization and specifications live in the project-local Dex tracker. The review-group documents below are historical source material for that map.
 
 ## Completed Review Groups
 

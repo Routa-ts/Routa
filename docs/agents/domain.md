@@ -22,15 +22,17 @@ The implementation and tests define what the current packages do. Public documen
 
 If public documentation conflicts with code or tests, report documentation drift instead of silently selecting one version.
 
-### Acceptance contracts
+### Active planning
 
-`docs/specs/v0/` contains acceptance contracts for current v0 behavior. A conflict between implementation and a v0 spec must be surfaced and resolved intentionally.
+V1 decision maps, specifications, priorities, and implementation tickets live in the project-local Dex tracker under `.dex/`. Read the relevant map and its tickets before planning V1 work.
+
+Dex is working state, not permanent product documentation. Record accepted vocabulary in `CONTEXT.md` and durable architectural decisions under `docs/adr/`.
 
 ### Future direction
 
-`docs/specs/v1/` and the design documents directly under `docs/` contain future direction and historical design work. They are not evidence that a feature currently exists.
+The design documents directly under `docs/` contain future direction and historical design work. They are inputs to V1 wayfinding, not evidence that a feature currently exists or has an accepted priority.
 
-Do not copy a v1 or design-document decision into `CONTEXT.md` or an accepted ADR unless current public behavior and implementation confirm it.
+Do not promote a design-document idea into permanent domain documentation until its Dex decision ticket resolves it.
 
 ### Documentation authoring
 
@@ -47,7 +49,8 @@ This repository uses a single domain context:
     └── adr/
         ├── 0001-source-route-contracts.md
         ├── 0002-own-only-the-http-boundary.md
-        └── 0003-commit-generated-routa-state.md
+        ├── 0003-commit-generated-routa-state.md
+        └── 0004-optional-typed-dependency-injection.md
 ```
 
 ## Use the glossary vocabulary
