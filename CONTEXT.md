@@ -40,6 +40,10 @@ _Avoid_: Loose response, raw status branch
 The one-time conversion of an external OpenAPI document into editable Routa source contracts.
 _Avoid_: Permanent OpenAPI ownership, continuous source replacement
 
+**Integration scaffold**:
+A generation-time recipe that writes application-owned integration code using public Routa APIs and direct upstream dependencies.
+_Avoid_: Routa integration package, runtime plugin, hidden adapter
+
 **OpenAPI baseline**:
 The accepted API contract against which Routa checks generated OpenAPI for drift and breaking changes.
 _Avoid_: Current generated output
