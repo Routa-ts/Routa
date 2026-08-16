@@ -56,11 +56,11 @@
 		"test": "vitest run"
 	},
 	"peerDependencies": {
-		"hono": "^4.12.27",
+		"hono": "^4.13.1",
 		"zod": "^4.4.3"
 	},
 	"devDependencies": {
-		"hono": "^4.12.27",
+		"hono": "^4.13.1",
 		"zod": "^4.4.3"
 	}
 }
