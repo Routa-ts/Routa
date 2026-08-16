@@ -98,8 +98,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       hono:
-        specifier: ^4.12.27
-        version: 4.12.27
+        specifier: ^4.13.1
+        version: 4.13.1
       tsx:
         specifier: ^4.23.1
         version: 4.23.1
@@ -126,8 +126,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       hono:
-        specifier: ^4.12.27
-        version: 4.12.27
+        specifier: ^4.13.1
+        version: 4.13.1
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -155,7 +155,7 @@ importers:
     dependencies:
       '@hono/node-server':
         specifier: 2.1.0
-        version: 2.1.0(hono@4.12.27)
+        version: 2.1.0(hono@4.13.1)
       '@routa-ts/core':
         specifier: workspace:*
         version: link:../core
@@ -176,8 +176,8 @@ importers:
   packages/core:
     devDependencies:
       hono:
-        specifier: ^4.12.27
-        version: 4.12.27
+        specifier: ^4.13.1
+        version: 4.13.1
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -2173,8 +2173,8 @@ packages:
   help-me@5.0.0:
     resolution: {integrity: sha512-7xgomUX6ADmcYzFik0HzAxh/73YlKR9bmFzf51CZwR+b6YtzU2m0u49hQCqV6SvlqIqsaxovfwdvbnsw3b/zpg==}
 
-  hono@4.12.27:
-    resolution: {integrity: sha512-1yrb/+w6HWQJrUCLkJ2IF5jNIPvvFkblV5RNOYl6bV+OA6p9GLcMpHFFGTosSvHvcAUibuUukRqhlYI4z32C7Q==}
+  hono@4.13.1:
+    resolution: {integrity: sha512-kdJoFVv2xmayw6cY09H7AbMJMt8Jn5jdlEdXsP7AGBdF2DIptVlKlOLKXP41yPip4/a3yQPv9gVcJYI8YY04dw==}
     engines: {node: '>=16.9.0'}
 
   html-escaper@3.0.3:
@@ -4288,9 +4288,9 @@ snapshots:
     dependencies:
       '@expressive-code/core': 0.44.1
 
-  '@hono/node-server@2.1.0(hono@4.12.27)':
+  '@hono/node-server@2.1.0(hono@4.13.1)':
     dependencies:
-      hono: 4.12.27
+      hono: 4.13.1
 
   '@img/colour@1.1.0': {}
 
@@ -5682,7 +5682,7 @@ snapshots:
 
   help-me@5.0.0: {}
 
-  hono@4.12.27: {}
+  hono@4.13.1: {}
 
   html-escaper@3.0.3: {}
 
