@@ -32,6 +32,30 @@ _Avoid_: Route registry
 A declaration of the context middleware requires and provides, plus the early outcomes it may produce.
 _Avoid_: Invisible hook, side-effect middleware
 
+**Authentication contract**:
+A provider-neutral HTTP-boundary agreement automatically applied to every route when configured, yielding anonymous or authenticated request context through Routa's credential orchestration and application-owned authentication; otherwise no authentication context is registered.
+_Avoid_: Auth provider, authentication implementation, framework-owned identity or session
+
+**Principal**:
+An application-defined identity authenticated for the current request, with a stable `id` and `type`; one application-wide schema configured in `routa.ts` validates and types every principal before it enters request context.
+_Avoid_: User, account, Better Auth user
+
+**Credential scheme**:
+A uniquely transported, application-named description of where an HTTP credential is carried, paired with application-owned authentication and its public security metadata; overlapping built-in transports are configuration errors.
+_Avoid_: Auth provider, login method, Better Auth mode
+
+**Authentication requirement**:
+A middleware guard that rejects anonymous request context and narrows downstream context to a principal authenticated through one of its allowed credential schemes; inherited folder, route, and method requirements compose by intersecting their allowed schemes before credential selection.
+_Avoid_: Authenticator, permission, role guard, authorization policy
+
+**Authenticator**:
+An application-owned callback that evaluates an extracted credential and explicitly returns either a principal candidate or rejection; unexpected failures are thrown and remain server errors.
+_Avoid_: Nullable user lookup, provider adapter, authentication middleware
+
+**Authentication challenge**:
+Public `WWW-Authenticate` metadata associated with a credential scheme and returned on `401` outcomes, using a safe generated default unless application code supplies a validated static override.
+_Avoid_: Login redirect, credential, provider failure details
+
 **Named outcome**:
 A declared response possibility identified by a domain-relevant name and carrying its associated data.
 _Avoid_: Loose response, raw status branch
