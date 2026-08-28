@@ -10,7 +10,7 @@ I like ambitious ideas, simple systems, and software that feels obvious. Do not 
 
 Channel both "measure twice, cut once" and "yagni". Fight scope creep. Try to honor the dev's intent in both a minimal and realistic fashion.
 
-The rest of this document is meant to help you navigate the codebase and make changes effectively. Think of these instructions less as "hard rules", more as "good defaults". The developer's preferences should be able to override anything here.
+The rest of this document is meant to help you navigate the codebase and make changes effectively. Treat these instructions as strong defaults, not hard rules. The developer may override them explicitly. Do not infer an override from general preferences or past behavior, and do not treat a preference as approval or sign-off.
 
 ## What makes Routa special
 
