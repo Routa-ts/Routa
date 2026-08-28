@@ -1,85 +1,92 @@
 # Routa
 
-Routa is a schema-first, OpenAPI-aware REST framework for TypeScript APIs. Developers describe the HTTP boundary through typed route contracts, then focus on application behavior. Routa handles routing, validation, middleware context, response serialization, diagnostics, and OpenAPI.
+Routa is a schema-first, OpenAPI-aware REST framework for TypeScript APIs. It should settle the HTTP boundary once, through typed route contracts, so developers can get back to application behavior. Routa owns routing, validation, middleware context, response serialization, diagnostics, and OpenAPI.
 
-Applications keep ownership of services, domain models, persistence, authentication, authorization, and business architecture.
+The application still owns its services, domain models, persistence, authentication, authorization, and business architecture. Hold that line. When normal application code must understand Routa internals or repeat transport logic, treat the leak as a framework design problem.
+
+## A note from JC Aceves
+
+I like ambitious ideas, simple systems, and software that feels obvious. Do not preserve complexity just because it already exists. Do not introduce machinery because it looks architecturally impressive. Understand the real constraint, then fight for the smallest model that makes the correct behavior unsurprising.
+
+Channel both "measure twice, cut once" and "yagni". Fight scope creep. Try to honor the dev's intent in both a minimal and realistic fashion.
+
+The rest of this document is meant to help you navigate the codebase and make changes effectively. Treat these instructions as strong defaults, not hard rules. The developer may override them explicitly. Do not infer an override from general preferences or past behavior, and do not treat a preference as approval or sign-off.
 
 ## What makes Routa special
 
-### Focus on the application
+These are the qualities that make Routa worth using. Use them to judge every change. Improve the framework without trading any of them away.
 
-Routa handles the HTTP mechanics so developers can spend their time on application behavior. Route handlers should express application decisions instead of manually parsing requests, selecting status codes, serializing responses, or keeping OpenAPI synchronized.
+### Application code stays about the application
 
-When normal application code must understand Routa internals or repeat transport logic, treat that as a framework design problem.
+Developer focus is the test. A route handler should express application decisions. It should not parse requests by hand, choose transport details, serialize responses, or keep OpenAPI synchronized. When every handler repeats the same transport work, Routa should own that translation.
 
-### Fully typed and checked before shipping
+### Types catch mistakes before users do
 
-Types connect route input, middleware context, named outcomes, and handlers. Static checks validate the route graph, configuration, generated metadata, and OpenAPI before code reaches production.
+Types connect route input, middleware context, named outcomes, and handlers. Static checks cover the route graph, configuration, generated metadata, and OpenAPI before code ships.
 
-Type inference and `routa check` are product guarantees. Preserve them across every feature. Prefer a clear build-time diagnostic over a runtime failure or a rule that exists only in documentation.
+Type inference and `routa check` are product guarantees. A feature is not complete while its types, checks, runtime behavior, generated metadata, and OpenAPI disagree. Prefer one clear build-time diagnostic over a late runtime failure or a rule buried in documentation.
 
-### Agent-friendly by design
+### The source explains itself
 
 An agent should understand a Routa project by reading `routa.ts`, route files, schemas, middleware contracts, generated metadata, and public documentation.
 
-Keep behavior explicit in source. Use stable vocabulary, predictable file conventions, deterministic generation, specific diagnostic codes, and complete runnable examples. An agent should not need to reconstruct the framework from hidden registration, runtime mutation, or undocumented conventions.
+Keep behavior explicit. Use stable vocabulary, predictable files, deterministic generation, specific diagnostic codes, and complete runnable examples. Hidden registration, runtime mutation, and undocumented conventions force agents to guess. Treat that guesswork as a design flaw.
 
-## Agent skills
+## How to work here
 
-### Issue tracker
+### Read the authority before choosing a direction
 
-Persistent work is tracked in project-local Dex under the gitignored `.dex/` directory, with no external synchronization. See `docs/agents/issue-tracker.md`.
+This repository has one domain context. Read `CONTEXT.md`, the relevant accepted ADRs under `docs/adr/`, and the source hierarchy in `docs/agents/domain.md` before changing domain behavior or making claims about what Routa supports.
 
-### Triage labels
+When sources conflict, follow the documented authority order and say what conflicted. Do not quietly choose the source that makes the work easier.
 
-Dex task descriptions use the five canonical triage roles. See `docs/agents/triage-labels.md`.
+### Keep persistent work in Dex
 
-### Domain docs
+Project-local Dex under `.dex/` holds work that must survive the session. It is local, gitignored state. Keep it out of GitHub and external trackers.
 
-This is a single-context repository: read `CONTEXT.md`, relevant ADRs under `docs/adr/`, and the documentation precedence rules in `docs/agents/domain.md`.
+Read `docs/agents/issue-tracker.md` before creating, changing, or completing Dex work. Dex task descriptions use the five canonical triage roles defined in `docs/agents/triage-labels.md`.
 
-## Pull requests
+### Build the smallest complete contract
+
+- Prefer a narrow promise that works through every affected layer over broad partial behavior.
+- Keep one schema-backed contract when parallel registries or annotations could drift.
+- Make failures early, specific, and actionable.
+- Keep generated code readable, deterministic, and safe to edit.
+- Implement with vertical tracer bullets. Make one capability usable before adding breadth.
+- For a consequential design decision, present one bounded recommendation. Build a disposable preview when code or prose hides the tradeoff. Record the decision after approval.
+- If a task requires breaking an accepted Routa boundary, say so loudly and get a human sign-off before breaking it.
+
+## Pull requests should arrive ready
+
+A pull request is for review, not a placeholder.
 
 - Create a pull request only when the user explicitly asks.
-- Every pull request must be ready for review when created. Never create a draft PR.
+- Open every pull request ready for review. Never create a draft.
 - Preserve the current branch scope unless the user asks to split it.
 - Before opening a PR, follow `CONTRIBUTING.md` and run `pnpm verify`. Add a changeset when publishable package behavior changes.
-- Use a plain, imperative title. Explain the problem, the change, verification, and any documentation or changeset decision in the body.
+- Use a plain, imperative title. In the body, explain the problem, the change, verification, and the documentation or changeset decision.
 - Keep Dex task IDs out of commits, PRs, release notes, and permanent documentation.
-- Visual documentation and design changes require a preview or before-and-after evidence in the PR.
-- Treat each review comment as a claim to evaluate, not an instruction to apply automatically. Check its correctness, importance, scope, and compatibility with accepted decisions.
-- Fix important and valid findings. Reply with the change and resolve the thread.
-- Close or ignore findings that are incorrect, already addressed, outside the PR scope, or in conflict with repository authority. Always reply with the specific reason before resolving or closing them.
-- Review work is complete only when every actionable finding is addressed and no unexplained unresolved threads remain.
+- Show evidence that the change works as expected. Report relevant tests, checks, or observed behavior for non-visual changes. Show a preview or before-and-after comparison for visual documentation and design changes.
+- Treat every review comment as a claim. Check its correctness, importance, scope, and compatibility with accepted decisions before changing code.
+- Fix valid, important findings. Reply with the change, then resolve the thread.
+- Reply with a specific reason before resolving a finding that is wrong, already addressed, outside the PR scope, or in conflict with repository authority.
+- Review work ends when every actionable finding is addressed and no unexplained unresolved thread remains.
 - Merge only when explicitly asked. After a GitHub merge, refresh the local branch and verify the resulting state.
 
 ## Where code lives
 
-- `packages/core/` contains public route and middleware contracts, type inference, the Hono runtime adapter, and framework logging.
-- `packages/cli/` contains project and route-graph analysis, TypeScript parsing, generation, OpenAPI checks, scaffolding, diagnostics, and CLI commands.
-- `packages/create-routa-ts/` creates new Routa projects.
-- `examples/basic-api/` is the smallest executable consumer example.
+- `packages/core/` owns public route and middleware contracts, type inference, the Hono runtime adapter, and framework logging.
+- `packages/cli/` owns project and route-graph analysis, TypeScript parsing, generation, OpenAPI checks, scaffolding, diagnostics, and CLI commands.
+- `packages/create-routa-ts/` creates Routa projects.
+- `examples/basic-api/` proves the smallest executable consumer.
 - `examples/full-api/` proves broader framework behavior and integration patterns.
-- `apps/docs/` is the public documentation site and has its own `AGENTS.md`.
-- `apps/design/` is the temporary visual design lab. Keep it separate from the public documentation site. It is expected to be deleted once the framework and visual design are stable, so do not turn it into permanent product architecture.
-- `docs/` contains accepted ADRs, agent instructions, and historical or future design material. Follow `docs/agents/domain.md` before treating a document as authoritative.
-- `scripts/` contains repository build, generation, smoke-test, and package verification helpers.
-- `.dex/` contains local persistent planning state. It is gitignored and does not belong in GitHub artifacts.
+- `apps/docs/` is the public documentation site. Follow its own `AGENTS.md` when working there.
+- `apps/design/` is a temporary visual design lab. Keep it separate from public docs. It should disappear once the framework and visual design settle, so do not make it permanent product architecture.
+- `docs/` holds accepted ADRs, agent instructions, and historical or future design material. Use `docs/agents/domain.md` to decide what carries authority.
+- `scripts/` holds build, generation, smoke-test, and package verification helpers.
+- `.dex/` holds local planning state. It is gitignored and does not belong in GitHub artifacts.
 
 Make source changes under `src/` and rebuild generated outputs through repository scripts.
-
-## Taste
-
-- Developer focus is the test. Normal application code should describe application behavior, while Routa handles HTTP translation.
-- Build the smallest complete contract. Broad partial behavior is worse than a narrow promise that works through every affected layer.
-- Static guarantees are part of the feature. Keep types, checks, runtime behavior, generated metadata, and OpenAPI aligned.
-- Explicit beats clever. Prefer one schema-backed contract over parallel registries or annotations that can drift. If an agent must execute the framework or inspect internals to understand a route contract, the design is too implicit.
-- Make errors early, specific, and actionable.
-- Keep generated code readable, deterministic, and safe to edit.
-- Use vertical tracer bullets for implementation. Make a capability usable before adding the next layer of breadth.
-- For consequential design work, present one bounded recommendation. Make a disposable preview when code or prose does not expose the tradeoff. Record the decision only after approval.
-- When repository sources conflict, follow the documented authority order and state the conflict instead of silently choosing.
-- If a task requires breaking an accepted Routa boundary, identify the boundary and get approval first.
 
 ## Scoped instructions
 
