@@ -60,6 +60,26 @@ _Avoid_: Login redirect, credential, provider failure details
 A declared response possibility identified by a domain-relevant name and carrying its associated data.
 _Avoid_: Loose response, raw status branch
 
+**Advanced response contract**:
+A complete JSON response declaration for a named outcome, including its status, body or intentional bodylessness, declared headers and cookies, runtime validation, generated metadata, and OpenAPI projection. Content negotiation, non-JSON serialization, files, streaming, redirects, and framework error formatting belong to separate capabilities.
+_Avoid_: Raw response, representation adapter, error policy
+
+**Input schema**:
+A schema applied to HTTP input whose input type describes the incoming representation and whose output type is the validated, possibly transformed value received by application code.
+_Avoid_: Response schema, domain model
+
+**Response schema**:
+A schema applied to a named outcome whose type describes the JSON value supplied by application code and sent on the wire. It validates that value rather than decoding it into another application value.
+_Avoid_: Input decoder, serializer, domain model
+
+**Schema metadata**:
+Documentation attached to a schema, such as component identity, title, description, deprecation, examples, and supported extensions, that Routa projects into OpenAPI without changing validation or repeating where the route contract places the schema.
+_Avoid_: Parallel OpenAPI schema, route placement annotation
+
+**Response cookie**:
+A declared cookie handle with a validated value and static attributes that produces typed set or clear effects for a named outcome. Its identity is its name, domain, and path; exactly one response producer may own that identity for a terminal outcome.
+_Avoid_: Raw Set-Cookie header, imperative cookie mutation, implicit cookie override
+
 **OpenAPI scaffold**:
 The one-time conversion of an external OpenAPI document into editable Routa source contracts.
 _Avoid_: Permanent OpenAPI ownership, continuous source replacement
