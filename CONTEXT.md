@@ -69,11 +69,11 @@ A schema applied to HTTP input whose input type describes the incoming represent
 _Avoid_: Response schema, domain model
 
 **Response schema**:
-A schema applied to a named outcome whose type describes the JSON value supplied by application code and sent on the wire. It validates that value rather than decoding it into another application value.
-_Avoid_: Input decoder, serializer, domain model
+A schema applied to a named outcome whose input and output types are identical and describe the wire-ready JSON value supplied by application code. Routa validates and sends that value unchanged, and OpenAPI projects the same JSON shape.
+_Avoid_: Input decoder, transformer, codec, serializer, domain model
 
 **Schema metadata**:
-Documentation attached to a schema, such as component identity, title, description, deprecation, examples, and supported extensions, that Routa projects into OpenAPI without changing validation or repeating where the route contract places the schema.
+Documentation attached to the final schema instance that Routa projects into OpenAPI without changing validation or repeating where the route contract places the schema. Routa accepts literal `id`, `title`, `description`, `deprecated`, `example`, `examples`, `readOnly`, `writeOnly`, `externalDocs`, and `x-*` fields. It rejects validation keywords, route-placement fields, computed metadata, and custom registry metadata.
 _Avoid_: Parallel OpenAPI schema, route placement annotation
 
 **Response cookie**:
