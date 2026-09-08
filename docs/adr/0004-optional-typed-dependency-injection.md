@@ -1,3 +1,7 @@
 # V1 includes optional typed dependency injection
 
 Routa V1 supports optional typed wiring for application-owned dependencies at application, route-file, and method scopes because large projects need explicit lifetimes and precise test replacement. Plain imports remain first-class, while Routa does not generate services, require a container or decorators, or take ownership of business logic; this adds framework surface in exchange for scalable composition and testing without prescribing application architecture.
+
+Each declaring scope has an explicit interface and one factory that wires its services through ordinary application code. Consumers see the interface, service references remain fixed, and middleware declares the service contracts it requires; this permits implementation changes and reuse across unrelated scopes while rejecting collisions within a request. Source-derived metadata describes those contracts without executing factories during generation.
+
+Factories register cleanup for resources they own, and Routa supplies the lifecycle timing for startup, request completion, construction failure, and application disposal. A generated project-bound test helper replaces complete scope factories before construction, preserving dependent-service wiring, interfaces, and cleanup ownership instead of replacing instances after their consumers have captured them. This capability includes ordinary production draining and service cleanup; expected application-error mapping, streaming lifetimes, and shutdown deadlines remain separate decisions.
