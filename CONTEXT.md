@@ -13,8 +13,20 @@ Developer-owned services, use cases, domain models, persistence, authentication,
 _Avoid_: Routa service layer, framework-owned business logic
 
 **Injected service**:
-An application-owned dependency optionally wired through Routa for typed access and test replacement; Routa does not own its business behavior.
+An application-owned dependency optionally wired through Routa under an explicit service contract and scope for typed access and test replacement; Routa does not own its business behavior.
 _Avoid_: Routa service, framework service, required service layer
+
+**Service contract**:
+An application-owned interface defining the required named services contributed by one scope. Consumers depend on that interface rather than a particular implementation.
+_Avoid_: Service implementation, runtime schema, global service registry
+
+**Service scope**:
+The application, route-file, or method boundary that determines an injected service's visibility and lifetime. Application services belong to one application instance; route-file and method services belong to a matching request.
+_Avoid_: Global singleton, implicit container scope
+
+**Service requirement**:
+A middleware declaration of the named injected services and public interfaces it needs before execution. Filesystem middleware can require application services, route-file middleware can also require its route-file services, and method middleware can also require its method services.
+_Avoid_: Service registration, context provision, service override
 
 **Route file**:
 A source module that owns one URL path and all HTTP methods declared for that path.
@@ -29,7 +41,7 @@ The validated project-wide model of paths, methods, middleware chains, context, 
 _Avoid_: Route registry
 
 **Middleware contract**:
-A declaration of the context middleware requires and provides, plus the early outcomes it may produce.
+A declaration of the context and injected services middleware requires, the context it provides, and the early outcomes it may produce.
 _Avoid_: Invisible hook, side-effect middleware
 
 **Authentication contract**:
