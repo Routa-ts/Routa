@@ -25,7 +25,7 @@ The application, route-file, or method boundary that determines an injected serv
 _Avoid_: Global singleton, implicit container scope
 
 **Service requirement**:
-A middleware declaration of the named injected services and public interfaces it needs before execution. Each placement must supply compatible services from scopes already available there.
+A middleware declaration of the named injected services and public interfaces it needs before execution. Filesystem middleware can require application services, route-file middleware can also require its route-file services, and method middleware can also require its method services.
 _Avoid_: Service registration, context provision, service override
 
 **Route file**:
