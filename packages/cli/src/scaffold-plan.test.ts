@@ -46,6 +46,61 @@ function snapshot(plan: ScaffoldPlan) {
 }
 
 describe("scaffold plan", () => {
+	it.each([undefined, ""])("blocks overwriting a retained file with hash %s", (hash) => {
+		const plan = planWith(["/status"]);
+		const state = snapshot(plan);
+		const path = join("src", "routes", "status", "route.ts");
+		state.manifest.generated = state.manifest.generated.map((entry) =>
+			entry.path === path ? { ...entry, sha256: hash } : entry,
+		);
+		state.files.set(path, "export const localEdit = true;");
+		const result = evaluateScaffold(plan, state);
+		expect(result.changes.find((change) => change.path === path)?.status).toBe("conflict");
+		expect(result.blocked).toContain("ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE");
+		expect(result.blocked).toContain("manifest hash is missing");
+	});
+
+	it("blocks removing a stale file whose manifest hash is missing", () => {
+		const previous = planWith(["/obsolete"]);
+		const state = snapshot(previous);
+		const path = join("src", "routes", "obsolete", "route.ts");
+		state.manifest.generated = state.manifest.generated.map((entry) =>
+			entry.path === path ? { ...entry, sha256: undefined } : entry,
+		);
+		state.files.set(path, "export const localEdit = true;");
+		const result = evaluateScaffold(planWith(["/status"]), state);
+		expect(result.changes.find((change) => change.path === path)?.status).toBe("conflict");
+		expect(result.blocked).toContain("ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE");
+		expect(result.blocked).toContain("manifest hash is missing");
+	});
+
+	it("blocks an unmanaged route without a manifest", () => {
+		const plan = planWith(["/status"]);
+		const path = join("src", "routes", "status", "route.ts");
+		const result = evaluateScaffold(plan, {
+			files: new Map([[path, "export const localEdit = true;"]]),
+		});
+		expect(result.changes.find((change) => change.path === path)?.status).toBe("conflict");
+		expect(result.blocked).toContain("ROUTA_SCAFFOLD_UNMANAGED_FILE");
+	});
+
+	it("regenerates framework metadata without a recorded hash", () => {
+		const plan = planWith(["/status"]);
+		const state = snapshot(plan);
+		const path = ".routa/routes.gen.ts";
+		state.manifest.generated = state.manifest.generated.map((entry) =>
+			entry.path === path ? { ...entry, sha256: undefined } : entry,
+		);
+		state.files.set(path, "// stale framework metadata");
+		state.files.set(".routa/manifest.json", "{}");
+		const result = evaluateScaffold(plan, state);
+		expect(result.blocked).toBeUndefined();
+		expect(result.changes.find((change) => change.path === path)?.status).toBe("update");
+		expect(result.changes.find((change) => change.path === ".routa/manifest.json")?.status).toBe(
+			"update",
+		);
+	});
+
 	it("renders deterministic source, metadata and matching manifest hashes from OpenAPI", () => {
 		const first = planWith(["/status"]);
 		const second = planWith(["/status"]);

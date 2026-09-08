@@ -3141,13 +3141,49 @@ paths:
 		const result = run(["scaffold", "openapi.yaml", "--yes"], { cwd });
 
 		expect(preview.code).toBe(0);
-		expect(preview.stdout).toContain("! conflict src/routes/users/$id/route.ts");
+		expect(preview.stdout).toContain(
+			`! conflict ${join("src", "routes", "users", "$id", "route.ts")}`,
+		);
 		expect(result.code).toBe(1);
 		expect(result.stderr).toContain("ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE");
 		expect(readFileSync(join(cwd, "src/routes/users/$id/route.ts"), "utf8")).toBe(
 			"export const localEdit = true;\n",
 		);
 		expect(readFileSync(join(cwd, ".routa/manifest.json"), "utf8")).toBe(manifestBefore);
+	});
+
+	it.each(["retained", "stale"])("preserves files when a %s route has no manifest hash", (kind) => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-regen-missing-hash-"));
+		createTypeScriptProject(cwd);
+		writeUsersAndItemOpenApi(cwd);
+		expect(run(["scaffold", "openapi.yaml"], { cwd }).code).toBe(0);
+		const path =
+			kind === "stale"
+				? join("src", "routes", "users", "$id", "route.ts")
+				: join("src", "routes", "users", "route.ts");
+		const manifestPath = join(cwd, ".routa/manifest.json");
+		const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+		for (const entry of manifest.generated) {
+			if (entry.path === path) delete entry.sha256;
+		}
+		writeFileSync(manifestPath, JSON.stringify(manifest));
+		writeFileSync(join(cwd, path), "export const localEdit = true;\n");
+		const paths = [
+			".routa/manifest.json",
+			...manifest.generated.map((entry: { path: string }) => entry.path),
+		];
+		const before = paths.map((file) => readFileSync(join(cwd, file), "utf8"));
+		writeSimpleUsersOpenApi(cwd);
+
+		const preview = run(["scaffold", "openapi.yaml", "--preview"], { cwd });
+		const result = run(["scaffold", "openapi.yaml", "--yes"], { cwd });
+
+		expect(preview.code).toBe(0);
+		expect(preview.stdout).toContain(`! conflict ${path}`);
+		expect(preview.stdout).toContain("manifest hash is missing");
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE");
+		expect(paths.map((file) => readFileSync(join(cwd, file), "utf8"))).toEqual(before);
 	});
 
 	it("preserves clean stale files when a retained route has a conflict", () => {

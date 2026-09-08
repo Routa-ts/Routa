@@ -143,6 +143,25 @@ export function evaluateScaffold(
 		const currentContent = snapshot.files.get(path);
 		const previous = previousGenerated.get(path);
 
+		if (
+			currentContent !== undefined
+			&& previous
+			&& !previous.sha256
+			&& path !== ".routa/manifest.json"
+			&& path !== ".routa/routes.gen.ts"
+		) {
+			changes.push({ path, status: "conflict", detail: "manifest hash is missing" });
+			blocked ??= scaffoldError(
+				"ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE",
+				`Refusing to overwrite or remove generated file because its manifest hash is missing: ${path}.`,
+				[
+					"Restore .routa/manifest.json from version control before regenerating.",
+					"Preserve any local edits; Routa cannot verify this file is unchanged.",
+				],
+			);
+			continue;
+		}
+
 		if (nextContent === undefined) {
 			if (currentContent === undefined) {
 				changes.push({
