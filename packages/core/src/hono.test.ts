@@ -661,6 +661,7 @@ describe("createHonoApp", () => {
 	});
 
 	it("rejects unsupported response accept headers", async () => {
+		let runCount = 0;
 		const app = createHonoApp([
 			{
 				method: "get",
@@ -672,7 +673,10 @@ describe("createHonoApp", () => {
 							schema: z.object({ ok: z.boolean() }),
 						},
 					},
-					run: async () => ({ type: "success", data: { ok: true } }),
+					run: () => {
+						runCount += 1;
+						return { type: "success", data: { ok: true } };
+					},
 				}),
 			},
 		]);
@@ -682,6 +686,7 @@ describe("createHonoApp", () => {
 		});
 
 		expect(response.status).toBe(406);
+		expect(runCount).toBe(0);
 	});
 
 	it("rejects json accept headers with zero quality", async () => {
