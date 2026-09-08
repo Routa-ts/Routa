@@ -3128,6 +3128,53 @@ paths:
 		);
 	});
 
+	it("previews modified stale files as conflicts and applies no partial mutation", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-regen-stale-conflict-"));
+		createTypeScriptProject(cwd);
+		writeUsersAndItemOpenApi(cwd);
+		run(["scaffold", "openapi.yaml"], { cwd });
+		const manifestBefore = readFileSync(join(cwd, ".routa/manifest.json"), "utf8");
+		writeFileSync(join(cwd, "src/routes/users/$id/route.ts"), "export const localEdit = true;\n");
+		writeSimpleUsersOpenApi(cwd);
+
+		const preview = run(["scaffold", "openapi.yaml", "--preview"], { cwd });
+		const result = run(["scaffold", "openapi.yaml", "--yes"], { cwd });
+
+		expect(preview.code).toBe(0);
+		expect(preview.stdout).toContain("! conflict src/routes/users/$id/route.ts");
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE");
+		expect(readFileSync(join(cwd, "src/routes/users/$id/route.ts"), "utf8")).toBe(
+			"export const localEdit = true;\n",
+		);
+		expect(readFileSync(join(cwd, ".routa/manifest.json"), "utf8")).toBe(manifestBefore);
+	});
+
+	it("preserves clean stale files when a retained route has a conflict", () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-regen-all-or-nothing-"));
+		createTypeScriptProject(cwd);
+		writeUsersAndItemOpenApi(cwd);
+		expect(run(["scaffold", "openapi.yaml"], { cwd }).code).toBe(0);
+		writeFileSync(join(cwd, "src/routes/users/route.ts"), "export const localEdit = true;\n");
+		const paths = [
+			"src/routes/users/route.ts",
+			"src/routes/users/schemas.ts",
+			"src/routes/users/$id/route.ts",
+			"src/routes/users/$id/schemas.ts",
+			".routa/routes.gen.ts",
+			".routa/openapi-baseline.json",
+			".routa/manifest.json",
+		];
+		const before = paths.map((path) => readFileSync(join(cwd, path), "utf8"));
+		writeSimpleUsersOpenApi(cwd);
+
+		const result = run(["scaffold", "openapi.yaml", "--yes"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE");
+		expect(paths.map((path) => readFileSync(join(cwd, path), "utf8"))).toEqual(before);
+	});
+
 	it("preserves user-owned business logic files during regeneration", () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-user-owned-"));
 		createTypeScriptProject(cwd);
