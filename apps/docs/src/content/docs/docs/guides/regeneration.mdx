@@ -73,12 +73,16 @@ whether the manifest tracks it, and whether its current hash matches the recorde
 | --- | --- | --- | --- |
 | No | — | — | `add` |
 | Yes | Yes | Yes | `update` or `unchanged` |
-| Yes | Yes | No | `ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE` |
+| Yes | Yes | No or missing hash | `ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE` |
 | Yes | No | — | `conflict`, then `ROUTA_SCAFFOLD_UNMANAGED_FILE` |
 
-Framework-owned metadata under `.routa/` is exempt. Routa always rewrites
-`routes.gen.ts`, `manifest.json`, and `openapi-baseline.json`, because those are derived
-files with no user content.
+Framework-owned `.routa/routes.gen.ts` and `.routa/manifest.json` are exempt.
+Routa can regenerate them without a matching recorded hash. The OpenAPI baseline
+still requires ownership and hash checks.
+
+A missing manifest hash also blocks removal of an existing stale file. Restore the
+manifest from version control and preserve local edits before regenerating. `--yes`
+does not bypass these checks, and known conflicts block all writes and deletions.
 
 ## Troubleshooting
 

@@ -1,0 +1,1877 @@
+import { createHash } from "node:crypto";
+import { dirname, join } from "node:path";
+import { parse as parseYaml } from "yaml";
+import {
+	type RouteMetadata,
+	type RouteMethodInputMetadata,
+	routesMetadataSource,
+} from "./project.js";
+
+export type ScaffoldRoute = {
+	file: string;
+	path: string;
+	methods: string[];
+	operationIds: string[];
+	middleware: string[];
+	groups: string[];
+	segments: string[];
+};
+
+export type ManifestGeneratedFile = {
+	path: string;
+	source?: string;
+	operationIds?: string[];
+	kind: string;
+	sha256?: string;
+};
+
+export type Manifest = {
+	version: 1;
+	openapi: { baseline: string };
+	generated: ManifestGeneratedFile[];
+};
+
+export type ScaffoldPlan = {
+	files: Map<string, string>;
+	manifest: Manifest;
+	manifestContent: string;
+	fileList: string[];
+	routes: ScaffoldRoute[];
+};
+
+export type ScaffoldSnapshot = {
+	manifest?: Manifest;
+	files: Map<string, string | undefined>;
+};
+
+export type ScaffoldPreviewChange = {
+	path: string;
+	status: "add" | "update" | "unchanged" | "conflict" | "remove";
+	detail?: string;
+	diff?: string[];
+};
+
+export type ScaffoldEvaluation = {
+	changes: ScaffoldPreviewChange[];
+	stalePaths: string[];
+	blocked?: string;
+};
+
+type ScaffoldPlanInput = {
+	files: Map<string, string>;
+	generatedPaths: Set<string>;
+	routes: ScaffoldRoute[];
+};
+
+function assembleScaffoldPlan(
+	document: unknown,
+	source: string,
+	input: ScaffoldPlanInput,
+): ScaffoldPlan {
+	const files = new Map(input.files);
+	const metadataPath = ".routa/routes.gen.ts";
+	const baselinePath = ".routa/openapi-baseline.json";
+	files.set(baselinePath, `${JSON.stringify(document, null, "\t")}\n`);
+
+	const manifestGenerated = Array.from(input.generatedPaths)
+		.sort()
+		.map((path) => {
+			const route = input.routes.find((item) => dirname(item.file) === dirname(path));
+
+			return {
+				path,
+				source,
+				operationIds: route?.operationIds ?? [],
+				kind: path.endsWith("schemas.ts") ? "schema" : "route",
+				sha256: sha256(files.get(path) ?? ""),
+			};
+		});
+
+	const manifest: Manifest = {
+		version: 1,
+		openapi: { baseline: baselinePath },
+		generated: [
+			...manifestGenerated,
+			{
+				path: metadataPath,
+				source,
+				kind: "route-metadata",
+				sha256: sha256(files.get(metadataPath) ?? ""),
+			},
+			{
+				path: baselinePath,
+				source,
+				kind: "openapi-baseline",
+				sha256: sha256(files.get(baselinePath) ?? ""),
+			},
+		],
+	};
+	const manifestContent = `${JSON.stringify(manifest, null, "\t")}\n`;
+
+	return {
+		files,
+		manifest,
+		manifestContent,
+		fileList: [
+			...Array.from(input.generatedPaths).sort(),
+			baselinePath,
+			".routa/manifest.json",
+			metadataPath,
+		],
+		routes: input.routes,
+	};
+}
+
+export function evaluateScaffold(
+	plan: ScaffoldPlan,
+	snapshot: ScaffoldSnapshot,
+): ScaffoldEvaluation {
+	const previousGenerated = new Map(
+		(snapshot.manifest?.generated ?? []).map((file) => [file.path, file]),
+	);
+	const paths = new Set([
+		...plan.files.keys(),
+		".routa/manifest.json",
+		...previousGenerated.keys(),
+	]);
+	const changes: ScaffoldPreviewChange[] = [];
+	let blocked: string | undefined;
+
+	for (const path of Array.from(paths).sort()) {
+		const nextContent =
+			path === ".routa/manifest.json" ? plan.manifestContent : plan.files.get(path);
+		const currentContent = snapshot.files.get(path);
+		const previous = previousGenerated.get(path);
+
+		if (
+			currentContent !== undefined
+			&& previous
+			&& !previous.sha256
+			&& path !== ".routa/manifest.json"
+			&& path !== ".routa/routes.gen.ts"
+		) {
+			changes.push({ path, status: "conflict", detail: "manifest hash is missing" });
+			blocked ??= scaffoldError(
+				"ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE",
+				`Refusing to overwrite or remove generated file because its manifest hash is missing: ${path}.`,
+				[
+					"Restore .routa/manifest.json from version control before regenerating.",
+					"Preserve any local edits; Routa cannot verify this file is unchanged.",
+				],
+			);
+			continue;
+		}
+
+		if (nextContent === undefined) {
+			if (currentContent === undefined) {
+				changes.push({
+					path,
+					status: "remove",
+					detail: "previously generated; file already missing",
+				});
+				continue;
+			}
+
+			if (previous?.sha256 && sha256(currentContent) !== previous.sha256) {
+				changes.push({ path, status: "conflict", detail: "generated file has local edits" });
+				blocked ??= modifiedRemovalError(path);
+				continue;
+			}
+
+			changes.push({
+				path,
+				status: "remove",
+				detail: "previously generated; no longer in OpenAPI output",
+			});
+			continue;
+		}
+
+		if (currentContent === undefined) {
+			changes.push({ path, status: "add" });
+			continue;
+		}
+
+		const currentHash = sha256(currentContent);
+		const nextHash = sha256(nextContent);
+
+		if (!previous && path !== ".routa/manifest.json" && path !== ".routa/routes.gen.ts") {
+			changes.push({ path, status: "conflict", detail: "unmanaged file exists" });
+			blocked ??= unmanagedFileError(path);
+			continue;
+		}
+
+		if (previous?.sha256 && currentHash !== previous.sha256 && path !== ".routa/routes.gen.ts") {
+			changes.push({
+				path,
+				status: "conflict",
+				detail: "generated file has local edits",
+				diff: previewDiff(currentContent, nextContent),
+			});
+			blocked ??= modifiedGeneratedError(path);
+			continue;
+		}
+
+		changes.push({
+			path,
+			status: currentHash === nextHash ? "unchanged" : "update",
+			detail:
+				currentHash !== nextHash && path === ".routa/routes.gen.ts"
+					? "framework metadata will be regenerated"
+					: undefined,
+			diff: currentHash === nextHash ? undefined : previewDiff(currentContent, nextContent),
+		});
+	}
+
+	return {
+		changes,
+		stalePaths: Array.from(previousGenerated.keys()).filter((path) => !plan.files.has(path)),
+		blocked,
+	};
+}
+
+function unmanagedFileError(path: string): string {
+	return scaffoldError(
+		"ROUTA_SCAFFOLD_UNMANAGED_FILE",
+		`Refusing to overwrite unmanaged file: ${path}.`,
+		[
+			"Routa can only overwrite files tracked in .routa/manifest.json.",
+			"If this is user-owned code, move it or rename it before scaffolding.",
+			"If this was generated by Routa, restore .routa/manifest.json or run with --preview to inspect conflicts.",
+		],
+	);
+}
+
+function modifiedGeneratedError(path: string): string {
+	return scaffoldError(
+		"ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE",
+		`Refusing to overwrite modified generated file: ${path}.`,
+		[
+			"This file changed since the last Routa manifest hash.",
+			"Move manual edits into application-owned files or review with --preview before regenerating.",
+		],
+	);
+}
+
+function modifiedRemovalError(path: string): string {
+	return scaffoldError(
+		"ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE",
+		`Refusing to remove modified generated file: ${path}.`,
+		[
+			"This file is no longer present in the OpenAPI output, but it has local edits.",
+			"Review with --preview and preserve any user-owned logic before deleting it.",
+		],
+	);
+}
+
+function previewDiff(currentContent: string, nextContent: string): string[] {
+	const currentLines = currentContent.split("\n");
+	const nextLines = nextContent.split("\n");
+	const max = Math.max(currentLines.length, nextLines.length);
+
+	for (let index = 0; index < max; index++) {
+		if (currentLines[index] === nextLines[index]) continue;
+		return [
+			`@@ line ${index + 1} @@`,
+			`- ${currentLines[index] ?? ""}`,
+			`+ ${nextLines[index] ?? ""}`,
+		];
+	}
+
+	return [];
+}
+
+function scaffoldError(code: string, message: string, details: string[] = []): string {
+	return [`${code}: ${message}`, ...details].join("\n");
+}
+
+function sha256(content: string): string {
+	return createHash("sha256").update(content).digest("hex");
+}
+
+const httpMethods = ["get", "post", "put", "patch", "delete", "head"] as const;
+
+type HttpMethod = (typeof httpMethods)[number];
+
+type OpenApiDocument = {
+	openapi?: string;
+	info?: unknown;
+	paths?: Record<string, OpenApiPathItem>;
+	components?: {
+		schemas?: Record<string, OpenApiSchema>;
+	};
+};
+
+type OpenApiPathItem = {
+	parameters?: OpenApiOperation["parameters"];
+} & Record<string, OpenApiOperation | unknown>;
+
+type OpenApiOperation = {
+	operationId?: string;
+	parameters?: Array<{
+		name?: string;
+		in?: string;
+		required?: boolean;
+		schema?: OpenApiSchema;
+	}>;
+	requestBody?: {
+		content?: Record<string, { schema?: OpenApiSchema }>;
+	};
+	responses?: Record<
+		string,
+		{
+			description?: string;
+			content?: Record<string, { schema?: OpenApiSchema }>;
+		}
+	>;
+};
+
+type OpenApiContent = Record<string, { schema?: OpenApiSchema }>;
+
+type OpenApiSchema = {
+	type?: string | string[];
+	format?: string;
+	enum?: unknown[];
+	const?: unknown;
+	items?: OpenApiSchema;
+	properties?: Record<string, OpenApiSchema>;
+	required?: string[];
+	$ref?: string;
+	oneOf?: unknown[];
+	anyOf?: OpenApiSchema[];
+	allOf?: unknown[];
+	nullable?: boolean;
+	additionalProperties?: unknown;
+};
+
+const generatedHeader = (source: string) =>
+	`// Generated by Routa.\n// Safe to edit, but regeneration may update this file after preview.\n// Source: ${source}\n\n`;
+
+const routesRoot = join("src", "routes");
+
+/**
+ * Parses an OpenAPI document and verifies its top-level `paths` structure.
+ *
+ * @param raw - The raw JSON or YAML source text.
+ * @param extension - The input file extension used to select the parser.
+ * @param source - The source file path used in error messages.
+ * @returns The parsed OpenAPI document.
+ */
+function parseOpenApi(raw: string, extension: string, source: string): OpenApiDocument {
+	let document: unknown;
+
+	try {
+		document = extension === ".json" ? JSON.parse(raw) : parseYaml(raw);
+	} catch (error) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_PARSE_ERROR",
+				`${source} could not be parsed as ${extension === ".json" ? "JSON" : "YAML"}.`,
+				[
+					`Parser error: ${error instanceof Error ? error.message : String(error)}`,
+					"Fix the syntax, then rerun the scaffold command.",
+				],
+			),
+		);
+	}
+
+	if (!document || typeof document !== "object" || !("paths" in document)) {
+		throw new Error(formatMissingPathsError(source, document));
+	}
+
+	if (!isRecord((document as OpenApiDocument).paths)) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_INVALID_PATHS",
+				`${source} has an invalid top-level "paths" value.`,
+				[
+					'"paths" must be an object that maps URL paths to HTTP methods.',
+					"Example:",
+					"paths:",
+					"  /users:",
+					"    get:",
+					"      operationId: listUsers",
+				],
+			),
+		);
+	}
+
+	return document as OpenApiDocument;
+}
+
+/**
+ * Formats the error for an OpenAPI document that is missing a top-level `paths` object.
+ *
+ * @param source - The input file path used in the error message.
+ * @param document - The parsed document used to suggest a corrected structure.
+ * @returns A formatted scaffold error message.
+ */
+function formatMissingPathsError(source: string, document: unknown): string {
+	const keys =
+		document && typeof document === "object" && !Array.isArray(document)
+			? Object.keys(document)
+			: [];
+	const pathLikeKeys = keys.filter((key) => key.startsWith("/"));
+	const lines = [`${source} is missing the required top-level "paths" object.`];
+
+	if (pathLikeKeys.length > 0) {
+		lines.push(
+			`Found path-like root key${pathLikeKeys.length === 1 ? "" : "s"} ${pathLikeKeys.map((key) => JSON.stringify(key)).join(", ")}.`,
+			"Those route definitions need to be nested under top-level paths:",
+			"openapi: 3.1.0",
+			"info:",
+			"  title: My API",
+			"  version: 0.0.0",
+			"paths:",
+			`  ${pathLikeKeys[0]}:`,
+			"    get:",
+			"      operationId: listUsers",
+			"      responses:",
+			'        "200":',
+			"          description: OK",
+		);
+	} else if (keys.length > 0) {
+		lines.push(
+			`Found top-level keys: ${keys.map((key) => JSON.stringify(key)).join(", ")}.`,
+			'Expected at least "openapi", "info", and "paths".',
+		);
+	} else {
+		lines.push(
+			"The file is empty or does not contain an OpenAPI object.",
+			'Expected at least "openapi", "info", and "paths".',
+		);
+	}
+
+	return scaffoldError("ROUTA_OPENAPI_MISSING_PATHS", lines[0], lines.slice(1));
+}
+
+/**
+ * Validates an OpenAPI document for Routa scaffolding support.
+ *
+ * Ensures the document includes required top-level fields, supported paths and operations, unique operation IDs, compatible request and response shapes, and supported schema definitions.
+ *
+ * @param document - The OpenAPI document to validate
+ */
+function validateOpenApiDocument(document: OpenApiDocument): void {
+	if (!document.openapi) {
+		throw new Error(
+			scaffoldError("ROUTA_OPENAPI_MISSING_OPENAPI_VERSION", 'Missing top-level "openapi".', [
+				"Add `openapi: 3.1.0` at the top of the file.",
+			]),
+		);
+	}
+
+	if (!isRecord(document.info)) {
+		throw new Error(
+			scaffoldError("ROUTA_OPENAPI_MISSING_INFO", 'Missing or invalid top-level "info".', [
+				"Add API metadata before paths:",
+				"info:",
+				"  title: My API",
+				"  version: 0.0.0",
+			]),
+		);
+	}
+
+	const operationIds = new Map<string, string>();
+	let supportedOperationCount = 0;
+
+	for (const name of Object.keys(document.components?.schemas ?? {})) {
+		validateGeneratedIdentifier(
+			refName(`#/components/schemas/${name}`),
+			`component schema ${name}`,
+		);
+		validateSchema(document.components?.schemas?.[name], document, `component schema ${name}`);
+	}
+
+	for (const [path, pathItem] of Object.entries(document.paths ?? {})) {
+		if (!path.startsWith("/")) {
+			throw new Error(
+				scaffoldError("ROUTA_OPENAPI_INVALID_PATH_KEY", `Invalid path key "${path}".`, [
+					'OpenAPI path keys must start with "/".',
+					`Use "/${path.replace(/^\/+/, "")}" instead of "${path}".`,
+				]),
+			);
+		}
+
+		validatePathSegments(path);
+
+		if (!isRecord(pathItem)) {
+			throw new Error(
+				scaffoldError("ROUTA_OPENAPI_INVALID_PATH_ITEM", `Invalid path item for ${path}.`, [
+					"Each path must contain HTTP method objects such as get, post, patch, or delete.",
+				]),
+			);
+		}
+
+		for (const [method, operation] of Object.entries(pathItem)) {
+			if (isOpenApiPathItemMetadata(method)) {
+				continue;
+			}
+
+			if (method === "options") {
+				throw new Error(
+					scaffoldError(
+						"ROUTA_OPENAPI_OPTIONS_AUTOMATIC",
+						`OPTIONS ${path} must not be declared in scaffold input.`,
+						[
+							"Routa generates OPTIONS at runtime from the methods declared for the path.",
+							"Remove the options operation and keep only application-owned route methods.",
+						],
+					),
+				);
+			}
+
+			if (!httpMethods.includes(method as HttpMethod)) {
+				const lowerMethod = method.toLowerCase();
+				const maybeCase = httpMethods.includes(lowerMethod as HttpMethod);
+				throw new Error(
+					scaffoldError(
+						"ROUTA_OPENAPI_UNSUPPORTED_METHOD",
+						`Unsupported method "${method}" under ${path}.`,
+						[
+							maybeCase
+								? `Use lowercase "${lowerMethod}" instead of "${method}".`
+								: `Allowed methods: ${httpMethods.join(", ")}.`,
+						],
+					),
+				);
+			}
+
+			if (!isRecord(operation)) {
+				throw new Error(
+					scaffoldError(
+						"ROUTA_OPENAPI_INVALID_OPERATION",
+						`${method.toUpperCase()} ${path} must be an operation object.`,
+						["Add operationId and responses under this method."],
+					),
+				);
+			}
+			const typedOperation = mergePathItemParameters(
+				pathItem as OpenApiPathItem,
+				operation as OpenApiOperation,
+				{ path, method: method as HttpMethod },
+			);
+
+			if (!typedOperation.operationId) {
+				throw new Error(
+					scaffoldError(
+						"ROUTA_OPENAPI_MISSING_OPERATION_ID",
+						`${method.toUpperCase()} ${path} is missing operationId.`,
+						[`Add operationId: ${suggestOperationId(method as HttpMethod, path)} under ${method}.`],
+					),
+				);
+			}
+
+			const operationLocation = `${method.toUpperCase()} ${path}`;
+			const previousLocation = operationIds.get(typedOperation.operationId);
+
+			if (previousLocation) {
+				throw new Error(
+					scaffoldError(
+						"ROUTA_OPENAPI_DUPLICATE_OPERATION_ID",
+						`Duplicate operationId "${typedOperation.operationId}".`,
+						[
+							`First used by ${previousLocation}.`,
+							`Also used by ${operationLocation}.`,
+							"Operation IDs must be unique because Routa uses them for generated schema names.",
+						],
+					),
+				);
+			}
+
+			operationIds.set(typedOperation.operationId, operationLocation);
+			supportedOperationCount++;
+
+			if (method === "get" && typedOperation.requestBody) {
+				throw new Error(
+					scaffoldError(
+						"ROUTA_OPENAPI_GET_BODY_UNSUPPORTED",
+						`GET ${path} cannot declare a request body.`,
+						["Routa v0 does not support request bodies on GET route contracts."],
+					),
+				);
+			}
+
+			validatePathParameters(path, typedOperation);
+			validateParameterSchemas(typedOperation, method as HttpMethod, path);
+			validateRequestBody(typedOperation, method as HttpMethod, path, document);
+			validateResponses(typedOperation, method as HttpMethod, path, document);
+
+			const names = operationNames(method as HttpMethod, path, typedOperation);
+			for (const [kind, name] of Object.entries(names)) {
+				validateGeneratedIdentifier(name, `${kind} name for ${method.toUpperCase()} ${path}`);
+			}
+		}
+	}
+
+	if (supportedOperationCount === 0) {
+		throw new Error(
+			scaffoldError("ROUTA_OPENAPI_NO_SUPPORTED_OPERATIONS", "No scaffoldable operations found.", [
+				`Add at least one supported HTTP method under paths: ${httpMethods.join(", ")}.`,
+			]),
+		);
+	}
+}
+
+/**
+ * Rejects OpenAPI path segments that could escape the generated routes directory.
+ *
+ * Path keys come from user-supplied OpenAPI files and are turned into filesystem
+ * directories, so `.`/`..` segments and path separator characters are refused.
+ *
+ * @param path - The OpenAPI path key to check.
+ */
+function validatePathSegments(path: string): void {
+	for (const segment of pathSegments(path)) {
+		if (/^\.+$/.test(segment) || /[\\\0]/.test(segment)) {
+			throw new Error(
+				scaffoldError(
+					"ROUTA_OPENAPI_UNSAFE_PATH_SEGMENT",
+					`Unsafe path segment "${segment}" in ${path}.`,
+					[
+						"Path segments cannot be dot segments or contain path separator characters.",
+						"Routa turns OpenAPI paths into src/routes directories, so segments must stay inside the project.",
+					],
+				),
+			);
+		}
+	}
+}
+
+/**
+ * Validates that a path template and its declared path parameters match.
+ *
+ * @param path - The OpenAPI path template to check.
+ * @param operation - The operation whose `in: "path"` parameters are validated against the template.
+ */
+function validatePathParameters(path: string, operation: OpenApiOperation): void {
+	const pathParams = new Set(
+		path
+			.split("/")
+			.filter((segment) => segment.startsWith("{") && segment.endsWith("}"))
+			.map((segment) => segment.slice(1, -1)),
+	);
+	const declaredParams = new Set(
+		(operation.parameters ?? [])
+			.filter((parameter) => parameter.in === "path" && parameter.name)
+			.map((parameter) => parameter.name as string),
+	);
+
+	for (const parameter of operation.parameters ?? []) {
+		if (parameter.in === "path" && parameter.required !== true) {
+			throw new Error(
+				scaffoldError(
+					"ROUTA_OPENAPI_PATH_PARAMETER_REQUIRED",
+					`Path parameter "${parameter.name ?? "<unknown>"}" in ${path} must set required: true.`,
+					["OpenAPI path parameters are always required; add required: true to the parameter."],
+				),
+			);
+		}
+	}
+
+	for (const name of pathParams) {
+		if (!declaredParams.has(name)) {
+			throw new Error(
+				scaffoldError(
+					"ROUTA_OPENAPI_MISSING_PATH_PARAMETER",
+					`${path} is missing path parameter "${name}".`,
+					[
+						`Add a parameter entry: { name: "${name}", in: "path", required: true, schema: { type: "string" } }.`,
+					],
+				),
+			);
+		}
+	}
+
+	for (const name of declaredParams) {
+		if (!pathParams.has(name)) {
+			throw new Error(
+				scaffoldError(
+					"ROUTA_OPENAPI_UNUSED_PATH_PARAMETER",
+					`Path parameter "${name}" is declared but not used in ${path}.`,
+					[`Either add {${name}} to the path or remove the parameter entry.`],
+				),
+			);
+		}
+	}
+}
+
+/**
+ * Validates that operation parameters use scalar schemas.
+ *
+ * Parameters arrive as single strings at runtime, so object, array, and `$ref`
+ * schemas cannot be validated and are rejected at scaffold time.
+ *
+ * @param operation - The OpenAPI operation whose parameters are checked
+ * @param method - The HTTP method for error reporting
+ * @param path - The OpenAPI path for error reporting
+ */
+function validateParameterSchemas(
+	operation: OpenApiOperation,
+	method: HttpMethod,
+	path: string,
+): void {
+	for (const parameter of operation.parameters ?? []) {
+		const schema = parameter.schema;
+
+		if (!schema) {
+			continue;
+		}
+
+		if (
+			schema.$ref
+			|| schema.type === "object"
+			|| schema.type === "array"
+			|| schema.properties
+			|| schema.items
+		) {
+			throw new Error(
+				scaffoldError(
+					"ROUTA_OPENAPI_UNSUPPORTED_PARAMETER_SCHEMA",
+					`Unsupported schema for parameter "${parameter.name ?? "<unknown>"}" in ${method.toUpperCase()} ${path}.`,
+					[
+						"Parameters are single string values at runtime, so schemas must be string, number, integer, boolean, or enum.",
+						"Move structured data into the request body instead.",
+					],
+				),
+			);
+		}
+	}
+}
+
+function mergePathItemParameters(
+	pathItem: OpenApiPathItem,
+	operation: OpenApiOperation,
+	location: { path: string; method: HttpMethod },
+): OpenApiOperation {
+	const pathParameters = pathItem.parameters ?? [];
+	const operationParameters = operation.parameters ?? [];
+
+	if (!Array.isArray(pathParameters)) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_INVALID_PARAMETERS",
+				`Path-level parameters for ${location.path} must be an array.`,
+				["Use parameters: [] or remove the path-level parameters field."],
+			),
+		);
+	}
+
+	if (!Array.isArray(operationParameters)) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_INVALID_PARAMETERS",
+				`${location.method.toUpperCase()} ${location.path} parameters must be an array.`,
+				["Use parameters: [] or remove the operation parameters field."],
+			),
+		);
+	}
+
+	if (pathParameters.length === 0) {
+		return operation;
+	}
+
+	const operationKeys = new Set(
+		operationParameters.map((parameter) => `${parameter.in ?? ""}:${parameter.name ?? ""}`),
+	);
+
+	return {
+		...operation,
+		parameters: [
+			...pathParameters.filter(
+				(parameter) => !operationKeys.has(`${parameter.in ?? ""}:${parameter.name ?? ""}`),
+			),
+			...operationParameters,
+		],
+	};
+}
+
+/**
+ * Validates an operation's request body for scaffold generation.
+ *
+ * @param operation - The OpenAPI operation to validate
+ * @param method - The HTTP method for error reporting
+ * @param path - The OpenAPI path for error reporting
+ * @param document - The OpenAPI document used to validate referenced schemas
+ */
+function validateRequestBody(
+	operation: OpenApiOperation,
+	method: HttpMethod,
+	path: string,
+	document: OpenApiDocument,
+): void {
+	if (!operation.requestBody) {
+		return;
+	}
+
+	if (!isRecord(operation.requestBody.content)) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_INVALID_REQUEST_BODY",
+				`${method.toUpperCase()} ${path} has an invalid requestBody.content value.`,
+				["requestBody.content must be an object with an application/json entry."],
+			),
+		);
+	}
+
+	for (const [mediaType, entry] of Object.entries(operation.requestBody.content)) {
+		if (mediaType !== "application/json") {
+			throw new Error(
+				scaffoldError(
+					"ROUTA_OPENAPI_UNSUPPORTED_REQUEST_MEDIA_TYPE",
+					`Unsupported request media type "${mediaType}" for ${method.toUpperCase()} ${path}.`,
+					["Routa v0 scaffold only supports application/json request bodies."],
+				),
+			);
+		}
+
+		validateSchema(entry.schema, document, `${method.toUpperCase()} ${path} request body`);
+	}
+}
+
+/**
+ * Validates the response definitions for an operation.
+ *
+ * @param operation - The OpenAPI operation to validate
+ * @param method - The HTTP method for error messages
+ * @param path - The OpenAPI path for error messages
+ * @param document - The OpenAPI document used to validate referenced schemas
+ * @throws Error when the operation has no responses, uses an invalid status code, or includes unsupported response content
+ */
+function validateResponses(
+	operation: OpenApiOperation,
+	method: HttpMethod,
+	path: string,
+	document: OpenApiDocument,
+): void {
+	if (!isRecord(operation.responses) || Object.keys(operation.responses).length === 0) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_MISSING_RESPONSES",
+				`${method.toUpperCase()} ${path} is missing responses.`,
+				[
+					"Add at least one response, for example:",
+					"responses:",
+					'  "200":',
+					"    description: OK",
+				],
+			),
+		);
+	}
+
+	for (const [status, response] of Object.entries(operation.responses)) {
+		if (!/^[1-5][0-9][0-9]$/.test(status)) {
+			throw new Error(
+				scaffoldError(
+					"ROUTA_OPENAPI_INVALID_RESPONSE_STATUS",
+					`Invalid response status "${status}" for ${method.toUpperCase()} ${path}.`,
+					['Use explicit numeric HTTP status strings such as "200" or "201".'],
+				),
+			);
+		}
+
+		if (response.content === undefined) {
+			continue;
+		}
+
+		if (!isRecord(response.content)) {
+			throw new Error(
+				scaffoldError(
+					"ROUTA_OPENAPI_INVALID_RESPONSE_CONTENT",
+					`${method.toUpperCase()} ${path} response ${status} has invalid content.`,
+					["Response content must be an object with an application/json entry."],
+				),
+			);
+		}
+
+		for (const [mediaType, entry] of Object.entries(response.content)) {
+			if (mediaType !== "application/json") {
+				throw new Error(
+					scaffoldError(
+						"ROUTA_OPENAPI_UNSUPPORTED_RESPONSE_MEDIA_TYPE",
+						`Unsupported response media type "${mediaType}" for ${method.toUpperCase()} ${path} ${status}.`,
+						["Routa v0 scaffold only supports application/json responses."],
+					),
+				);
+			}
+
+			validateSchema(entry.schema, document, `${method.toUpperCase()} ${path} response ${status}`);
+		}
+	}
+}
+
+/**
+ * Validates a supported OpenAPI schema for scaffolding.
+ *
+ * @param schema - The schema to validate.
+ * @param document - The OpenAPI document containing component references.
+ * @param location - The location label used in validation errors.
+ */
+function validateSchema(
+	schema: OpenApiSchema | undefined,
+	document: OpenApiDocument,
+	location: string,
+): void {
+	if (!schema) {
+		return;
+	}
+
+	if (schema.oneOf || schema.allOf) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_UNSUPPORTED_SCHEMA",
+				`Unsupported composed schema in ${location}.`,
+				[
+					"Routa v0 supports object, array, string, number, integer, boolean, enum, const, anyOf unions, and local component refs.",
+					"oneOf and allOf are not supported by scaffold yet. Use anyOf for unions.",
+				],
+			),
+		);
+	}
+
+	if (Array.isArray(schema.type)) {
+		if (schema.type.length === 1) {
+			// Keep validating nested constructs (e.g. object properties) instead of early-returning.
+			schema = normalizeSingleTypeArray(schema);
+		} else {
+			// Allow OpenAPI 3.1 nullable type arrays like `type: ["string", "null"]`
+			// only when there is exactly one non-null entry.
+			const nonNullTypes = schema.type.filter((entry) => entry !== "null");
+			const isNullableTypeArray = schema.type.includes("null");
+
+			if (isNullableTypeArray && nonNullTypes.length === 1) {
+				schema = { ...schema, type: nonNullTypes[0] };
+			} else {
+				throw new Error(
+					scaffoldError(
+						"ROUTA_OPENAPI_UNSUPPORTED_SCHEMA",
+						`Unsupported multi-type array in ${location}.`,
+						[
+							"Routa v0 scaffold only supports OpenAPI 3.1 type arrays with exactly one entry,",
+							'or a nullable type array with exactly one non-null entry (e.g. type: ["string", "null"]).',
+							"Use anyOf for true multi-type unions.",
+						],
+					),
+				);
+			}
+		}
+	}
+
+	if (schema.nullable) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_UNSUPPORTED_SCHEMA",
+				`Unsupported schema option in ${location}.`,
+				[
+					"The OpenAPI 3.0 nullable flag is not supported.",
+					'Use an OpenAPI 3.1 type array instead, for example type: ["string", "null"].',
+				],
+			),
+		);
+	}
+
+	if (
+		schema.additionalProperties !== undefined
+		&& (typeof schema.additionalProperties !== "object"
+			|| schema.additionalProperties === null
+			|| schema.properties)
+	) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_UNSUPPORTED_SCHEMA",
+				`Unsupported schema option in ${location}.`,
+				[
+					"additionalProperties is only supported as a schema on objects without fixed properties (maps to z.record).",
+				],
+			),
+		);
+	}
+
+	if (
+		schema.const !== undefined
+		&& !["string", "number", "boolean"].includes(typeof schema.const)
+	) {
+		throw new Error(
+			scaffoldError("ROUTA_OPENAPI_UNSUPPORTED_SCHEMA", `Unsupported const value in ${location}.`, [
+				"Only string, number, and boolean const values are supported.",
+			]),
+		);
+	}
+
+	if (schema.$ref) {
+		const name = refName(schema.$ref);
+
+		if (!document.components?.schemas?.[name]) {
+			throw new Error(
+				scaffoldError(
+					"ROUTA_OPENAPI_MISSING_REF",
+					`Missing $ref target ${schema.$ref} in ${location}.`,
+					[`Add components.schemas.${name}, or change the $ref to an existing component schema.`],
+				),
+			);
+		}
+
+		return;
+	}
+
+	validateSchema(schema.items, document, `${location} items`);
+
+	for (const [index, entry] of (schema.anyOf ?? []).entries()) {
+		validateSchema(entry, document, `${location} anyOf[${index}]`);
+	}
+
+	if (typeof schema.additionalProperties === "object" && schema.additionalProperties !== null) {
+		validateSchema(
+			schema.additionalProperties as OpenApiSchema,
+			document,
+			`${location} additionalProperties`,
+		);
+	}
+
+	for (const [name, property] of Object.entries(schema.properties ?? {})) {
+		validateSchema(property, document, `${location} property "${name}"`);
+	}
+}
+
+/**
+ * Determines whether a path item key is OpenAPI metadata.
+ *
+ * @param key - The path item key to check
+ * @returns `true` if the key is `parameters`, `summary`, `description`, or `servers`, `false` otherwise.
+ */
+function isOpenApiPathItemMetadata(key: string): boolean {
+	return ["parameters", "summary", "description", "servers"].includes(key);
+}
+
+/**
+ * Suggests an operation ID for an HTTP method and path.
+ *
+ * @returns A PascalCase identifier built from the method and path.
+ */
+function suggestOperationId(method: HttpMethod, path: string): string {
+	return `${method}${pascalCase(path)}`;
+}
+
+/**
+ * Determines whether a value is a plain object.
+ *
+ * @param value - The value to check.
+ * @returns `true` if `value` is a non-null object and not an array, `false` otherwise.
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Converts an OpenAPI path to its route directory path.
+ *
+ * @param openApiPath - The OpenAPI path template
+ * @returns The route directory path under `src/routes`
+ */
+function pathToRouteDir(openApiPath: string): string {
+	return join(routesRoot, ...routeDirSegments(openApiPath));
+}
+
+/**
+ * Converts an OpenAPI path into directory-style route segments.
+ *
+ * @param openApiPath - The OpenAPI path template
+ * @returns The path segments with `{param}` converted to `$param`
+ */
+function routeDirSegments(openApiPath: string): string[] {
+	return pathSegments(openApiPath).map((segment) =>
+		segment.startsWith("{") && segment.endsWith("}") ? `$${segment.slice(1, -1)}` : segment,
+	);
+}
+
+/**
+ * Splits an OpenAPI path into its individual segments.
+ *
+ * @param openApiPath - The OpenAPI path to split
+ * @returns The non-empty path segments in order
+ */
+function pathSegments(openApiPath: string): string[] {
+	return openApiPath.split("/").filter(Boolean);
+}
+
+/**
+ * Builds generated type names for an OpenAPI operation.
+ *
+ * @param method - The HTTP method for the operation
+ * @param path - The OpenAPI path template
+ * @param operation - The OpenAPI operation definition
+ * @returns The generated names for params, query, headers, cookies, body, and response types
+ */
+function operationNames(method: HttpMethod, path: string, operation: OpenApiOperation) {
+	const base = pascalCase(operation.operationId ?? `${method} ${path}`);
+
+	return {
+		params: `${base}Params`,
+		query: `${base}Query`,
+		headers: `${base}Headers`,
+		cookies: `${base}Cookies`,
+		body: `${base}Body`,
+		response: `${base}Response`,
+	};
+}
+
+/**
+ * Builds a Zod object schema for an operation's path parameters.
+ *
+ * @returns A `z.object(...)` expression for the path parameters, or `undefined` when the path has no parameters.
+ */
+function schemaForPathParams(path: string, operation: OpenApiOperation): string | undefined {
+	const names = new Set(
+		path
+			.split("/")
+			.filter((segment) => segment.startsWith("{") && segment.endsWith("}"))
+			.map((segment) => segment.slice(1, -1)),
+	);
+
+	if (names.size === 0) {
+		return undefined;
+	}
+
+	const parameterSchemas = new Map(
+		(operation.parameters ?? [])
+			.filter((parameter) => parameter.in === "path" && parameter.name)
+			.map((parameter) => [parameter.name as string, parameter.schema]),
+	);
+
+	const props = Array.from(names)
+		.sort()
+		.map((name) => `${propertyKey(name)}: ${zodForParameterSchema(parameterSchemas.get(name))}`);
+
+	return formatZodObject(props);
+}
+
+/**
+ * Builds a Zod object schema for parameters at a specific location.
+ *
+ * @param operation - The OpenAPI operation to read parameters from
+ * @param location - The OpenAPI parameter location to include, such as `query` or `header`
+ * @returns The Zod object expression for the matching parameters, or `undefined` when none are present
+ */
+function schemaForParameters(operation: OpenApiOperation, location: string): string | undefined {
+	const parameters = (operation.parameters ?? []).filter(
+		(parameter) => parameter.in === location && parameter.name,
+	);
+
+	if (parameters.length === 0) {
+		return undefined;
+	}
+
+	const props = parameters.map((parameter) => {
+		const schema = zodForParameterSchema(parameter.schema);
+		const optional = parameter.required ? "" : ".optional()";
+		// The runtime reads headers from the Fetch Headers object, which lowercases names.
+		const name =
+			location === "header" ? (parameter.name as string).toLowerCase() : (parameter.name as string);
+		return `${propertyKey(name)}: ${schema}${optional}`;
+	});
+
+	return formatZodObject(props);
+}
+
+/**
+ * Builds a Zod schema for an operation request body.
+ *
+ * @returns The Zod expression for the request body schema, or `undefined` when the operation has no request body schema.
+ */
+function schemaForRequestBody(operation: OpenApiOperation): string | undefined {
+	const schema = requestBodySchema(operation);
+	return schema ? zodForSchema(schema) : undefined;
+}
+
+/**
+ * Builds scaffold metadata for supported operation responses.
+ *
+ * @returns The response status, generated Zod schema, original schema source, and placeholder value for each success response.
+ */
+function schemasForResponses(operation: OpenApiOperation, document: OpenApiDocument) {
+	const successEntries = Object.entries(operation.responses ?? {}).filter(([status]) =>
+		status.startsWith("2"),
+	);
+	const entries =
+		successEntries.length > 0
+			? successEntries
+			: Object.entries(operation.responses ?? {}).slice(0, 1);
+
+	return entries.map(([rawStatus, response]) => {
+		const status = Number(rawStatus);
+		const schema = firstJsonContent(response.content)?.schema;
+		const zodSchema = schema ? zodForSchema(schema) : "z.unknown()";
+
+		return {
+			status: Number.isFinite(status) ? status : 200,
+			schema: zodSchema,
+			schemaSource: schema,
+			placeholder: placeholderForSchema(schema, document),
+		};
+	});
+}
+
+function responseSchemaName(
+	baseName: string,
+	status: number,
+	responses: readonly { status: number }[],
+): string {
+	return responses.length === 1 && (status === 200 || status === 201)
+		? baseName
+		: `${baseName}${status}`;
+}
+
+/**
+ * Gets the JSON request body schema for an operation.
+ *
+ * @returns The schema from the `application/json` request body content, or `undefined` if none exists.
+ */
+function requestBodySchema(operation: OpenApiOperation): OpenApiSchema | undefined {
+	return firstJsonContent(operation.requestBody?.content)?.schema;
+}
+
+/**
+ * Selects the JSON schema entry from a content map.
+ *
+ * @param content - A map of media types to OpenAPI content entries.
+ * @returns The `application/json` entry when present, otherwise the first entry in the map.
+ */
+function firstJsonContent(content: OpenApiContent | undefined) {
+	return content?.["application/json"] ?? Object.values(content ?? {})[0];
+}
+
+/**
+ * Converts an OpenAPI parameter schema into a Zod expression that coerces wire strings.
+ *
+ * Path, query, header, and cookie values always arrive as strings at runtime, so
+ * numeric and boolean parameter schemas must parse from their string form.
+ *
+ * @param schema - The parameter schema to convert
+ * @returns A Zod expression string that accepts the parameter's wire format
+ */
+function zodForParameterSchema(schema: OpenApiSchema | undefined): string {
+	if (!schema) {
+		return "z.string()";
+	}
+
+	if (schema.type === "integer") {
+		return "z.coerce.number().int()";
+	}
+
+	if (schema.type === "number") {
+		return "z.coerce.number()";
+	}
+
+	if (schema.type === "boolean") {
+		return "z.stringbool()";
+	}
+
+	return zodForSchema(schema);
+}
+
+/**
+ * Converts an OpenAPI schema into a Zod expression.
+ *
+ * @param schema - The schema to convert
+ * @returns A Zod expression string for the schema, or `z.unknown()` when no schema is provided
+ */
+function zodForSchema(schema: OpenApiSchema | undefined): string {
+	if (!schema) {
+		return "z.unknown()";
+	}
+
+	if (schema.$ref) {
+		return refName(schema.$ref);
+	}
+
+	schema = normalizeSingleTypeArray(schema);
+
+	const nonNull = nonNullSchema(schema);
+
+	if (nonNull) {
+		return `${zodForSchema(nonNull)}.nullable()`;
+	}
+
+	if (schema.const !== undefined && ["string", "number", "boolean"].includes(typeof schema.const)) {
+		return `z.literal(${JSON.stringify(schema.const)})`;
+	}
+
+	if (schema.anyOf && schema.anyOf.length > 0) {
+		if (schema.anyOf.length === 1) {
+			return zodForSchema(schema.anyOf[0]);
+		}
+
+		const discriminator = discriminatorForAnyOf(schema.anyOf);
+
+		if (discriminator) {
+			return `z.discriminatedUnion(${JSON.stringify(discriminator)}, [${schema.anyOf.map((entry) => zodForSchema(entry)).join(", ")}])`;
+		}
+
+		return `z.union([${schema.anyOf.map((entry) => zodForSchema(entry)).join(", ")}])`;
+	}
+
+	if (schema.enum?.every((item) => typeof item === "string")) {
+		return `z.enum([${schema.enum.map((item) => JSON.stringify(item)).join(", ")}])`;
+	}
+
+	if (schema.type === "array") {
+		return `z.array(${zodForSchema(schema.items)})`;
+	}
+
+	if (
+		schema.type === "object"
+		&& !schema.properties
+		&& typeof schema.additionalProperties === "object"
+		&& schema.additionalProperties !== null
+	) {
+		return `z.record(z.string(), ${zodForSchema(schema.additionalProperties as OpenApiSchema)})`;
+	}
+
+	if (schema.type === "object" || schema.properties) {
+		const required = new Set(schema.required ?? []);
+		const props = Object.entries(schema.properties ?? {}).map(([name, value]) => {
+			const optional = required.has(name) ? "" : ".optional()";
+			return `${propertyKey(name)}: ${zodForSchema(value)}${optional}`;
+		});
+
+		return formatZodObject(props);
+	}
+
+	if (schema.type === "integer") {
+		return "z.int()";
+	}
+
+	if (schema.type === "number") {
+		return "z.number()";
+	}
+
+	if (schema.type === "boolean") {
+		return "z.boolean()";
+	}
+
+	if (schema.type === "null") {
+		return "z.null()";
+	}
+
+	if (schema.type === "string" && schema.format) {
+		const formats: Record<string, string> = {
+			email: "z.email()",
+			uuid: "z.uuid()",
+			uri: "z.url()",
+			"date-time": "z.iso.datetime()",
+			date: "z.iso.date()",
+		};
+		const mapped = formats[schema.format];
+
+		if (mapped) {
+			return mapped;
+		}
+	}
+
+	return "z.string()";
+}
+
+/**
+ * Finds a required property whose unique literal values discriminate every
+ * inline object variant in an OpenAPI `anyOf` schema.
+ *
+ * @param variants - The union variants to inspect.
+ * @returns The discriminator property name, or `undefined` when the union is not safely discriminated.
+ */
+function discriminatorForAnyOf(variants: OpenApiSchema[]): string | undefined {
+	const [first] = variants;
+
+	if (!first || !(first.type === "object" || first.properties)) {
+		return undefined;
+	}
+
+	for (const name of Object.keys(first.properties ?? {})) {
+		const values = variants.map((variant) => {
+			if (!(variant.type === "object" || variant.properties)) {
+				return undefined;
+			}
+
+			if (!variant.required?.includes(name)) {
+				return undefined;
+			}
+
+			const value = variant.properties?.[name]?.const;
+			return ["string", "number", "boolean"].includes(typeof value) ? value : undefined;
+		});
+
+		if (values.every((value) => value !== undefined) && new Set(values).size === variants.length) {
+			return name;
+		}
+	}
+
+	return undefined;
+}
+
+/**
+ * Normalizes OpenAPI `type` arrays with a single entry into their scalar form.
+ *
+ * Examples:
+ * - `type: ["integer"]` -> `type: "integer"`
+ * - `type: ["null"]` -> `type: "null"`
+ */
+function normalizeSingleTypeArray(schema: OpenApiSchema): OpenApiSchema {
+	if (Array.isArray(schema.type) && schema.type.length === 1) {
+		return { ...schema, type: schema.type[0] };
+	}
+
+	return schema;
+}
+
+/**
+ * Extracts the non-null variant from a nullable OpenAPI schema.
+ *
+ * Handles both OpenAPI 3.1 spellings of nullability: a `type` array containing
+ * `"null"`, and an `anyOf` pairing one schema with `{ type: "null" }`.
+ *
+ * @param schema - The schema to inspect
+ * @returns The schema without its null variant, or `undefined` when not nullable
+ */
+function nonNullSchema(schema: OpenApiSchema): OpenApiSchema | undefined {
+	if (Array.isArray(schema.type) && schema.type.includes("null")) {
+		const rest = schema.type.filter((entry) => entry !== "null");
+		return { ...schema, type: rest.length === 1 ? rest[0] : rest };
+	}
+
+	if (schema.anyOf?.length === 2) {
+		const nullEntry = schema.anyOf.find((entry) => entry.type === "null" && !entry.properties);
+
+		if (nullEntry) {
+			return schema.anyOf.find((entry) => entry !== nullEntry);
+		}
+	}
+
+	return undefined;
+}
+
+/**
+ * Builds a placeholder value for an OpenAPI schema.
+ *
+ * @returns A TypeScript expression string representing a sample value for the schema.
+ */
+function placeholderForSchema(
+	schema: OpenApiSchema | undefined,
+	document: OpenApiDocument,
+	seen = new Set<string>(),
+): string {
+	if (schema?.$ref) {
+		const name = refName(schema.$ref);
+
+		if (seen.has(name)) {
+			return "{}";
+		}
+
+		const component = document.components?.schemas?.[name];
+		return placeholderForSchema(component, document, new Set([...seen, name]));
+	}
+
+	if (
+		schema?.const !== undefined
+		&& ["string", "number", "boolean"].includes(typeof schema.const)
+	) {
+		return JSON.stringify(schema.const);
+	}
+
+	if (schema?.enum && schema.enum.length > 0 && typeof schema.enum[0] === "string") {
+		return JSON.stringify(schema.enum[0]);
+	}
+
+	if (schema) {
+		schema = normalizeSingleTypeArray(schema);
+		const nonNull = nonNullSchema(schema);
+
+		if (nonNull) {
+			return placeholderForSchema(nonNull, document, seen);
+		}
+	}
+
+	if (schema?.anyOf && schema.anyOf.length > 0) {
+		return placeholderForSchema(schema.anyOf[0], document, seen);
+	}
+
+	if (schema?.type === "array") {
+		return "[]";
+	}
+
+	if (schema?.type === "object" || schema?.properties) {
+		const entries = Object.entries(schema.properties ?? {}).map(
+			([name, value]) => `${propertyKey(name)}: ${placeholderForSchema(value, document, seen)}`,
+		);
+
+		return `{ ${entries.join(", ")} }`;
+	}
+
+	if (schema?.type === "integer" || schema?.type === "number") {
+		return "0";
+	}
+
+	if (schema?.type === "boolean") {
+		return "false";
+	}
+
+	if (schema?.type === "string" && schema.format) {
+		const placeholders: Record<string, string> = {
+			email: '"example@example.com"',
+			uuid: '"00000000-0000-4000-8000-000000000000"',
+			uri: '"https://example.invalid"',
+			"date-time": '"2026-01-01T00:00:00.000Z"',
+			date: '"2026-01-01"',
+		};
+		const placeholder = placeholders[schema.format];
+
+		if (placeholder) {
+			return placeholder;
+		}
+	}
+
+	if (schema?.type === "string") {
+		return '""';
+	}
+
+	return "null";
+}
+
+/**
+ * Formats a named import from `./schemas.js`.
+ *
+ * @param names - The imported binding names
+ * @returns A single-line or multi-line import statement
+ */
+function formatNamedImport(names: string[]): string {
+	if (names.length <= 3) {
+		return `import { ${names.join(", ")} } from "./schemas.js";`;
+	}
+
+	return `import {
+\t${names.join(",\n\t")},
+} from "./schemas.js";`;
+}
+
+/**
+ * Formats a Zod object schema expression.
+ *
+ * @param props - The object property expressions to include.
+ * @returns The Zod object expression string.
+ */
+function formatZodObject(props: string[]): string {
+	if (props.length === 0) {
+		return "z.object({})";
+	}
+
+	if (props.length > 1) {
+		return `z.object({
+\t${props.join(",\n\t")},
+})`;
+	}
+
+	return `z.object({ ${props.join(", ")} })`;
+}
+
+/**
+ * Formats a property name for use in generated TypeScript.
+ *
+ * @param name - The property name to format.
+ * @returns The identifier when it is valid, otherwise a JSON string literal.
+ */
+function propertyKey(name: string): string {
+	return /^[$A-Z_a-z][$\w]*$/.test(name) ? name : JSON.stringify(name);
+}
+
+/**
+ * Adds Zod exports for schemas referenced by a schema.
+ *
+ * @param schemaExports - The collected schema export definitions
+ * @param schema - The schema to inspect for referenced components
+ * @param document - The OpenAPI document containing component schemas
+ */
+function addReferencedComponents(
+	schemaExports: Map<string, string>,
+	schema: OpenApiSchema | undefined,
+	document: OpenApiDocument,
+): void {
+	for (const ref of refsInSchema(schema)) {
+		const name = refName(ref);
+		const component = document.components?.schemas?.[name];
+
+		if (!component || schemaExports.has(name)) {
+			continue;
+		}
+
+		addReferencedComponents(schemaExports, component, document);
+		schemaExports.set(name, zodForSchema(component));
+	}
+}
+
+/**
+ * Collects all schema references contained in an OpenAPI schema.
+ *
+ * @param schema - The schema to inspect.
+ * @returns The `$ref` values found in the schema, including nested array items and object properties.
+ */
+function refsInSchema(schema: OpenApiSchema | undefined): string[] {
+	if (!schema) {
+		return [];
+	}
+
+	return [
+		...(schema.$ref ? [schema.$ref] : []),
+		...refsInSchema(schema.items),
+		...Object.values(schema.properties ?? {}).flatMap((property) => refsInSchema(property)),
+	];
+}
+
+/**
+ * Converts a local schema reference to a PascalCase name.
+ *
+ * @param ref - The OpenAPI `$ref` value
+ * @returns The PascalCase schema name
+ * @throws If `ref` does not point to `#/components/schemas/*`
+ */
+function refName(ref: string): string {
+	if (!ref.startsWith("#/components/schemas/")) {
+		throw new Error(
+			scaffoldError("ROUTA_OPENAPI_UNSUPPORTED_REF", `Unsupported OpenAPI $ref "${ref}".`, [
+				'Routa v0 scaffold only supports local refs like "#/components/schemas/User".',
+			]),
+		);
+	}
+
+	const name = ref.split("/").at(-1);
+
+	if (!name) {
+		throw new Error(
+			scaffoldError("ROUTA_OPENAPI_UNSUPPORTED_REF", `Unsupported OpenAPI $ref "${ref}".`, [
+				'Routa v0 scaffold only supports local refs like "#/components/schemas/User".',
+			]),
+		);
+	}
+
+	return pascalCase(name);
+}
+
+/**
+ * Validates that a generated name is a valid TypeScript identifier.
+ *
+ * @param name - The generated identifier to validate
+ * @param context - The OpenAPI source description used in the error message
+ */
+function validateGeneratedIdentifier(name: string, context: string): void {
+	if (!/^[$A-Z_a-z][$\w]*$/.test(name)) {
+		throw new Error(
+			scaffoldError(
+				"ROUTA_OPENAPI_INVALID_TYPESCRIPT_IDENTIFIER",
+				`Invalid generated TypeScript identifier "${name}" from ${context}.`,
+				[
+					"Rename the OpenAPI operationId, parameter, or component so Routa can generate valid TypeScript.",
+				],
+			),
+		);
+	}
+}
+
+/**
+ * Converts a string to PascalCase.
+ *
+ * @param value - The input text
+ * @returns The PascalCase form of `value`, or `Operation` when the input is empty after normalization
+ */
+function pascalCase(value: string): string {
+	const text = value.replaceAll(/[^a-zA-Z0-9]+/g, " ").trim();
+
+	if (!text) {
+		return "Operation";
+	}
+
+	return text
+		.split(/\s+/)
+		.map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+		.join("");
+}
+
+/** Converts source text into deterministic generated output without filesystem access. */
+export function createScaffoldPlan(raw: string, extension: string, source: string): ScaffoldPlan {
+	const document = parseOpenApi(raw, extension, source);
+	validateOpenApiDocument(document);
+	const paths = document.paths ?? {};
+	const generated = new Set<string>();
+	const routes: ScaffoldRoute[] = [];
+	const metadataRoutes: RouteMetadata[] = [];
+	const generatedContent = new Map<string, string>();
+
+	for (const [openApiPath, pathItem] of Object.entries(paths)) {
+		const operations = Object.entries(pathItem).filter(([method]) =>
+			httpMethods.includes(method as HttpMethod),
+		) as Array<[HttpMethod, OpenApiOperation]>;
+
+		if (operations.length === 0) {
+			continue;
+		}
+
+		const routeDir = pathToRouteDir(openApiPath);
+		const routeFile = join(routeDir, "route.ts");
+		const schemaFile = join(routeDir, "schemas.ts");
+
+		const schemaExports = new Map<string, string>();
+		const routeImports = new Set<string>();
+		const methodBlocks: string[] = [];
+		const operationIds: string[] = [];
+		const responsesByMethod: Record<string, number[]> = {};
+		const inputsByMethod: Record<string, RouteMethodInputMetadata> = {};
+
+		for (const [method, operation] of operations) {
+			const operationWithParameters = mergePathItemParameters(pathItem, operation, {
+				path: openApiPath,
+				method,
+			});
+			const names = operationNames(method, openApiPath, operationWithParameters);
+			operationIds.push(
+				operationWithParameters.operationId ?? `${method}${pascalCase(openApiPath)}`,
+			);
+			const inputParts: string[] = [];
+			const paramsSchema = schemaForPathParams(openApiPath, operationWithParameters);
+			const querySchema = schemaForParameters(operationWithParameters, "query");
+			const headersSchema = schemaForParameters(operationWithParameters, "header");
+			const cookiesSchema = schemaForParameters(operationWithParameters, "cookie");
+			const bodySchema = schemaForRequestBody(operationWithParameters);
+			const responses = schemasForResponses(operationWithParameters, document);
+			const primaryResponse = responses[0];
+			responsesByMethod[method] = responses.map((response) => response.status);
+			inputsByMethod[method] = {
+				params: Boolean(paramsSchema),
+				query: Boolean(querySchema),
+				headers: Boolean(headersSchema),
+				cookies: Boolean(cookiesSchema),
+				body: Boolean(bodySchema),
+			};
+
+			if (paramsSchema) {
+				schemaExports.set(names.params, paramsSchema);
+				routeImports.add(names.params);
+				inputParts.push(`params: ${names.params}`);
+			}
+
+			if (querySchema) {
+				schemaExports.set(names.query, querySchema);
+				routeImports.add(names.query);
+				inputParts.push(`query: ${names.query}`);
+			}
+
+			if (headersSchema) {
+				schemaExports.set(names.headers, headersSchema);
+				routeImports.add(names.headers);
+				inputParts.push(`headers: ${names.headers}`);
+			}
+
+			if (cookiesSchema) {
+				schemaExports.set(names.cookies, cookiesSchema);
+				routeImports.add(names.cookies);
+				inputParts.push(`cookies: ${names.cookies}`);
+			}
+
+			if (bodySchema) {
+				addReferencedComponents(
+					schemaExports,
+					requestBodySchema(operationWithParameters),
+					document,
+				);
+				schemaExports.set(names.body, bodySchema);
+				routeImports.add(names.body);
+				inputParts.push(`body: ${names.body}`);
+			}
+
+			for (const response of responses) {
+				addReferencedComponents(schemaExports, response.schemaSource, document);
+				schemaExports.set(
+					responseSchemaName(names.response, response.status, responses),
+					response.schema,
+				);
+				routeImports.add(responseSchemaName(names.response, response.status, responses));
+			}
+
+			const inputBlock =
+				inputParts.length > 0
+					? `\n\t\tinput: {\n\t\t\t${inputParts.join(",\n\t\t\t")},\n\t\t},`
+					: "";
+
+			methodBlocks.push(`\t${method}: createRoute({${inputBlock}
+\t\tresponses: {
+\t\t\t${responses
+				.map((response, index) => {
+					const key = index === 0 ? "success" : `success${response.status}`;
+					const schemaName = responseSchemaName(names.response, response.status, responses);
+					return `${key}: {
+\t\t\t\tstatus: ${response.status},
+\t\t\t\tschema: ${schemaName},
+\t\t\t}`;
+				})
+				.join(",\n\t\t\t")},
+\t\t},
+\t\trun: () => {
+\t\t\t// TODO: call application-owned business logic.
+\t\t\treturn {
+\t\t\t\ttype: "success",
+\t\t\t\tdata: ${primaryResponse.placeholder} as unknown as z.output<typeof ${responseSchemaName(names.response, primaryResponse.status, responses)}>,
+\t\t\t};
+\t\t},
+\t})`);
+		}
+
+		const imports = formatNamedImport(Array.from(routeImports).sort());
+		const routePath = openApiPath.replaceAll(/\{([^}]+)\}/g, ":$1");
+		const routeSource = `${generatedHeader(source)}import { createRoute, createRouteRoot } from "@routa-ts/core";
+import type { z } from "zod";
+${imports}
+
+const route = createRouteRoot(${JSON.stringify(routePath)});
+
+export default route({
+${methodBlocks.join(",\n")},
+});
+`;
+		const schemaSource = `${generatedHeader(source)}import { z } from "zod";
+
+${Array.from(schemaExports.entries())
+	.map(([name, schema]) => `export const ${name} = ${schema};`)
+	.join("\n\n")}
+`;
+
+		generated.add(routeFile);
+		generated.add(schemaFile);
+		generatedContent.set(routeFile, routeSource);
+		generatedContent.set(schemaFile, schemaSource);
+		routes.push({
+			file: routeFile,
+			path: routePath,
+			methods: operations.map(([method]) => method.toUpperCase()),
+			operationIds,
+			middleware: [],
+			groups: [],
+			segments: pathSegments(openApiPath),
+		});
+		metadataRoutes.push({
+			file: routeFile,
+			path: openApiPath.replaceAll(/\{([^}]+)\}/g, ":$1"),
+			methods: operations.map(([method]) => method.toUpperCase()),
+			responses: responsesByMethod,
+			inputs: inputsByMethod,
+			middleware: [],
+			methodMiddleware: Object.fromEntries(operations.map(([method]) => [method, []])),
+			ctx: [],
+			groups: [],
+			segments: routeDirSegments(openApiPath),
+		});
+	}
+
+	// Shared with `routa check` so the runtime always loads the same metadata shape.
+	generatedContent.set(".routa/routes.gen.ts", routesMetadataSource(metadataRoutes));
+	generatedContent.set(".routa/openapi-baseline.json", `${JSON.stringify(document, null, "\t")}\n`);
+
+	return assembleScaffoldPlan(document, source, {
+		files: generatedContent,
+		generatedPaths: generated,
+		routes,
+	});
+}

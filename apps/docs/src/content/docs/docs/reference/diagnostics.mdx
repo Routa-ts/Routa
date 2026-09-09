@@ -158,11 +158,12 @@ restore the manifest from version control.
 
 ### `ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE`
 
-A tracked generated file no longer matches its recorded hash, so regenerating would discard
-your edits.
+A tracked generated file no longer matches its recorded hash, or its manifest hash is
+missing. Routa refuses to overwrite or remove it because local edits may be lost.
 
 **Fix:** move the edits into application-owned modules, then regenerate. Run with
-`--preview` first to see the full list.
+`--preview` first to see the full list. If the hash is missing, restore
+`.routa/manifest.json` from version control before regenerating.
 
 ## Non-Coded Failures
 
