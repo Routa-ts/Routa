@@ -80,6 +80,10 @@ _Avoid_: Raw response, representation adapter, error policy
 A schema applied to HTTP input whose input type describes the incoming representation and whose output type is the validated, possibly transformed value received by application code.
 _Avoid_: Response schema, domain model
 
+**Pagination contract**:
+An opt-in HTTP contract for cursor or offset inputs and page responses, expressed through ordinary query and named outcome schemas. Schema helpers provide a standard form; application code owns record fetching, cursor interpretation, ordering, counts, and navigation values.
+_Avoid_: Query engine, automatic pagination, framework-owned ordering
+
 **Response schema**:
 A schema applied to a named outcome whose input and output types are identical and describe the wire-ready JSON value supplied by application code. Routa validates and sends that value unchanged, and OpenAPI projects the same JSON shape.
 _Avoid_: Input decoder, transformer, codec, serializer, domain model
