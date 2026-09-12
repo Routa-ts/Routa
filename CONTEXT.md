@@ -104,6 +104,18 @@ _Avoid_: Permanent OpenAPI ownership, continuous source replacement
 A generation-time recipe that writes application-owned integration code using public Routa APIs and direct upstream dependencies.
 _Avoid_: Routa integration package, runtime plugin, hidden adapter
 
+**Request observation**:
+An opt-in measurement or span for one request reaching Routa, ending at server-observed transmission completion or interruption. Application execution and resource cleanup have separate lifetimes.
+_Avoid_: Handler timing, client receipt confirmation, service lifetime
+
+**Transmission outcome**:
+The observed completion or interruption of an HTTP response, separate from its sent status. An interruption is attributed to the client or server only when evidence supports that cause; otherwise its cause remains unknown.
+_Avoid_: HTTP status, application outcome, inferred disconnect cause
+
+**Telemetry adapter**:
+An application-owned implementation of Routa's public request-observation interfaces that connects HTTP instrumentation to a telemetry library. Applications own propagation, sampling, business instrumentation, export, and telemetry resources.
+_Avoid_: Routa telemetry client, privileged integration, vendor-specific framework API
+
 **OpenAPI baseline**:
 The accepted API contract against which Routa checks generated OpenAPI for drift and breaking changes.
 _Avoid_: Current generated output
