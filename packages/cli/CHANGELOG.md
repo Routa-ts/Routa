@@ -1,5 +1,12 @@
 # @routa-ts/cli
 
+## 0.4.0
+
+### Patch Changes
+
+- Updated dependencies [cab89de]
+  - @routa-ts/core@0.4.0
+
 ## 0.3.1
 
 ### Patch Changes
