@@ -13,8 +13,8 @@ export default route({
 				}),
 			},
 		},
-		run: () => {
-			return { type: "success", data: { message: "Hello, world!" } };
+		run: ({ response }) => {
+			return response.success({ message: "Hello, world!" });
 		},
 	}),
 });

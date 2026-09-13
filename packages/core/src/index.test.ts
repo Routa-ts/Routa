@@ -14,6 +14,31 @@ declare module "./index.js" {
 }
 
 describe("route contracts", () => {
+	it("infers response methods and their individual payloads within route roots", () => {
+		createRouteRoot("/status")({
+			get: createRoute({
+				responses: {
+					ok: { status: 200, schema: z.object({ id: z.string() }) },
+					notFound: { status: 404, schema: z.object({ message: z.string() }) },
+				},
+				run: ({ response }) => {
+					// @ts-expect-error Only declared outcomes are available.
+					response.created({ id: "1" });
+					// @ts-expect-error Payloads must match the selected outcome.
+					response.ok({ message: "missing" });
+					// @ts-expect-error Required data cannot be omitted.
+					response.ok();
+					// @ts-expect-error Builder methods cannot be reassigned.
+					response.ok = response.notFound;
+					const result = response.ok({ id: "1" });
+					expectType<"ok">(result.type);
+					expectType<string>(result.data.id);
+					return result;
+				},
+			}),
+		});
+	});
+
 	it("preserves route method declarations", () => {
 		const requireAuth = createMiddleware({
 			provides: {
