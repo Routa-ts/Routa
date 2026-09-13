@@ -33,7 +33,7 @@ export default route({
 				schema: EmailConflictSchema,
 			},
 		},
-		run: async ({ input, ctx }) => {
+		run: async ({ input, ctx, response }) => {
 			const correlationId = randomUUID();
 
 			ctx.logger.info("users.create", "Creating a user.", {
@@ -46,7 +46,7 @@ export default route({
 				ctx.logger.warn("users.create_conflict", "Email is already in use.", {
 					correlationId,
 				});
-				return { type: "emailConflict", data: { message: "Email already in use." } };
+				return response.emailConflict({ message: "Email already in use." });
 			}
 
 			ctx.logger.info("users.created", "User created.", {
@@ -54,7 +54,7 @@ export default route({
 				userId: created.id,
 			});
 
-			return { type: "success", data: created };
+			return response.success(created);
 		},
 	}),
 });
@@ -100,9 +100,14 @@ declared here applies to this method only, in addition to anything inherited fro
 
 ### `run`
 
-The handler. It receives `{ input, ctx }` and returns `{ type, data }`, where `type` is a
-key of `responses` or of any middleware `rejects` map. Results may contain only those two
-fields; Routa rejects extra fields so that responses stay describable in OpenAPI.
+The handler receives `{ input, ctx, response }`. Return `response.success(data)` to
+choose an outcome named `success`. The methods come from this route's `responses` keys,
+and each method accepts the corresponding schema's output type. A method only builds a
+result; it does not send anything until you return that result from the handler.
+
+You can also return `{ type, data }` directly. Results may contain only those two fields;
+Routa rejects extra fields so that responses stay describable in OpenAPI. See
+[ResponseBuilders](/docs/reference/core/#responsebuilders) for the type signature.
 
 ## Handler Context
 

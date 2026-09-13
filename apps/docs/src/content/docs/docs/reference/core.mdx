@@ -58,7 +58,7 @@ function createRoute<TInput, TResponses, TMiddleware>(
 ```
 
 Declares one HTTP method. The function returns its argument unchanged; its purpose is to
-capture literal types so `run` receives typed `input` and `ctx` and is constrained to the
+capture literal types so `run` receives typed `input`, `ctx`, and `response` and is constrained to the
 declared outcomes.
 
 | Field | Type | Required |
@@ -67,7 +67,7 @@ declared outcomes.
 | `responses` | `Record<string, { status: number; schema: ZodType }>` | Yes |
 | `middleware` | `readonly MiddlewareContract[]` | No |
 | `deprecation` | `{ sunset?: string; replacement?: string }` | No |
-| `run` | `({ input, ctx }) => { type, data }` | Yes |
+| `run` | `({ input, ctx, response }) => { type, data }` or a promise of that result | Yes |
 
 `deprecation.replacement` accepts a registered route path beginning with `/` or an
 absolute `http:`/`https:` URL. Local paths are checked against the generated route
@@ -85,9 +85,55 @@ export const getStatus = createRoute({
 	responses: {
 		success: { status: 200, schema: z.object({ ok: z.boolean() }) },
 	},
-	run: () => ({ type: "success", data: { ok: true } }),
+	run: ({ response }) => response.success({ ok: true }),
 });
 ```
+
+## `ResponseBuilders`
+
+```ts
+import type { RouteResponses, SchemaOutput } from "@routa-ts/core";
+
+type ResponseBuilders<TResponses extends RouteResponses> = {
+	readonly [K in keyof TResponses & string]: (
+		data: SchemaOutput<TResponses[K]["schema"]>,
+	) => {
+		readonly type: K;
+		readonly data: SchemaOutput<TResponses[K]["schema"]>;
+	};
+};
+```
+
+Handlers receive `response: ResponseBuilders<TResponses>`. Each method uses the name
+and schema of one outcome in the route's own `responses` declaration. There are no
+built-in outcome names, and middleware rejects do not add builder methods.
+
+| Parameter | Type | Purpose |
+| --- | --- | --- |
+| `data` | Selected outcome schema's output type | Body data for the result |
+
+A builder returns `{ type, data }` without sending a response. Return that result from
+`run` to select the outcome. Routa applies the declared status, configured response
+validation, and JSON serialization. Existing object returns remain supported.
+
+```ts
+import { createRoute } from "@routa-ts/core";
+import { z } from "zod";
+
+export const getGreeting = createRoute({
+	responses: {
+		ok: { status: 200, schema: z.object({ message: z.string() }) },
+	},
+	run: ({ response }) => response.ok({ message: "Hello!" }),
+});
+```
+
+**Errors:** TypeScript rejects undeclared methods and data that does not match the
+selected schema. Runtime payload validation follows the `responseValidation` setting.
+The `response` object is frozen; its methods cannot be replaced.
+
+`RouteHandlerArgs<TInput, TCtx, TResponses = RouteResponses>` accepts the response
+contract as its third type parameter when you explicitly annotate handler arguments.
 
 ## `createRouteRoot`
 
@@ -365,7 +411,7 @@ type UsersRouteConfig = RouteRootConfigForCtx<{
 ## Exported Types
 
 `HttpMethod`, `RouteInput`, `RouteResponses`, `RouteContract`, `AnyRouteContract`,
-`RouteRun`, `RouteHandlerArgs`, `RoutaResult`, `RouteRunResult`, `InferInput`,
+`RouteRun`, `RouteHandlerArgs`, `ResponseBuilders`, `RoutaResult`, `RouteRunResult`, `InferInput`,
 `InferResponse`, `SchemaInput`, `SchemaOutput`, `RoutaRouteContext`, `RoutaConfig`,
 `ResponseValidation`, `RouteDeprecation`, `RouteDeprecationReplacement`, `RegisteredRoutePath`,
 `ExternalApiUrl`, `ContextualRouteContract`, `RouteRootConfigForCtx`, `MiddlewareContract`,

@@ -52,6 +52,14 @@ export type RoutaResult<TResponses extends RouteResponses> = {
 
 export type RouteRunResult<TResponses extends RouteResponses> = RoutaResult<TResponses>;
 
+/** Pure result builders keyed by the route's declared outcome names. */
+export type ResponseBuilders<TResponses extends RouteResponses> = {
+	readonly [K in keyof TResponses & string]: (data: SchemaOutput<TResponses[K]["schema"]>) => {
+		readonly type: K;
+		readonly data: SchemaOutput<TResponses[K]["schema"]>;
+	};
+};
+
 type WidenedRouteRunResult<TResponses extends RouteResponses> = {
 	readonly type: string;
 	readonly data: SchemaOutput<TResponses[keyof TResponses & string]["schema"]>;
@@ -176,16 +184,23 @@ export type RoutaRouteContext = {
 	readonly logger: RoutaLogger;
 };
 
-export type RouteHandlerArgs<TInput extends RouteInput | undefined, TCtx> = {
+export type RouteHandlerArgs<
+	TInput extends RouteInput | undefined,
+	TCtx,
+	TResponses extends RouteResponses = RouteResponses,
+> = {
 	input: InferInput<TInput>;
 	ctx: Omit<TCtx, keyof RoutaRouteContext> & RoutaRouteContext;
+	response: ResponseBuilders<TResponses>;
 };
 
 export type RouteRun<
 	TInput extends RouteInput | undefined,
 	TResponses extends RouteResponses,
 	TCtx,
-> = (args: RouteHandlerArgs<TInput, TCtx>) => MaybePromise<RouteRunReturn<NoInfer<TResponses>>>;
+> = (
+	args: RouteHandlerArgs<TInput, TCtx, NoInfer<TResponses>>,
+) => MaybePromise<RouteRunReturn<NoInfer<TResponses>>>;
 
 export type RouteContract<
 	TInput extends RouteInput | undefined,

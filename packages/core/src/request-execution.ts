@@ -16,6 +16,7 @@ export type RuntimeRouteContract = AnyRouteContract & {
 	run: (args: {
 		input: Record<string, unknown>;
 		ctx: Record<string, unknown>;
+		response: Readonly<Record<string, (data: unknown) => RuntimeResult>>;
 	}) => RuntimeResult | Promise<RuntimeResult>;
 	middleware?: readonly RuntimeMiddlewareContract[];
 };
@@ -94,7 +95,15 @@ async function runWithMiddleware(
 		if (!item) {
 			// Framework-owned context is applied last so middleware or a low-level
 			// createContext implementation cannot replace the configured logger.
-			const result = await contract.run({ input: routeInput, ctx: { ...ctx, logger } });
+			const response = Object.create(null) as Record<string, (data: unknown) => RuntimeResult>;
+			for (const type of Object.keys(contract.responses)) {
+				response[type] = (data) => ({ type, data });
+			}
+			const result = await contract.run({
+				input: routeInput,
+				ctx: { ...ctx, logger },
+				response: Object.freeze(response),
+			});
 
 			if (isRuntimeResult(result)) {
 				return result;
