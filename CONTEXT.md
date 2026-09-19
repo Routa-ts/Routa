@@ -16,6 +16,10 @@ _Avoid_: Routa service layer, framework-owned business logic
 An application-owned dependency optionally wired through Routa under an explicit service contract and scope for typed access and test replacement; Routa does not own its business behavior.
 _Avoid_: Routa service, framework service, required service layer
 
+**Application environment**:
+An application-owned configuration object supplied to a Routa application instance and shared with its request context and configured service factories. The application owns loading and validation; Routa owns typed access and initialization ordering.
+_Avoid_: Raw process environment, framework secret store, global environment registry
+
 **Service contract**:
 An application-owned interface defining the required named services contributed by one scope. Consumers depend on that interface rather than a particular implementation.
 _Avoid_: Service implementation, runtime schema, global service registry
