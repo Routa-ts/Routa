@@ -108,6 +108,14 @@ _Avoid_: Permanent OpenAPI ownership, continuous source replacement
 A generation-time recipe that writes application-owned integration code using public Routa APIs and direct upstream dependencies.
 _Avoid_: Routa integration package, runtime plugin, hidden adapter
 
+**Request identity**:
+A Routa-generated identifier for one request, shared by its typed context, response header, and framework logs. Incoming correlation identifiers remain separate and never replace it.
+_Avoid_: Incoming request ID, correlation ID, trace ID
+
+**Correlation identity**:
+An optional, validated caller-supplied identifier used to associate requests in context, logs, and response headers. It remains separate from Routa's generated request identity and is not proof of authentication.
+_Avoid_: Request identity, principal, trace ID
+
 **Request observation**:
 An opt-in measurement or span for one request reaching Routa, ending at server-observed transmission completion or interruption. Application execution and resource cleanup have separate lifetimes.
 _Avoid_: Handler timing, client receipt confirmation, service lifetime
