@@ -12,6 +12,10 @@ _Avoid_: Business layer, application architecture
 Developer-owned services, use cases, domain models, persistence, authentication, and authorization called from the HTTP boundary.
 _Avoid_: Routa service layer, framework-owned business logic
 
+**Application definition**:
+A reusable, source-derived description connecting a Routa project's configuration and runtime route bindings. It describes an application without starting an instance or initializing its environment and services.
+_Avoid_: Running application, editable route registry, service container
+
 **Injected service**:
 An application-owned dependency optionally wired through Routa under an explicit service contract and scope for typed access and test replacement; Routa does not own its business behavior.
 _Avoid_: Routa service, framework service, required service layer

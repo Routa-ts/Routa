@@ -1,0 +1,3 @@
+# Executables own process lifecycle
+
+Routa V1 keeps process signals and exit in the executable, while its Node lifecycle API owns admission, tracked work, and registered cleanup for each application instance. Deadline expiry reports incomplete shutdown and requests cancellation; actual completion remains separately observable because unfinished JavaScript can still use application resources. This preserves safe cleanup and multiple application instances without global handlers or another hook pipeline, while applications own shared logging and telemetry resources and deployment supervisors enforce hard termination when the event loop cannot progress.
