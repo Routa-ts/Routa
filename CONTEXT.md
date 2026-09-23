@@ -120,6 +120,10 @@ _Avoid_: Incoming request ID, correlation ID, trace ID
 An optional, validated caller-supplied identifier used to associate requests in context, logs, and response headers. It remains separate from Routa's generated request identity and is not proof of authentication.
 _Avoid_: Request identity, principal, trace ID
 
+**Request protection policy**:
+An application-declared HTTP-boundary contract that limits admitted request concurrency and execution time and optionally cancels work after transport loss. Its occupied capacity remains tied to execution, transmission, and registered cleanup rather than response selection alone.
+_Avoid_: Rate limit, transaction deadline, background-task manager
+
 **Request observation**:
 An opt-in measurement or span for one request reaching Routa, ending at server-observed transmission completion or interruption. Application execution and resource cleanup have separate lifetimes.
 _Avoid_: Handler timing, client receipt confirmation, service lifetime
