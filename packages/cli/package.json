@@ -51,7 +51,7 @@
 		"@routa-ts/core": "workspace:*",
 		"tsx": "4.23.13",
 		"typescript": "7.0.2",
-		"yaml": "2.9.0"
+		"yaml": "2.9.1"
 	},
 	"devDependencies": {
 		"create-routa-ts": "workspace:*"
