@@ -17,7 +17,7 @@
 		"@routa-ts/core": "workspace:*",
 		"hono": "^4.13.8",
 		"tsx": "^4.23.13",
-		"zod": "^4.4.3"
+		"zod": "^4.6.5"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.12",

@@ -136,6 +136,45 @@ describe("createHonoApp", () => {
 		});
 	});
 
+	it("requires seconds in date-time request fields", async () => {
+		const app = createHonoApp([
+			{
+				method: "post",
+				path: "/events",
+				contract: createRoute({
+					input: {
+						body: z.object({ createdAt: z.iso.datetime() }),
+					},
+					responses: {
+						accepted: {
+							status: 200,
+							schema: z.object({ createdAt: z.string() }),
+						},
+					},
+					run: ({ input }) => ({ type: "accepted", data: input.body }),
+				}),
+			},
+		]);
+
+		const request = (createdAt: string) =>
+			app.request("/events", {
+				method: "POST",
+				body: JSON.stringify({ createdAt }),
+				headers: { "content-type": "application/json" },
+			});
+
+		const missingSeconds = await request("2026-09-25T12:30Z");
+		expect(missingSeconds.status).toBe(400);
+		await expect(missingSeconds.json()).resolves.toMatchObject({
+			title: "Validation failed",
+			status: 400,
+		});
+
+		const fullTimestamp = await request("2026-09-25T12:30:00Z");
+		expect(fullTimestamp.status).toBe(200);
+		await expect(fullTimestamp.json()).resolves.toEqual({ createdAt: "2026-09-25T12:30:00Z" });
+	});
+
 	it("runs middleware and accumulates context for the handler", async () => {
 		const requireAuth = createMiddleware({
 			provides: {
