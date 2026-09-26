@@ -1,5 +1,11 @@
 # @routa-ts/core
 
+## 0.4.1
+
+### Patch Changes
+
+- dd633db: Require Zod 4.6.5 for route contracts. Date-time input now requires seconds in RFC 3339 timestamps.
+
 ## 0.4.0
 
 ### Minor Changes
