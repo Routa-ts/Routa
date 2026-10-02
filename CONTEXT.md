@@ -124,6 +124,18 @@ _Avoid_: Request identity, principal, trace ID
 An application-declared HTTP-boundary contract that limits admitted request concurrency and execution time and optionally cancels work after transport loss. Its occupied capacity remains tied to execution, transmission, and registered cleanup rather than response selection alone.
 _Avoid_: Rate limit, transaction deadline, background-task manager
 
+**Health probe**:
+An explicitly configured Routa operation whose successful response confirms an admitted HTTP request can be answered, without evaluating application dependency readiness. Framework authentication, protection, and lifecycle failures remain separate from its successful signal.
+_Avoid_: Dependency health check, restart guarantee
+
+**Readiness probe**:
+An explicitly configured Routa operation reporting the combined result of required application-owned checks, without independently admitting or blocking ordinary application traffic.
+_Avoid_: Request gate, startup check
+
+**Readiness evaluation**:
+One application-instance-local execution of all configured readiness checks, shared by concurrent probes and tracked until its callbacks settle; its published result and actual work completion have separate lifetimes.
+_Avoid_: Per-request dependency check, background poll
+
 **Request observation**:
 An opt-in measurement or span for one request reaching Routa, ending at server-observed transmission completion or interruption. Application execution and resource cleanup have separate lifetimes.
 _Avoid_: Handler timing, client receipt confirmation, service lifetime
