@@ -225,6 +225,8 @@ type RoutaMetrics = {
 
 ## Part 5.3: Health, Readiness, and Liveness
 
+This section records a historical proposal. [ADR-0007](adr/0007-application-owned-readiness.md) supersedes its endpoint exposure policy: both health and readiness require explicit opt-in, and `/health` and `/ready` are default paths only when enabled. Runtime implementation remains pending. The proposal below must not override accepted contracts.
+
 ### Decisions
 
 - Routa provides a health endpoint by default.
