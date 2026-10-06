@@ -52,6 +52,14 @@ _Avoid_: Route registry
 A declaration of the context and injected services middleware requires, the context it provides, and the early outcomes it may produce.
 _Avoid_: Invisible hook, side-effect middleware
 
+**Rate-limit decision**:
+An application-owned admission result that permits a request, reports exhausted quota, or reports that the limiter is unavailable. Routa translates it into ordinary middleware continuation or a declared HTTP rejection while the application owns identity, quota, algorithm, and storage.
+_Avoid_: Framework bucket, counter-store contract, automatic quota policy
+
+**Request metadata**:
+Routa-owned readonly facts about the current HTTP request and its matched operation, including resolved network addresses and their provenance. These transport facts remain separate from application-owned identity and policy.
+_Avoid_: Raw request, middleware state, quota key
+
 **Authentication contract**:
 A provider-neutral HTTP-boundary agreement automatically applied to every route when configured, yielding anonymous or authenticated request context through Routa's credential orchestration and application-owned authentication; otherwise no authentication context is registered.
 _Avoid_: Auth provider, authentication implementation, framework-owned identity or session
