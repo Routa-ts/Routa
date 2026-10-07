@@ -1,5 +1,7 @@
 # Security Design (Group 2)
 
+> Historical design input. This document does not establish accepted V1 contracts or shipped behavior. Follow the [source hierarchy](agents/domain.md#source-hierarchy), [current vocabulary](../CONTEXT.md), and [accepted ADRs](adr/).
+
 ## Scope
 
 This document records decisions for Group 2 in small parts.
@@ -213,7 +215,9 @@ responses: {
 
 ## Part 2.4: Rate Limiting and Request Protection
 
-### Decisions
+> The rate-limiting proposals below are superseded. The accepted V1 contract adapts application-owned decisions through ordinary middleware; applications own identity, quota, algorithm, storage, and backend resources. Memory support is editable application-owned scaffold code. Framework token-bucket defaults, global store configuration, built-in adapters, and automatic policy defaults below are historical proposals. See [Rate-limit decision](../CONTEXT.md#language) and [HTTP-boundary ownership](adr/0002-own-only-the-http-boundary.md). Runtime delivery remains pending.
+
+### Historical proposals
 
 - Routa may ship opinionated defaults, while allowing full developer overrides.
 - Routa's public rate-limit API is framework-level, not Hono-specific.
