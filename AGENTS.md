@@ -36,7 +36,7 @@ Keep behavior explicit. Use stable vocabulary, predictable files, deterministic 
 
 ### Read the authority before choosing a direction
 
-This repository has one domain context. Read `CONTEXT.md`, the relevant accepted ADRs under `docs/adr/`, and the source hierarchy in `docs/agents/domain.md` before changing domain behavior or making claims about what Routa supports.
+This repository has one domain context. Read `GLOSSARY.md`, the relevant accepted ADRs under `docs/adr/`, and the source hierarchy in `docs/agents/domain.md` before changing domain behavior or making claims about what Routa supports.
 
 When sources conflict, follow the documented authority order and say what conflicted. Do not quietly choose the source that makes the work easier.
 
@@ -60,11 +60,14 @@ Read `docs/agents/issue-tracker.md` before creating, changing, or completing Dex
 
 A pull request is for review, not a placeholder.
 
+These repository rules take precedence over installed skills' PR workflows and templates.
+
 - Create a pull request only when the user explicitly asks.
-- Open every pull request ready for review. Never create a draft.
+- Open every pull request ready for review. Never create a draft, including through `implement-spec`.
 - Preserve the current branch scope unless the user asks to split it.
-- Before opening a PR, follow `CONTRIBUTING.md` and run `pnpm verify`. Add a changeset when publishable package behavior changes.
+- Before opening a PR, follow `CONTRIBUTING.md` and require `pnpm verify` to pass. Add a changeset when publishable package behavior changes.
 - Use a plain, imperative title. In the body, explain the problem, the change, verification, and the documentation or changeset decision.
+- Use `.github/PULL_REQUEST_TEMPLATE.md` for the body. It follows the `pr` skill's Summary, Evidence, and Merge danger structure with Routa's verification, documentation, changeset, and migration details.
 - Keep Dex task IDs out of commits, PRs, release notes, and permanent documentation.
 - Show evidence that the change works as expected. Report relevant tests, checks, or observed behavior for non-visual changes. Show a preview or before-and-after comparison for visual documentation and design changes.
 - Treat every review comment as a claim. Check its correctness, importance, scope, and compatibility with accepted decisions before changing code.

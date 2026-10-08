@@ -1,6 +1,6 @@
 # Security Design (Group 2)
 
-> Historical design input. This document does not establish accepted V1 contracts or shipped behavior. Follow the [source hierarchy](agents/domain.md#source-hierarchy), [current vocabulary](../CONTEXT.md), and [accepted ADRs](adr/).
+> Historical design input. This document does not establish accepted V1 contracts or shipped behavior. Follow the [source hierarchy](agents/domain.md#source-hierarchy), [current vocabulary](../GLOSSARY.md), and [accepted ADRs](adr/).
 
 ## Scope
 
@@ -215,7 +215,7 @@ responses: {
 
 ## Part 2.4: Rate Limiting and Request Protection
 
-> The rate-limiting proposals below are superseded. The accepted V1 contract adapts application-owned decisions through ordinary middleware; applications own identity, quota, algorithm, storage, and backend resources. Memory support is editable application-owned scaffold code. Framework token-bucket defaults, global store configuration, built-in adapters, and automatic policy defaults below are historical proposals. See [Rate-limit decision](../CONTEXT.md#language) and [HTTP-boundary ownership](adr/0002-own-only-the-http-boundary.md). Runtime delivery remains pending.
+> The rate-limiting proposals below are superseded. The accepted V1 contract adapts application-owned decisions through ordinary middleware; applications own identity, quota, algorithm, storage, and backend resources. Memory support is editable application-owned scaffold code. Framework token-bucket defaults, global store configuration, built-in adapters, and automatic policy defaults below are historical proposals. See [Rate-limit decision](../GLOSSARY.md#language) and [HTTP-boundary ownership](adr/0002-own-only-the-http-boundary.md). Runtime delivery remains pending.
 
 ### Historical proposals
 

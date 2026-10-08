@@ -6,11 +6,11 @@ How engineering skills consume Routa's domain documentation.
 
 Read:
 
-1. `CONTEXT.md` for canonical Routa vocabulary.
+1. `GLOSSARY.md` for canonical Routa vocabulary.
 2. Relevant accepted decisions under `docs/adr/`.
 3. The source hierarchy below for the area being changed.
 
-If `CONTEXT.md` or `docs/adr/` does not exist, proceed silently. `/domain-modeling` creates them only when a term or durable decision is ready to record.
+If `GLOSSARY.md` or `docs/adr/` does not exist, proceed silently. `/domain-modeling` creates them only when a term or durable decision is ready to record.
 
 ## Source hierarchy
 
@@ -26,7 +26,7 @@ If public documentation conflicts with code or tests, report documentation drift
 
 V1 decision maps, specifications, priorities, and implementation tickets live in the project-local Dex tracker under `.dex/`. Read the relevant map and its tickets before planning V1 work.
 
-Dex is working state, not permanent product documentation. Record accepted vocabulary in `CONTEXT.md` and durable architectural decisions under `docs/adr/`.
+Dex is working state, not permanent product documentation. Record accepted vocabulary in `GLOSSARY.md` and durable architectural decisions under `docs/adr/`.
 
 ### Future direction
 
@@ -40,11 +40,11 @@ When editing public documentation, follow `apps/docs/AGENTS.md`.
 
 ## File structure
 
-This repository uses a single domain context:
+This repository uses a single domain glossary:
 
 ```text
 /
-├── CONTEXT.md
+├── GLOSSARY.md
 └── docs/
     └── adr/
         ├── 0001-source-route-contracts.md
@@ -55,7 +55,7 @@ This repository uses a single domain context:
 
 ## Use the glossary vocabulary
 
-Use terms from `CONTEXT.md` consistently in issue titles, specifications, tests, refactoring proposals, and documentation.
+Use terms from `GLOSSARY.md` consistently in issue titles, specifications, tests, refactoring proposals, and documentation.
 
 If a needed concept is missing, either reconsider the new terminology or use `/domain-modeling` to resolve the gap.
 
