@@ -103,7 +103,7 @@ for formatting, typechecking, and unit tests; Turborepo caches repeated work.
 
 Routa has a complete v0 implementation baseline in this repo. Implementation, tests, and public documentation define shipped behavior.
 
-Active V1 priorities, specifications, and implementation tickets live in the project-local Dex tracker. Permanent product language and architectural decisions remain in `CONTEXT.md` and `docs/adr/`.
+Active V1 priorities, specifications, and implementation tickets live in the project-local Dex tracker. Permanent product language and architectural decisions remain in `GLOSSARY.md` and `docs/adr/`.
 
 ## License
 

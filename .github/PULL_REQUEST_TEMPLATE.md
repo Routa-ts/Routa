@@ -1,18 +1,21 @@
-# Summary
+## Summary
 
-<!-- What changed and why? -->
+<Problem and resulting behavior, in one or two sentences.>
 
-## Tests
+<Smallest useful diff, diagram, pseudocode, or tree.>
 
-<!-- List commands run, or explain why tests were not run. -->
+## Evidence
 
-## Breaking Changes
+<!-- Use real observations for before/after evidence. A failing test is useful when one exists. -->
 
-<!-- Write "None" or describe the migration impact. -->
+- Before: <Observed behavior or failing check.>
+- After: <Observed behavior or passing check.>
+- Verification: `pnpm verify`: <result>, plus relevant checks.
+- Documentation: <Updated pages, or why no update is needed.>
+- Changeset: <Added changeset, or why none is needed.>
 
-## Checklist
+## Merge danger
 
-- [ ] Tests or docs updated for changed behavior
-- [ ] Changeset added for user-facing package changes
-- [ ] Public API changes were discussed in an issue or discussion
-- [ ] Package output checked when publishing behavior changed
+- Door: <One-way or two-way, with a brief rollback explanation.>
+- Blast radius: <Affected packages, consumers, or behavior.>
+- Breaking changes: <None, or the required migration.>

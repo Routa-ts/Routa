@@ -9,7 +9,7 @@ Persistent issues, specifications, decision maps, and implementation tickets for
 - Do not call `dex sync`, `dex import`, or `dex export`.
 - Do not enable GitHub or Shortcut synchronization.
 - Do not put Dex task IDs in commits, pull requests, release notes, or permanent documentation.
-- Keep permanent product decisions in `CONTEXT.md` or `docs/adr/`, not only in Dex.
+- Keep permanent product decisions in `GLOSSARY.md` or `docs/adr/`, not only in Dex.
 - Use in-session task tools for temporary scratch planning; use Dex when work must survive the session.
 
 ## Task descriptions
@@ -88,6 +88,12 @@ dex show <id> --full
 
 Use `--json` when structured output is useful.
 
+## When a skill implements a specification
+
+`/implement-spec` uses Dex parent and blocker relationships as its task graph. Fetch each ticket with `dex show <id> --full`; only take work on the ready frontier with `Triage: ready-for-agent`.
+
+Resolve tickets through Dex completion. Keep the current branch scope unless the user asks to split it. Routa's pull request rules in `AGENTS.md` override the skill's draft-PR step: open a PR only when explicitly requested, after verification, and ready for review.
+
 ## Triage operations
 
 - Discover a role with `dex list "<role>" --json`, searching the `Triage:` marker.
@@ -99,6 +105,8 @@ Use `--json` when structured output is useful.
 ## Wayfinding operations
 
 A wayfinding map is a top-level Dex task. Decision tickets are its children.
+
+Use the `Type:` marker in each description in place of the skill's native `wayfinder:<type>` label. Maps and their children carry no `Category:` or `Triage:` markers; those roles belong to implementation work.
 
 The map description contains:
 
