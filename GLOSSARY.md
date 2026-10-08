@@ -168,6 +168,10 @@ _Avoid_: Routa telemetry client, privileged integration, vendor-specific framewo
 The accepted API contract against which Routa checks generated OpenAPI for drift and breaking changes.
 _Avoid_: Current generated output
 
+**Hosted OpenAPI reference**:
+An opt-in application-served view of its complete current API contract, consisting of a reference UI and the same source-derived OpenAPI document. Its explicit access policy is separate from access to the documented API operations.
+_Avoid_: OpenAPI baseline, route reference, documentation portal
+
 **Generated metadata**:
 Deterministic, source-derived contract state used by Routa's types, runtime, and checks and reviewed alongside source.
 _Avoid_: Disposable build artifact
