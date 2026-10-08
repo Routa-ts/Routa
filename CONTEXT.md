@@ -16,6 +16,14 @@ _Avoid_: Routa service layer, framework-owned business logic
 A reusable, source-derived description connecting a Routa project's configuration and runtime route bindings. It describes an application without starting an instance or initializing its environment and services.
 _Avoid_: Running application, editable route registry, service container
 
+**Test application**:
+An isolated, project-bound in-memory Routa application instance that executes its effective HTTP contracts with application-owned environment/service replacements and tracked resource disposal.
+_Avoid_: Mock route registry, test server, Hono app
+
+**Typed test client**:
+A project-bound view of a Routa test application's effective HTTP operations, projecting incoming wire values and response contracts into typed in-memory calls.
+_Avoid_: Production SDK, handler harness, parallel route registry
+
 **Injected service**:
 An application-owned dependency optionally wired through Routa under an explicit service contract and scope for typed access and test replacement; Routa does not own its business behavior.
 _Avoid_: Routa service, framework service, required service layer
