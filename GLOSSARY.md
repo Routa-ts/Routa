@@ -92,6 +92,10 @@ _Avoid_: Nullable user lookup, provider adapter, authentication middleware
 Public `WWW-Authenticate` metadata associated with a credential scheme and returned on `401` outcomes, using a safe generated default unless application code supplies a validated static override; missing or disallowed credentials challenge every effective allowed scheme, while an invalid selected credential challenges only its scheme.
 _Avoid_: Login redirect, credential, provider failure details
 
+**Authorization guard**:
+A typed middleware contract that enforces an application-owned access decision at the HTTP boundary. Routa owns enforcement and the declared HTTP contract; the application owns permission semantics, policy logic, resource loading, and field visibility.
+_Avoid_: Framework policy engine, role resolver, resource loader
+
 **Named outcome**:
 A declared response possibility identified by a domain-relevant name and carrying its associated data.
 _Avoid_: Loose response, raw status branch
