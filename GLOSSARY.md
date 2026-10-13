@@ -100,6 +100,14 @@ _Avoid_: Framework policy engine, role resolver, resource loader
 A declared response possibility identified by a domain-relevant name and carrying its associated data.
 _Avoid_: Loose response, raw status branch
 
+**Response representation**:
+One explicitly declared wire form of a named outcome's payload, selected by Routa from the request's media preferences while preserving the outcome's application meaning.
+_Avoid_: Handler-selected format, alternate domain model
+
+**Representation serializer**:
+An application-owned mapping from a named outcome's typed canonical payload to one declared wire representation, invoked by Routa without changing the application outcome or its schema contract.
+_Avoid_: Response schema transform, automatic export layout
+
 **Advanced response contract**:
 A complete JSON response declaration for a named outcome, including its status, body or intentional bodylessness, declared headers and cookies, runtime validation, generated metadata, and OpenAPI projection. Content negotiation, non-JSON serialization, files, streaming, redirects, and framework error formatting belong to separate capabilities.
 _Avoid_: Raw response, representation adapter, error policy
@@ -112,8 +120,12 @@ _Avoid_: Response schema, domain model
 An opt-in HTTP contract for cursor or offset inputs and page responses, expressed through ordinary query and named outcome schemas. Schema helpers provide a standard form; application code owns record fetching, cursor interpretation, ordering, counts, and navigation values.
 _Avoid_: Query engine, automatic pagination, framework-owned ordering
 
+**Uploaded file**:
+A declared, admitted HTTP file input with reported metadata and bounded content; applications own verification, processing and storage.
+_Avoid_: Storage object, trusted path, verified content type
+
 **Response schema**:
-A schema applied to a named outcome whose input and output types are identical and describe the wire-ready JSON value supplied by application code. Routa validates and sends that value unchanged, and OpenAPI projects the same JSON shape.
+A non-mutating schema defining the wire-ready JSON payload of a schema-backed named outcome, with identical input and output types. JSON representations send that value unchanged; other declared representations serialize the same typed payload into their own wire shapes.
 _Avoid_: Input decoder, transformer, codec, serializer, domain model
 
 **Schema metadata**:
@@ -141,7 +153,7 @@ An optional, validated caller-supplied identifier used to associate requests in 
 _Avoid_: Request identity, principal, trace ID
 
 **Request protection policy**:
-An application-declared HTTP-boundary contract that limits admitted request concurrency and execution time and optionally cancels work after transport loss. Its occupied capacity remains tied to execution, transmission, and registered cleanup rather than response selection alone.
+An application-declared HTTP-boundary contract that limits admitted request concurrency and execution time and optionally cancels work after transport loss. Its occupied capacity remains tied to tracked execution, declared stream production, response transmission and registered cleanup rather than response selection alone.
 _Avoid_: Rate limit, transaction deadline, background-task manager
 
 **Health probe**:
@@ -157,8 +169,12 @@ One application-instance-local execution of all configured readiness checks, sha
 _Avoid_: Per-request dependency check, background poll
 
 **Request observation**:
-An opt-in measurement or span for one request reaching Routa, ending at server-observed transmission completion or interruption. Application execution and resource cleanup have separate lifetimes.
+An opt-in measurement or span for one request reaching Routa, ending at server-observed transmission completion or interruption. Application execution, stream production and resource cleanup have separate lifetimes.
 _Avoid_: Handler timing, client receipt confirmation, service lifetime
+
+**Stream production**:
+The application-owned work producing the body of a declared streaming outcome, with completion tracked separately from HTTP transmission and request resource cleanup.
+_Avoid_: Transmission completion, body EOF, background task registration
 
 **Transmission outcome**:
 The observed completion or interruption of an HTTP response, separate from its sent status. An interruption is attributed to the client or server only when evidence supports that cause; otherwise its cause remains unknown.
