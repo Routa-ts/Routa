@@ -100,6 +100,10 @@ _Avoid_: Framework policy engine, role resolver, resource loader
 A declared response possibility identified by a domain-relevant name and carrying its associated data.
 _Avoid_: Loose response, raw status branch
 
+**Application error mapping**:
+An explicit HTTP-boundary rule translating a recognized application error into a declared named outcome. The application owns the error's meaning and the public data the mapping exposes.
+_Avoid_: Implicit exception interpretation, transport-aware service error
+
 **Response representation**:
 One explicitly declared wire form of a named outcome's payload, selected by Routa from the request's media preferences while preserving the outcome's application meaning.
 _Avoid_: Handler-selected format, alternate domain model
