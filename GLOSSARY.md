@@ -156,6 +156,14 @@ _Avoid_: Incoming request ID, correlation ID, trace ID
 An optional, validated caller-supplied identifier used to associate requests in context, logs, and response headers. It remains separate from Routa's generated request identity and is not proof of authentication.
 _Avoid_: Request identity, principal, trace ID
 
+**HTTP security policy**:
+An application-declared HTTP-boundary contract for CORS grants, browser security headers and HTTPS requirements, shared consistently across Routa responses.
+_Avoid_: Application security guarantee, authentication policy, inferred risk profile
+
+**Security guardrail**:
+A configurable diagnostic about a concrete risk in declared Routa HTTP security settings, separate from invalid-contract errors and request enforcement.
+_Avoid_: Security proof, request middleware, policy engine
+
 **Request protection policy**:
 An application-declared HTTP-boundary contract that limits admitted request concurrency and execution time and optionally cancels work after transport loss. Its occupied capacity remains tied to tracked execution, declared stream production, response transmission and registered cleanup rather than response selection alone.
 _Avoid_: Rate limit, transaction deadline, background-task manager
