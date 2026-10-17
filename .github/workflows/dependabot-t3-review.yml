@@ -1,0 +1,127 @@
+name: Dependabot T3 review
+
+on:
+  pull_request_target:
+    types: [opened]
+
+# This sender needs no GitHub API access. Never check out or execute PR code here.
+permissions: {}
+
+concurrency:
+  group: dependabot-t3-review-${{ github.repository }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  notify-t3:
+    name: Send signed PR information to T3
+    if: >-
+      github.event.action == 'opened' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      # Inline base-branch code only: no checkout, actions, packages, or PR scripts.
+      - name: POST signed webhook
+        env:
+          T3_WEBHOOK_URL: ${{ secrets.T3_WEBHOOK_URL }}
+          T3_WEBHOOK_SECRET: ${{ secrets.T3_WEBHOOK_SECRET }}
+        shell: python
+        run: |
+          import hashlib
+          import hmac
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          def fail(message):
+              print(f"::error::{message}")
+              sys.exit(1)
+
+          with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as source:
+              event = json.load(source)
+          pr = event.get("pull_request", {})
+          if (
+              os.environ["GITHUB_EVENT_NAME"] != "pull_request_target"
+              or event.get("action") != "opened"
+              or pr.get("user", {}).get("login") != "dependabot[bot]"
+              or os.environ["GITHUB_RUN_ATTEMPT"] != "1"
+          ):
+              print("Skipped: only the first attempt of a Dependabot opened event is sent.")
+              sys.exit(0)
+
+          url = os.environ.get("T3_WEBHOOK_URL", "")
+          secret = os.environ.get("T3_WEBHOOK_SECRET", "")
+          if not url or not secret:
+              fail("Configure T3_WEBHOOK_URL and T3_WEBHOOK_SECRET in GitHub secrets. See .github/dependabot-t3-review.md.")
+          try:
+              parsed = urllib.parse.urlsplit(url)
+              valid_url = (
+                  parsed.scheme == "https"
+                  and parsed.hostname == "relay.t3.codes"
+                  and parsed.port in (None, 443)
+                  and not parsed.username
+                  and not parsed.password
+              )
+          except ValueError:
+              valid_url = False
+          if not valid_url:
+              fail("T3_WEBHOOK_URL must be an HTTPS relay.t3.codes webhook URL.")
+
+          repository = event["repository"]["full_name"]
+          delivery = f"{repository}:pull_request:{pr['number']}:opened"
+          payload = {
+              "action": "opened",
+              "repository": repository,
+              "delivery_id": delivery,
+              "pull_request": {
+                  "number": pr["number"],
+                  "title": pr["title"],
+                  "url": pr["html_url"],
+                  "author": pr["user"]["login"],
+                  # These nested fields match the existing T3 task placeholders.
+                  "html_url": pr["html_url"],
+                  "user": {"login": pr["user"]["login"]},
+                  "base": {"ref": pr["base"]["ref"], "sha": pr["base"]["sha"]},
+                  "head": {
+                      "ref": pr["head"]["ref"],
+                      "sha": pr["head"]["sha"],
+                      "repo": {"full_name": pr["head"]["repo"]["full_name"]},
+                  },
+              },
+          }
+          body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+          signature = "sha256=" + hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+          request = urllib.request.Request(
+              url,
+              data=body,
+              method="POST",
+              headers={
+                  "Content-Type": "application/json",
+                  "User-Agent": "Routa-Dependabot-T3/1.0",
+                  "X-Hub-Signature-256": signature,
+                  "X-GitHub-Event": "pull_request",
+                  "X-GitHub-Delivery": delivery,
+              },
+          )
+
+          class NoRedirects(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+
+          # Do not redirect credentials or retry an ambiguously delivered POST.
+          opener = urllib.request.build_opener(NoRedirects())
+          try:
+              with opener.open(request, timeout=30) as response:
+                  status = response.status
+          except urllib.error.HTTPError as error:
+              fail(f"T3 webhook returned HTTP {error.code}. Check the URL and signing configuration.")
+          except (urllib.error.URLError, TimeoutError, OSError):
+              fail("T3 webhook transport failed. Check T3 delivery history before attempting recovery.")
+          if not 200 <= status < 300:
+              fail(f"T3 webhook returned unexpected HTTP {status}.")
+          print(f"T3 relay accepted webhook: HTTP {status}; delivery={delivery}")
+          print("Confirm signature acceptance and review execution in T3 task history.")
