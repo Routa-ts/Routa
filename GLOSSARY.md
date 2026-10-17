@@ -168,6 +168,10 @@ _Avoid_: Security proof, request middleware, policy engine
 An application-declared HTTP-boundary contract that limits admitted request concurrency and execution time and optionally cancels work after transport loss. Its occupied capacity remains tied to tracked execution, declared stream production, response transmission and registered cleanup rather than response selection alone.
 _Avoid_: Rate limit, transaction deadline, background-task manager
 
+**Transport safeguards**:
+Routa-owned bounds on receiving HTTP requests, retaining connections and transmitting responses, separate from application execution and resource completion.
+_Avoid_: Production profile, execution deadline, process watchdog
+
 **Health probe**:
 An explicitly configured Routa operation whose successful response confirms an admitted HTTP request can be answered, without evaluating application dependency readiness. Framework authentication, protection, and lifecycle failures remain separate from its successful signal.
 _Avoid_: Dependency health check, restart guarantee
