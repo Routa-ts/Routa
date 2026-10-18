@@ -73,7 +73,7 @@ Routa-owned readonly facts about the current HTTP request and its matched operat
 _Avoid_: Raw request, middleware state, quota key
 
 **Authentication contract**:
-A provider-neutral HTTP-boundary agreement that yields anonymous or authenticated request context through Routa's credential orchestration and application-owned verification. Configured operations use it automatically unless explicitly declared handler-owned; unconfigured or handler-owned operations receive no framework authentication context.
+A provider-neutral HTTP-boundary agreement that yields anonymous or authenticated request context through Routa's credential orchestration and application-owned verification. When application-wide authentication is configured, automatic operations resolve credentials and reject invalid presented credentials even without a route-level authentication requirement. Without application authentication configuration, or on an explicitly handler-owned operation, no framework authentication context is provided.
 _Avoid_: Auth provider, authentication implementation, framework-owned identity or session
 
 **Authentication mode**:
