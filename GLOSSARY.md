@@ -52,6 +52,10 @@ _Avoid_: Controller, one file per verb
 The declaration for one HTTP method, including accepted input, middleware, named outcomes, metadata, and the handler boundary.
 _Avoid_: Controller action, loose handler
 
+**Native HTTP contract**:
+A source-declared Routa request or response contract that delegates payload handling to application-owned Web Request or Response code while retaining the shared HTTP pipeline. Undeclared payload, status and media facts remain unknown.
+_Avoid_: Provider mode, raw mount, privileged integration
+
 **Route graph**:
 The validated project-wide model of paths, methods, middleware chains, context, and contract metadata.
 _Avoid_: Route registry
@@ -69,8 +73,12 @@ Routa-owned readonly facts about the current HTTP request and its matched operat
 _Avoid_: Raw request, middleware state, quota key
 
 **Authentication contract**:
-A provider-neutral HTTP-boundary agreement automatically applied to every route when configured, yielding anonymous or authenticated request context through Routa's credential orchestration and application-owned authentication; otherwise no authentication context is registered.
+A provider-neutral HTTP-boundary agreement that yields anonymous or authenticated request context through Routa's credential orchestration and application-owned verification. Configured operations use it automatically unless explicitly declared handler-owned; unconfigured or handler-owned operations receive no framework authentication context.
 _Avoid_: Auth provider, authentication implementation, framework-owned identity or session
+
+**Authentication mode**:
+An operation's explicit choice between Routa-owned credential orchestration and application-handler-owned credential processing. Handler ownership does not remove inherited authentication requirements or establish authenticated context.
+_Avoid_: Public route, authentication bypass, provider mode
 
 **Principal**:
 An application-defined identity authenticated for the current request, with a stable `id` and `type`; one application-wide schema configured in `routa.ts` validates and types every principal before it becomes `ctx.auth.principal`.
