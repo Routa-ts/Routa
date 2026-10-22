@@ -10,12 +10,12 @@
 	"packageManager": "pnpm@11.9.0",
 	"scripts": {
 		"build": "vp run prepare:local-cli && vp run --filter './apps/*' --filter './examples/*' build",
-		"check": "vp check && vp run check:biome",
+		"check": "vp run prepare:local-cli && vp check",
 		"changeset": "vp exec changeset",
-		"format": "vp fmt && vp exec biome format --write apps examples docs .github biome.json packages/core/CHANGELOG.md packages/cli/CHANGELOG.md packages/create-routa-ts/CHANGELOG.md",
-		"format:check": "vp fmt --check && vp exec biome format apps examples docs .github biome.json packages/core/CHANGELOG.md packages/cli/CHANGELOG.md packages/create-routa-ts/CHANGELOG.md",
+		"format": "vp fmt",
+		"format:check": "vp fmt --check",
 		"generated:check": "vp run prepare:local-cli && vp run --filter './examples/*' build && vp exec node scripts/check-generated.mjs",
-		"lint": "vp lint && vp run check:biome",
+		"lint": "vp run prepare:local-cli && vp lint",
 		"lint:repo": "vp run lint",
 		"pack:check": "vp exec node scripts/pack-check.mjs",
 		"prepare:local-cli": "vp run build:packages && vp exec node scripts/link-local-cli.mjs",
@@ -25,15 +25,16 @@
 		"typecheck": "vp run build:packages && vp run --filter './packages/*' --filter './apps/*' typecheck",
 		"verify": "vp run check && vp run typecheck && vp run test && vp run generated:check && vp run --filter './examples/*' check && vp run --filter './examples/*' openapi:check && scripts/scaffold-error-smoke.sh && vp run pack:check",
 		"version": "vp exec changeset version",
-		"build:packages": "vp run compile",
-		"check:biome": "vp exec biome lint --config-path=biome.framework.json && vp exec biome check apps examples docs .github biome.json packages/core/CHANGELOG.md packages/cli/CHANGELOG.md packages/create-routa-ts/CHANGELOG.md"
+		"build:packages": "vp run compile"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.5.12",
 		"@changesets/cli": "3.0.3",
 		"@types/node": "26.6.5",
 		"typescript": "7.0.2",
 		"vite-plus": "1.3.0",
-		"yaml": "2.9.1"
+		"yaml": "2.9.1",
+		"@astrojs/compiler-rs": "0.5.1",
+		"eslint-plugin-import-x": "4.17.1",
+		"eslint-plugin-no-secrets": "2.3.3"
 	}
 }

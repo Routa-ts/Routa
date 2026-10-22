@@ -33,12 +33,12 @@ cd routa-app
 npm run dev
 ```
 
-| Flag | Effect | Default |
-| --- | --- | --- |
-| `--yes`, `-y` | Skip the final confirmation prompt | Prompt when interactive |
-| `--openapi`, `--no-openapi` | Include or omit the starter OpenAPI document | Include |
-| `--git`, `--no-git` | Initialize or skip a git repository | Initialize when interactive |
-| `--install`, `--no-install` | Run or skip dependency installation | Install when interactive |
+| Flag                        | Effect                                       | Default                     |
+| --------------------------- | -------------------------------------------- | --------------------------- |
+| `--yes`, `-y`               | Skip the final confirmation prompt           | Prompt when interactive     |
+| `--openapi`, `--no-openapi` | Include or omit the starter OpenAPI document | Include                     |
+| `--git`, `--no-git`         | Initialize or skip a git repository          | Initialize when interactive |
+| `--install`, `--no-install` | Run or skip dependency installation          | Install when interactive    |
 
 `dir` defaults to `routa-app`. The package manager is detected from
 `npm_config_user_agent` and used for installation and for the printed next-step commands
@@ -64,10 +64,10 @@ src/routes/status/schemas.ts
 .routa/routes.gen.ts
 ```
 
-| Flag | Effect |
-| --- | --- |
+| Flag        | Effect                                         |
+| ----------- | ---------------------------------------------- |
 | `--preview` | Print the change list without writing anything |
-| `--yes` | Confirm writing when a manifest already exists |
+| `--yes`     | Confirm writing when a manifest already exists |
 
 The first run needs neither flag. Once `.routa/manifest.json` exists, Routa requires
 `--preview` or `--yes` so regeneration is never accidental.
@@ -187,8 +187,8 @@ Middleware:
 - none
 ```
 
-| Flag | Values | Default |
-| --- | --- | --- |
+| Flag       | Values             | Default    |
+| ---------- | ------------------ | ---------- |
 | `--format` | `markdown`, `json` | `markdown` |
 
 Both `--format json` and `--format=json` are accepted. An unrecognized value exits `1`
@@ -219,8 +219,8 @@ required. This is the check to gate merges on.
 routa openapi breaking [--update-baseline]
 ```
 
-| Flag | Effect |
-| --- | --- |
+| Flag                | Effect                                                                |
+| ------------------- | --------------------------------------------------------------------- |
 | `--update-baseline` | Write the current generated document as the new baseline and exit `0` |
 
 ```txt

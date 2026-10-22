@@ -20,63 +20,63 @@ Routa's own checks already cover you.
 <Steps>
 1. Run the existing tests.
 
-	<PackageManagers type="run" args="test" />
+    <PackageManagers type="run" args="test" />
 
 2. Test a schema directly when you want to pin the shape of a payload. This is what the
    generated starter test does.
 
-	```ts title="src/routes/status/route.test.ts"
-	import { describe, expect, it } from "vitest";
-	import { GetStatusResponse } from "./schemas.js";
+   ```ts title="src/routes/status/route.test.ts"
+   import { describe, expect, it } from "vitest";
+   import { GetStatusResponse } from "./schemas.js";
 
-	describe("GET /status", () => {
-		it("accepts the documented success response", () => {
-			expect(GetStatusResponse.safeParse({ ok: true }).success).toBe(true);
-		});
-	});
-	```
+   describe("GET /status", () => {
+   	it("accepts the documented success response", () => {
+   		expect(GetStatusResponse.safeParse({ ok: true }).success).toBe(true);
+   	});
+   });
+   ```
 
 3. Test a handler by calling its `run` directly. It is a plain function, so pass `input`
    and `ctx` and assert on the outcome name.
 
-	```ts title="src/routes/users/$userId/route.test.ts"
-	import { createLogger } from "@routa-ts/core/logger";
-	import { describe, expect, it } from "vitest";
-	import route from "./route.js";
+   ```ts title="src/routes/users/$userId/route.test.ts"
+   import { createLogger } from "@routa-ts/core/logger";
+   import { describe, expect, it } from "vitest";
+   import route from "./route.js";
 
-	const ctx = { logger: createLogger({ enabled: false }) };
+   const ctx = { logger: createLogger({ enabled: false }) };
 
-	describe("GET /users/:userId", () => {
-		it("returns notFound for an unknown user", async () => {
-			const result = await route.get.run({ input: { params: { userId: "nope" } }, ctx });
+   describe("GET /users/:userId", () => {
+   	it("returns notFound for an unknown user", async () => {
+   		const result = await route.get.run({ input: { params: { userId: "nope" } }, ctx });
 
-			expect(result.type).toBe("notFound");
-		});
-	});
-	```
+   		expect(result.type).toBe("notFound");
+   	});
+   });
+   ```
 
 4. Test the full boundary when middleware, parsing, and serialization all matter. Build
    the Hono app from your routes and use its `fetch`.
 
-	```ts title="src/routes/users/route.http.test.ts"
-	import { createHonoApp } from "@routa-ts/core/hono";
-	import { describe, expect, it } from "vitest";
-	import route from "./route.js";
+   ```ts title="src/routes/users/route.http.test.ts"
+   import { createHonoApp } from "@routa-ts/core/hono";
+   import { describe, expect, it } from "vitest";
+   import route from "./route.js";
 
-	const app = createHonoApp([{ method: "post", path: "/users", contract: route.post }]);
+   const app = createHonoApp([{ method: "post", path: "/users", contract: route.post }]);
 
-	describe("POST /users", () => {
-		it("rejects a body that fails validation", async () => {
-			const response = await app.request("/users", {
-				method: "POST",
-				headers: { "content-type": "application/json" },
-				body: JSON.stringify({ name: "" }),
-			});
+   describe("POST /users", () => {
+   	it("rejects a body that fails validation", async () => {
+   		const response = await app.request("/users", {
+   			method: "POST",
+   			headers: { "content-type": "application/json" },
+   			body: JSON.stringify({ name: "" }),
+   		});
 
-			expect(response.status).toBe(400);
-		});
-	});
-	```
+   		expect(response.status).toBe(400);
+   	});
+   });
+   ```
 
 </Steps>
 
@@ -91,11 +91,11 @@ Routa's own checks already cover you.
 
 ## What to Test Where
 
-| Level | Use it for | Do not use it for |
-| --- | --- | --- |
-| Schema | Payload shapes, coercion, optionality | Anything requiring a request |
-| Handler | Outcome selection and service orchestration | Validation and status mapping, which Routa owns |
-| HTTP | Middleware chains, parsing, status codes, content negotiation | Business rules better tested in services |
+| Level   | Use it for                                                    | Do not use it for                               |
+| ------- | ------------------------------------------------------------- | ----------------------------------------------- |
+| Schema  | Payload shapes, coercion, optionality                         | Anything requiring a request                    |
+| Handler | Outcome selection and service orchestration                   | Validation and status mapping, which Routa owns |
+| HTTP    | Middleware chains, parsing, status codes, content negotiation | Business rules better tested in services        |
 
 Business logic belongs in application-owned services and should be tested there, without
 Routa in the picture at all. A route test that needs a database is usually testing the
@@ -119,12 +119,12 @@ openapi:check`} />
 
 ## Troubleshooting
 
-| Problem | Fix |
-| --- | --- |
-| Imports fail with `ERR_MODULE_NOT_FOUND` | Use `.js` extensions in relative imports. Generated projects are ESM. |
-| A handler test cannot construct `ctx` | Pass the keys the route's middleware provides, plus a logger. `createLogger({ enabled: false })` keeps test output clean. |
-| Type errors on `route.get.run` | Metadata is stale. Run `routa generate`. |
-| Vitest picks up files under `.routa/` | Generated metadata contains no tests; narrow `include` in the Vitest config if a glob is too broad. |
+| Problem                                  | Fix                                                                                                                       |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Imports fail with `ERR_MODULE_NOT_FOUND` | Use `.js` extensions in relative imports. Generated projects are ESM.                                                     |
+| A handler test cannot construct `ctx`    | Pass the keys the route's middleware provides, plus a logger. `createLogger({ enabled: false })` keeps test output clean. |
+| Type errors on `route.get.run`           | Metadata is stale. Run `routa generate`.                                                                                  |
+| Vitest picks up files under `.routa/`    | Generated metadata contains no tests; narrow `include` in the Vitest config if a glob is too broad.                       |
 
 <Aside type="caution" title="v0 status">
 	Schema, handler, and HTTP-boundary testing are implemented with public APIs in v0. A

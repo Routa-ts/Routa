@@ -64,12 +64,12 @@ Teal for structural accent; graphite for the chassis; bright mint for high-signa
 	</div>
 </div>
 
-| Token | Role | Feeling |
-| --- | --- | --- |
-| Teal | Links, focus, structure | Engineered precision |
-| Graphite | Surfaces | Dense, technical |
-| Space Grotesk | UI + titles | Geometric, modern |
-| Space Mono | Code + labels | Lattice labels |
+| Token         | Role                    | Feeling              |
+| ------------- | ----------------------- | -------------------- |
+| Teal          | Links, focus, structure | Engineered precision |
+| Graphite      | Surfaces                | Dense, technical     |
+| Space Grotesk | UI + titles             | Geometric, modern    |
+| Space Mono    | Code + labels           | Lattice labels       |
 
 ## Cell badges
 
@@ -136,35 +136,35 @@ Teal for structural accent; graphite for the chassis; bright mint for high-signa
 
 1. Initialize the chassis.
 
-	```sh
-	pnpm create routa-ts@latest
-	```
+   ```sh
+   pnpm create routa-ts@latest
+   ```
 
 2. Define a typed cell.
 
-	```ts
-	const CreateUserSchema = z.object({
-		email: z.string().email(),
-		name: z.string().min(1),
-	});
+   ```ts
+   const CreateUserSchema = z.object({
+   	email: z.string().email(),
+   	name: z.string().min(1),
+   });
 
-	export default createRouteRoot("/users")({
-		post: createRoute({
-			input: { body: CreateUserSchema },
-			responses: {
-				success: { status: 201, schema: UserSchema },
-			},
-			run: async ({ input, ctx }) => users.createUser(input.body, ctx),
-		}),
-	});
-	```
+   export default createRouteRoot("/users")({
+   	post: createRoute({
+   		input: { body: CreateUserSchema },
+   		responses: {
+   			success: { status: 201, schema: UserSchema },
+   		},
+   		run: async ({ input, ctx }) => users.createUser(input.body, ctx),
+   	}),
+   });
+   ```
 
 3. Verify edges, then serve.
 
-	```sh
-	pnpm routa check
-	pnpm routa start
-	```
+   ```sh
+   pnpm routa check
+   pnpm routa start
+   ```
 
 </Steps>
 
@@ -173,17 +173,17 @@ Teal for structural accent; graphite for the chassis; bright mint for high-signa
 <FileTree>
 
 - src/
-	- routes/
-		- users/
-			- route.ts
-			- schemas.ts
-			- $userId/
-				- route.ts
-				- schemas.ts
-	- middleware/
-		- context.ts
+  - routes/
+    - users/
+      - route.ts
+      - schemas.ts
+      - $userId/
+        - route.ts
+        - schemas.ts
+  - middleware/
+    - context.ts
 - .routa/
-	- routes.gen.ts
+  - routes.gen.ts
 
 </FileTree>
 
@@ -217,11 +217,11 @@ responses: {
 },
 ```
 
-| Outcome key | Status | Schema |
-| --- | --- | --- |
-| `success` | 200 | `UserSchema` |
-| `notFound` | 404 | `ErrorSchema` |
-| `conflict` | 409 | `ErrorSchema` |
+| Outcome key | Status | Schema        |
+| ----------- | ------ | ------------- |
+| `success`   | 200    | `UserSchema`  |
+| `notFound`  | 404    | `ErrorSchema` |
+| `conflict`  | 409    | `ErrorSchema` |
 
 > Lattice identity: **structure is the brand.** Sharp corners, teal edges, mono labels — docs should feel engineered.
 

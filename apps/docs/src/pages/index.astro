@@ -21,38 +21,40 @@ const createCommands = packageManagers.map((id) => ({
 <!doctype html>
 <html lang="en">
 	<head>
-		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title>{title}</title>
-		<meta name="description" content={description}>
-		<link rel="canonical" href={canonical}>
-		<meta property="og:type" content="website">
-		<meta property="og:site_name" content="Routa">
-		<meta property="og:locale" content="en">
-		<meta property="og:url" content={canonical}>
-		<meta property="og:title" content={title}>
-		<meta property="og:description" content={description}>
-		<meta property="og:image" content={ogImage}>
-		<meta property="og:image:width" content="1200">
-		<meta property="og:image:height" content="630">
+		<meta name="description" content={description} />
+		<link rel="canonical" href={canonical} />
+		<meta property="og:type" content="website" />
+		<meta property="og:site_name" content="Routa" />
+		<meta property="og:locale" content="en" />
+		<meta property="og:url" content={canonical} />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
+		<meta property="og:image" content={ogImage} />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
 		<meta
 			property="og:image:alt"
 			content="Routa — filesystem routes with contracts. Schema-first REST for TypeScript."
-		>
-		<meta name="twitter:card" content="summary_large_image">
-		<meta name="twitter:title" content={title}>
-		<meta name="twitter:description" content={description}>
-		<meta name="twitter:image" content={ogImage}>
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg">
-		<link rel="preconnect" href="https://fonts.googleapis.com">
-		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+		/>
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content={title} />
+		<meta name="twitter:description" content={description} />
+		<meta name="twitter:image" content={ogImage} />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link
 			href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
 			rel="stylesheet"
-		>
+		/>
 	</head>
 	<body>
-		<a class="skip" href="#main">Skip to content</a>
+		<a class="skip" href="#main">
+			Skip to content
+		</a>
 		<main id="main" class="lp-schematic">
 			<section class="hero" aria-label="Hero">
 				<svg
@@ -72,18 +74,32 @@ const createCommands = packageManagers.map((id) => ({
 					<circle class="node" cx="920" cy="320" r="8"></circle>
 					<circle class="node" cx="800" cy="100" r="7"></circle>
 					<circle class="node lit" cx="1060" cy="190" r="8"></circle>
-					<text x="140" y="248">route</text>
-					<text x="350" y="158">schema</text>
-					<text x="560" y="78">middleware</text>
-					<text x="720" y="218">handler</text>
-					<text x="920" y="298">response</text>
-					<text x="800" y="78">openapi</text>
-					<text x="1060" y="168">check</text>
+					<text x="140" y="248">
+						route
+					</text>
+					<text x="350" y="158">
+						schema
+					</text>
+					<text x="560" y="78">
+						middleware
+					</text>
+					<text x="720" y="218">
+						handler
+					</text>
+					<text x="920" y="298">
+						response
+					</text>
+					<text x="800" y="78">
+						openapi
+					</text>
+					<text x="1060" y="168">
+						check
+					</text>
 				</svg>
 
 				<div class="hero-copy">
 					<div class="brand-mark">
-						<img src="/favicon.svg" alt="" width="40" height="40">
+						<img src="/favicon.svg" alt="" width="40" height="40" />
 						Routa
 						<span class="dot" aria-hidden="true"></span>
 					</div>
@@ -93,24 +109,28 @@ const createCommands = packageManagers.map((id) => ({
 						Schema-first REST for TypeScript — Zod contracts on a Hono runtime.
 					</p>
 					<div class="cta-row">
-						<a class="btn btn-primary" href="/docs/">Get started</a>
-						<a class="btn btn-ghost" href="https://github.com/Routa-ts/Routa">GitHub</a>
+						<a class="btn btn-primary" href="/docs/">
+							Get started
+						</a>
+						<a class="btn btn-ghost" href="https://github.com/Routa-ts/Routa">
+							GitHub
+						</a>
 					</div>
 					<div class="cli">
 						<div class="cli-tabs" role="tablist" aria-label="Package manager">
 							{createCommands.map(({ id }, index) => (
-									<button
-										type="button"
-										role="tab"
-										id={`pm-tab-${id}`}
-										aria-controls="pm-panel"
-										aria-selected={index === 0 ? "true" : "false"}
-										tabindex={index === 0 ? 0 : -1}
-										data-pm={id}
-									>
-										{id}
-									</button>
-								))}
+								<button
+									type="button"
+									role="tab"
+									id={`pm-tab-${id}`}
+									aria-controls="pm-panel"
+									aria-selected={index === 0 ? "true" : "false"}
+									tabindex={index === 0 ? 0 : -1}
+									data-pm={id}
+								>
+									{id}
+								</button>
+							))}
 						</div>
 						<div class="cli-body">
 							<code
@@ -122,7 +142,9 @@ const createCommands = packageManagers.map((id) => ({
 								<span aria-hidden="true">$</span>
 								<span data-cmd-text>{createCommands[0].command}</span>
 							</code>
-							<button type="button" class="cli-copy">Copy</button>
+							<button type="button" class="cli-copy">
+								Copy
+							</button>
 							<span class="visually-hidden" role="status" data-copy-status></span>
 						</div>
 					</div>
@@ -140,10 +162,10 @@ const createCommands = packageManagers.map((id) => ({
 					<div class="compare">
 						<div class="code-panel">
 							<div class="code-panel__bar">
-								<span>without Routa</span><span>vibes</span>
+								<span>without Routa</span>
+								<span>vibes</span>
 							</div>
-							<pre
-							><code>app.post(<span class="str">"/users"</span>, <span class="kw">async</span> (c) => {"{"}
+							<pre><code>app.post(<span class="str">"/users"</span>, <span class="kw">async</span> (c) => {"{"}
   <span class="kw">const</span> body = <span class="kw">await</span> c.req.json();
   <span class="cm">// validate… somewhere?</span>
   <span class="kw">const</span> user = <span class="kw">await</span> create(body);
@@ -152,10 +174,10 @@ const createCommands = packageManagers.map((id) => ({
 						</div>
 						<div class="code-panel">
 							<div class="code-panel__bar">
-								<span>with Routa</span><span>contract</span>
+								<span>with Routa</span>
+								<span>contract</span>
 							</div>
-							<pre
-							><code><span class="kw">const</span> route = <span class="fn">createRouteRoot</span>(<span class="str">"/users"</span>);
+							<pre><code><span class="kw">const</span> route = <span class="fn">createRouteRoot</span>(<span class="str">"/users"</span>);
 
 <span class="kw">export default</span> route({"{"}
   post: <span class="fn">createRoute</span>({"{"}
@@ -196,8 +218,8 @@ const createCommands = packageManagers.map((id) => ({
 						<li>TypeScript</li>
 					</ul>
 					<p class="v0-note">
-						<strong>v0</strong>
-						— intentionally narrow. Schema-first REST, not a fullstack meta-framework.
+						<strong>v0</strong>— intentionally narrow. Schema-first REST, not a fullstack
+						meta-framework.
 					</p>
 				</div>
 			</section>
@@ -209,8 +231,12 @@ const createCommands = packageManagers.map((id) => ({
 						<p>From first route to OpenAPI lockstep.</p>
 					</div>
 					<div class="cta-row">
-						<a class="btn btn-primary" href="/docs/start/quickstart/">Quickstart</a>
-						<a class="btn btn-ghost" href="/docs/">Documentation</a>
+						<a class="btn btn-primary" href="/docs/start/quickstart/">
+							Quickstart
+						</a>
+						<a class="btn btn-ghost" href="/docs/">
+							Documentation
+						</a>
 					</div>
 				</div>
 			</section>

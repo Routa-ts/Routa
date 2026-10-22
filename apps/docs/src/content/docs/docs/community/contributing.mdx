@@ -5,7 +5,7 @@ description: Set up the Routa repository and land a change.
 
 import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
 
-Routa is open source under the MIT License. The repository is a vp run workspace holding
+Routa is open source under the MIT License. The repository is a workspace holding
 three published packages, two example applications, this documentation site, and a design
 lab. Framework checks, tests, and package builds use the locally pinned Vite Plus toolchain.
 
@@ -22,52 +22,51 @@ lab. Framework checks, tests, and package builds use the locally pinned Vite Plu
 <Steps>
 1. Install dependencies from the repository root.
 
-	```sh
-	vp install --frozen-lockfile
-	```
+    ```sh
+    vp install --frozen-lockfile
+    ```
 
 2. Run the full check suite before making changes, so you know the baseline is green.
 
-	```sh
-	vp run check
-	vp run typecheck
-	vp run build
-	vp run test
-	```
+   ```sh
+   vp run check
+   vp run typecheck
+   vp run build
+   vp run test
+   ```
 
-	`vp run check` combines Oxfmt, type-aware Oxlint, compiler diagnostics, and the remaining
-	Biome checks. `vp run typecheck` also runs explicit TypeScript source and test programs
-	and Astro checks. `vp run build` builds the packages, examples, and sites. `vp run test`
-	runs all framework tests with Vite Plus's bundled Vitest.
+   `vp run check` combines Oxfmt, type-aware Oxlint, compiler diagnostics, and the JavaScript plugins for dependency and secret checks. `vp run typecheck` also runs explicit TypeScript source and test programs
+   and Astro checks. `vp run build` builds the packages, examples, and sites. `vp run test`
+   runs all framework tests with Vite Plus's bundled Vitest.
 
-	Only package compilation is cached. Tests and type checks execute on every run.
-	A global Vite Plus installation is optional. Generated applications retain their
-	existing TypeScript, Biome, and Vitest tooling.
+   Only package compilation is cached. Tests and type checks execute on every run.
+   Install Vite Plus before running repository commands. Generated applications retain their
+   existing TypeScript, Biome, and Vitest tooling.
 
 3. Make the change in the package that owns the behavior.
 
-	| Path | Owns |
-	| --- | --- |
-	| `packages/core` | Route, middleware, config, logger, and query helpers |
-	| `packages/cli` | Validation, generation, OpenAPI, scaffolding, and the servers |
-	| `packages/create-routa-ts` | The project scaffolder |
-	| `apps/docs` | This documentation site |
-	| `examples/*` | Runnable demonstrations of the public surface |
+   | Path                       | Owns                                                          |
+   | -------------------------- | ------------------------------------------------------------- |
+   | `packages/core`            | Route, middleware, config, logger, and query helpers          |
+   | `packages/cli`             | Validation, generation, OpenAPI, scaffolding, and the servers |
+   | `packages/create-routa-ts` | The project scaffolder                                        |
+   | `apps/docs`                | This documentation site                                       |
+   | `examples/*`               | Runnable demonstrations of the public surface                 |
 
 4. Verify against a real project. The examples run the `routa` binary, so build and link
    the local CLI before checking them.
 
-	```sh
-	vp run prepare:local-cli
-	vp run --filter full-api check
-	vp run --filter full-api dev
-	```
+   ```sh
+   vp run prepare:local-cli
+   vp run --filter full-api check
+   vp run --filter full-api dev
+   ```
 
 5. Add a changeset for any change to a published package.
 
-	```sh
-	vp run changeset
-	```
+   ```sh
+   vp run changeset
+   ```
 
 6. Update the documentation in the same pull request. Read `apps/docs/AGENTS.md` first; it
    defines the required page frame, the package-manager command component, and the
@@ -98,12 +97,12 @@ Every new feature needs all four of these, which is what the coverage rules in
 
 ## Troubleshooting
 
-| Problem | Fix |
-| --- | --- |
-| Workspace packages resolve to published versions | Run `vp install` from the root, not from inside a package. |
-| An example fails after a core change | Rebuild first. Examples consume built output, so run `vp run build`. |
-| A formatter reports differences | Run `vp run format` to apply them. |
-| The docs build fails on a slug | A sidebar entry in `astro.config.mjs` points at a page that does not exist. |
+| Problem                                          | Fix                                                                         |
+| ------------------------------------------------ | --------------------------------------------------------------------------- |
+| Workspace packages resolve to published versions | Run `vp install` from the root, not from inside a package.                  |
+| An example fails after a core change             | Rebuild first. Examples consume built output, so run `vp run build`.        |
+| A formatter reports differences                  | Run `vp run format` to apply them.                                          |
+| The docs build fails on a slug                   | A sidebar entry in `astro.config.mjs` points at a page that does not exist. |
 
 <Aside type="note" title="Keep the contract aligned">
 	Shipped behavior must agree across implementation, tests, and public documentation.

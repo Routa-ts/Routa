@@ -22,22 +22,22 @@ so a broken contract never reaches the server.
 1. Run in development while editing. Routa validates routes, writes
    `.routa/routes.gen.ts`, typechecks, and starts the server through `tsx`.
 
-	<PackageManagers type="run" args="dev" />
+    <PackageManagers type="run" args="dev" />
 
 2. Edit any file under `src/`. The supervisor detects the change, revalidates, and
    restarts the runtime.
 
-	```txt
-	Restarting Routa dev server...
-	```
+   ```txt
+   Restarting Routa dev server...
+   ```
 
 3. Build before running in production mode.
 
-	<PackageManagers type="run" args="build" />
+   <PackageManagers type="run" args="build" />
 
 4. Start the built runtime. This runs `dist/`, does not typecheck, and does not compile.
 
-	<PackageManagers type="run" args="start" />
+   <PackageManagers type="run" args="start" />
 
 </Steps>
 
@@ -57,13 +57,13 @@ Each completed request is logged at `info`, so a `curl` should produce a second 
 
 ## Development Versus Production
 
-| | `routa dev` | `routa start` |
-| --- | --- | --- |
-| Source | `src/` through `tsx` | `dist/` JavaScript |
-| Typecheck | Yes, before starting | No |
-| Restart on change | Yes | No |
-| Empty route files | Stubbed with a valid contract | Not stubbed |
-| Requires a build | No | Yes |
+|                   | `routa dev`                   | `routa start`      |
+| ----------------- | ----------------------------- | ------------------ |
+| Source            | `src/` through `tsx`          | `dist/` JavaScript |
+| Typecheck         | Yes, before starting          | No                 |
+| Restart on change | Yes                           | No                 |
+| Empty route files | Stubbed with a valid contract | Not stubbed        |
+| Requires a build  | No                            | Yes                |
 
 Creating an empty `route.ts` in development is deliberate: Routa fills it with a valid
 stub contract so the file compiles while you decide what it should contain. It prints the
@@ -75,12 +75,12 @@ Stubbed src/routes/reports/route.ts
 
 ## Troubleshooting
 
-| Problem | Fix |
-| --- | --- |
-| `Missing compiled runtime output for src/routes/users/route.ts. Run routa build first.` | `start` compares each source file against its `dist/` output. Build first. |
-| `Compiled runtime output for … is stale. Run routa build first.` | A source file is newer than its compiled output. Rebuild. |
-| The dev server keeps serving old behavior after an edit | Validation failed. The diagnostics are printed and the previous process keeps running until source validates again. |
-| The server exits immediately with no diagnostics | The port is in use. `api.start_failed` is logged at `error` with the host and port. |
+| Problem                                                                                 | Fix                                                                                                                 |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `Missing compiled runtime output for src/routes/users/route.ts. Run routa build first.` | `start` compares each source file against its `dist/` output. Build first.                                          |
+| `Compiled runtime output for … is stale. Run routa build first.`                        | A source file is newer than its compiled output. Rebuild.                                                           |
+| The dev server keeps serving old behavior after an edit                                 | Validation failed. The diagnostics are printed and the previous process keeps running until source validates again. |
+| The server exits immediately with no diagnostics                                        | The port is in use. `api.start_failed` is logged at `error` with the host and port.                                 |
 
 <Aside type="caution" title="v0 status">
 	Development supervision and the built `start` runtime are implemented in v0. `routa

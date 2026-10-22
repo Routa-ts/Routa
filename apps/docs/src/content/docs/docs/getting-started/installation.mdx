@@ -32,55 +32,55 @@ into an existing project. For a new project, the scaffolder installs everything 
 1. Install the runtime dependencies. `hono` and `zod` are peer dependencies of
    `@routa-ts/core`, so install them alongside it.
 
-	<PackageManagers type="add" args="@routa-ts/cli @routa-ts/core hono zod" />
+    <PackageManagers type="add" args="@routa-ts/cli @routa-ts/core hono zod" />
 
-	```txt
-	@routa-ts/cli, @routa-ts/core, hono, and zod added to dependencies.
-	```
+    ```txt
+    @routa-ts/cli, @routa-ts/core, hono, and zod added to dependencies.
+    ```
 
 2. Install the development dependencies used by generated Routa apps.
 
-	<PackageManagers type="add-dev" args="@biomejs/biome @types/node tsx typescript vitest" />
+   <PackageManagers type="add-dev" args="@biomejs/biome @types/node tsx typescript vitest" />
 
-	```txt
-	@biomejs/biome, @types/node, tsx, typescript, and vitest added to devDependencies.
-	```
+   ```txt
+   @biomejs/biome, @types/node, tsx, typescript, and vitest added to devDependencies.
+   ```
 
 3. Add the scripts that generated apps use.
 
-	```json title="package.json"
-	{
-		"scripts": {
-			"dev": "routa dev",
-			"start": "routa start",
-			"generate": "routa generate",
-			"check": "routa check",
-			"build": "routa build",
-			"test": "vitest run",
-			"scaffold": "routa scaffold openapi.yaml",
-			"openapi:check": "routa openapi check"
-		}
-	}
-	```
+   ```json title="package.json"
+   {
+   	"scripts": {
+   		"dev": "routa dev",
+   		"start": "routa start",
+   		"generate": "routa generate",
+   		"check": "routa check",
+   		"build": "routa build",
+   		"test": "vitest run",
+   		"scaffold": "routa scaffold openapi.yaml",
+   		"openapi:check": "routa openapi check"
+   	}
+   }
+   ```
 
 4. Create the Routa configuration entry point. Routa requires this file to exist, even
    when it is empty of options.
 
-	```ts title="src/routa.ts"
-	import { createRouta } from "@routa-ts/core";
+   ```ts title="src/routa.ts"
+   import { createRouta } from "@routa-ts/core";
 
-	export default createRouta({
-		port: 3000,
-	});
-	```
+   export default createRouta({
+   	port: 3000,
+   });
+   ```
 
 5. Include both source and generated metadata in TypeScript compilation.
 
-	```json title="tsconfig.json"
-	{
-		"include": ["src/**/*.ts", ".routa/**/*.ts"]
-	}
-	```
+   ```json title="tsconfig.json"
+   {
+   	"include": ["src/**/*.ts", ".routa/**/*.ts"]
+   }
+   ```
 
 </Steps>
 
@@ -100,19 +100,19 @@ Routa check passed.
 
 ## The Packages
 
-| Package | Role |
-| --- | --- |
-| `@routa-ts/core` | Route, middleware, config, logger, and query helpers used by your source and by generated code. |
-| `@routa-ts/cli` | The `routa` binary for checks, generation, builds, scaffolding, and the dev server. |
-| `create-routa-ts` | Project scaffolder invoked through your package manager's `create` command. |
+| Package           | Role                                                                                            |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| `@routa-ts/core`  | Route, middleware, config, logger, and query helpers used by your source and by generated code. |
+| `@routa-ts/cli`   | The `routa` binary for checks, generation, builds, scaffolding, and the dev server.             |
+| `create-routa-ts` | Project scaffolder invoked through your package manager's `create` command.                     |
 
 ## Troubleshooting
 
-| Problem | Fix |
-| --- | --- |
-| `ROUTA_PROJECT_REQUIRED: Missing src/routa.ts.` | Create `src/routa.ts` with a default `createRouta()` export, as in step four. |
-| TypeScript cannot find `.routa/routes.gen.ts` types. | Add `.routa/**/*.ts` to `include` in `tsconfig.json`, then run `routa generate`. |
-| Peer dependency warnings for `hono` or `zod`. | Install both explicitly. `@routa-ts/core` declares them as peers rather than bundling them. |
+| Problem                                              | Fix                                                                                         |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `ROUTA_PROJECT_REQUIRED: Missing src/routa.ts.`      | Create `src/routa.ts` with a default `createRouta()` export, as in step four.               |
+| TypeScript cannot find `.routa/routes.gen.ts` types. | Add `.routa/**/*.ts` to `include` in `tsconfig.json`, then run `routa generate`.            |
+| Peer dependency warnings for `hono` or `zod`.        | Install both explicitly. `@routa-ts/core` declares them as peers rather than bundling them. |
 
 <Aside type="note" title="CLI in dependencies">
 	Generated Routa apps keep `@routa-ts/cli` in `dependencies` rather than

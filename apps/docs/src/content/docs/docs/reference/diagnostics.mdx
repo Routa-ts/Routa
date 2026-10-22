@@ -170,14 +170,14 @@ missing. Routa refuses to overwrite or remove it because local edits may be lost
 Some conditions fail without a `ROUTA_*` code because they are detected at registration or
 in the OpenAPI commands rather than during route validation:
 
-| Message | Meaning |
-| --- | --- |
-| `Missing .routa/openapi-baseline.json. Run routa scaffold first.` | No accepted contract exists yet |
-| `Regeneration requires preview or confirmation.` | Scaffolding again without `--preview` or `--yes` |
-| `Duplicate middleware reject key "…"` | Two middleware in one chain declare the same reject name |
-| `Duplicate route registration: …` | The same method and path registered twice at runtime |
-| `Middleware requires ctx.… but it was not provided.` | A required context key was missing at request time |
-| `Missing compiled runtime output for …` | `routa start` without a current `routa build` |
+| Message                                                           | Meaning                                                  |
+| ----------------------------------------------------------------- | -------------------------------------------------------- |
+| `Missing .routa/openapi-baseline.json. Run routa scaffold first.` | No accepted contract exists yet                          |
+| `Regeneration requires preview or confirmation.`                  | Scaffolding again without `--preview` or `--yes`         |
+| `Duplicate middleware reject key "…"`                             | Two middleware in one chain declare the same reject name |
+| `Duplicate route registration: …`                                 | The same method and path registered twice at runtime     |
+| `Middleware requires ctx.… but it was not provided.`              | A required context key was missing at request time       |
+| `Missing compiled runtime output for …`                           | `routa start` without a current `routa build`            |
 
 <Aside type="note" title="Generated documents carry diagnostics">
 	When OpenAPI generation runs against a project that does not validate, the output

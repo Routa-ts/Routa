@@ -1,0 +1,2 @@
+# Markdown containers indent fences with spaces around tab-indented code.
+*.mdx whitespace=-space-before-tab

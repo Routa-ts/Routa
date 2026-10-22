@@ -23,7 +23,7 @@ rather than silently discarding work.
 1. Preview. Routa requires this or an explicit `--yes` once a manifest exists, so a second
    run can never be accidental.
 
-	<PackageManagers type="exec" args="scaffold openapi.yaml --preview" />
+    <PackageManagers type="exec" args="scaffold openapi.yaml --preview" />
 
 2. Read every entry marked `~ update`. These are tracked files whose current content still
    matches the manifest and whose newly generated content would change. A tracked file
@@ -40,11 +40,11 @@ rather than silently discarding work.
 
 5. Apply.
 
-	<PackageManagers type="exec" args="scaffold openapi.yaml --yes" />
+   <PackageManagers type="exec" args="scaffold openapi.yaml --yes" />
 
 6. Validate and review the diff before committing.
 
-	<PackageManagers type="run" args="check" />
+   <PackageManagers type="run" args="check" />
 
 </Steps>
 
@@ -69,12 +69,12 @@ src/routes/users/route.ts
 For each file it is about to write, Routa compares three things: whether the file exists,
 whether the manifest tracks it, and whether its current hash matches the recorded one.
 
-| Exists | Tracked | Hash matches | Result |
-| --- | --- | --- | --- |
-| No | — | — | `add` |
-| Yes | Yes | Yes | `update` or `unchanged` |
-| Yes | Yes | No or missing hash | `ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE` |
-| Yes | No | — | `conflict`, then `ROUTA_SCAFFOLD_UNMANAGED_FILE` |
+| Exists | Tracked | Hash matches       | Result                                           |
+| ------ | ------- | ------------------ | ------------------------------------------------ |
+| No     | —       | —                  | `add`                                            |
+| Yes    | Yes     | Yes                | `update` or `unchanged`                          |
+| Yes    | Yes     | No or missing hash | `ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE`         |
+| Yes    | No      | —                  | `conflict`, then `ROUTA_SCAFFOLD_UNMANAGED_FILE` |
 
 Framework-owned `.routa/routes.gen.ts` and `.routa/manifest.json` are exempt.
 Routa can regenerate them without a matching recorded hash. The OpenAPI baseline
@@ -86,12 +86,12 @@ does not bypass these checks, and known conflicts block all writes and deletions
 
 ## Troubleshooting
 
-| Problem | Fix |
-| --- | --- |
-| `Refusing to overwrite modified generated file` | Move your edits into an application-owned module, then re-run. Handler logic belongs in services, which is what makes routes regenerable. |
-| `Refusing to overwrite unmanaged file` | Rename your file, or restore `.routa/manifest.json` from version control if it was lost. |
-| Preview shows everything as `conflict` | The manifest is missing. Restore it from git rather than deleting your source. |
-| A route you deleted from the document still serves traffic | Regeneration removed the file but metadata is stale. Run `routa generate`. |
+| Problem                                                    | Fix                                                                                                                                       |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `Refusing to overwrite modified generated file`            | Move your edits into an application-owned module, then re-run. Handler logic belongs in services, which is what makes routes regenerable. |
+| `Refusing to overwrite unmanaged file`                     | Rename your file, or restore `.routa/manifest.json` from version control if it was lost.                                                  |
+| Preview shows everything as `conflict`                     | The manifest is missing. Restore it from git rather than deleting your source.                                                            |
+| A route you deleted from the document still serves traffic | Regeneration removed the file but metadata is stale. Run `routa generate`.                                                                |
 
 <Aside type="caution" title="v0 status">
 	In v0, you can use manifest-based preview, conflict detection, and safe regeneration.

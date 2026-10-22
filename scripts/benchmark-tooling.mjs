@@ -75,9 +75,17 @@ function fixture(name) {
 		cpSync(join(root, f), join(dir, f));
 	mkdirSync(join(dir, "node_modules", "@types"), { recursive: true });
 	for (const name of readdirSync(join(root, "node_modules"))) {
-		if (name === "@types") continue;
+		if (name === "@types" || name === ".bin" || name === "@biomejs") continue;
 		symlinkSync(join(root, "node_modules", name), join(dir, "node_modules", name));
 	}
+	mkdirSync(join(dir, "node_modules", ".bin"), { recursive: true });
+	for (const name of readdirSync(join(root, "node_modules", ".bin")))
+		symlinkSync(join(root, "node_modules", ".bin", name), join(dir, "node_modules", ".bin", name));
+	symlinkSync(
+		join(baseline, "node_modules", ".bin", "biome"),
+		join(dir, "node_modules", ".bin", "biome"),
+	);
+	symlinkSync(join(baseline, "node_modules", "@biomejs"), join(dir, "node_modules", "@biomejs"));
 	for (const name of readdirSync(join(root, "node_modules", "@types"))) {
 		symlinkSync(
 			join(root, "node_modules", "@types", name),
@@ -118,6 +126,7 @@ const lintFixture = fixture("lint"),
 	vpFormat = fixture("vp-format");
 const previous =
 	args.includes("--resume") && existsSync(output) ? JSON.parse(readFileSync(output, "utf8")) : null;
+const selected = option("--only", "").split(",").filter(Boolean);
 const remeasure = option("--remeasure", "").split(",").filter(Boolean);
 if (![rounds, workflowRounds].every((n) => Number.isInteger(n) && n > 0))
 	throw new Error("Run counts must be positive integers.");
@@ -244,7 +253,7 @@ function save() {
 			"\t",
 		) + "\n",
 	);
-	const formatted = spawnSync("vp", ["exec", "biome", "format", "--write", output], {
+	const formatted = spawnSync("vp", ["fmt", output], {
 		cwd: root,
 		encoding: "utf8",
 	});
@@ -252,6 +261,7 @@ function save() {
 		throw new Error("Cannot format benchmark output: " + formatted.stderr);
 }
 function compare(id, title, a, b, n, setupA, setupB, note) {
+	if (selected.length && !selected.includes(id)) return;
 	if (comparisons.some((c) => c.id === id)) {
 		process.stdout.write(`Resume: ${id} already measured\n`);
 		return;

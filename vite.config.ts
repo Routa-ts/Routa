@@ -1,16 +1,13 @@
 import { defineConfig } from "vite-plus";
 
-const frameworkIgnores = [
+const generatedIgnores = [
 	"**/node_modules/**",
 	"**/dist/**",
 	"**/coverage/**",
 	"**/.routa/**",
 	"**/.turbo/**",
 	".dex/**",
-	"apps/**",
-	"examples/**",
-	"docs/**",
-	".github/**",
+	"**/.astro/**",
 ];
 
 export default defineConfig({
@@ -30,7 +27,11 @@ export default defineConfig({
 		},
 	},
 	lint: {
-		ignorePatterns: frameworkIgnores,
+		ignorePatterns: generatedIgnores,
+		jsPlugins: [
+			{ name: "dependency-checks", specifier: "eslint-plugin-import-x" },
+			"eslint-plugin-no-secrets",
+		],
 		plugins: ["typescript", "unicorn", "oxc", "node", "import", "vitest", "promise"],
 		options: {
 			typeAware: true,
@@ -40,6 +41,7 @@ export default defineConfig({
 			"no-console": "warn",
 			"no-debugger": "error",
 			"no-eval": "error",
+			"no-secrets/no-secrets": ["error", { tolerance: 4.5 }],
 			"no-unused-vars": "error",
 			"typescript/ban-ts-comment": [
 				"error",
@@ -55,19 +57,20 @@ export default defineConfig({
 		},
 		overrides: [
 			{
+				files: ["packages/*/src/**/*.ts"],
+				excludeFiles: ["**/*.test.ts"],
+				rules: { "dependency-checks/no-extraneous-dependencies": "error" },
+			},
+			{
 				files: ["**/*.test.ts"],
-				rules: { "no-console": "off" },
+				rules: { "no-console": "off", "no-secrets/no-secrets": "off" },
 			},
 		],
 	},
 	fmt: {
-		ignorePatterns: [
-			...frameworkIgnores,
-			"**/CHANGELOG.md",
-			"biome.json",
-			"pnpm-lock.yaml",
-			"skills-lock.json",
-		],
+		ignorePatterns: [...generatedIgnores, "pnpm-lock.yaml", "skills-lock.json"],
+		// The pinned Astro formatter drops frontmatter comments unless this is set.
+		astro: { skipFrontmatter: true },
 		useTabs: true,
 		tabWidth: 2,
 		printWidth: 100,

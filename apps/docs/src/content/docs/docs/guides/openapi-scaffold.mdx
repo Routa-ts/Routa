@@ -22,28 +22,28 @@ TypeScript source to match it.
 <Steps>
 1. Preview the changes. Nothing is written in preview mode, so run this first every time.
 
-	<PackageManagers type="exec" args="scaffold openapi.yaml --preview" />
+    <PackageManagers type="exec" args="scaffold openapi.yaml --preview" />
 
 2. Read the change list. Each generated path is marked with what would happen to it.
 
-	| Marker | Meaning |
-	| --- | --- |
-	| `+ add` | New file that does not exist yet |
-	| `~ update` | Tracked generated file whose content would change |
-	| `= unchanged` | Generated file already matches |
-	| `! conflict` | A file exists at that path that Routa does not track |
-	| `- remove` | Previously generated file no longer described by the document |
+   | Marker        | Meaning                                                       |
+   | ------------- | ------------------------------------------------------------- |
+   | `+ add`       | New file that does not exist yet                              |
+   | `~ update`    | Tracked generated file whose content would change             |
+   | `= unchanged` | Generated file already matches                                |
+   | `! conflict`  | A file exists at that path that Routa does not track          |
+   | `- remove`    | Previously generated file no longer described by the document |
 
 3. Resolve every conflict before continuing. Move or rename any file marked `! conflict`
    that you want to keep, since Routa refuses to overwrite files it did not generate.
 
 4. Apply the changes.
 
-	<PackageManagers type="exec" args="scaffold openapi.yaml --yes" />
+   <PackageManagers type="exec" args="scaffold openapi.yaml --yes" />
 
 5. Validate and typecheck the generated source.
 
-	<PackageManagers type="run" args="check" />
+   <PackageManagers type="run" args="check" />
 
 </Steps>
 
@@ -67,14 +67,14 @@ Generated handlers are stubs. They satisfy the contract and return placeholder d
 
 ## What Gets Generated
 
-| From the document | Into source |
-| --- | --- |
-| Path and method | `src/routes/**/route.ts` with a `createRoute` per method |
-| Parameters | `input.params`, `input.query`, `input.headers`, `input.cookies` |
-| JSON request body | `input.body` |
-| JSON responses | Entries in `responses`, named from status and `operationId` |
-| `components.schemas` | Shared schema modules referenced by routes |
-| The whole document | `.routa/openapi-baseline.json` |
+| From the document    | Into source                                                     |
+| -------------------- | --------------------------------------------------------------- |
+| Path and method      | `src/routes/**/route.ts` with a `createRoute` per method        |
+| Parameters           | `input.params`, `input.query`, `input.headers`, `input.cookies` |
+| JSON request body    | `input.body`                                                    |
+| JSON responses       | Entries in `responses`, named from status and `operationId`     |
+| `components.schemas` | Shared schema modules referenced by routes                      |
+| The whole document   | `.routa/openapi-baseline.json`                                  |
 
 Supported input is deliberately narrow: paths, methods, `operationId`, path/query/header/
 cookie parameters, JSON bodies, JSON responses, and `components.schemas`. Anything else
@@ -82,13 +82,13 @@ stays in the source document and is not approximated in TypeScript.
 
 ## Troubleshooting
 
-| Problem | Fix |
-| --- | --- |
-| `ROUTA_OPENAPI_UNSUPPORTED_EXTENSION` | Rename the document to `.yaml`, `.yml`, or `.json`. |
-| `ROUTA_OPENAPI_FILE_NOT_FOUND` | Run from the project root, or pass the path relative to it. |
-| `Regeneration requires preview or confirmation.` | A manifest already exists. Re-run with `--preview`, then with `--yes`. |
-| `ROUTA_SCAFFOLD_UNMANAGED_FILE` | A file exists where Routa wants to generate one, and the manifest does not track it. Move or rename yours. |
-| `ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE` | You edited a generated file. Move the edits into application-owned code, or accept losing them. |
+| Problem                                          | Fix                                                                                                        |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `ROUTA_OPENAPI_UNSUPPORTED_EXTENSION`            | Rename the document to `.yaml`, `.yml`, or `.json`.                                                        |
+| `ROUTA_OPENAPI_FILE_NOT_FOUND`                   | Run from the project root, or pass the path relative to it.                                                |
+| `Regeneration requires preview or confirmation.` | A manifest already exists. Re-run with `--preview`, then with `--yes`.                                     |
+| `ROUTA_SCAFFOLD_UNMANAGED_FILE`                  | A file exists where Routa wants to generate one, and the manifest does not track it. Move or rename yours. |
+| `ROUTA_SCAFFOLD_MODIFIED_GENERATED_FILE`         | You edited a generated file. Move the edits into application-owned code, or accept losing them.            |
 
 <Aside type="caution" title="v0 status">
 	Scaffolding the supported JSON OpenAPI surface is implemented in v0; unsupported

@@ -8,8 +8,8 @@
 		"check": "routa check",
 		"generate": "routa generate",
 		"build": "routa build",
-		"lint": "biome check .",
-		"format": "biome check --write .",
+		"lint": "vp lint",
+		"format": "vp fmt",
 		"scaffold": "cd scaffold && routa scaffold openapi.yaml --preview",
 		"scaffold:preview": "cd scaffold && routa scaffold openapi.yaml --preview",
 		"scaffold:update": "cd scaffold && routa scaffold openapi.yaml --yes",
@@ -31,7 +31,6 @@
 		"zod": "^4.6.7"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.5.12",
 		"@types/node": "26.6.5",
 		"typescript": "7.0.2"
 	}

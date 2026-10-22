@@ -17,13 +17,16 @@ export const CatalogItem = z.object({
 	enabled: z.boolean(),
 	score: z.number().nullable(),
 	attributes: z.record(z.string(), z.string()),
-	delivery: z.discriminatedUnion("kind", [z.object({
-	kind: z.literal("email"),
-	email: z.email(),
-}), z.object({
-	kind: z.literal("webhook"),
-	callback: z.url(),
-})]),
+	delivery: z.discriminatedUnion("kind", [
+		z.object({
+			kind: z.literal("email"),
+			email: z.email(),
+		}),
+		z.object({
+			kind: z.literal("webhook"),
+			callback: z.url(),
+		}),
+	]),
 	createdAt: z.iso.datetime(),
 });
 
@@ -36,13 +39,16 @@ export const CatalogItemInput = z.object({
 	enabled: z.boolean(),
 	score: z.number().nullable().optional(),
 	attributes: z.record(z.string(), z.string()),
-	delivery: z.discriminatedUnion("kind", [z.object({
-	kind: z.literal("email"),
-	email: z.email(),
-}), z.object({
-	kind: z.literal("webhook"),
-	callback: z.url(),
-})]),
+	delivery: z.discriminatedUnion("kind", [
+		z.object({
+			kind: z.literal("email"),
+			email: z.email(),
+		}),
+		z.object({
+			kind: z.literal("webhook"),
+			callback: z.url(),
+		}),
+	]),
 });
 
 export const ReplaceCatalogItemBody = CatalogItemInput;

@@ -14,7 +14,7 @@ astro dev --background
 
 Manage the background server with `astro dev stop`, `astro dev status`, and `astro dev logs`.
 
-Before opening a pull request, run `pnpm --filter @routa-ts/docs build`. A broken internal
+Before opening a pull request, run `vp run --filter @routa-ts/docs build`. A broken internal
 link fails the build.
 
 ## Purpose of a Page
@@ -62,7 +62,7 @@ Every page uses this frame, regardless of which structure it follows.
   ```ts title="src/routes/users/route.ts"
   ````
 
-- Indent with tabs inside code blocks, matching the repository Biome configuration.
+- Indent with tabs inside code blocks, matching the repository Oxfmt configuration.
 - Show the output or diagnostic when a command produces one. A command without its
   expected result is half a doc.
 
@@ -80,14 +80,14 @@ import PackageManagers from "@components/PackageManagers.astro";
 
 Supported `type` values:
 
-| `type`    | Purpose                        | Example props                                     |
-| --------- | ------------------------------ | ------------------------------------------------- |
-| `create`  | Scaffold a new Routa project   | `<PackageManagers type="create" target="my-api" args="--yes" />` |
-| `install` | Install existing dependencies  | `<PackageManagers type="install" />`               |
-| `add`     | Add runtime dependencies       | `<PackageManagers type="add" args="hono zod" />`   |
-| `add-dev` | Add dev dependencies           | `<PackageManagers type="add-dev" args="vitest" />` |
-| `run`     | Run a `package.json` script    | `<PackageManagers type="run" args="dev" />`        |
-| `exec`    | Run the `routa` binary         | `<PackageManagers type="exec" args="check" />`     |
+| `type`    | Purpose                       | Example props                                                    |
+| --------- | ----------------------------- | ---------------------------------------------------------------- |
+| `create`  | Scaffold a new Routa project  | `<PackageManagers type="create" target="my-api" args="--yes" />` |
+| `install` | Install existing dependencies | `<PackageManagers type="install" />`                             |
+| `add`     | Add runtime dependencies      | `<PackageManagers type="add" args="hono zod" />`                 |
+| `add-dev` | Add dev dependencies          | `<PackageManagers type="add-dev" args="vitest" />`               |
+| `run`     | Run a `package.json` script   | `<PackageManagers type="run" args="dev" />`                      |
+| `exec`    | Run the `routa` binary        | `<PackageManagers type="exec" args="check" />`                   |
 
 Use `env` for a leading environment prefix: `<PackageManagers type="run" args="start" env="HOST=0.0.0.0 PORT=3000" />`.
 For `type="create"`, use `target` for the project directory and `args` for flags; the
@@ -96,7 +96,7 @@ component inserts npm's required `--` separator.
 All tabs share `syncKey="pkg"`, so a reader picks their package manager once per site visit.
 
 Plain ` ```sh ` blocks remain correct for commands that are not package-manager specific,
-such as `node --version`, `git init`, or repository-only `pnpm --filter` commands in the
+such as `node --version`, `git init`, or repository-only `vp run --filter` commands in the
 Examples and Community sections.
 
 ## Coverage Rules
@@ -156,15 +156,15 @@ next steps.
 
 ### Structure by Section
 
-| Section         | Structure                                        |
-| --------------- | ------------------------------------------------ |
-| Start           | E, except Quickstart which uses B                |
-| Getting Started | B (D for Project Anatomy)                        |
-| Concepts        | A, or D for architectural pages                  |
-| Guides          | B                                                |
-| Reference       | C                                                |
-| Examples        | A                                                |
-| Community       | B                                                |
+| Section         | Structure                         |
+| --------------- | --------------------------------- |
+| Start           | E, except Quickstart which uses B |
+| Getting Started | B (D for Project Anatomy)         |
+| Concepts        | A, or D for architectural pages   |
+| Guides          | B                                 |
+| Reference       | C                                 |
+| Examples        | A                                 |
+| Community       | B                                 |
 
 ## Astro Reference
 

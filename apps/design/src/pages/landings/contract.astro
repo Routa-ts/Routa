@@ -12,7 +12,7 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 			<div class="hero-grid">
 				<div class="hero-copy">
 					<div class="brand-mark">
-						<img src="/favicon.svg" alt="" width="40" height="40">
+						<img src="/favicon.svg" alt="" width="40" height="40" />
 						Routa
 						<span class="dot" aria-hidden="true"></span>
 					</div>
@@ -22,8 +22,12 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 						OpenAPI stays in lockstep.
 					</p>
 					<div class="cta-row">
-						<a class="btn btn-primary" href="https://routa-ts.dev/docs/">Get started</a>
-						<a class="btn btn-ghost" href="https://github.com/Routa-ts/Routa">GitHub</a>
+						<a class="btn btn-primary" href="https://routa-ts.dev/docs/">
+							Get started
+						</a>
+						<a class="btn btn-ghost" href="https://github.com/Routa-ts/Routa">
+							GitHub
+						</a>
 					</div>
 					<div class="cli" data-cmd="pnpm create routa-ts@latest">
 						<span>$ pnpm create routa-ts@latest</span>
@@ -35,10 +39,10 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 					<div class="flow-label">One route · one contract</div>
 					<div class="code-panel">
 						<div class="code-panel__bar">
-							<span>src/routes/users/route.ts</span><span>filesystem</span>
+							<span>src/routes/users/route.ts</span>
+							<span>filesystem</span>
 						</div>
-						<pre
-						><code><span class="kw">export default</span> <span class="fn">createRouteRoot</span>(<span class="str">"/users"</span>)({"{"}
+						<pre><code><span class="kw">export default</span> <span class="fn">createRouteRoot</span>(<span class="str">"/users"</span>)({"{"}
   post: <span class="fn">createRoute</span>({"{"}
     input: {"{"} body: CreateUserSchema {"}"},
     responses: {"{"}
@@ -50,14 +54,20 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 {"}"});</code></pre>
 					</div>
 					<div class="code-panel">
-						<div class="code-panel__bar"><span>schemas/user.ts</span><span>zod</span></div>
+						<div class="code-panel__bar">
+							<span>schemas/user.ts</span>
+							<span>zod</span>
+						</div>
 						<pre><code><span class="kw">export const</span> CreateUserSchema = z.object({"{"}
   email: z.string().email(),
   name: z.string().min(<span class="str">1</span>),
 {"}"});</code></pre>
 					</div>
 					<div class="code-panel">
-						<div class="code-panel__bar"><span>openapi.yaml · emitted</span><span>peer</span></div>
+						<div class="code-panel__bar">
+							<span>openapi.yaml · emitted</span>
+							<span>peer</span>
+						</div>
 						<pre><code><span class="cm"># POST /users — generated from the contract</span>
 paths:
   /users:
@@ -97,8 +107,8 @@ paths:
 					<li>
 						<strong>CLI lifecycle</strong>
 						<p>
-							<code class="mono">check</code>
-							→ <code class="mono">build</code> → <code class="mono">start</code> before you ship.
+							<code class="mono">check</code>→ <code class="mono">build</code> →{" "}
+							<code class="mono">start</code> before you ship.
 						</p>
 					</li>
 					<li>
@@ -113,8 +123,7 @@ paths:
 					<li>TypeScript</li>
 				</ul>
 				<p class="v0-note">
-					<strong>v0</strong>
-					— intentionally narrow. No enterprise logo wall. No cloud funnel.
+					<strong>v0</strong>— intentionally narrow. No enterprise logo wall. No cloud funnel.
 				</p>
 			</div>
 		</section>
@@ -126,10 +135,12 @@ paths:
 					<p>Quickstart, route anatomy, and OpenAPI workflow under /docs/.</p>
 				</div>
 				<div class="cta-row">
-					<a class="btn btn-primary" href="https://routa-ts.dev/docs/start/quickstart/"
-						>Quickstart</a
-					>
-					<a class="btn btn-ghost" href="/landings/">All options</a>
+					<a class="btn btn-primary" href="https://routa-ts.dev/docs/start/quickstart/">
+						Quickstart
+					</a>
+					<a class="btn btn-ghost" href="/landings/">
+						All options
+					</a>
 				</div>
 			</div>
 		</section>

@@ -64,12 +64,12 @@ Signal cyan for action, deep navy for depth, frost for readable body text.
 	</div>
 </div>
 
-| Token | Role | Feeling |
-| --- | --- | --- |
-| Accent cyan | Links, primary CTA, focus | “You are here” |
-| Navy ground | Page / sidebar | Night navigation |
-| Sora | UI + headings | Modern, directional |
-| IBM Plex Mono | Code + badges | Instrument readout |
+| Token         | Role                      | Feeling             |
+| ------------- | ------------------------- | ------------------- |
+| Accent cyan   | Links, primary CTA, focus | “You are here”      |
+| Navy ground   | Page / sidebar            | Night navigation    |
+| Sora          | UI + headings             | Modern, directional |
+| IBM Plex Mono | Code + badges             | Instrument readout  |
 
 ## Voice badges
 
@@ -136,29 +136,29 @@ Signal cyan for action, deep navy for depth, frost for readable body text.
 
 1. Create a project.
 
-	```sh
-	pnpm create routa-ts@latest
-	```
+   ```sh
+   pnpm create routa-ts@latest
+   ```
 
 2. Define a route contract in `src/routes`.
 
-	```ts
-	export default createRouteRoot("/status")({
-		get: createRoute({
-			responses: {
-				success: { status: 200, schema: StatusSchema },
-			},
-			run: async () => ({ ok: true }),
-		}),
-	});
-	```
+   ```ts
+   export default createRouteRoot("/status")({
+   	get: createRoute({
+   		responses: {
+   			success: { status: 200, schema: StatusSchema },
+   		},
+   		run: async () => ({ ok: true }),
+   	}),
+   });
+   ```
 
 3. Check alignment, then start the server.
 
-	```sh
-	pnpm routa check
-	pnpm routa start
-	```
+   ```sh
+   pnpm routa check
+   pnpm routa start
+   ```
 
 </Steps>
 
@@ -167,17 +167,17 @@ Signal cyan for action, deep navy for depth, frost for readable body text.
 <FileTree>
 
 - src/
-	- routes/
-		- status/
-			- route.ts
-			- schemas.ts
-		- users/
-			- route.ts
-			- $userId/
-				- route.ts
-	- routa.ts
+  - routes/
+    - status/
+      - route.ts
+      - schemas.ts
+    - users/
+      - route.ts
+      - $userId/
+        - route.ts
+  - routa.ts
 - .routa/
-	- routes.gen.ts
+  - routes.gen.ts
 
 </FileTree>
 

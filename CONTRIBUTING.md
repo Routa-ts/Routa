@@ -31,8 +31,8 @@ metadata, example contracts, scaffold diagnostics, and packed-package validation
 
 ## Framework tooling
 
-- `vp run check` runs Oxfmt and Oxlint together with type-aware rules and compiler
-  diagnostics. The compiler-diagnostics integration is experimental, so `vp run typecheck`
+- `vp run check` builds workspace declarations, then runs Oxfmt and Oxlint together
+  with type-aware rules and compiler diagnostics. The compiler-diagnostics integration is experimental, so `vp run typecheck`
   also runs TypeScript against explicit source and test programs, plus Astro checks.
 - `vp run test` runs all framework tests with the Vitest version bundled with Vite Plus.
   Tests always execute. Use `vp exec --filter @routa-ts/core vp test watch` while working
@@ -45,9 +45,13 @@ metadata, example contracts, scaffold diagnostics, and packed-package validation
   `vp exec node scripts/check-tooling-cache.mjs` separately from other builds to test
   output restoration and dependency invalidation. The probe restores its temporary edit.
 - `vp run build` also builds both examples, the docs site, and the design lab.
-- `vp run format` formats framework files with Oxfmt. Biome still owns formatting and
-  linting for docs, design, and examples. It also checks framework dependency declarations
-  and secrets, which are not replaced by the current Oxlint configuration.
+- `vp run format` uses Oxfmt across the repository, including Markdown, MDX, CSS,
+  YAML, JSON, HTML, and Astro. Astro formatting uses the pinned `@astrojs/compiler-rs`.
+  Its frontmatter formatting is disabled because the pinned formatter drops comments;
+  Astro checks and Oxlint still inspect those scripts.
+  Oxlint checks supported scripts, with JavaScript plugins for runtime dependency
+  declarations and secret detection. Template/CSS lint coverage differs from Biome;
+  Astro checks and site builds remain required.
 
 Vite Plus package configs preserve the published `.js` entry points, including the
 CLI's spawned `runtime.js`. Declaration generation uses the existing TypeScript 7
@@ -60,7 +64,8 @@ dependency to avoid mixing plugin types from two Vite distributions.
 
 The [tooling comparison](docs/vite-plus-migration-results.html) records repeated timings,
 CPU, memory, dependency counts, and comparison limits. Its numerical evidence is in
-`docs/vite-plus-benchmarks.json`; `scripts/benchmark-tooling.mjs` reruns the measurements
+`docs/vite-plus-oxc-benchmarks.json`. The earlier hybrid snapshot remains in
+`docs/vite-plus-benchmarks.json`. `scripts/benchmark-tooling.mjs` reruns the measurements
 against the isolated baseline and environment adjustments recorded there.
 
 ## Pull Requests

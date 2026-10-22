@@ -3705,14 +3705,10 @@ export default createRouteRoot("/legacy")({ get: createRoute({ deprecation: { re
 			),
 		);
 
-		const result = spawnSync(
-			"pnpm",
-			["exec", "tsc", "-p", join(cwd, "tsconfig.json"), "--noEmit"],
-			{
-				cwd: repoRoot,
-				encoding: "utf8",
-			},
-		);
+		const result = spawnSync("vp", ["exec", "tsc", "-p", join(cwd, "tsconfig.json"), "--noEmit"], {
+			cwd: repoRoot,
+			encoding: "utf8",
+		});
 
 		expect(withoutPnpmWarnings(result.stderr)).toBe("");
 		expect(result.stdout).toBe("");

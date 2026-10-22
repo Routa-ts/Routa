@@ -64,13 +64,13 @@ Mapped 1:1 to CLI ANSI roles: cyan heading/command, green success, yellow warn, 
 	</div>
 </div>
 
-| CLI role | ANSI | Docs twin |
-| --- | --- | --- |
-| heading / command | cyan `36` | Links + primary CTA |
-| success | green `32` | Accent, success badges |
-| warn | yellow `33` | Caution asides |
-| error | red `31` | Danger asides |
-| muted | dim | Secondary copy |
+| CLI role          | ANSI        | Docs twin              |
+| ----------------- | ----------- | ---------------------- |
+| heading / command | cyan `36`   | Links + primary CTA    |
+| success           | green `32`  | Accent, success badges |
+| warn              | yellow `33` | Caution asides         |
+| error             | red `31`    | Danger asides          |
+| muted             | dim         | Secondary copy         |
 
 ## Process badges
 
@@ -137,25 +137,25 @@ Mapped 1:1 to CLI ANSI roles: cyan heading/command, green success, yellow warn, 
 
 1. Scaffold.
 
-	```sh
-	pnpm create routa-ts@latest my-api
-	cd my-api
-	```
+   ```sh
+   pnpm create routa-ts@latest my-api
+   cd my-api
+   ```
 
 2. Inspect the generated entry.
 
-	```ts
-	// src/routa.ts
-	import { createApp } from "@routa-ts/core";
-	```
+   ```ts
+   // src/routa.ts
+   import { createApp } from "@routa-ts/core";
+   ```
 
 3. Run the loop.
 
-	```sh
-	pnpm routa check
-	pnpm routa start
-	# listening on :3000
-	```
+   ```sh
+   pnpm routa check
+   pnpm routa start
+   # listening on :3000
+   ```
 
 </Steps>
 
@@ -164,15 +164,15 @@ Mapped 1:1 to CLI ANSI roles: cyan heading/command, green success, yellow warn, 
 <FileTree>
 
 - my-api/
-	- package.json
-	- src/
-		- routa.ts
-		- routes/
-			- demo/
-				- route.ts
-	- .routa/
-		- routes.gen.ts
-	- .nvmrc
+  - package.json
+  - src/
+    - routa.ts
+    - routes/
+      - demo/
+        - route.ts
+  - .routa/
+    - routes.gen.ts
+  - .nvmrc
 
 </FileTree>
 

@@ -74,13 +74,13 @@ each method the right `ctx` type.
 An optional map of request sources to Zod schemas. Each source is parsed independently
 before the handler runs:
 
-| Source | Parsed from |
-| --- | --- |
-| `params` | Dynamic path segments |
-| `query` | The URL query string |
-| `headers` | Request headers, lowercased |
+| Source    | Parsed from                      |
+| --------- | -------------------------------- |
+| `params`  | Dynamic path segments            |
+| `query`   | The URL query string             |
+| `headers` | Request headers, lowercased      |
 | `cookies` | The `Cookie` header, URI-decoded |
-| `body` | The JSON request body |
+| `body`    | The JSON request body            |
 
 Only the sources you declare appear on `input`, and each one arrives as the schema's parsed
 output type. A parse failure returns `400` with a problem document listing the failing

@@ -21,60 +21,61 @@ checks Routa expects before you ship. The generated app already contains a worki
 1. Create a Routa project. The scaffolder asks for a project name and whether to include a
    starter OpenAPI file, a git repository, and installed dependencies.
 
-	<PackageManagers type="create" />
+    <PackageManagers type="create" />
 
-	```txt
-	Your Routa app is ready in 'routa-app'.
-	```
+    ```txt
+    Your Routa app is ready in 'routa-app'.
+    ```
 
-2. Enter the project. If you answered no to the install prompt, run the install command
-   below; otherwise skip it.
+2.  Enter the project. If you answered no to the install prompt, run the install command
+    below; otherwise skip it.
 
-	```sh
-	cd routa-app
-	pwd
-	```
+    ```sh
+    cd routa-app
+    pwd
+    ```
 
-	```txt
-	…/routa-app
-	```
+    ```txt
+    …/routa-app
+    ```
 
-	<PackageManagers type="install" />
+    <PackageManagers type="install" />
 
-	```sh
-	test -d node_modules && echo "Dependencies installed."
-	```
+    ```sh
+    test -d node_modules && echo "Dependencies installed."
+    ```
 
-	```txt
-	Dependencies installed.
-	```
+    ```txt
+    Dependencies installed.
+    ```
 
-3. Start development mode.
+3.  Start development mode.
 
-	<PackageManagers type="run" args="dev" />
+    <PackageManagers type="run" args="dev" />
 
-	`routa dev` validates the route graph, writes `.routa/routes.gen.ts`, typechecks the
-	project, and starts the server on `http://127.0.0.1:3000`.
+    `routa dev` validates the route graph, writes `.routa/routes.gen.ts`, typechecks the
+    project, and starts the server on `http://127.0.0.1:3000`.
 
-	```txt
-	INFO api.started Routa API started. {"host":"127.0.0.1","port":3000,"routes":1}
-	```
+    ```txt
+    INFO api.started Routa API started. {"host":"127.0.0.1","port":3000,"routes":1}
+    ```
 
-4. Run the checks used before shipping.
+4.  Run the checks used before shipping.
 
-	<PackageManagers type="run" args={`generate
-check
-build
-test
-openapi:check`} />
+        <PackageManagers type="run" args={`generate
 
-	```txt
-	Generated .routa/routes.gen.ts for 1 route file(s).
-	Routa check passed.
-	Routa build passed for 1 route file(s).
-	Test Files  1 passed (1)
-	OpenAPI check passed. No drift detected.
-	```
+    check
+    build
+    test
+    openapi:check`} />
+
+        ```txt
+        Generated .routa/routes.gen.ts for 1 route file(s).
+        Routa check passed.
+        Routa build passed for 1 route file(s).
+        Test Files  1 passed (1)
+        OpenAPI check passed. No drift detected.
+        ```
 
 </Steps>
 
@@ -101,12 +102,12 @@ Routa check passed.
 
 ## Troubleshooting
 
-| Problem | Fix |
-| --- | --- |
-| `Routa commands must run inside a TypeScript Routa project.` | Run the command from the project root, the directory holding `package.json` and `src/routes`. |
-| The server starts on a port already in use. | Set `PORT` for one run, or change `port` in `src/routa.ts`. |
-| `routa openapi check` reports missing `.routa/openapi-baseline.json`. | You created the project without the starter OpenAPI file. Run `routa scaffold openapi.yaml` or skip the OpenAPI check. |
-| Editing a route does not change the response. | `routa dev` restarts on changes under `src/`. If validation failed, the diagnostics appear in the dev output and the previous server keeps running. |
+| Problem                                                               | Fix                                                                                                                                                 |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Routa commands must run inside a TypeScript Routa project.`          | Run the command from the project root, the directory holding `package.json` and `src/routes`.                                                       |
+| The server starts on a port already in use.                           | Set `PORT` for one run, or change `port` in `src/routa.ts`.                                                                                         |
+| `routa openapi check` reports missing `.routa/openapi-baseline.json`. | You created the project without the starter OpenAPI file. Run `routa scaffold openapi.yaml` or skip the OpenAPI check.                              |
+| Editing a route does not change the response.                         | `routa dev` restarts on changes under `src/`. If validation failed, the diagnostics appear in the dev output and the previous server keeps running. |
 
 <Aside type="caution" title="v0 status">
 	Routa is at a v0 implementation baseline. Everything in this quickstart is implemented

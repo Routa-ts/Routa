@@ -4844,5 +4844,6 @@
 		"buildOutputFiles": 19,
 		"checkProbes": 17,
 		"cacheScenarios": 4
-	}
+	},
+	"candidateState": "Historical hybrid candidate before removing Biome; see vite-plus-oxc-benchmarks.json for the current configuration."
 }
