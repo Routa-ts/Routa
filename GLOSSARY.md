@@ -177,7 +177,7 @@ An application-declared HTTP-boundary contract that limits admitted request conc
 _Avoid_: Rate limit, transaction deadline, background-task manager
 
 **Transport safeguards**:
-Routa-owned bounds on receiving HTTP requests, retaining connections and transmitting responses, separate from application execution and resource completion.
+Routa-owned bounds on receiving HTTP requests and retaining connections, separate from application execution and resource completion.
 _Avoid_: Production profile, execution deadline, process watchdog
 
 **Health probe**:
@@ -189,8 +189,8 @@ An explicitly configured Routa operation reporting the combined result of requir
 _Avoid_: Request gate, startup check
 
 **Readiness evaluation**:
-One application-instance-local execution of all configured readiness checks, shared by concurrent probes and tracked until its callbacks settle; its published result and actual work completion have separate lifetimes.
-_Avoid_: Per-request dependency check, background poll
+One execution of all configured readiness checks for a single readiness probe, bounded by one timeout and tracked until its callbacks settle; its reported result and actual work completion have separate lifetimes.
+_Avoid_: Cached readiness, shared evaluation, background poll
 
 **Request observation**:
 An opt-in measurement or span for one request reaching Routa, ending at server-observed transmission completion or interruption. Application execution, stream production and resource cleanup have separate lifetimes.
@@ -215,6 +215,14 @@ _Avoid_: Current generated output
 **Hosted OpenAPI reference**:
 An opt-in application-served view of its complete current API contract, consisting of a reference UI and the same source-derived OpenAPI document. Its explicit access policy is separate from access to the documented API operations.
 _Avoid_: OpenAPI baseline, route reference, documentation portal
+
+**Contract fact**:
+A configuration value that changes an application's HTTP contract, such as whether an operation exists or which framework failures it can return. Routa reads contract facts statically.
+_Avoid_: Literal config, static setting
+
+**Tuning value**:
+A configuration value that adjusts enforcement of an existing contract without changing it, such as a timeout, limit or origin list. Applications supply tuning values at runtime.
+_Avoid_: Contract fact, generated policy
 
 **Generated metadata**:
 Deterministic, source-derived contract state used by Routa's types, runtime, and checks and reviewed alongside source.

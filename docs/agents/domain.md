@@ -50,7 +50,19 @@ This repository uses a single domain glossary:
         ├── 0001-source-route-contracts.md
         ├── 0002-own-only-the-http-boundary.md
         ├── 0003-commit-generated-routa-state.md
-        └── 0004-optional-typed-dependency-injection.md
+        ├── 0004-optional-typed-dependency-injection.md
+        ├── 0005-factory-owned-log-safety.md
+        ├── 0006-executable-owned-process-lifecycle.md
+        ├── 0007-application-owned-readiness.md
+        ├── 0008-track-stream-producer-completion.md
+        ├── 0009-explicit-http-error-mappings.md
+        ├── 0010-explicit-api-evolution-checks.md
+        ├── 0011-explicit-http-security-policy.md
+        ├── 0012-bound-transport-without-inventing-work-completion.md
+        ├── 0013-source-declared-native-http-interoperability.md
+        ├── 0014-explicit-authentication-ownership-and-cookie-effects.md
+        ├── 0015-application-owned-integration-scaffolds.md
+        └── 0016-static-contract-facts-runtime-tuning-values.md
 ```
 
 ## Use the glossary vocabulary
