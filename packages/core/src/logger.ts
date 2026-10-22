@@ -111,18 +111,15 @@ function writeConsoleLog(event: RoutaLogEvent): void {
 	const line = `[${event.timestamp}] ${event.level.toUpperCase()} ${event.event} ${event.message}${payload}`;
 
 	if (event.level === "error" || event.level === "fatal") {
-		// biome-ignore lint/suspicious/noConsole: The default logger intentionally writes runtime logs.
 		globalThis.console.error(line);
 		return;
 	}
 
 	if (event.level === "warn") {
-		// biome-ignore lint/suspicious/noConsole: The default logger intentionally writes runtime logs.
 		globalThis.console.warn(line);
 		return;
 	}
 
-	// biome-ignore lint/suspicious/noConsole: The default logger intentionally writes runtime logs.
 	globalThis.console.log(line);
 }
 

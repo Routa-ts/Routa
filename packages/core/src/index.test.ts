@@ -1,6 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
-import { createMiddleware, createRouta, createRoute, createRouteRoot } from "./index.js";
+import {
+	createMiddleware,
+	createRouta,
+	createRoute,
+	createRouteRoot,
+	createRouteRootFactory,
+} from "./index.js";
 import type { RoutaLogger } from "./logger.js";
 
 declare module "./index.js" {
@@ -95,6 +101,15 @@ describe("route contracts", () => {
 		};
 		// @ts-expect-error Extra method keys are rejected even through an intermediate value.
 		routeRoot(indirectOptions);
+
+		const mixedMethods = { get: indirectOptions.options, options: indirectOptions.options };
+		// @ts-expect-error Extra methods remain invalid alongside supported methods.
+		routeRoot(mixedMethods);
+		const customRouteRoot = createRouteRootFactory<{
+			"/status": { get: Record<never, never> };
+		}>()("/status");
+		// @ts-expect-error Explicit context factories enforce the same method restriction.
+		customRouteRoot(mixedMethods);
 	});
 
 	it("preserves Routa app configuration", () => {
@@ -183,8 +198,8 @@ describe("route contracts", () => {
 					schema: z.object({ message: z.string() }),
 				},
 			},
+			// @ts-expect-error Middleware may only return declared reject types.
 			run: () => ({
-				// @ts-expect-error Middleware may only return declared reject types.
 				type: "notDeclared",
 				data: { message: "No token" },
 			}),
@@ -197,9 +212,9 @@ describe("route contracts", () => {
 					schema: z.object({ message: z.string() }),
 				},
 			},
+			// @ts-expect-error Reject data must match the selected reject schema.
 			run: () => ({
 				type: "unauthorized",
-				// @ts-expect-error Reject data must match the selected reject schema.
 				data: { message: 401 },
 			}),
 		});

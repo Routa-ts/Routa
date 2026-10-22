@@ -5,35 +5,35 @@
 	"type": "module",
 	"license": "MIT",
 	"engines": {
-		"node": ">=24"
+		"node": "^24.11.0 || >=26.0.0"
 	},
 	"packageManager": "pnpm@11.9.0",
 	"scripts": {
-		"build": "turbo run build",
-		"check": "biome check .",
+		"build": "pnpm prepare:local-cli && vp run --filter './apps/*' --filter './examples/*' build",
+		"check": "vp check && pnpm check:biome",
 		"changeset": "changeset",
-		"format": "biome format --write .",
-		"format:check": "biome format .",
+		"format": "vp fmt && biome format --write apps examples docs .github biome.json packages/*/CHANGELOG.md",
+		"format:check": "vp fmt --check && biome format apps examples docs .github biome.json packages/*/CHANGELOG.md",
 		"generated:check": "pnpm run prepare:local-cli && pnpm --filter './examples/*' build && node scripts/check-generated.mjs",
-		"lint": "turbo run lint",
-		"lint:repo": "biome lint .",
+		"lint": "vp lint && pnpm check:biome",
+		"lint:repo": "pnpm lint",
 		"pack:check": "node scripts/pack-check.mjs",
-		"prepare:local-cli": "pnpm --filter './packages/*' build && node scripts/link-local-cli.mjs",
-		"quality": "pnpm check && turbo run typecheck test",
+		"prepare:local-cli": "pnpm build:packages && node scripts/link-local-cli.mjs",
+		"quality": "pnpm check && pnpm typecheck && pnpm test",
 		"release": "pnpm run prepare:local-cli && pnpm quality && pnpm build && pnpm pack:check && changeset publish",
-		"test": "turbo run test",
-		"typecheck": "turbo run typecheck",
+		"test": "vp run unit",
+		"typecheck": "pnpm build:packages && vp run --filter './packages/*' --filter './apps/*' typecheck",
 		"verify": "pnpm check && pnpm typecheck && pnpm test && pnpm generated:check && pnpm --filter './examples/*' check && pnpm --filter './examples/*' openapi:check && scripts/scaffold-error-smoke.sh && pnpm pack:check",
-		"version": "changeset version"
+		"version": "changeset version",
+		"build:packages": "vp run compile",
+		"check:biome": "biome lint --config-path=biome.framework.json && biome check apps examples docs .github biome.json packages/*/CHANGELOG.md"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.12",
 		"@changesets/cli": "3.0.3",
 		"@types/node": "26.6.5",
-		"esbuild": "0.28.2",
-		"turbo": "2.11.8",
 		"typescript": "7.0.2",
-		"vitest": "5.0.3",
+		"vite-plus": "1.3.0",
 		"yaml": "2.9.1"
 	}
 }

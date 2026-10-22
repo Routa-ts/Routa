@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Routa: Vite Plus migration results</title>
+<style>
+:root { color-scheme: light dark; --ink: var(--foreground, #172b4d); --muted-ink: var(--muted-foreground, #56657b); --line: var(--border, #d4deec); --surface: var(--card, #f3f6fb); --blue: var(--primary, #215ce5); --good: var(--success-foreground, #086650); --code-bg-fallback: #eaf0f8; --code-ink-fallback: #19324f; }
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--ink); font-family: var(--font-sans, "Avenir Next", "Segoe UI", sans-serif); font-size: 15px; line-height: 1.55; }
+main { width: 100%; max-width: 1120px; margin: 0 auto; }
+h1 { margin: 0 0 8px; font-size: clamp(25px, 5.5vw, 38px); line-height: 1.15; font-weight: 650; letter-spacing: -0.025em; }
+h2 { margin: 0; font-size: 20px; line-height: 1.3; font-weight: 600; }
+h3 { margin: 0 0 6px; font-size: 14px; color: var(--muted-ink); font-weight: 600; }
+p { margin: 0 0 12px; max-width: 79ch; }
+a { color: var(--blue); text-underline-offset: 3px; }
+button { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 7px; padding: 8px 12px; cursor: pointer; }
+button[aria-pressed="true"] { color: var(--primary-foreground, white); background: var(--blue); border-color: var(--blue); }
+:where(a, button, summary):focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
+code { font: 0.86em var(--font-mono, "SFMono-Regular", Consolas, monospace); overflow-wrap: anywhere; }
+pre { padding: 16px; border-radius: var(--radius, 8px); background: var(--code-background, var(--code-bg-fallback)); color: var(--code-foreground, var(--code-ink-fallback)); white-space: pre-wrap; overflow-wrap: anywhere; }
+summary { cursor: pointer; color: var(--blue); padding: 11px 0; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+caption { text-align: left; padding: 0 0 10px; font-weight: 600; }
+th, td { text-align: left; vertical-align: top; padding: 10px 8px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+thead th { color: var(--muted-ink); font-weight: 500; }
+tbody th { font-weight: 550; }
+[hidden] { display: none; }
+.intro { padding: 4px 0 20px; }
+.lede { margin-bottom: 14px; font-size: 17px; }
+.meta { color: var(--muted-ink); font-size: 13px; }
+.outcome { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; border-radius: var(--radius, 8px); padding: 20px; background: var(--surface); margin: 0 0 24px; }
+.outcome p { margin-bottom: 0; }
+.outcome strong { display: block; font-size: 21px; margin-bottom: 4px; }
+.coverage-track { height: 10px; border-radius: 10px; background: var(--line); margin: 9px 0 4px; overflow: hidden; }
+.coverage-fill { height: 10px; background: var(--blue); width: 100%; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.feature { border-top: 1px solid var(--line); padding: 22px 0 14px; }
+.feature-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.decision { color: var(--muted-ink); font-size: 12px; flex-shrink: 0; }
+.comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.after { border-left: 3px solid var(--blue); padding-left: 16px; }
+.evidence { margin-top: 8px; margin-bottom: 0; }
+.detail-body { padding: 10px 0 4px; }
+.table-wrap { width: 100%; overflow-x: auto; margin: 8px 0 14px; }
+.timings { margin-top: 28px; border-top: 2px solid var(--line); padding-top: 22px; }
+.timings h2 { margin-bottom: 10px; }
+.note { color: var(--muted-ink); font-size: 13px; }
+.pass { color: var(--good); font-weight: 600; }
+footer { padding: 24px 0 8px; color: var(--muted-ink); font-size: 13px; }
+@media(prefers-color-scheme: dark) { :root { --ink: var(--foreground, #e8edf5); --muted-ink: var(--muted-foreground, #a8b4c7); --line: var(--border, #354150); --surface: var(--card, #162234); --blue: var(--primary, #8ab5ff); --good: var(--success-foreground, #84d8bc); --code-bg-fallback: #19273b; --code-ink-fallback: #dce8fb; } button[aria-pressed="true"] { color: var(--primary-foreground, #11213a); } }
+@media(max-width: 580px) { .outcome, .comparison { grid-template-columns: 1fr; } .outcome { gap: 18px; padding: 16px; } .comparison { gap: 6px; } .feature-head { display: block; } .decision { display: inline-block; margin-top: 5px; } th, td { padding: 9px 4px; font-size: 12px; } .after { margin-bottom: 6px; } }
+@media print { .controls { display: none; } .feature[hidden] { display: block; } details > * { display: block; } }
+</style></head><body><main>
+<header class="intro"><h1>Routa with Vite Plus</h1><p class="lede">A tested migration for framework development. Generated applications keep their existing tools.</p><p class="meta">21 October 2026. Branch <code>chore/vite-plus-toolchain</code><br>Baseline <code>f07c761</code>. Node 24.18.0. pnpm 11.9.0. Vite Plus 1.3.0.</p></header>
+<div class="outcome"><div><strong>204 tests execute and pass</strong><p>Both packed starter variants work, including the packaged HTTP server. Full verification and both site builds pass.</p></div><div><strong>All 9 test files typecheck</strong><div class="coverage-track" role="img" aria-label="Test-file typecheck coverage increased from one of nine files to nine of nine"><div class="coverage-fill"></div></div><p>Previously 1 of 9. Enabling the others exposed async fixture errors and an unsupported-method typing gap.</p></div></div>
+<nav class="controls" aria-label="Filter migration decisions"><button type="button" data-filter="all" aria-pressed="true">All decisions</button><button type="button" data-filter="checks" aria-pressed="false">Checks and tests</button><button type="button" data-filter="build" aria-pressed="false">Build and cache</button><button type="button" data-filter="retained" aria-pressed="false">Retained tools</button></nav>
+<section aria-label="Before and after decisions"><article class="feature" id="system" data-group="toolchain">
+ <header class="feature-head"><h2>System installation</h2><span class="decision">Adopted</span></header>
+ <div class="comparison"><section class="before"><h3>Before</h3><p><code>vp 0.2.2</code> was installed through Bun. Node and pnpm were managed separately.</p></section><section class="after"><h3>After</h3><p><code>vp 1.3.0</code> is installed through the official system installer. The repository also pins <code>vite-plus@1.3.0</code>, so CI and contributors use the same local release.</p></section></div>
+ <p class="evidence"><strong>Evidence.</strong> The environment doctor passes. Existing fnm Node 24.18.0 and pnpm 11.9.0 remain in system-first mode. A frozen-lockfile installation passes. No global CLI installation is required for repository commands.</p>
+ <details><summary>Commands and technical details</summary><div class="detail-body"><pre><code>vp env doctor
+vp env current --json
+pnpm install --frozen-lockfile
+pnpm exec vp toolchain --json</code></pre></div></details>
+ </article><article class="feature" id="quality" data-group="checks">
+ <header class="feature-head"><h2>Lint, formatting, and type errors together</h2><span class="decision">Adopted with Biome checks</span></header>
+ <div class="comparison"><section class="before"><h3>Before</h3><p><code>pnpm check</code> ran Biome. Disposable source/test type errors, an unused <code>@ts-expect-error</code>, and a floating promise passed that command. The separate verification workflow still checked source types.</p></section><section class="after"><h3>After</h3><p><code>pnpm check</code> runs <code>vp check</code> with type-aware lint and compiler diagnostics, then the remaining Biome checks. All four failure fixtures now fail. Focused tests fail before and after.</p></section></div>
+ <p class="evidence"><strong>Evidence.</strong> All 17 check probes behave as expected. Oxfmt rejects a formatting fixture, fixes it, and accepts the result. Package-local lint also rejects floating promises. Biome still rejects an undeclared dependency and its documented fake AWS key.</p>
+ <details><summary>Commands and technical details</summary><div class="detail-body"><p>Oxlint compiler diagnostics are experimental. We keep explicit TypeScript source and test checks, Astro checks, and Biome dependency/secret rules. Docs, design, and examples retain Biome formatting and linting.</p><pre><code>pnpm check
+pnpm typecheck
+pnpm --filter @routa-ts/core lint
+pnpm format</code></pre></div></details>
+ </article><article class="feature" id="types" data-group="checks">
+ <header class="feature-head"><h2>The test files now participate in type checking</h2><span class="decision">Fixed coverage gap</span></header>
+ <div class="comparison"><section class="before"><h3>Before</h3><p>Core and CLI test configs inherited an exclusion for their own tests. Only the creator package's test file was included: <strong>1 of 9 files</strong>.</p></section><section class="after"><h3>After</h3><p>Both configs explicitly clear the exclusion: <strong>9 of 9 files</strong>. The tests now await 142 CLI calls and use explicit route-context factories where context is required.</p></section></div>
+ <p class="evidence"><strong>Evidence.</strong> Activating those checks exposed a real route-root typing gap. Unsupported method keys could pass through an intermediate object. The generic constraint now rejects them in both registered and explicit-context factories. Regression assertions cover objects with supported and unsupported methods together.</p>
+ <details><summary>Commands and technical details</summary><div class="detail-body"><div class="table-wrap"><table><caption>Test files included in explicit TypeScript programs</caption><thead><tr><th>Package</th><th>Before</th><th>After</th><th>Runtime tests</th></tr></thead><tbody><tr><th scope="row">core</th><td>0</td><td>5</td><td>71</td></tr><tr><th scope="row">cli</th><td>0</td><td>3</td><td>121</td></tr><tr><th scope="row">create-routa-ts</th><td>1</td><td>1</td><td>12</td></tr></tbody></table></div><p>The existing runtime assertions remain. Intentional invalid runtime fixtures use specific compiler-error assertions. A patch changeset records the public type correction.</p></div></details>
+ </article><article class="feature" id="tests" data-group="checks">
+ <header class="feature-head"><h2>Vitest through the pinned Vite Plus toolchain</h2><span class="decision">Adopted</span></header>
+ <div class="comparison"><section class="before"><h3>Before</h3><p>Vitest 5.0.3 ran through Turbo. A forced test run included builds for all seven workspace packages and apps, even the sites without tests.</p></section><section class="after"><h3>After</h3><p>Tests import <code>vite-plus/test</code> and run bundled Vitest 5.0.5. Three framework test packages execute; site and example builds are outside the test chain.</p></section></div>
+ <p class="evidence"><strong>Evidence.</strong> <strong>204 tests pass in 9 files.</strong> Tests always execute. Two fixtures now declare their pnpm user-agent explicitly instead of depending on the task runner's environment. Starter-project Vitest defaults stay unchanged.</p>
+ <details><summary>Commands and technical details</summary><div class="detail-body"><pre><code>pnpm test</code></pre><p>Observed forced old workflow: 5.350 s. New workflow with cached package compilation: 4.079 s. The work differs, so this is a workflow comparison rather than an isolated runner benchmark.</p></div></details>
+ </article><article class="feature" id="pack" data-group="build">
+ <header class="feature-head"><h2>Library builds with explicit published entry points</h2><span class="decision">Adopted with a timing tradeoff</span></header>
+ <div class="comparison"><section class="before"><h3>Before</h3><p>A 141-line custom script ran TypeScript, deleted maps, bundled selected files with esbuild, and checked required outputs.</p></section><section class="after"><h3>After</h3><p>Three package configs use <code>vp pack</code>. Explicit entries preserve <code>.js</code> exports, the CLI's spawned <code>runtime.js</code>, external runtime dependencies, and declarations. The custom builder and direct esbuild dependency are removed.</p></section></div>
+ <p class="evidence"><strong>Evidence.</strong> Installed tarball consumers pass for both starter variants, including an HTTP request to the packaged server. The direct uncached package build is slower in this sample. Adoption reduces custom build code; it is not a cold-build speedup.</p>
+ <details><summary>Commands and technical details</summary><div class="detail-body"><div class="table-wrap"><table><caption>Uncompressed dist output, including declarations</caption><thead><tr><th>Package</th><th>Before</th><th>After</th><th>Bytes</th></tr></thead><tbody><tr><th scope="row">core</th><td>45,342 B<br>10 files</td><td>39,812 B<br>10 files</td><td>-12.2%</td></tr><tr><th scope="row">cli</th><td>189,065 B<br>12 files</td><td>202,984 B<br>4 files</td><td>+7.4%</td></tr><tr><th scope="row">create-routa-ts</th><td>45,309 B<br>6 files</td><td>27,755 B<br>5 files</td><td>-38.7%</td></tr></tbody></table></div><p>tsdown's TypeScript 7 declaration integration is experimental. Explicit <code>tsc</code> checks and installed-package validation remain. Output sizes are not npm download sizes.</p></div></details>
+ </article><article class="feature" id="cache" data-group="build">
+ <header class="feature-head"><h2>Cache package compilation and execute validation</h2><span class="decision">Adopted</span></header>
+ <div class="comparison"><section class="before"><h3>Before</h3><p>Turbo cached builds, type checks, and tests. The recorded baseline verification reused all 18 Turbo task results.</p></section><section class="after"><h3>After</h3><p>Vite Task replaces Turbo. One bounded compilation task caches the three package outputs with explicit source/config/manifest/lockfile inputs. Tests and other package scripts are uncached.</p></section></div>
+ <p class="evidence"><strong>Evidence.</strong> All four cache scenarios pass: warm hit, deleted-output restoration, source-change miss, and conservative rebuild after reverting the edit. Restoration reproduces all 19 files byte for byte, including executable modes.</p>
+ <details><summary>Commands and technical details</summary><div class="detail-body"><pre><code>pnpm build:packages
+pnpm exec vp run --no-cache compile</code></pre><p>The cache is deliberately local. Restoring a source file also caused a rebuild in this test; we do not claim historical source revisions produce a cache hit.</p></div></details>
+ </article><article class="feature" id="ecosystem" data-group="retained">
+ <header class="feature-head"><h2>Astro integration without a global Vite alias</h2><span class="decision">Existing Vite retained</span></header>
+ <div class="comparison"><section class="before"><h3>Before</h3><p>Docs and design used Astro with regular Vite 8.3.4 and Tailwind. Both site builds already worked.</p></section><section class="after"><h3>After</h3><p>Astro and Tailwind continue to use their original Vite distribution. Framework tooling uses Vite Plus's bundled Vite 8.3.4. A workspace-wide alias was tried and removed after plugin-type errors.</p></section></div>
+ <p class="evidence"><strong>Evidence.</strong> Both Astro checks pass with zero errors. The full build creates 32 docs pages, 14 design pages, and both examples with 5 and 11 route files. Existing i18n/404 content warnings remain.</p>
+ <details><summary>Commands and technical details</summary><div class="detail-body"><pre><code>pnpm typecheck
+pnpm build</code></pre><p>Routa's API runtime, CLI TypeScript analysis, tsx development loader, pnpm, and Changesets remain in place. Vite Plus development tooling adds no Routa runtime dependency.</p></div></details>
+ </article><article class="feature" id="consumers" data-group="retained">
+ <header class="feature-head"><h2>Generated applications and published consumers</h2><span class="decision">Defaults retained</span></header>
+ <div class="comparison"><section class="before"><h3>Before</h3><p>Scaffolds emitted TypeScript, Biome, and Vitest tooling with the existing scripts and dependency ranges. Both OpenAPI and non-OpenAPI starters worked.</p></section><section class="after"><h3>After</h3><p><strong>All 26 generated files match the baseline SHA-256 hashes.</strong> Fifteen files in the OpenAPI starter and eleven without OpenAPI are unchanged. Scaffold Vitest stays <code>^4.1.9</code>; Biome stays <code>^2.5.2</code>.</p></section></div>
+ <p class="evidence"><strong>Evidence.</strong> Packed installation, route checking, building, unit testing, and OpenAPI validation pass. The packaged server responds with HTTP 200 and <code>{ "ok": true }</code>. Committed example metadata stays unchanged.</p>
+ <details><summary>Commands and technical details</summary><div class="detail-body"><pre><code>pnpm generated:check
+pnpm pack:check</code></pre><p>The JSON evidence includes the before/after hash for every generated file and the emitted file lists for every published package.</p></div></details>
+ </article></section>
+<section class="timings"><h2>Observed timings, including the tradeoffs</h2><p class="note">Single wall-clock runs on the same macOS arm64 machine. The cache state and work performed matter more than the small differences. These observations do not establish a general speedup.</p><div class="table-wrap"><table><thead><tr><th>Workflow</th><th>Before</th><th>After</th><th>How to read it</th></tr></thead><tbody><tr><th scope="row">Repository check</th><td>0.547 s</td><td>1.559 s</td><td>The new check includes type-aware lint and compiler diagnostics, plus retained Biome checks.</td></tr><tr><th scope="row">Test workflow</th><td>5.350 s</td><td>4.079 s</td><td>Old run forced every Turbo task. New run executes all tests with package compilation cached.</td></tr><tr><th scope="row">Uncached package build</th><td>0.430 s</td><td>0.660 s</td><td>Same direct pnpm filter command. New bundling is slower; custom build code is removed.</td></tr><tr><th scope="row">Complete verification</th><td>20.533 s</td><td>22.785 s</td><td>Old verification reused typecheck/test results. New verification executes them. Cache states differ.</td></tr><tr><th scope="row">Warm compilation cache</th><td>Not measured separately</td><td>0.212 s</td><td>All three package outputs reused. Deleted-output restoration took 0.214 s.</td></tr></tbody></table></div>
+<details><summary>All 17 check probes and their expected outcomes</summary><p class="note">A failing command is a passing probe when the fixture intentionally contains a problem. All disposable files were removed.</p><div class="table-wrap"><table><thead><tr><th>Probe</th><th>Exit</th><th>Expected</th><th>Result</th></tr></thead><tbody><tr><th scope="row">before-probe-source-type-error</th><td>0</td><td>Success</td><td class="pass">Pass</td></tr><tr><th scope="row">after-probe-source-type-error</th><td>1</td><td>TS2322</td><td class="pass">Pass</td></tr><tr><th scope="row">before-probe-test-type-error</th><td>0</td><td>Success</td><td class="pass">Pass</td></tr><tr><th scope="row">after-probe-test-type-error</th><td>1</td><td>TS2322</td><td class="pass">Pass</td></tr><tr><th scope="row">before-probe-unused-expect-error</th><td>0</td><td>Success</td><td class="pass">Pass</td></tr><tr><th scope="row">after-probe-unused-expect-error</th><td>1</td><td>TS2578</td><td class="pass">Pass</td></tr><tr><th scope="row">before-probe-floating-promise</th><td>0</td><td>Success</td><td class="pass">Pass</td></tr><tr><th scope="row">after-probe-floating-promise</th><td>1</td><td>no-floating-promises</td><td class="pass">Pass</td></tr><tr><th scope="row">before-probe-focused-test</th><td>1</td><td>Rejected</td><td class="pass">Pass</td></tr><tr><th scope="row">after-probe-focused-test</th><td>1</td><td>no-focused-tests</td><td class="pass">Pass</td></tr><tr><th scope="row">after-probe-dependency</th><td>1</td><td>noUndeclaredDependencies</td><td class="pass">Pass</td></tr><tr><th scope="row">before-probe-format</th><td>1</td><td>Rejected</td><td class="pass">Pass</td></tr><tr><th scope="row">after-probe-format</th><td>1</td><td>Rejected</td><td class="pass">Pass</td></tr><tr><th scope="row">after-probe-format-fix</th><td>0</td><td>Success</td><td class="pass">Pass</td></tr><tr><th scope="row">after-probe-format-fixed</th><td>0</td><td>Success</td><td class="pass">Pass</td></tr><tr><th scope="row">package-lint</th><td>1</td><td>no-floating-promises</td><td class="pass">Pass</td></tr><tr><th scope="row">secret-check</th><td>1</td><td>noSecrets</td><td class="pass">Pass</td></tr></tbody></table></div></details>
+<details><summary>What remains experimental or outside this migration</summary><div class="detail-body"><p>Compiler diagnostics in Oxlint and TypeScript 7 declaration generation through tsdown are experimental. Explicit TypeScript checks and packed-consumer tests remain required.</p><p>Native lint still emits advisory warnings. Astro retains its existing missing-i18n/404 content warnings. No failed check is treated as a pass.</p><p>Coverage reporting, browser testing, hooks, remote caching, automatic export generation, and a Vite-based application runtime were not adopted. They have no compatibility claim in this report. pnpm, Changesets, Astro, tsx, Routa's runtime TypeScript analysis, and scoped Biome checks remain.</p></div></details>
+</section>
+<footer><p><a href="vite-plus-migration-results.json" download>Download commands, results, hashes, and file sizes as JSON</a></p><p><a href="vite-plus-tooling-research.md">Full cited research</a> and <a href="vite-plus-feature-map.html">feature map</a>. Tool behavior: <a href="https://viteplus.dev/guide/test">Vitest</a>, <a href="https://viteplus.dev/guide/pack">package builds</a>, <a href="https://viteplus.dev/config/run">task configuration</a>, <a href="https://oxc.rs/docs/guide/usage/linter/type-aware.html">type-aware lint</a>, <a href="https://biomejs.dev/linter/rules/no-secrets/javascript/">synthetic secret fixture</a>.</p></footer>
+</main><script>
+const buttons = document.querySelectorAll('[data-filter]');
+for (const button of buttons) {
+ button.addEventListener('click', () => {
+  const filter = button.dataset.filter;
+  for (const other of buttons) other.setAttribute('aria-pressed', String(other === button));
+  for (const feature of document.querySelectorAll('[data-group]')) feature.hidden = filter !== 'all' && feature.dataset.group !== filter;
+ });
+}
+</script></body></html>

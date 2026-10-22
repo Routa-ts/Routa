@@ -1,0 +1,676 @@
+{
+	"date": "2026-10-21T22:15:41-06:00",
+	"branch": "chore/vite-plus-toolchain",
+	"baselineCommit": "f07c761e8475deb6e0d4e868fadcb3bdcff66c60",
+	"environment": {
+		"platform": "macOS arm64",
+		"node": "24.18.0",
+		"pnpm": "11.9.0",
+		"globalVitePlus": "1.3.0",
+		"nodeManager": "existing fnm, system_first",
+		"packageManagerMode": "system_first"
+	},
+	"toolchain": {
+		"vite-plus": "1.3.0",
+		"@voidzero-dev/vite-plus-core": "1.3.0",
+		"vite": "8.3.4",
+		"rolldown": "1.2.14",
+		"vitest": "5.0.5",
+		"oxlint": "1.88.0",
+		"oxfmt": "0.73.0",
+		"oxlint-tsgolint": "7.0.2004",
+		"tsdown": "0.23.1",
+		"vite-task": "9ba4cc93379cf2d7a6c7e657285bb8a00e8339dc",
+		"oxc": "0.154.0",
+		"oxc-resolver": "11.24.3"
+	},
+	"measurements": {
+		"before-check": {
+			"phase": "before",
+			"name": "check",
+			"command": ["pnpm", "check"],
+			"seconds": 0.547,
+			"exitCode": 0
+		},
+		"before-tests": {
+			"phase": "before",
+			"name": "tests",
+			"command": ["pnpm", "exec", "turbo", "run", "test", "--force"],
+			"seconds": 5.35,
+			"exitCode": 0
+		},
+		"before-packages-build": {
+			"phase": "before",
+			"name": "packages-build",
+			"command": ["pnpm", "--filter", "./packages/*", "build"],
+			"seconds": 0.43,
+			"exitCode": 0
+		},
+		"before-verify-baseline": {
+			"phase": "before",
+			"name": "verify-baseline",
+			"command": ["pnpm", "verify"],
+			"seconds": 20.533,
+			"exitCode": 0
+		},
+		"after-check": {
+			"phase": "after",
+			"name": "check",
+			"command": ["pnpm", "check"],
+			"seconds": 1.559,
+			"exitCode": 0
+		},
+		"after-tests": {
+			"phase": "after",
+			"name": "tests",
+			"command": ["pnpm", "test"],
+			"seconds": 4.079,
+			"exitCode": 0
+		},
+		"after-packages-build": {
+			"phase": "after",
+			"name": "packages-build",
+			"command": ["pnpm", "--filter", "./packages/*", "build"],
+			"seconds": 0.66,
+			"exitCode": 0
+		},
+		"after-packages-build-warm": {
+			"phase": "after",
+			"name": "packages-build-warm",
+			"command": ["pnpm", "build:packages"],
+			"seconds": 0.222,
+			"exitCode": 0
+		},
+		"after-typecheck": {
+			"phase": "after",
+			"name": "typecheck",
+			"command": ["pnpm", "typecheck"],
+			"seconds": 2.588,
+			"exitCode": 0
+		},
+		"after-build": {
+			"phase": "after",
+			"name": "build",
+			"command": ["pnpm", "build"],
+			"seconds": 3.197,
+			"exitCode": 0
+		},
+		"after-pack-check": {
+			"phase": "after",
+			"name": "pack-check",
+			"command": ["pnpm", "pack:check"],
+			"seconds": 10.004,
+			"exitCode": 0
+		},
+		"final-verify": {
+			"phase": "final",
+			"name": "verify",
+			"command": ["pnpm", "verify"],
+			"seconds": 22.785,
+			"exitCode": 0
+		}
+	},
+	"methodology": [
+		"Single wall-clock observations on the same machine. These are workflow observations, not a statistical benchmark.",
+		"Before pnpm verify reused 8/8 typecheck/build and 10/10 test/build Turbo task results. After compiler checks and all tests execute; only package compilation is cached.",
+		"Before test timing forces Turbo execution, including seven builds. After timing runs three test packages with a warm package-build cache and no unrelated site/example builds.",
+		"Uncached package timings use the identical pnpm --filter ./packages/* build command. The new builder is slower on this measurement.",
+		"Before lint probes use the unchanged baseline Biome configuration against disposable fixtures. Source typechecking already existed in pnpm verify; the old pnpm check alone did not run it.",
+		"Temporary failure fixtures and cache edits were removed. Scaffold comparisons use fixed names and routaVersion 0.4.1 in both variants."
+	],
+	"testFiles": {
+		"core": {
+			"beforeTypechecked": 0,
+			"afterTypechecked": 5,
+			"runtimeTests": 71
+		},
+		"cli": {
+			"beforeTypechecked": 0,
+			"afterTypechecked": 3,
+			"runtimeTests": 121
+		},
+		"create-routa-ts": {
+			"beforeTypechecked": 1,
+			"afterTypechecked": 1,
+			"runtimeTests": 12
+		}
+	},
+	"probes": [
+		{
+			"name": "before-probe-source-type-error",
+			"command": ["pnpm", "exec", "biome", "check", "packages/core/src/tooling-probe.ts"],
+			"exitCode": 0,
+			"expectedSuccess": true,
+			"expectedDiagnostic": null,
+			"passed": true,
+			"seconds": 0.671
+		},
+		{
+			"name": "after-probe-source-type-error",
+			"command": ["pnpm", "exec", "vp", "check", "--no-fmt"],
+			"exitCode": 1,
+			"expectedSuccess": false,
+			"expectedDiagnostic": "TS2322",
+			"passed": true,
+			"seconds": 0.784
+		},
+		{
+			"name": "before-probe-test-type-error",
+			"command": ["pnpm", "exec", "biome", "check", "packages/core/src/tooling-probe.test.ts"],
+			"exitCode": 0,
+			"expectedSuccess": true,
+			"expectedDiagnostic": null,
+			"passed": true,
+			"seconds": 0.445
+		},
+		{
+			"name": "after-probe-test-type-error",
+			"command": ["pnpm", "exec", "vp", "check", "--no-fmt"],
+			"exitCode": 1,
+			"expectedSuccess": false,
+			"expectedDiagnostic": "TS2322",
+			"passed": true,
+			"seconds": 0.746
+		},
+		{
+			"name": "before-probe-unused-expect-error",
+			"command": ["pnpm", "exec", "biome", "check", "packages/core/src/tooling-probe.test.ts"],
+			"exitCode": 0,
+			"expectedSuccess": true,
+			"expectedDiagnostic": null,
+			"passed": true,
+			"seconds": 0.376
+		},
+		{
+			"name": "after-probe-unused-expect-error",
+			"command": ["pnpm", "exec", "vp", "check", "--no-fmt"],
+			"exitCode": 1,
+			"expectedSuccess": false,
+			"expectedDiagnostic": "TS2578",
+			"passed": true,
+			"seconds": 0.709
+		},
+		{
+			"name": "before-probe-floating-promise",
+			"command": ["pnpm", "exec", "biome", "check", "packages/core/src/tooling-probe.ts"],
+			"exitCode": 0,
+			"expectedSuccess": true,
+			"expectedDiagnostic": null,
+			"passed": true,
+			"seconds": 0.381
+		},
+		{
+			"name": "after-probe-floating-promise",
+			"command": ["pnpm", "exec", "vp", "check", "--no-fmt"],
+			"exitCode": 1,
+			"expectedSuccess": false,
+			"expectedDiagnostic": "no-floating-promises",
+			"passed": true,
+			"seconds": 0.693
+		},
+		{
+			"name": "before-probe-focused-test",
+			"command": ["pnpm", "exec", "biome", "check", "packages/core/src/tooling-probe.test.ts"],
+			"exitCode": 1,
+			"expectedSuccess": false,
+			"expectedDiagnostic": null,
+			"passed": true,
+			"seconds": 0.388
+		},
+		{
+			"name": "after-probe-focused-test",
+			"command": ["pnpm", "exec", "vp", "check", "--no-fmt"],
+			"exitCode": 1,
+			"expectedSuccess": false,
+			"expectedDiagnostic": "no-focused-tests",
+			"passed": true,
+			"seconds": 0.747
+		},
+		{
+			"name": "after-probe-dependency",
+			"command": ["pnpm", "exec", "biome", "lint", "--config-path=biome.framework.json"],
+			"exitCode": 1,
+			"expectedSuccess": false,
+			"expectedDiagnostic": "noUndeclaredDependencies",
+			"passed": true,
+			"seconds": 0.396
+		},
+		{
+			"name": "before-probe-format",
+			"command": ["pnpm", "exec", "biome", "format", "packages/core/src/tooling-probe.ts"],
+			"exitCode": 1,
+			"expectedSuccess": false,
+			"expectedDiagnostic": null,
+			"passed": true,
+			"seconds": 0.208
+		},
+		{
+			"name": "after-probe-format",
+			"command": ["pnpm", "exec", "vp", "fmt", "--check", "packages/core/src/tooling-probe.ts"],
+			"exitCode": 1,
+			"expectedSuccess": false,
+			"expectedDiagnostic": null,
+			"passed": true,
+			"seconds": 0.3
+		},
+		{
+			"name": "after-probe-format-fix",
+			"command": ["pnpm", "exec", "vp", "fmt", "packages/core/src/tooling-probe.ts"],
+			"exitCode": 0,
+			"expectedSuccess": true,
+			"expectedDiagnostic": null,
+			"passed": true,
+			"seconds": 0.296
+		},
+		{
+			"name": "after-probe-format-fixed",
+			"command": ["pnpm", "exec", "vp", "fmt", "--check", "packages/core/src/tooling-probe.ts"],
+			"exitCode": 0,
+			"expectedSuccess": true,
+			"expectedDiagnostic": null,
+			"passed": true,
+			"seconds": 0.297
+		},
+		{
+			"name": "package-lint",
+			"command": ["pnpm", "--filter", "@routa-ts/core", "lint"],
+			"exitCode": 1,
+			"expectedDiagnostic": "no-floating-promises",
+			"passed": true
+		},
+		{
+			"name": "secret-check",
+			"command": ["pnpm", "exec", "biome", "lint", "--config-path=biome.framework.json"],
+			"exitCode": 1,
+			"expectedDiagnostic": "noSecrets",
+			"passed": true
+		}
+	],
+	"cacheScenarios": [
+		{
+			"name": "warm",
+			"seconds": 0.212,
+			"exitCode": 0,
+			"cacheHit": true,
+			"expectedCacheHit": true,
+			"passed": true
+		},
+		{
+			"name": "restore",
+			"seconds": 0.214,
+			"exitCode": 0,
+			"cacheHit": true,
+			"expectedCacheHit": true,
+			"passed": true,
+			"filesRestored": 19,
+			"bytesAndModesMatch": true
+		},
+		{
+			"name": "source-change",
+			"seconds": 0.834,
+			"exitCode": 0,
+			"cacheHit": false,
+			"expectedCacheHit": false,
+			"passed": true
+		},
+		{
+			"name": "source-reverted",
+			"seconds": 0.84,
+			"exitCode": 0,
+			"cacheHit": false,
+			"expectedCacheHit": false,
+			"passed": true
+		}
+	],
+	"scaffolds": [
+		{
+			"name": "with-openapi",
+			"fileCount": 15,
+			"allHashesMatch": true,
+			"beforeSha256": {
+				".gitignore": "4f07282b3054f905e81555c7a50dd428abd88269084e92f3efbe934104c859a2",
+				".nvmrc": "68ca3fba3b7e864770cb61aeb306d4bd4354b68ab4dd38450860c5d823e42a53",
+				".routa/manifest.json": "4f4adcd4ff41eecccf335cf1b9579fb1c543b1f2c3d378329824765ce53e5988",
+				".routa/openapi-baseline.json": "b23865f44aa078c8bc02fd4bd6d58c041cc9bc0793cb49db11038a56656f86fa",
+				".routa/routes.gen.ts": "3307847bd9c3154e0f2aff405535c11e23f7a9869541a440c3f94806b63c3251",
+				".vscode/settings.json": "ce7bebbffa4cf01d0ea409ec1e98429b105bcd795c6b3daeb3476a2087908733",
+				"README.md": "412cd16753b42c9afed92c0840a6b0534ed644a77e358db18cf15d5312f35d5a",
+				"biome.json": "c9e5e59c7cf7a9fa1b09a276bb68bdc5c18e215372ad4b463301583df4f1d518",
+				"openapi.yaml": "b29f6c977dfb5ab27d324055387711ff57af1350aa7ce270704fcb4d4461e522",
+				"package.json": "3afeac435db0e61f6451d34399d506cc54b49e33f9679f2f45f66f839d7949ba",
+				"src/routa.ts": "240e839020ede9b0629b4374a7a1b394618daa4b68cd7a975d8076b3cece8ffc",
+				"src/routes/status/route.test.ts": "6d05cf270df52d0226c793deb8c318a7bcb2a7c46ea804175cd628a51a684456",
+				"src/routes/status/route.ts": "bc1bdbd6bb59c7f6517f8eab3bff364d1e4d8f35cc0a6a0f586add132bca0a40",
+				"src/routes/status/schemas.ts": "e6607431569859956a7f78b57dff9da7be7b0468db7740ec2f270f51b385e64d",
+				"tsconfig.json": "bed6f7d134e160d8d17b0804bbc0d5b3efeb7b0e90c99940a6ab606ffaa6f49c"
+			},
+			"afterSha256": {
+				".gitignore": "4f07282b3054f905e81555c7a50dd428abd88269084e92f3efbe934104c859a2",
+				".nvmrc": "68ca3fba3b7e864770cb61aeb306d4bd4354b68ab4dd38450860c5d823e42a53",
+				".routa/manifest.json": "4f4adcd4ff41eecccf335cf1b9579fb1c543b1f2c3d378329824765ce53e5988",
+				".routa/openapi-baseline.json": "b23865f44aa078c8bc02fd4bd6d58c041cc9bc0793cb49db11038a56656f86fa",
+				".routa/routes.gen.ts": "3307847bd9c3154e0f2aff405535c11e23f7a9869541a440c3f94806b63c3251",
+				".vscode/settings.json": "ce7bebbffa4cf01d0ea409ec1e98429b105bcd795c6b3daeb3476a2087908733",
+				"biome.json": "c9e5e59c7cf7a9fa1b09a276bb68bdc5c18e215372ad4b463301583df4f1d518",
+				"openapi.yaml": "b29f6c977dfb5ab27d324055387711ff57af1350aa7ce270704fcb4d4461e522",
+				"package.json": "3afeac435db0e61f6451d34399d506cc54b49e33f9679f2f45f66f839d7949ba",
+				"README.md": "412cd16753b42c9afed92c0840a6b0534ed644a77e358db18cf15d5312f35d5a",
+				"src/routa.ts": "240e839020ede9b0629b4374a7a1b394618daa4b68cd7a975d8076b3cece8ffc",
+				"src/routes/status/route.test.ts": "6d05cf270df52d0226c793deb8c318a7bcb2a7c46ea804175cd628a51a684456",
+				"src/routes/status/route.ts": "bc1bdbd6bb59c7f6517f8eab3bff364d1e4d8f35cc0a6a0f586add132bca0a40",
+				"src/routes/status/schemas.ts": "e6607431569859956a7f78b57dff9da7be7b0468db7740ec2f270f51b385e64d",
+				"tsconfig.json": "bed6f7d134e160d8d17b0804bbc0d5b3efeb7b0e90c99940a6ab606ffaa6f49c"
+			}
+		},
+		{
+			"name": "without-openapi",
+			"fileCount": 11,
+			"allHashesMatch": true,
+			"beforeSha256": {
+				".gitignore": "4f07282b3054f905e81555c7a50dd428abd88269084e92f3efbe934104c859a2",
+				".nvmrc": "68ca3fba3b7e864770cb61aeb306d4bd4354b68ab4dd38450860c5d823e42a53",
+				".vscode/settings.json": "ce7bebbffa4cf01d0ea409ec1e98429b105bcd795c6b3daeb3476a2087908733",
+				"README.md": "7dd00582c7bb64c83cd08435cfa788fa4f1c8084688347e021183c1d0d95d12a",
+				"biome.json": "c9e5e59c7cf7a9fa1b09a276bb68bdc5c18e215372ad4b463301583df4f1d518",
+				"package.json": "89e6594ceb0b061c2bd5ab355bdc6d7397ed0988b70b40a7eef2815be411e2eb",
+				"src/routa.ts": "240e839020ede9b0629b4374a7a1b394618daa4b68cd7a975d8076b3cece8ffc",
+				"src/routes/status/route.test.ts": "6d05cf270df52d0226c793deb8c318a7bcb2a7c46ea804175cd628a51a684456",
+				"src/routes/status/route.ts": "bc1bdbd6bb59c7f6517f8eab3bff364d1e4d8f35cc0a6a0f586add132bca0a40",
+				"src/routes/status/schemas.ts": "e6607431569859956a7f78b57dff9da7be7b0468db7740ec2f270f51b385e64d",
+				"tsconfig.json": "bed6f7d134e160d8d17b0804bbc0d5b3efeb7b0e90c99940a6ab606ffaa6f49c"
+			},
+			"afterSha256": {
+				".gitignore": "4f07282b3054f905e81555c7a50dd428abd88269084e92f3efbe934104c859a2",
+				".nvmrc": "68ca3fba3b7e864770cb61aeb306d4bd4354b68ab4dd38450860c5d823e42a53",
+				".vscode/settings.json": "ce7bebbffa4cf01d0ea409ec1e98429b105bcd795c6b3daeb3476a2087908733",
+				"biome.json": "c9e5e59c7cf7a9fa1b09a276bb68bdc5c18e215372ad4b463301583df4f1d518",
+				"package.json": "89e6594ceb0b061c2bd5ab355bdc6d7397ed0988b70b40a7eef2815be411e2eb",
+				"README.md": "7dd00582c7bb64c83cd08435cfa788fa4f1c8084688347e021183c1d0d95d12a",
+				"src/routa.ts": "240e839020ede9b0629b4374a7a1b394618daa4b68cd7a975d8076b3cece8ffc",
+				"src/routes/status/route.test.ts": "6d05cf270df52d0226c793deb8c318a7bcb2a7c46ea804175cd628a51a684456",
+				"src/routes/status/route.ts": "bc1bdbd6bb59c7f6517f8eab3bff364d1e4d8f35cc0a6a0f586add132bca0a40",
+				"src/routes/status/schemas.ts": "e6607431569859956a7f78b57dff9da7be7b0468db7740ec2f270f51b385e64d",
+				"tsconfig.json": "bed6f7d134e160d8d17b0804bbc0d5b3efeb7b0e90c99940a6ab606ffaa6f49c"
+			}
+		}
+	],
+	"packageOutputs": [
+		{
+			"package": "core",
+			"beforeBytes": 45342,
+			"afterBytes": 39812,
+			"beforeFiles": 10,
+			"afterFiles": 10,
+			"before": [
+				{
+					"file": "hono.d.ts",
+					"bytes": 975
+				},
+				{
+					"file": "hono.js",
+					"bytes": 5763
+				},
+				{
+					"file": "index.d.ts",
+					"bytes": 11136
+				},
+				{
+					"file": "index.js",
+					"bytes": 1777
+				},
+				{
+					"file": "logger.d.ts",
+					"bytes": 1605
+				},
+				{
+					"file": "logger.js",
+					"bytes": 3168
+				},
+				{
+					"file": "query/helpers.d.ts",
+					"bytes": 886
+				},
+				{
+					"file": "query/helpers.js",
+					"bytes": 1163
+				},
+				{
+					"file": "request-execution.d.ts",
+					"bytes": 1465
+				},
+				{
+					"file": "request-execution.js",
+					"bytes": 17404
+				}
+			],
+			"after": [
+				{
+					"file": "hono.d.ts",
+					"bytes": 1010
+				},
+				{
+					"file": "hono.js",
+					"bytes": 4892
+				},
+				{
+					"file": "index.d.ts",
+					"bytes": 11095
+				},
+				{
+					"file": "index.js",
+					"bytes": 1810
+				},
+				{
+					"file": "logger.d.ts",
+					"bytes": 1603
+				},
+				{
+					"file": "logger.js",
+					"bytes": 2464
+				},
+				{
+					"file": "query/helpers.d.ts",
+					"bytes": 929
+				},
+				{
+					"file": "query/helpers.js",
+					"bytes": 1034
+				},
+				{
+					"file": "request-execution.d.ts",
+					"bytes": 207
+				},
+				{
+					"file": "request-execution.js",
+					"bytes": 14768
+				}
+			]
+		},
+		{
+			"package": "cli",
+			"beforeBytes": 189065,
+			"afterBytes": 202984,
+			"beforeFiles": 12,
+			"afterFiles": 4,
+			"before": [
+				{
+					"file": "ast.d.ts",
+					"bytes": 1240
+				},
+				{
+					"file": "index.d.ts",
+					"bytes": 970
+				},
+				{
+					"file": "index.js",
+					"bytes": 170600
+				},
+				{
+					"file": "openapi.d.ts",
+					"bytes": 1492
+				},
+				{
+					"file": "project.d.ts",
+					"bytes": 6166
+				},
+				{
+					"file": "runtime.d.ts",
+					"bytes": 1028
+				},
+				{
+					"file": "runtime.js",
+					"bytes": 4028
+				},
+				{
+					"file": "scaffold-plan.d.ts",
+					"bytes": 1347
+				},
+				{
+					"file": "scaffold.d.ts",
+					"bytes": 488
+				},
+				{
+					"file": "typescript-runner.d.ts",
+					"bytes": 291
+				},
+				{
+					"file": "typescript.d.ts",
+					"bytes": 1346
+				},
+				{
+					"file": "ui.d.ts",
+					"bytes": 69
+				}
+			],
+			"after": [
+				{
+					"file": "index.d.ts",
+					"bytes": 977
+				},
+				{
+					"file": "index.js",
+					"bytes": 196232
+				},
+				{
+					"file": "runtime.d.ts",
+					"bytes": 1042
+				},
+				{
+					"file": "runtime.js",
+					"bytes": 4733
+				}
+			]
+		},
+		{
+			"package": "create-routa-ts",
+			"beforeBytes": 45309,
+			"afterBytes": 27755,
+			"beforeFiles": 6,
+			"afterFiles": 5,
+			"before": [
+				{
+					"file": "cli.d.ts",
+					"bytes": 31
+				},
+				{
+					"file": "cli.js",
+					"bytes": 21540
+				},
+				{
+					"file": "create-project.d.ts",
+					"bytes": 697
+				},
+				{
+					"file": "index.d.ts",
+					"bytes": 1165
+				},
+				{
+					"file": "index.js",
+					"bytes": 21515
+				},
+				{
+					"file": "ui.d.ts",
+					"bytes": 361
+				}
+			],
+			"after": [
+				{
+					"file": "cli.d.ts",
+					"bytes": 9
+				},
+				{
+					"file": "cli.js",
+					"bytes": 307
+				},
+				{
+					"file": "index.d.ts",
+					"bytes": 2187
+				},
+				{
+					"file": "index.js",
+					"bytes": 178
+				},
+				{
+					"file": "src-DrEbUQBU.js",
+					"bytes": 25074
+				}
+			]
+		}
+	],
+	"verification": {
+		"frameworkTests": 204,
+		"testFiles": 9,
+		"packedStarterVariants": 2,
+		"packedHttpStatus": 200,
+		"packedHttpBody": {
+			"ok": true
+		},
+		"docsPages": 32,
+		"designPages": 14,
+		"exampleRouteFiles": [5, 11],
+		"frozenLockfileInstall": true,
+		"generatedMetadataUnchanged": true
+	},
+	"limitations": [
+		"Oxlint compiler diagnostics and tsdown TypeScript 7 declaration integration are experimental. Explicit tsc source/test checks and installed-consumer smoke tests remain required.",
+		"Native lint emits advisory warnings. Existing Astro missing-i18n/404 content warnings remain; all checks and builds exit successfully.",
+		"A workspace-wide Vite alias caused Astro/Tailwind plugin type errors. It was removed; Astro retains regular Vite 8.3.4, while Vite Plus owns its aliased distribution.",
+		"Cache restoration and source invalidation are tested. Remote caching, coverage reports, browser tests, hooks, automatic export generation, and a Vite-based application runtime were not adopted or claimed as tested.",
+		"Secret detection was checked with Biome's documented fake AWS key, not real credentials or a full secrets audit."
+	],
+	"sources": {
+		"research": "vite-plus-tooling-research.md",
+		"featureMap": "vite-plus-feature-map.html",
+		"typeChecking": "https://oxc.rs/docs/guide/usage/linter/type-aware.html",
+		"pack": "https://viteplus.dev/guide/pack",
+		"tasks": "https://viteplus.dev/config/run",
+		"test": "https://viteplus.dev/guide/test",
+		"secretProbe": "https://biomejs.dev/linter/rules/no-secrets/javascript/"
+	},
+	"reportQa": {
+		"previewWidths": [728, 360],
+		"darkModeChecked": true,
+		"allDetailsExpandedAtMobile": true,
+		"mobileScrollWidth": 360,
+		"horizontalOverflow": false,
+		"filterVisibleCounts": {
+			"all": 8,
+			"checks": 3,
+			"build": 2,
+			"retained": 2
+		},
+		"desktopScrollWidth": 728,
+		"desktopHorizontalOverflow": false
+	},
+	"probeFixtures": {
+		"sourceAndTestTypeError": "export const count: string = 123;",
+		"unusedExpectError": "// @ts-expect-error Deliberately unused for the compiler probe.\nexport const count: string = \"valid\";",
+		"floatingPromise": "Promise.resolve(\"deliberately unawaited\");",
+		"focusedTest": "import { it } from \"vite-plus/test\";\nit.only(\"probe\", () => {});",
+		"undeclaredDependency": "import { missing } from \"undeclared-tooling-probe\";\nexport { missing };",
+		"formatting": "export const values={ answer:42 };",
+		"secretDetection": "Use the documented synthetic AWS example linked in sources.secretProbe. No actual credentials were used.",
+		"cacheSourceMutation": "Append a comment to packages/core/src/logger.ts, run compile, restore the original bytes, and run compile again.",
+		"cacheRestoration": "Hash output bytes and executable modes, delete all three packages/*/dist directories, run compile, then compare every restored file."
+	}
+}

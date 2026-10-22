@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { createScaffoldPlan, evaluateScaffold, type ScaffoldPlan } from "./scaffold-plan.js";
 
 function planWith(paths: string[]) {

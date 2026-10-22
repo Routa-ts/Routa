@@ -15,7 +15,7 @@ const appDir = join(tmp, "app");
 const packages = ["@routa-ts/core", "create-routa-ts", "@routa-ts/cli"];
 const tarballs = new Map();
 
-run("pnpm", ["--filter", "./packages/*", "build"], root);
+run("pnpm", ["build:packages"], root);
 mkdirSync(packDir, { recursive: true });
 
 for (const packageName of packages) {

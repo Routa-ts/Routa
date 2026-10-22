@@ -50,10 +50,10 @@
 		"dist"
 	],
 	"scripts": {
-		"build": "node ../../scripts/build-package.mjs @routa-ts/core",
+		"build": "vp pack",
 		"typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
-		"lint": "biome lint src",
-		"test": "vitest run"
+		"lint": "vp lint",
+		"test": "vp test run"
 	},
 	"peerDependencies": {
 		"hono": "^4.12.27",

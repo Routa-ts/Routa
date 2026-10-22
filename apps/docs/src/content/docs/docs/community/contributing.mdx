@@ -6,13 +6,13 @@ description: Set up the Routa repository and land a change.
 import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
 
 Routa is open source under the MIT License. The repository is a pnpm workspace holding
-three published packages, two example applications, and this documentation site, wired
-together with Turborepo.
+three published packages, two example applications, this documentation site, and a design
+lab. Framework checks, tests, and package builds use the locally pinned Vite Plus toolchain.
 
 ## Before You Start
 
-- Node.js 24 or later, matching `.nvmrc`.
-- pnpm. The repository uses workspace protocol links between packages.
+- Node.js 24.11 or later on the Node 24 line, or Node.js 26 or later. `.nvmrc` selects Node 24.
+- pnpm 11.9.0, pinned in the root manifest. The repository uses workspace protocol links.
 - A read of the v0 requirements and current public scope. Maintainers coordinate planned
   V1 work through the project-local tracker described in `docs/agents/issue-tracker.md`.
 
@@ -22,7 +22,7 @@ together with Turborepo.
 1. Install dependencies from the repository root.
 
 	```sh
-	pnpm install
+	pnpm install --frozen-lockfile
 	```
 
 2. Run the full check suite before making changes, so you know the baseline is green.
@@ -34,8 +34,14 @@ together with Turborepo.
 	pnpm test
 	```
 
-	`pnpm check` runs Biome formatting and lint checks. The other three run through
-	Turborepo across every workspace package.
+	`pnpm check` combines Oxfmt, type-aware Oxlint, compiler diagnostics, and the remaining
+	Biome checks. `pnpm typecheck` also runs explicit TypeScript source and test programs
+	and Astro checks. `pnpm build` builds the packages, examples, and sites. `pnpm test`
+	runs all framework tests with Vite Plus's bundled Vitest.
+
+	Only package compilation is cached. Tests and type checks execute on every run.
+	A global Vite Plus installation is optional. Generated applications retain their
+	existing TypeScript, Biome, and Vitest tooling.
 
 3. Make the change in the package that owns the behavior.
 
@@ -95,7 +101,7 @@ Every new feature needs all four of these, which is what the coverage rules in
 | --- | --- |
 | Workspace packages resolve to published versions | Run `pnpm install` from the root, not from inside a package. |
 | An example fails after a core change | Rebuild first. Examples consume built output, so run `pnpm build`. |
-| Biome reports formatting differences | Run `pnpm format` to apply them. |
+| A formatter reports differences | Run `pnpm format` to apply them. |
 | The docs build fails on a slug | A sidebar entry in `astro.config.mjs` points at a page that does not exist. |
 
 <Aside type="note" title="Keep the contract aligned">

@@ -36,7 +36,7 @@ jobs:
     uses: ./.github/workflows/node-pnpm-job.yml
     with:
       command: |
-        pnpm --filter './packages/*' build
+        pnpm build:packages
         node scripts/link-local-cli.mjs --root "$GITHUB_WORKSPACE"
         pnpm test
 
@@ -45,7 +45,7 @@ jobs:
     uses: ./.github/workflows/node-pnpm-job.yml
     with:
       command: |
-        pnpm --filter './packages/*' build
+        pnpm build:packages
         node scripts/link-local-cli.mjs --root "$GITHUB_WORKSPACE"
         pnpm build
 
@@ -66,7 +66,7 @@ jobs:
     uses: ./.github/workflows/node-pnpm-job.yml
     with:
       command: |
-        pnpm --filter './packages/*' build
+        pnpm build:packages
         node scripts/link-local-cli.mjs --root "$GITHUB_WORKSPACE"
         pnpm build
         pnpm --filter './examples/*' check

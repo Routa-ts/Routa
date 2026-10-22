@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createProject } from "./create-project.js";
 import { createCommandArgs, resolveRoutaVersion, runCreate } from "./index.js";
 
@@ -17,6 +17,7 @@ vi.mock("node:child_process", () => ({
 describe("create-routa-ts", () => {
 	afterEach(() => {
 		spawnSyncMock.mockReset();
+		vi.unstubAllEnvs();
 	});
 
 	it("forwards pnpm create args to routa create", () => {
@@ -204,6 +205,7 @@ describe("create-routa-ts", () => {
 	});
 
 	it("exits non-zero when pnpm install fails", async () => {
+		vi.stubEnv("npm_config_user_agent", "pnpm/11.9.0");
 		const cwd = await mkdtemp(join(tmpdir(), "create-routa-ts-install-fail-"));
 		spawnSyncMock.mockReturnValue({ status: 1, stderr: "ERR_PNPM_NO_MATCHING_VERSION" });
 		const stdout = process.stdout.write;

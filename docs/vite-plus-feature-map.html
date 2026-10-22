@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vite Plus features for Routa</title>
+<style>
+:root{color-scheme:light dark}body{margin:0;color:var(--foreground);font-family:var(--font-sans,system-ui)}main{width:100%;background:transparent}h1{font-size:1.35em;font-weight:500;margin:0 0 8px}p{margin:0 0 16px}.meta,.legend{color:var(--muted-foreground)}.legend{display:flex;flex-wrap:wrap;gap:8px 20px;margin-bottom:20px}:where(.legend) span{display:inline-block}.legend strong{color:var(--foreground);font-weight:500}details{margin:0 0 12px;border-bottom:1px solid var(--border)}summary{padding:14px 0;font-weight:500;min-height:24px}summary span{font-weight:400;color:var(--muted-foreground);margin-left:8px;white-space:nowrap}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{text-align:left;vertical-align:top;padding:12px 8px 12px 0;border-bottom:1px solid var(--border);overflow-wrap:anywhere}th{font-weight:500;color:var(--muted-foreground)}th:nth-child(1){width:26%}th:nth-child(2){width:13%}tbody tr:last-child td{border-bottom:0}td:first-child{font-weight:500}a{color:var(--foreground);text-decoration:underline;text-underline-offset:3px}code{font-family:var(--font-mono,monospace);background:var(--code-background);color:var(--code-foreground);padding:1px 3px;border-radius:3px}footer{margin-top:20px;color:var(--muted-foreground)}@media(max-width:520px){thead{display:none}tr{display:block;padding:10px 0;border-bottom:1px solid var(--border)}tbody tr:last-child{border:0}td{display:block;width:auto;border:0;padding:4px 0}td:nth-child(2)::before{content:'Adoption: ';color:var(--muted-foreground)}summary span{display:block;margin-left:18px}summary{min-height:44px}}
+</style></head><body><main id="routa-vp-feature-map">
+<h1>Vite Plus features for Routa</h1>
+<p class="meta">Vite Plus 1.3.0 · Framework development · Scaffold defaults retained</p>
+<div class="legend"><span><strong>Use first</strong> Initial migration</span><span><strong>Pilot</strong> Prove equivalence</span><span><strong>Optional</strong> Use when needed</span><span><strong>Defer</strong> No current requirement</span></div>
+
+<details open>
+<summary>Static checks and formatting <span>11 features</span></summary>
+<table class="table">
+<thead>
+<tr><th scope="col">Feature</th><th scope="col">Adoption</th><th scope="col">Use in Routa</th>
+</tr></thead>
+<tbody>
+<tr><td data-label="Feature">Combined format, lint, and type check</td><td data-label="Adoption">Use first</td><td data-label="Use in Routa">Make <code>vp check</code> the framework static-check entry point after coverage is proven. Keep <code>pnpm verify</code> as the aggregate. <a href="https://viteplus.dev/guide/check" target="_blank" rel="noreferrer">Check</a></td>
+</tr>
+<tr><td data-label="Feature">Syntax linting and reviewed fixes</td><td data-label="Adoption">Use first</td><td data-label="Use in Routa">Replace framework Biome lint commands with <code>vp lint</code>; map explicit rules, suppressions, and test exceptions before choosing a preset. <a href="https://viteplus.dev/guide/lint" target="_blank" rel="noreferrer">Lint</a></td>
+</tr>
+<tr><td data-label="Feature">Type-aware lint rules</td><td data-label="Adoption">Use first</td><td data-label="Use in Routa">Enable useful semantic rules, including unhandled and misused promises, for asynchronous request execution, cleanup, and CLI work. Enabling type analysis alone does not mean every rule is enabled. <a href="https://oxc.rs/docs/guide/usage/linter/type-aware.html" target="_blank" rel="noreferrer">Oxlint type-aware guide</a></td>
+</tr>
+<tr><td data-label="Feature">Compiler diagnostics during lint</td><td data-label="Adoption">Pilot</td><td data-label="Use in Routa">Enable <code>typeAware</code> and experimental <code>typeCheck</code> together, then compare source, test, and expected-failure coverage before removing <code>tsc --noEmit</code>. <a href="https://oxc.rs/docs/guide/usage/linter/type-aware.html#type-checking-diagnostics" target="_blank" rel="noreferrer">Type checking</a>, <a href="https://oxc.rs/docs/guide/usage/linter/cli" target="_blank" rel="noreferrer">stability</a></td>
+</tr>
+<tr><td data-label="Feature">Formatting and format verification</td><td data-label="Adoption">Use first</td><td data-label="Use in Routa">Use <code>vp fmt</code> and <code>vp fmt --check</code>, retaining tabs, double quotes, semicolons, and the intended line width. <a href="https://viteplus.dev/guide/fmt" target="_blank" rel="noreferrer">Format</a></td>
+</tr>
+<tr><td data-label="Feature">Import and package.json sorting</td><td data-label="Adoption">Pilot</td><td data-label="Use in Routa">Evaluate Oxfmt&#x27;s import sorting and package.json sorting to replace Biome organization. Preserve side-effect import order and intentional scaffold text. <a href="https://oxc.rs/docs/guide/usage/formatter/sorting" target="_blank" rel="noreferrer">Import sorting</a>, <a href="https://oxc.rs/docs/guide/usage/formatter/sorting#package-json" target="_blank" rel="noreferrer">package.json sorting</a></td>
+</tr>
+<tr><td data-label="Feature">Tailwind class sorting</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Apply Oxfmt&#x27;s stylesheet-aware sorting to docs/design classes if it improves maintenance. Import and Tailwind sorting are disabled by default; package.json sorting is enabled by default. <a href="https://oxc.rs/docs/guide/usage/formatter/sorting" target="_blank" rel="noreferrer">Sorting options</a></td>
+</tr>
+<tr><td data-label="Feature">Markdown, MDX, CSS, YAML, JSON, and Astro formatting</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Broaden checks deliberately, rather than reformatting every documentation file as an incidental migration. Astro formatting needs its optional compiler package and setting. <a href="https://oxc.rs/docs/guide/usage/formatter/language-support" target="_blank" rel="noreferrer">Language support</a></td>
+</tr>
+<tr><td data-label="Feature">Shared rules and file-specific overrides</td><td data-label="Adoption">Use first</td><td data-label="Use in Routa">Put lint/format policy in root <code>vite.config.ts</code>; express package and fixture differences through root overrides. <a href="https://viteplus.dev/guide/monorepo" target="_blank" rel="noreferrer">Monorepos</a></td>
+</tr>
+<tr><td data-label="Feature">JavaScript lint plugins and custom rules</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Preserve an important rule unavailable natively using a compatible plugin. Write a custom rule only for a concrete recurring error. <a href="https://viteplus.dev/guide/lint#js-plugins" target="_blank" rel="noreferrer">Plugin support</a></td>
+</tr>
+<tr><td data-label="Feature">Cross-file import analysis</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Evaluate import-cycle checks across framework modules. This is a linting aid, not Routa&#x27;s route-graph analysis. <a href="https://oxc.rs/docs/guide/usage/linter/multi-file-analysis" target="_blank" rel="noreferrer">Multi-file analysis</a></td>
+</tr></tbody></table>
+</details>
+<details>
+<summary>Tests and measurements <span>9 features</span></summary>
+<table class="table">
+<thead>
+<tr><th scope="col">Feature</th><th scope="col">Adoption</th><th scope="col">Use in Routa</th>
+</tr></thead>
+<tbody>
+<tr><td data-label="Feature">Unit/integration tests, mocks, and snapshots</td><td data-label="Adoption">Use first</td><td data-label="Use in Routa">Run the existing package suites through <code>vp test</code>; keep assertions and real HTTP/subprocess/filesystem behavior. <a href="https://viteplus.dev/guide/test" target="_blank" rel="noreferrer">Vite Plus tests</a></td>
+</tr>
+<tr><td data-label="Feature">Watch and focused execution</td><td data-label="Adoption">Use first</td><td data-label="Use in Routa">Use <code>vp test watch</code> during edits and Vitest file/name filters to narrow feedback. Plain <code>vp test</code> runs once. <a href="https://vitest.dev/guide/filtering" target="_blank" rel="noreferrer">Filtering</a></td>
+</tr>
+<tr><td data-label="Feature">Test projects</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Give core, CLI, and creator explicit projects, or separate fast tests from process-heavy checks. Keep per-package invocation if it remains clearer. <a href="https://vitest.dev/guide/projects" target="_blank" rel="noreferrer">Projects</a></td>
+</tr>
+<tr><td data-label="Feature">Coverage</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Find untested diagnostic, cleanup, serialization, and error branches. Add a coverage provider matching bundled Vitest; establish a baseline before choosing thresholds. <a href="https://vitest.dev/guide/coverage" target="_blank" rel="noreferrer">Coverage</a></td>
+</tr>
+<tr><td data-label="Feature">Type tests</td><td data-label="Adoption">Pilot</td><td data-label="Use in Routa">Check route inference, middleware context, named outcomes, and expected compiler failures. Runtime test transpilation does not check TypeScript. <a href="https://vitest.dev/guide/testing-types" target="_blank" rel="noreferrer">Type testing</a></td>
+</tr>
+<tr><td data-label="Feature">Benchmarks</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Measure route analysis, dispatch, or serialization on fixed fixtures. CLI cold starts also need process-level measurements. <a href="https://vitest.dev/guide/benchmarking" target="_blank" rel="noreferrer">Benchmarking</a></td>
+</tr>
+<tr><td data-label="Feature">Reports, sharding, and debugging</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Improve CI output or split expensive suites when their observed size justifies it. Debug cleanup/timing failures without changing test intent. <a href="https://vitest.dev/guide/reporters" target="_blank" rel="noreferrer">Reporters</a>, <a href="https://vitest.dev/guide/cli" target="_blank" rel="noreferrer">CLI</a>, <a href="https://vitest.dev/guide/debugging" target="_blank" rel="noreferrer">debugging</a></td>
+</tr>
+<tr><td data-label="Feature">Test UI and performance diagnosis</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Use the optional aligned <code>@vitest/ui</code> package in explicit watch mode, or Vitest&#x27;s diagnostic tools when a suite hangs or slows down. <a href="https://vitest.dev/guide/ui" target="_blank" rel="noreferrer">UI</a>, <a href="https://vitest.dev/guide/cli" target="_blank" rel="noreferrer">CLI</a></td>
+</tr>
+<tr><td data-label="Feature">Real browser testing</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Potentially test docs UI behavior. Low immediate value for Node framework tests; Playwright needs an optional provider and browser installation. <a href="https://vitest.dev/guide/browser/" target="_blank" rel="noreferrer">Browser mode</a></td>
+</tr></tbody></table>
+</details>
+<details>
+<summary>Workspace tasks, caching, and package builds <span>14 features</span></summary>
+<table class="table">
+<thead>
+<tr><th scope="col">Feature</th><th scope="col">Adoption</th><th scope="col">Use in Routa</th>
+</tr></thead>
+<tbody>
+<tr><td data-label="Feature">Workspace scripts and package filters</td><td data-label="Adoption">Pilot</td><td data-label="Use in Routa">Replace Turbo invocation with <code>vp run --filter &#x27;./packages/*&#x27; build</code> while keeping package build scripts initially. <a href="https://viteplus.dev/guide/run" target="_blank" rel="noreferrer">Run</a></td>
+</tr>
+<tr><td data-label="Feature">Explicit dependency graph</td><td data-label="Adoption">Pilot</td><td data-label="Use in Routa">Reproduce current build-before-typecheck and build-before-test ordering. Include relevant <code>devDependencies</code>; the CLI depends on the creator for development. <a href="https://viteplus.dev/config/run#dependson" target="_blank" rel="noreferrer">Task dependencies</a></td>
+</tr>
+<tr><td data-label="Feature">Parallel execution and concurrency</td><td data-label="Adoption">Pilot</td><td data-label="Use in Routa">Run independent checks concurrently after prerequisites. Avoid parallel mode for dependent builds. <a href="https://viteplus.dev/guide/run#concurrency" target="_blank" rel="noreferrer">Concurrency</a></td>
+</tr>
+<tr><td data-label="Feature">Local task-result caching</td><td data-label="Adoption">Pilot</td><td data-label="Use in Routa">Reuse deterministic builds and restore <code>dist/**</code>. Prove second-run hits, edited-input misses, and deleted-output restoration. <a href="https://viteplus.dev/guide/cache" target="_blank" rel="noreferrer">Caching</a></td>
+</tr>
+<tr><td data-label="Feature">Automatic file tracking</td><td data-label="Adoption">Pilot</td><td data-label="Use in Routa">Track reads, missing-file probes, directory listings, and writes without enumerating all source inputs. Validate with Routa&#x27;s compiler API and subprocesses. <a href="https://viteplus.dev/guide/automatic-data-tracking" target="_blank" rel="noreferrer">Tracking</a></td>
+</tr>
+<tr><td data-label="Feature">Explicit inputs, outputs, and environment</td><td data-label="Adoption">Pilot</td><td data-label="Use in Routa">Use <code>cache.input</code>, <code>output</code>, <code>env</code>, and <code>untrackedEnv</code> where inference is incomplete. Generic filesystem tracking cannot infer arbitrary environment reads. <a href="https://viteplus.dev/config/run" target="_blank" rel="noreferrer">Cache configuration</a></td>
+</tr>
+<tr><td data-label="Feature">Cache inspection and cleanup</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Inspect hits/misses and clear task results during investigation. Cached success is evidence of replay, not evidence that validation reran. <a href="https://viteplus.dev/guide/cache#cache-commands" target="_blank" rel="noreferrer">Cache commands</a></td>
+</tr>
+<tr><td data-label="Feature">Cross-run GitHub Actions cache</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Persist <code>node_modules/.vite/task-cache</code> after local correctness is proven. Upstream labels this workflow experimental; measure restore/save costs. <a href="https://viteplus.dev/guide/github-actions-cache" target="_blank" rel="noreferrer">Actions cache</a></td>
+</tr>
+<tr><td data-label="Feature">Multiple package entry points</td><td data-label="Adoption">Pilot</td><td data-label="Use in Routa">Use <code>vp pack</code> to emit the current core exports and CLI/creator entries. Configure the separately spawned CLI runtime explicitly. <a href="https://viteplus.dev/guide/pack" target="_blank" rel="noreferrer">Pack</a>, <a href="https://tsdown.dev/options/entry" target="_blank" rel="noreferrer">entry points</a></td>
+</tr>
+<tr><td data-label="Feature">Bundled/unbundled ESM and dependency control</td><td data-label="Adoption">Pilot</td><td data-label="Use in Routa">Preserve core module layout, bundled CLI internals, and deliberate runtime externals. <a href="https://tsdown.dev/options/unbundle" target="_blank" rel="noreferrer">Unbundled output</a>, <a href="https://tsdown.dev/options/dependencies" target="_blank" rel="noreferrer">dependencies</a></td>
+</tr>
+<tr><td data-label="Feature">Declaration generation</td><td data-label="Adoption">Pilot</td><td data-label="Use in Routa">Use a TypeScript-backed generator for inference-heavy public contracts. Verify emitted types against installed consumers. <a href="https://tsdown.dev/options/dts" target="_blank" rel="noreferrer">Declarations</a></td>
+</tr>
+<tr><td data-label="Feature">Watch package builds</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Use <code>vp pack --watch</code> for framework edits. Keep dependent output consumption and local CLI linking explicit. <a href="https://viteplus.dev/guide/pack" target="_blank" rel="noreferrer">Pack watch</a></td>
+</tr>
+<tr><td data-label="Feature">Build size reports</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Inspect CLI/creator output size and unexpected dependency bundling; use raw sizes for Node packages and avoid paying for compressed-size reports when irrelevant. <a href="https://tsdown.dev/reference/api/Interface.ReportOptions" target="_blank" rel="noreferrer">tsdown report options</a></td>
+</tr>
+<tr><td data-label="Feature">publint and Are the Types Wrong</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Add package metadata and declaration-resolution checks through tsdown. These optional integrations require <code>publint</code> and/or <code>@arethetypeswrong/core</code> and supplement real packed consumer tests. <a href="https://tsdown.dev/options/lint" target="_blank" rel="noreferrer">Package validation</a></td>
+</tr></tbody></table>
+</details>
+<details>
+<summary>Contributor workflow and infrastructure <span>13 features</span></summary>
+<table class="table">
+<thead>
+<tr><th scope="col">Feature</th><th scope="col">Adoption</th><th scope="col">Use in Routa</th>
+</tr></thead>
+<tbody>
+<tr><td data-label="Feature">GitHub Actions provisioning</td><td data-label="Adoption">Pilot</td><td data-label="Use in Routa"><code>voidzero-dev/setup-vp</code> can provision Vite Plus, Node, pnpm, and dependencies in our reusable workflow. Keep exact release/SHA pins and OIDC publishing configuration. <a href="https://viteplus.dev/guide/ci" target="_blank" rel="noreferrer">CI</a></td>
+</tr>
+<tr><td data-label="Feature">Oxc/Vitest editor integration</td><td data-label="Adoption">Use first</td><td data-label="Use in Routa">Use the root lint/format policy and runner in VS Code, Zed, or JetBrains. Framework settings can differ from generated-project settings. <a href="https://viteplus.dev/guide/ide-integration" target="_blank" rel="noreferrer">IDE integration</a></td>
+</tr>
+<tr><td data-label="Feature">Hooks and staged checks</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa"><code>vp staged</code> gives local staged-file feedback; <code>vp hooks enable/disable/status</code> manages the dispatcher. It can replace Husky/lint-staged where used; Routa currently has neither. <a href="https://viteplus.dev/guide/commit-hooks" target="_blank" rel="noreferrer">Commit hooks</a></td>
+</tr>
+<tr><td data-label="Feature">Package-manager facade</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Use <code>vp install --frozen-lockfile</code>, <code>add</code>, <code>remove</code>, <code>update</code>, <code>dedupe</code>, <code>outdated</code>, <code>why</code>, or <code>pm ...</code> while pnpm remains the resolver. <a href="https://viteplus.dev/guide/package-management" target="_blank" rel="noreferrer">Package management</a></td>
+</tr>
+<tr><td data-label="Feature">Local and one-off binaries</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Prefer <code>vp exec</code> for installed tools and explicit versions with <code>vp dlx</code> for one-off execution. Global <code>vpx</code> can fall back to downloads. <a href="https://viteplus.dev/guide/vpx" target="_blank" rel="noreferrer">Binaries</a></td>
+</tr>
+<tr><td data-label="Feature">Node/pnpm environment management</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Global <code>vp env</code> can pin, provision, switch, and diagnose contributor environments. Contributors can retain their current setup with the project-local CLI. <a href="https://viteplus.dev/guide/env" target="_blank" rel="noreferrer">Environment</a></td>
+</tr>
+<tr><td data-label="Feature">Diagnostics and shell completion</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa"><code>vp env doctor/current/which</code> explains selected tools; completion finds task names for global-CLI users. <a href="https://viteplus.dev/guide/env#commands" target="_blank" rel="noreferrer">Environment commands</a></td>
+</tr>
+<tr><td data-label="Feature">Toolchain inspection and coordinated upgrades</td><td data-label="Adoption">Use first</td><td data-label="Use in Routa">Record <code>vp toolchain --json</code>; upgrade Vite Plus, Vite aliases, Vitest pins, and ecosystem packages together. <a href="https://viteplus.dev/guide/upgrade#show-the-toolchain" target="_blank" rel="noreferrer">Inspection</a>, <a href="https://viteplus.dev/guide/upgrade-project" target="_blank" rel="noreferrer">project upgrades</a></td>
+</tr>
+<tr><td data-label="Feature">Global self-upgrade and rollback</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa"><code>vp upgrade</code> maintains a contributor&#x27;s global CLI separately from the project toolchain. <a href="https://viteplus.dev/guide/upgrade" target="_blank" rel="noreferrer">Global upgrades</a></td>
+</tr>
+<tr><td data-label="Feature">Docker/devcontainer image</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Use an exact <code>ghcr.io/voidzero-dev/vite-plus</code> tag/digest for reproducible development or container CI. It is a build image. <a href="https://viteplus.dev/guide/docker" target="_blank" rel="noreferrer">Docker</a></td>
+</tr>
+<tr><td data-label="Feature">App/library/monorepo templates and local generators</td><td data-label="Adoption">Optional</td><td data-label="Use in Routa">Useful for disposable experiments or a future internal package generator. Keep the public Routa creator and OpenAPI scaffolding. <a href="https://viteplus.dev/guide/create" target="_blank" rel="noreferrer">Create</a></td>
+</tr>
+<tr><td data-label="Feature">Organization template catalogs</td><td data-label="Adoption">Defer</td><td data-label="Use in Routa">An optional future distribution convenience. Routa has no current requirement to publish a separate organization catalog. <a href="https://viteplus.dev/guide/create#organization-templates" target="_blank" rel="noreferrer">Organization templates</a></td>
+</tr>
+<tr><td data-label="Feature">Agent/editor configuration generation</td><td data-label="Adoption">Defer</td><td data-label="Use in Routa">Inspect proposed setup, but retain Routa&#x27;s existing authority and conventions. Tool adoption does not require regenerating <code>AGENTS.md</code>. <a href="https://viteplus.dev/guide/migrate" target="_blank" rel="noreferrer">Migration</a></td>
+</tr></tbody></table>
+</details>
+<footer>Research checked 21 October 2026. This is the pre-migration research map. See the <a href="vite-plus-migration-results.html">tested before-and-after results</a> for implemented choices.</footer>
+</main></body></html>
