@@ -10,7 +10,7 @@
 		"build": "routa build",
 		"lint": "biome check .",
 		"format": "biome check --write .",
-		"scaffold": "pnpm scaffold:preview",
+		"scaffold": "cd scaffold && routa scaffold openapi.yaml --preview",
 		"scaffold:preview": "cd scaffold && routa scaffold openapi.yaml --preview",
 		"scaffold:update": "cd scaffold && routa scaffold openapi.yaml --yes",
 		"openapi:check": "routa openapi check",

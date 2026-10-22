@@ -41,8 +41,7 @@
 		"dist"
 	],
 	"scripts": {
-		"build": "vp pack",
-		"typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+		"typecheck": "vp exec tsc -p tsconfig.json --noEmit && vp exec tsc -p tsconfig.test.json --noEmit",
 		"lint": "vp lint",
 		"test": "vp test run"
 	},

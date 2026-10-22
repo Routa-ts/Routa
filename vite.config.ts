@@ -19,25 +19,8 @@ export default defineConfig({
 		cache: { scripts: false, tasks: true },
 		tasks: {
 			compile: {
-				command: "pnpm --filter './packages/*' build",
-				cache: {
-					input: [
-						"packages/*/src/**",
-						"!packages/*/src/**/*.test.ts",
-						"packages/*/package.json",
-						"packages/*/tsconfig.json",
-						"packages/*/vite.config.ts",
-						"tsconfig.base.json",
-						"package.json",
-						"pnpm-lock.yaml",
-						"pnpm-workspace.yaml",
-						"vite.config.ts",
-						".npmrc",
-						".nvmrc",
-					],
-					output: ["packages/*/dist/**"],
-					env: ["CI"],
-				},
+				command: "vp run --filter './packages/*' build",
+				cache: false,
 			},
 			unit: {
 				command: "vp run --filter './packages/*' test",

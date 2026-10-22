@@ -5,14 +5,15 @@ description: Set up the Routa repository and land a change.
 
 import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
 
-Routa is open source under the MIT License. The repository is a pnpm workspace holding
+Routa is open source under the MIT License. The repository is a vp run workspace holding
 three published packages, two example applications, this documentation site, and a design
 lab. Framework checks, tests, and package builds use the locally pinned Vite Plus toolchain.
 
 ## Before You Start
 
 - Node.js 24.11 or later on the Node 24 line, or Node.js 26 or later. `.nvmrc` selects Node 24.
-- pnpm 11.9.0, pinned in the root manifest. The repository uses workspace protocol links.
+- Vite Plus. Use `vp` for development commands; the root manifest pins its toolchain
+  and pnpm 11.9.0 as the underlying dependency resolver.
 - A read of the v0 requirements and current public scope. Maintainers coordinate planned
   V1 work through the project-local tracker described in `docs/agents/issue-tracker.md`.
 
@@ -22,21 +23,21 @@ lab. Framework checks, tests, and package builds use the locally pinned Vite Plu
 1. Install dependencies from the repository root.
 
 	```sh
-	pnpm install --frozen-lockfile
+	vp install --frozen-lockfile
 	```
 
 2. Run the full check suite before making changes, so you know the baseline is green.
 
 	```sh
-	pnpm check
-	pnpm typecheck
-	pnpm build
-	pnpm test
+	vp run check
+	vp run typecheck
+	vp run build
+	vp run test
 	```
 
-	`pnpm check` combines Oxfmt, type-aware Oxlint, compiler diagnostics, and the remaining
-	Biome checks. `pnpm typecheck` also runs explicit TypeScript source and test programs
-	and Astro checks. `pnpm build` builds the packages, examples, and sites. `pnpm test`
+	`vp run check` combines Oxfmt, type-aware Oxlint, compiler diagnostics, and the remaining
+	Biome checks. `vp run typecheck` also runs explicit TypeScript source and test programs
+	and Astro checks. `vp run build` builds the packages, examples, and sites. `vp run test`
 	runs all framework tests with Vite Plus's bundled Vitest.
 
 	Only package compilation is cached. Tests and type checks execute on every run.
@@ -57,15 +58,15 @@ lab. Framework checks, tests, and package builds use the locally pinned Vite Plu
    the local CLI before checking them.
 
 	```sh
-	pnpm prepare:local-cli
-	pnpm --filter full-api check
-	pnpm --filter full-api dev
+	vp run prepare:local-cli
+	vp run --filter full-api check
+	vp run --filter full-api dev
 	```
 
 5. Add a changeset for any change to a published package.
 
 	```sh
-	pnpm changeset
+	vp run changeset
 	```
 
 6. Update the documentation in the same pull request. Read `apps/docs/AGENTS.md` first; it
@@ -76,13 +77,13 @@ lab. Framework checks, tests, and package builds use the locally pinned Vite Plu
 
 ## Verify
 
-`pnpm verify` runs the complete gate: lint, typecheck, tests, generated-file drift, example
+`vp run verify` runs the complete gate: lint, typecheck, tests, generated-file drift, example
 checks, OpenAPI checks, the scaffold error smoke test, and a packaging check. A change is
 ready when it passes and the docs site builds.
 
 ```sh
-pnpm verify
-pnpm --filter @routa-ts/docs build
+vp run verify
+vp run --filter @routa-ts/docs build
 ```
 
 ## Documentation Expectations
@@ -99,9 +100,9 @@ Every new feature needs all four of these, which is what the coverage rules in
 
 | Problem | Fix |
 | --- | --- |
-| Workspace packages resolve to published versions | Run `pnpm install` from the root, not from inside a package. |
-| An example fails after a core change | Rebuild first. Examples consume built output, so run `pnpm build`. |
-| A formatter reports differences | Run `pnpm format` to apply them. |
+| Workspace packages resolve to published versions | Run `vp install` from the root, not from inside a package. |
+| An example fails after a core change | Rebuild first. Examples consume built output, so run `vp run build`. |
+| A formatter reports differences | Run `vp run format` to apply them. |
 | The docs build fails on a slug | A sidebar entry in `astro.config.mjs` points at a page that does not exist. |
 
 <Aside type="note" title="Keep the contract aligned">

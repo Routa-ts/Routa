@@ -10,7 +10,7 @@
 
 - Before: <Observed behavior or failing check.>
 - After: <Observed behavior or passing check.>
-- Verification: `pnpm verify`: <result>, plus relevant checks.
+- Verification: `vp run verify`: <result>, plus relevant checks.
 - Documentation: <Updated pages, or why no update is needed.>
 - Changeset: <Added changeset, or why none is needed.>
 

@@ -6,7 +6,7 @@ cli="$repo_root/packages/cli/dist/index.js"
 
 if [[ ! -f "$cli" ]]; then
 	echo "Missing built CLI at $cli"
-	echo "Run: pnpm build"
+	echo "Run: vp run build"
 	exit 1
 fi
 

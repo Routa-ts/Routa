@@ -672,5 +672,6 @@
 		"secretDetection": "Use the documented synthetic AWS example linked in sources.secretProbe. No actual credentials were used.",
 		"cacheSourceMutation": "Append a comment to packages/core/src/logger.ts, run compile, restore the original bytes, and run compile again.",
 		"cacheRestoration": "Hash output bytes and executable modes, delete all three packages/*/dist directories, run compile, then compare every restored file."
-	}
+	},
+	"supersededBy": "vite-plus-benchmarks.json"
 }
