@@ -17,7 +17,13 @@ ROUTA_MIDDLEWARE_ORDER: src/routes/admin/middleware.ts: withAdmin requires ctx.a
 Suggestion: Move middleware that provides auth before withAdmin.
 ```
 
-Any diagnostic fails the command with exit code `1`, and no metadata is written.
+Any diagnostic fails the command with exit code `1`, and no metadata is written. A
+warning is printed with a `Warning:` prefix and does not fail the command:
+
+```txt
+Warning: ROUTA_SCHEMA_OPAQUE_INPUT: src/routes/imports/schemas.ts: z.preprocess() accepts input Routa cannot describe, so OpenAPI documents the schema after preprocessing: z.preprocess(...)
+Suggestion: Parse the incoming value with a declarative schema first, then use .transform() or .pipe() to change it.
+```
 
 ## Project Structure
 
@@ -82,8 +88,9 @@ described in OpenAPI. Move anything else into `data`.
 
 ### `ROUTA_DUPLICATE_SCHEMA_NAME`
 
-Two modules export a schema with the same name. Exported schema names become OpenAPI
-component names, so they must be unique across the project.
+A `schemas.ts` file exports two schemas with the same name. Exported schema names become
+OpenAPI component names. Across files, identical declarations with the same name share a
+component, and different ones fail with `ROUTA_SCHEMA_COMPONENT_COLLISION`.
 
 **Fix:** rename one to something contract-specific, such as `CreateUserResponse`.
 
@@ -127,16 +134,97 @@ is stale.
 
 **Fix:** use `/new-route` for this API, or `https://api.example.com/new-route` for another.
 
+## Schemas
+
+Routa reads route and middleware schemas statically to check them and to generate OpenAPI.
+These codes name the schemas it cannot read faithfully. See
+[Schemas](/docs/concepts/schemas/) for what is supported.
+
+### `ROUTA_SCHEMA_UNSUPPORTED`
+
+A schema uses a construct Routa cannot describe in OpenAPI, such as `z.tuple()`,
+`.extend()`, a schema built by calling your own function, or a value that is not a Zod
+schema.
+
+**Fix:** write the schema with supported Zod constructs. Compose objects with
+`z.intersection()` or `.and()`.
+
+### `ROUTA_SCHEMA_UNRESOLVED`
+
+A schema identifier does not name a declaration Routa can read. Routa reads route schemas
+from the route file and its sibling `schemas.ts`, and middleware reject schemas from the
+file that declares the middleware. It does not follow imports.
+
+**Fix:** declare or export the schema in one of those files.
+
+### `ROUTA_RESPONSE_SCHEMA_MUTATION`
+
+A response schema changes the value it validates, for example with `.transform()`,
+`.default()`, `z.coerce.number()`, or `.trim()`.
+
+**Fix:** return the wire-ready value from the handler and keep the response schema
+validation-only.
+
+### `ROUTA_SCHEMA_OPAQUE_INPUT`
+
+Warning. An input schema runs a function before any schema Routa can read, through
+`z.preprocess()` or a leading `z.transform()`. The route still runs, and OpenAPI documents
+the schema that follows the function.
+
+**Fix:** parse the incoming value with a declarative schema first, then change it with
+`.transform()` or `.pipe()`, or accept the warning.
+
+### `ROUTA_SCHEMA_META_STRUCTURAL`
+
+`.meta()` sets a key that would override the schema's structure, such as `type`,
+`properties`, `format`, or `default`.
+
+**Fix:** express the constraint with the Zod schema and keep `.meta()` for documentation.
+
+### `ROUTA_SCHEMA_META_PLACEMENT`
+
+`.meta()` sets a key that places the schema in a route, such as `in`, `param`, or
+`operationId`.
+
+**Fix:** put the schema under `input` or `responses` in `createRoute`.
+
+### `ROUTA_SCHEMA_META_UNSUPPORTED`
+
+`.meta()` sets a key Routa does not document.
+
+**Fix:** use `id`, `title`, `description`, `deprecated`, `example`, `examples`,
+`readOnly`, `writeOnly`, `externalDocs`, or an `x-` extension.
+
+### `ROUTA_SCHEMA_META_COMPUTED`
+
+Metadata is computed at runtime, for example `.describe(label)` or a spread in `.meta()`.
+
+**Fix:** write metadata as inline literals.
+
+### `ROUTA_SCHEMA_REGISTRY`
+
+A schema file uses `z.globalRegistry`, `z.registry()`, or `.register()`. Registry metadata
+lives outside the route contract.
+
+**Fix:** attach documentation with `.meta()` or `.describe()` on the schema the route uses.
+
+### `ROUTA_SCHEMA_COMPONENT_COLLISION`
+
+Two different schema declarations would share one `components.schemas` key: two
+`.meta({ id })` calls with the same id, or two exports with the same name and different
+content.
+
+**Fix:** reuse one declaration, or give each schema a distinct `.meta({ id })`. Routa never
+renames components.
+
+### `ROUTA_SCHEMA_COMPONENT_ID_INVALID`
+
+A schema `id` or export name used as a component key contains characters OpenAPI does not
+allow.
+
+**Fix:** use only letters, digits, `.`, `-`, and `_`.
+
 ## OpenAPI
-
-### `ROUTA_OPENAPI_UNSUPPORTED_ZOD`
-
-A schema uses a Zod construct Routa cannot represent in OpenAPI. This is a warning, not a
-failure: it appears under `x-routa-schema-warnings` in the generated document, and the
-schema still validates at runtime.
-
-**Fix:** simplify the schema if the operation must be fully described in OpenAPI, or accept
-the warning.
 
 ### `ROUTA_OPENAPI_UNSUPPORTED_EXTENSION`
 

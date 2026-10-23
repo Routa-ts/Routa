@@ -77,8 +77,11 @@ Generated handlers are stubs. They satisfy the contract and return placeholder d
 | The whole document   | `.routa/openapi-baseline.json`                                  |
 
 Supported input is deliberately narrow: paths, methods, `operationId`, path/query/header/
-cookie parameters, JSON bodies, JSON responses, and `components.schemas`. Anything else
-stays in the source document and is not approximated in TypeScript.
+cookie parameters, JSON bodies, JSON responses, and `components.schemas`. Schemas map the
+same way generation maps them back: `anyOf` becomes `z.union`, and a `oneOf` with a
+`discriminator.propertyName` that every variant requires as a distinct `const` becomes
+`z.discriminatedUnion`. Anything else, including `allOf`, stays in the source document and
+is not approximated in TypeScript.
 
 ## Troubleshooting
 
@@ -93,8 +96,8 @@ stays in the source document and is not approximated in TypeScript.
 <Aside type="caution" title="v0 status">
 	Scaffolding the supported JSON OpenAPI surface is implemented in v0; unsupported
 	OpenAPI features remain deferred. Scaffolding is a one-way import, not a live binding.
-	After the first run, route files own route contracts. The baseline owns `info`, `servers`,
-	and `components.schemas`.
+	After the first run, route files own route contracts and the schemas they use. The
+	baseline owns `info` and `servers`.
 </Aside>
 
 ## Next Steps
