@@ -44,10 +44,8 @@ jobs:
     name: Build
     uses: ./.github/workflows/node-vp-job.yml
     with:
-      command: |
-        vp run build:packages
-        vp exec node scripts/link-local-cli.mjs --root "$GITHUB_WORKSPACE"
-        vp run build
+      # Exercise CLI preparation from a fresh checkout, as the release job does.
+      command: vp run build
 
   docs:
     name: Docs

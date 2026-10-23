@@ -45,7 +45,11 @@ metadata, example contracts, scaffold diagnostics, and packed-package validation
   `vp run --no-cache compile` to force a rebuild. Run
   `vp exec node scripts/check-tooling-cache.mjs` separately from other builds to test
   output restoration and dependency invalidation. The probe restores its temporary edit.
-- `vp run build` also builds both examples, the docs site, and the design lab.
+- `vp run build` also builds both examples, the docs site, and the design lab. It prepares
+  and links the local CLI before planning example commands. The root `build`,
+  `generated:check`, and `verify` scripts use a `vp exec -c` shell boundary so Vite
+  Plus does not resolve the not-yet-built `routa` executable during outer task
+  planning. This also lets the release command start on a fresh checkout.
 - `vp run format` uses Oxfmt across the repository, including Markdown, MDX, CSS,
   YAML, JSON, HTML, and Astro. Astro formatting uses the pinned `@astrojs/compiler-rs`.
   Its frontmatter formatting is disabled because the pinned formatter drops comments;
