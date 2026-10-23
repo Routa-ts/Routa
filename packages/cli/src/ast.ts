@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import * as ts from "./typescript.js";
 
 /**
@@ -96,4 +98,32 @@ export function localInitializer(
 			}
 		}
 	}
+}
+
+/**
+ * Resolves a relative module specifier to an existing TypeScript file.
+ *
+ * @param cwd - The project root used to resolve candidate paths.
+ * @param fromFile - The file containing the import or re-export.
+ * @param specifier - The module specifier to resolve.
+ * @returns The first matching file path relative to `cwd`, or `undefined` if no relative file exists.
+ */
+export function resolveImportFile(
+	cwd: string,
+	fromFile: string,
+	specifier: string,
+): string | undefined {
+	if (!specifier.startsWith(".")) {
+		return;
+	}
+
+	const base = join(dirname(fromFile), specifier);
+	const candidates = [
+		base,
+		base.endsWith(".js") ? `${base.slice(0, -3)}.ts` : undefined,
+		base.endsWith(".ts") ? base : `${base}.ts`,
+		join(base, "index.ts"),
+	].filter((item): item is string => Boolean(item));
+
+	return candidates.find((candidate) => existsSync(join(cwd, candidate)));
 }

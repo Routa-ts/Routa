@@ -53,6 +53,7 @@
 		"yaml": "2.9.1"
 	},
 	"devDependencies": {
-		"create-routa-ts": "workspace:*"
+		"create-routa-ts": "workspace:*",
+		"zod": "^4.6.7"
 	}
 }
