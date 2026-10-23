@@ -1,5 +1,13 @@
 # @routa-ts/cli
 
+## 0.5.0
+
+### Patch Changes
+
+- Updated dependencies [2fee4d3]
+- Updated dependencies [fde4d67]
+  - @routa-ts/core@0.5.0
+
 ## 0.4.1
 
 ### Patch Changes

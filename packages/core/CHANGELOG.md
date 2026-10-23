@@ -1,5 +1,15 @@
 # @routa-ts/core
 
+## 0.5.0
+
+### Minor Changes
+
+- 2fee4d3: Reject unsupported route-root method keys passed through intermediate objects, as well as object literals. This makes the existing OPTIONS restriction apply consistently.
+
+### Patch Changes
+
+- fde4d67: Require Zod 4.6.7 for route contracts. Oversized arrays, sets, and maps now fail their leading upper size checks before parsing elements.
+
 ## 0.4.1
 
 ### Patch Changes
