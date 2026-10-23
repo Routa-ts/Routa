@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
 import { createHonoApp } from "./hono.js";
-import { createMiddleware, createRoute } from "./index.js";
+import { createMiddleware, createRoute, createRouteRootFactory } from "./index.js";
 import { createLogger, type RoutaLogEvent } from "./logger.js";
 
 describe("createHonoApp", () => {
@@ -594,22 +594,24 @@ describe("createHonoApp", () => {
 			{
 				method: "post",
 				path: "/users",
-				contract: createRoute({
-					middleware: [requireTenant],
-					input: {
-						body: z.object({ tenantId: z.string(), name: z.string() }),
-					},
-					responses: {
-						success: {
-							status: 201,
-							schema: z.object({ tenantId: z.string(), name: z.string() }),
+				contract: createRouteRootFactory<{ "/users": { post: { tenant: string } } }>()("/users")({
+					post: createRoute({
+						middleware: [requireTenant],
+						input: {
+							body: z.object({ tenantId: z.string(), name: z.string() }),
 						},
-					},
-					run: ({ input, ctx }) => ({
-						type: "success",
-						data: { tenantId: ctx.tenant as string, name: input.body.name },
+						responses: {
+							success: {
+								status: 201,
+								schema: z.object({ tenantId: z.string(), name: z.string() }),
+							},
+						},
+						run: ({ input, ctx }) => ({
+							type: "success",
+							data: { tenantId: ctx.tenant, name: input.body.name },
+						}),
 					}),
-				}),
+				}).post,
 			},
 		]);
 
@@ -642,16 +644,20 @@ describe("createHonoApp", () => {
 			{
 				method: "get",
 				path: "/session",
-				contract: createRoute({
-					middleware: [withSession],
-					responses: {
-						success: {
-							status: 200,
-							schema: z.object({ authenticated: z.boolean(), userId: z.string().optional() }),
+				contract: createRouteRootFactory<{
+					"/session": { get: { session: { authenticated: boolean; userId?: string } } };
+				}>()("/session")({
+					get: createRoute({
+						middleware: [withSession],
+						responses: {
+							success: {
+								status: 200,
+								schema: z.object({ authenticated: z.boolean(), userId: z.string().optional() }),
+							},
 						},
-					},
-					run: ({ ctx }) => ({ type: "success", data: ctx.session }),
-				}),
+						run: ({ ctx }) => ({ type: "success", data: ctx.session }),
+					}),
+				}).get,
 			},
 		]);
 
@@ -1031,20 +1037,24 @@ describe("createHonoApp", () => {
 			{
 				method: "get",
 				path: "/me",
-				contract: createRoute({
-					middleware: [withSession, requireAuth],
-					responses: {
-						success: {
-							status: 200,
-							schema: z.object({ id: z.string() }),
-						},
-						unauthorized: {
-							status: 401,
-							schema: z.object({ message: z.string() }),
-						},
+				contract: createRouteRootFactory<{ "/me": { get: { auth: { userId: string } } } }>()("/me")(
+					{
+						get: createRoute({
+							middleware: [withSession, requireAuth],
+							responses: {
+								success: {
+									status: 200,
+									schema: z.object({ id: z.string() }),
+								},
+								unauthorized: {
+									status: 401,
+									schema: z.object({ message: z.string() }),
+								},
+							},
+							run: ({ ctx }) => ({ type: "success", data: { id: ctx.auth.userId } }),
+						}),
 					},
-					run: ({ ctx }) => ({ type: "success", data: { id: ctx.auth.userId } }),
-				}),
+				).get,
 			},
 		]);
 
@@ -1089,20 +1099,24 @@ describe("createHonoApp", () => {
 			{
 				method: "get",
 				path: "/me",
-				contract: createRoute({
-					middleware: [withNullSession, requireAuth],
-					responses: {
-						success: {
-							status: 200,
-							schema: z.object({ id: z.string() }),
-						},
-						unauthorized: {
-							status: 401,
-							schema: z.object({ message: z.string() }),
-						},
+				contract: createRouteRootFactory<{ "/me": { get: { auth: { userId: string } } } }>()("/me")(
+					{
+						get: createRoute({
+							middleware: [withNullSession, requireAuth],
+							responses: {
+								success: {
+									status: 200,
+									schema: z.object({ id: z.string() }),
+								},
+								unauthorized: {
+									status: 401,
+									schema: z.object({ message: z.string() }),
+								},
+							},
+							run: ({ ctx }) => ({ type: "success", data: { id: ctx.auth.userId } }),
+						}),
 					},
-					run: ({ ctx }) => ({ type: "success", data: { id: ctx.auth.userId } }),
-				}),
+				).get,
 			},
 		]);
 
@@ -1181,31 +1195,35 @@ describe("createHonoApp", () => {
 			{
 				method: "get",
 				path: "/me",
-				contract: createRoute({
-					middleware: [withoutProvides, projectedProvides],
-					responses: {
-						success: {
-							status: 200,
-							schema: z.object({
-								id: z.string(),
-								role: z.string(),
-								hasSecret: z.boolean(),
-								hasUndeclared: z.boolean(),
-								hasRootLeak: z.boolean(),
-							}),
+				contract: createRouteRootFactory<{
+					"/me": { get: { user: { id: string }; role: string } };
+				}>()("/me")({
+					get: createRoute({
+						middleware: [withoutProvides, projectedProvides],
+						responses: {
+							success: {
+								status: 200,
+								schema: z.object({
+									id: z.string(),
+									role: z.string(),
+									hasSecret: z.boolean(),
+									hasUndeclared: z.boolean(),
+									hasRootLeak: z.boolean(),
+								}),
+							},
 						},
-					},
-					run: ({ ctx }) => ({
-						type: "success",
-						data: {
-							id: ctx.user.id,
-							role: ctx.role,
-							hasSecret: "secret" in ctx.user,
-							hasUndeclared: "undeclared" in ctx,
-							hasRootLeak: "rootLeak" in ctx,
-						},
+						run: ({ ctx }) => ({
+							type: "success",
+							data: {
+								id: ctx.user.id,
+								role: ctx.role,
+								hasSecret: "secret" in ctx.user,
+								hasUndeclared: "undeclared" in ctx,
+								hasRootLeak: "rootLeak" in ctx,
+							},
+						}),
 					}),
-				}),
+				}).get,
 			},
 		]);
 
@@ -1257,6 +1275,7 @@ describe("createHonoApp", () => {
 			provides: {
 				user: z.object({ id: z.string() }),
 			},
+			// @ts-expect-error Exercise runtime validation of invalid middleware output.
 			run: ({ next }) => next({ user: { id: 123, secret: "middleware-secret" } }),
 		});
 		const app = createHonoApp(
@@ -1312,6 +1331,7 @@ describe("createHonoApp", () => {
 				first: z.string(),
 				second: z.string(),
 			},
+			// @ts-expect-error Exercise runtime validation of partially invalid middleware output.
 			run: ({ next }) => next({ first: "changed", second: 123 }),
 		});
 		const app = createHonoApp([

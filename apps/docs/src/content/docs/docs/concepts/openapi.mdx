@@ -64,10 +64,10 @@ TypeScript.
 Routa adds three vendor extensions so information that has no standard field is still
 visible in the document:
 
-| Extension | Meaning |
-| --- | --- |
-| `x-routa-authz` | Permission strings declared by middleware `openapi.permissions` |
-| `x-routa-diagnostics` | Validation errors that prevented a complete document |
+| Extension                 | Meaning                                                                      |
+| ------------------------- | ---------------------------------------------------------------------------- |
+| `x-routa-authz`           | Permission strings declared by middleware `openapi.permissions`              |
+| `x-routa-diagnostics`     | Validation errors that prevented a complete document                         |
 | `x-routa-schema-warnings` | Zod constructs Routa could not represent, as `ROUTA_OPENAPI_UNSUPPORTED_ZOD` |
 
 A document containing `x-routa-diagnostics` means generation ran against a project that

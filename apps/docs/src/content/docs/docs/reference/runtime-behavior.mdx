@@ -35,14 +35,14 @@ For each matched route, in order:
 
 ## Status Codes Routa Produces
 
-| Status | Cause |
-| --- | --- |
-| `204` | Automatic `OPTIONS` response |
-| `400` | Input failed schema validation, or the JSON body could not be parsed |
-| `405` | The path exists but does not declare the requested method |
-| `406` | The `Accept` header cannot be satisfied by JSON |
-| `415` | The request body's content type is not a JSON media type |
-| `500` | A handler or middleware returned output that does not match its contract |
+| Status | Cause                                                                    |
+| ------ | ------------------------------------------------------------------------ |
+| `204`  | Automatic `OPTIONS` response                                             |
+| `400`  | Input failed schema validation, or the JSON body could not be parsed     |
+| `405`  | The path exists but does not declare the requested method                |
+| `406`  | The `Accept` header cannot be satisfied by JSON                          |
+| `415`  | The request body's content type is not a JSON media type                 |
+| `500`  | A handler or middleware returned output that does not match its contract |
 
 Every other status comes from your contract.
 
@@ -60,15 +60,15 @@ or 406 are the plain-text exceptions:
 }
 ```
 
-| `type` | Title | Status |
-| --- | --- | --- |
-| `…/problems/validation` | Validation failed | 400 |
-| `…/problems/invalid-json` | Invalid JSON body | 400 |
-| Plain text (no problem type) | Method Not Allowed | 405 |
-| Plain text (no problem type) | Not Acceptable | 406 |
-| `…/problems/unsupported-media-type` | Unsupported Media Type | 415 |
-| `…/problems/handler-output` | Invalid handler output | 500 |
-| `…/problems/internal` | Internal Server Error | 500 |
+| `type`                              | Title                  | Status |
+| ----------------------------------- | ---------------------- | ------ |
+| `…/problems/validation`             | Validation failed      | 400    |
+| `…/problems/invalid-json`           | Invalid JSON body      | 400    |
+| Plain text (no problem type)        | Method Not Allowed     | 405    |
+| Plain text (no problem type)        | Not Acceptable         | 406    |
+| `…/problems/unsupported-media-type` | Unsupported Media Type | 415    |
+| `…/problems/handler-output`         | Invalid handler output | 500    |
+| `…/problems/internal`               | Internal Server Error  | 500    |
 
 Only input validation problems include `issues` in the response. Handler-output problems
 never leak the underlying message or response values, since they may contain internal
@@ -97,13 +97,13 @@ policy in your application.
 
 ## Input Parsing Details
 
-| Source | Behavior |
-| --- | --- |
-| `params` | Values from dynamic path segments |
-| `query` | The query string as a flat record; repeated keys collapse to the last value |
-| `headers` | All request headers, lowercased |
+| Source    | Behavior                                                                                             |
+| --------- | ---------------------------------------------------------------------------------------------------- |
+| `params`  | Values from dynamic path segments                                                                    |
+| `query`   | The query string as a flat record; repeated keys collapse to the last value                          |
+| `headers` | All request headers, lowercased                                                                      |
 | `cookies` | Parsed from the `Cookie` header and URI-decoded, falling back to the raw value on malformed encoding |
-| `body` | Requires `application/json` or a `+json` media type, otherwise `415` |
+| `body`    | Requires `application/json` or a `+json` media type, otherwise `415`                                 |
 
 ## Response Serialization
 

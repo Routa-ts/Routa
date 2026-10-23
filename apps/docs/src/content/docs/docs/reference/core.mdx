@@ -12,12 +12,12 @@ than bundled.
 
 <PackageManagers type="add" args="@routa-ts/core hono zod" />
 
-| Entry point | Contents |
-| --- | --- |
-| `@routa-ts/core` | `createRouta`, `createRoute`, `createRouteRoot`, `createRouteRootFactory`, `createMiddleware`, and the contract types |
-| `@routa-ts/core/hono` | `createHonoApp`, `isBodylessStatus` |
-| `@routa-ts/core/logger` | `createLogger` and the logger types |
-| `@routa-ts/core/query/helpers` | `Sort`, `Fields` |
+| Entry point                    | Contents                                                                                                              |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `@routa-ts/core`               | `createRouta`, `createRoute`, `createRouteRoot`, `createRouteRootFactory`, `createMiddleware`, and the contract types |
+| `@routa-ts/core/hono`          | `createHonoApp`, `isBodylessStatus`                                                                                   |
+| `@routa-ts/core/logger`        | `createLogger` and the logger types                                                                                   |
+| `@routa-ts/core/query/helpers` | `Sort`, `Fields`                                                                                                      |
 
 ## `createRouta`
 
@@ -28,13 +28,13 @@ function createRouta<const TConfig extends RoutaConfig>(config: TConfig): TConfi
 Preserves an application configuration object with Routa's typing. Export the result as
 the default export of `src/routa.ts`, which the runtime imports at boot.
 
-| Option | Type | Default |
-| --- | --- | --- |
-| `host` | `string` | `"127.0.0.1"` |
-| `port` | `number` | `3000` |
-| `logger` | `RoutaLogger \| false` | Built-in console logger |
-| `lifecycleHeaders` | `boolean` | `false` |
-| `responseValidation` | `"development" \| "always"` | `"development"` |
+| Option               | Type                        | Default                 |
+| -------------------- | --------------------------- | ----------------------- |
+| `host`               | `string`                    | `"127.0.0.1"`           |
+| `port`               | `number`                    | `3000`                  |
+| `logger`             | `RoutaLogger \| false`      | Built-in console logger |
+| `lifecycleHeaders`   | `boolean`                   | `false`                 |
+| `responseValidation` | `"development" \| "always"` | `"development"`         |
 
 ```ts title="src/routa.ts"
 import { createRouta } from "@routa-ts/core";
@@ -61,13 +61,13 @@ Declares one HTTP method. The function returns its argument unchanged; its purpo
 capture literal types so `run` receives typed `input`, `ctx`, and `response` and is constrained to the
 declared outcomes.
 
-| Field | Type | Required |
-| --- | --- | --- |
-| `input` | `{ params?, query?, headers?, cookies?, body? }` of Zod schemas | No |
-| `responses` | `Record<string, { status: number; schema: ZodType }>` | Yes |
-| `middleware` | `readonly MiddlewareContract[]` | No |
-| `deprecation` | `{ sunset?: string; replacement?: string }` | No |
-| `run` | `({ input, ctx, response }) => { type, data }` or a promise of that result | Yes |
+| Field         | Type                                                                       | Required |
+| ------------- | -------------------------------------------------------------------------- | -------- |
+| `input`       | `{ params?, query?, headers?, cookies?, body? }` of Zod schemas            | No       |
+| `responses`   | `Record<string, { status: number; schema: ZodType }>`                      | Yes      |
+| `middleware`  | `readonly MiddlewareContract[]`                                            | No       |
+| `deprecation` | `{ sunset?: string; replacement?: string }`                                | No       |
+| `run`         | `({ input, ctx, response }) => { type, data }` or a promise of that result | Yes      |
 
 `deprecation.replacement` accepts a registered route path beginning with `/` or an
 absolute `http:`/`https:` URL. Local paths are checked against the generated route
@@ -108,9 +108,9 @@ Handlers receive `response: ResponseBuilders<TResponses>`. Each method uses the 
 and schema of one outcome in the route's own `responses` declaration. There are no
 built-in outcome names, and middleware rejects do not add builder methods.
 
-| Parameter | Type | Purpose |
-| --- | --- | --- |
-| `data` | Selected outcome schema's output type | Body data for the result |
+| Parameter | Type                                  | Purpose                  |
+| --------- | ------------------------------------- | ------------------------ |
+| `data`    | Selected outcome schema's output type | Body data for the result |
 
 A builder returns `{ type, data }` without sending a response. Return that result from
 `run` to select the outcome. Routa applies the declared status, configured response
@@ -219,14 +219,14 @@ function createMiddleware<TRequires, TProvides, TRejects, TInput>(
 ): MiddlewareContract<TRequires, TProvides, TRejects, TInput>
 ```
 
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `requires` | `readonly string[]` | Context keys that must already exist |
-| `provides` | `Record<string, ZodType>` | Context keys this middleware adds |
-| `rejects` | `Record<string, { status: number; schema: ZodType }>` | Early responses it can return |
-| `input` | Same shape as a route `input` | Request data the middleware needs |
-| `openapi` | `{ security?, permissions? }` | Metadata emitted into generated OpenAPI |
-| `run` | `({ input, ctx, next }) => …` | The implementation |
+| Field      | Type                                                  | Purpose                                 |
+| ---------- | ----------------------------------------------------- | --------------------------------------- |
+| `requires` | `readonly string[]`                                   | Context keys that must already exist    |
+| `provides` | `Record<string, ZodType>`                             | Context keys this middleware adds       |
+| `rejects`  | `Record<string, { status: number; schema: ZodType }>` | Early responses it can return           |
+| `input`    | Same shape as a route `input`                         | Request data the middleware needs       |
+| `openapi`  | `{ security?, permissions? }`                         | Metadata emitted into generated OpenAPI |
+| `run`      | `({ input, ctx, next }) => …`                         | The implementation                      |
 
 `run` either returns a reject outcome or returns `next(providedCtx)`. Routa parses every
 declared `provides` value before merging any of them into `ctx`, and downstream code
@@ -257,16 +257,16 @@ function createHonoApp(routes: readonly HonoRoute[], options?: CreateHonoAppOpti
 Builds the Hono application from route definitions. The CLI runtime calls this for you;
 call it directly in tests.
 
-| Parameter | Type | Purpose |
-| --- | --- | --- |
-| `routes[].method` | `HttpMethod` | Lowercase method name |
-| `routes[].path` | `string` | Hono path with `:name` parameters |
-| `routes[].contract` | `AnyRouteContract` | The `createRoute` result |
-| `routes[].createContext` | `() => object` | Optional base context, must return a plain object |
-| `options.logger` | `RoutaLogger` | Enables `http.request` and `http.error` logging |
-| `options.lifecycleHeaders` | `boolean` | Emit `Deprecation`, `Sunset`, and `Link` |
+| Parameter                    | Type                        | Purpose                                             |
+| ---------------------------- | --------------------------- | --------------------------------------------------- |
+| `routes[].method`            | `HttpMethod`                | Lowercase method name                               |
+| `routes[].path`              | `string`                    | Hono path with `:name` parameters                   |
+| `routes[].contract`          | `AnyRouteContract`          | The `createRoute` result                            |
+| `routes[].createContext`     | `() => object`              | Optional base context, must return a plain object   |
+| `options.logger`             | `RoutaLogger`               | Enables `http.request` and `http.error` logging     |
+| `options.lifecycleHeaders`   | `boolean`                   | Emit `Deprecation`, `Sunset`, and `Link`            |
 | `options.responseValidation` | `"development" \| "always"` | Response schema policy; defaults to `"development"` |
-| `options.runtimeMode` | `"dev" \| "start"` | Explicit mode; defaults to `"dev"` for direct use |
+| `options.runtimeMode`        | `"dev" \| "start"`          | Explicit mode; defaults to `"dev"` for direct use   |
 
 Registration throws for an explicitly declared `options` method, a duplicate
 method-and-path pair, a `GET` or `HEAD` contract declaring a body, and duplicate reject
@@ -303,26 +303,26 @@ export function responseFor(status: number, data: unknown): Response {
 function createLogger(options?: CreateLoggerOptions): RoutaLogger
 ```
 
-| Option | Type | Default |
-| --- | --- | --- |
-| `enabled` | `boolean` | `true` |
-| `level` | `"trace" \| "debug" \| "info" \| "warn" \| "error" \| "fatal" \| "silent"` | `"info"` |
-| `sink` | `(event: RoutaLogEvent) => void` | Console writer |
-| `now` | `() => Date` | `() => new Date()` |
+| Option    | Type                                                                       | Default            |
+| --------- | -------------------------------------------------------------------------- | ------------------ |
+| `enabled` | `boolean`                                                                  | `true`             |
+| `level`   | `"trace" \| "debug" \| "info" \| "warn" \| "error" \| "fatal" \| "silent"` | `"info"`           |
+| `sink`    | `(event: RoutaLogEvent) => void`                                           | Console writer     |
+| `now`     | `() => Date`                                                               | `() => new Date()` |
 
 `enabled: false` forces the level to `"silent"`, which is how the no-op logger is built.
 `now` exists so tests can produce deterministic timestamps.
 
 The returned `RoutaLogger` is structural and depends on no logging package:
 
-| Member | Signature |
-| --- | --- |
+| Member                                             | Signature                                                 |
+| -------------------------------------------------- | --------------------------------------------------------- |
 | `trace`, `debug`, `info`, `warn`, `error`, `fatal` | `(event: string, message: string, data?: object) => void` |
-| `silent` | Same signature, always a no-op |
-| `log` | `(event: RoutaLogEvent) => void` |
-| `child` | `(bindings: object) => RoutaLogger` |
-| `bindings` | `() => object` |
-| `isLevelEnabled` | `(level) => boolean` |
+| `silent`                                           | Same signature, always a no-op                            |
+| `log`                                              | `(event: RoutaLogEvent) => void`                          |
+| `child`                                            | `(bindings: object) => RoutaLogger`                       |
+| `bindings`                                         | `() => object`                                            |
+| `isLevelEnabled`                                   | `(level) => boolean`                                      |
 
 Every log event carries `level`, `event`, `message`, `timestamp`, and optional `data`.
 Child bindings are merged into `data` on each write.
@@ -394,10 +394,10 @@ type RouteRootConfigForCtx<
 Describes the route-level middleware and HTTP method contracts accepted by a path-bound
 route helper. The context map can provide a distinct handler context for each method.
 
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `middleware` | `readonly AnyMiddlewareContract[]` | Middleware shared by every declared method |
-| `get`, `post`, `put`, `patch`, `delete`, `head` | `ContextualRouteContract` | Contract typed with that method's context |
+| Field                                           | Type                               | Purpose                                    |
+| ----------------------------------------------- | ---------------------------------- | ------------------------------------------ |
+| `middleware`                                    | `readonly AnyMiddlewareContract[]` | Middleware shared by every declared method |
+| `get`, `post`, `put`, `patch`, `delete`, `head` | `ContextualRouteContract`          | Contract typed with that method's context  |
 
 ```ts
 import type { RouteRootConfigForCtx } from "@routa-ts/core";

@@ -42,9 +42,8 @@
 		"dist"
 	],
 	"scripts": {
-		"build": "node ../../scripts/build-package.mjs create-routa-ts",
-		"typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
-		"lint": "biome lint src",
-		"test": "vitest run"
+		"typecheck": "vp exec tsc -p tsconfig.json --noEmit && vp exec tsc -p tsconfig.test.json --noEmit",
+		"lint": "vp lint",
+		"test": "vp test run"
 	}
 }

@@ -5,35 +5,37 @@
 	"type": "module",
 	"license": "MIT",
 	"engines": {
-		"node": ">=24"
+		"node": "^24.11.0 || >=26.0.0"
 	},
 	"packageManager": "pnpm@11.9.0",
 	"scripts": {
-		"build": "turbo run build",
-		"check": "biome check .",
-		"changeset": "changeset",
-		"format": "biome format --write .",
-		"format:check": "biome format .",
-		"generated:check": "pnpm run prepare:local-cli && pnpm --filter './examples/*' build && node scripts/check-generated.mjs",
-		"lint": "turbo run lint",
-		"lint:repo": "biome lint .",
-		"pack:check": "node scripts/pack-check.mjs",
-		"prepare:local-cli": "pnpm --filter './packages/*' build && node scripts/link-local-cli.mjs",
-		"quality": "pnpm check && turbo run typecheck test",
-		"release": "pnpm run prepare:local-cli && pnpm quality && pnpm build && pnpm pack:check && changeset publish",
-		"test": "turbo run test",
-		"typecheck": "turbo run typecheck",
-		"verify": "pnpm check && pnpm typecheck && pnpm test && pnpm generated:check && pnpm --filter './examples/*' check && pnpm --filter './examples/*' openapi:check && scripts/scaffold-error-smoke.sh && pnpm pack:check",
-		"version": "changeset version"
+		"build": "vp run prepare:local-cli && vp run --filter './apps/*' --filter './examples/*' build",
+		"check": "vp run prepare:checks && vp check",
+		"changeset": "vp exec changeset",
+		"format": "vp fmt",
+		"format:check": "vp fmt --check",
+		"generated:check": "vp run prepare:local-cli && vp run --filter './examples/*' build && vp exec node scripts/check-generated.mjs",
+		"lint": "vp run prepare:checks && vp lint",
+		"lint:repo": "vp run lint",
+		"pack:check": "vp exec node scripts/pack-check.mjs",
+		"prepare:local-cli": "vp run build:packages && vp exec node scripts/link-local-cli.mjs",
+		"quality": "vp run check && vp run typecheck && vp run test",
+		"release": "vp run prepare:local-cli && vp run quality && vp run build && vp run pack:check && vp exec changeset publish",
+		"test": "vp run unit",
+		"typecheck": "vp run build:packages && vp run --filter './packages/*' --filter './apps/*' typecheck",
+		"verify": "vp run check && vp run typecheck && vp run test && vp run generated:check && vp run --filter './examples/*' check && vp run --filter './examples/*' openapi:check && scripts/scaffold-error-smoke.sh && vp run pack:check",
+		"version": "vp exec changeset version",
+		"build:packages": "vp run compile",
+		"prepare:checks": "vp run prepare:local-cli && vp run --filter './apps/*' sync"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.5.12",
 		"@changesets/cli": "3.0.3",
 		"@types/node": "26.6.5",
-		"esbuild": "0.28.2",
-		"turbo": "2.11.8",
 		"typescript": "7.0.2",
-		"vitest": "5.0.3",
-		"yaml": "2.9.1"
+		"vite-plus": "1.3.0",
+		"yaml": "2.9.1",
+		"@astrojs/compiler-rs": "0.5.1",
+		"eslint-plugin-import-x": "4.17.1",
+		"eslint-plugin-no-secrets": "2.3.3"
 	}
 }

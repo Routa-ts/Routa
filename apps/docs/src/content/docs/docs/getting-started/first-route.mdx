@@ -22,73 +22,73 @@ generated metadata and OpenAPI.
 1. Create the schema module. Keeping schemas beside the route is the default convention,
    and exported names become OpenAPI component names.
 
-	```ts title="src/routes/users/$userId/schemas.ts"
-	import { z } from "zod";
+    ```ts title="src/routes/users/$userId/schemas.ts"
+    import { z } from "zod";
 
-	export const GetUserParams = z.object({
-		userId: z.string().min(1),
-	});
+    export const GetUserParams = z.object({
+    	userId: z.string().min(1),
+    });
 
-	export const GetUserResponse = z.object({
-		id: z.string(),
-		name: z.string(),
-	});
+    export const GetUserResponse = z.object({
+    	id: z.string(),
+    	name: z.string(),
+    });
 
-	export const UserNotFoundResponse = z.object({
-		message: z.string(),
-	});
-	```
+    export const UserNotFoundResponse = z.object({
+    	message: z.string(),
+    });
+    ```
 
 2. Create the route file. The folder path becomes the URL path, and `$userId` becomes the
    `:userId` parameter.
 
-	```ts title="src/routes/users/$userId/route.ts"
-	import { createRoute, createRouteRoot } from "@routa-ts/core";
-	import { GetUserParams, GetUserResponse, UserNotFoundResponse } from "./schemas.js";
+   ```ts title="src/routes/users/$userId/route.ts"
+   import { createRoute, createRouteRoot } from "@routa-ts/core";
+   import { GetUserParams, GetUserResponse, UserNotFoundResponse } from "./schemas.js";
 
-	const route = createRouteRoot("/users/:userId");
+   const route = createRouteRoot("/users/:userId");
 
-	export default route({
-		get: createRoute({
-			input: {
-				params: GetUserParams,
-			},
-			responses: {
-				success: {
-					status: 200,
-					schema: GetUserResponse,
-				},
-				notFound: {
-					status: 404,
-					schema: UserNotFoundResponse,
-				},
-			},
-			run: async ({ input }) => {
-				if (input.params.userId !== "usr_1") {
-					return { type: "notFound", data: { message: "User not found." } };
-				}
+   export default route({
+   	get: createRoute({
+   		input: {
+   			params: GetUserParams,
+   		},
+   		responses: {
+   			success: {
+   				status: 200,
+   				schema: GetUserResponse,
+   			},
+   			notFound: {
+   				status: 404,
+   				schema: UserNotFoundResponse,
+   			},
+   		},
+   		run: async ({ input }) => {
+   			if (input.params.userId !== "usr_1") {
+   				return { type: "notFound", data: { message: "User not found." } };
+   			}
 
-				return { type: "success", data: { id: input.params.userId, name: "Ada" } };
-			},
-		}),
-	});
-	```
+   			return { type: "success", data: { id: input.params.userId, name: "Ada" } };
+   		},
+   	}),
+   });
+   ```
 
 3. Generate route metadata so the new path is registered and typed.
 
-	<PackageManagers type="run" args="generate" />
+   <PackageManagers type="run" args="generate" />
 
-	```txt
-	Generated .routa/routes.gen.ts for 2 route file(s).
-	```
+   ```txt
+   Generated .routa/routes.gen.ts for 2 route file(s).
+   ```
 
 4. Start the development server.
 
-	<PackageManagers type="run" args="dev" />
+   <PackageManagers type="run" args="dev" />
 
-	```txt
-	INFO api.started Routa API started. {"host":"127.0.0.1","port":3000,"routes":2}
-	```
+   ```txt
+   INFO api.started Routa API started. {"host":"127.0.0.1","port":3000,"routes":2}
+   ```
 
 </Steps>
 
@@ -131,12 +131,12 @@ schema before serializing it with the declared status.
 
 ## Troubleshooting
 
-| Problem | Fix |
-| --- | --- |
-| `ROUTA_ROUTE_CONFIG_UNRESOLVED` | The file must have a default export produced by the `createRouteRoot(path)` helper. Assigning the config to a variable that is exported later cannot be resolved statically. |
-| `ROUTA_MISSING_SUCCESS_RESPONSE` | Every method needs at least one response with a 2xx status. |
-| `ROUTA_RESULT_TYPE` | The handler returned a name that is not a key of `responses`. Check for a typo or add the outcome. |
-| The route returns 404 for every request. | Metadata is stale. Run `routa generate` and restart the server. |
+| Problem                                  | Fix                                                                                                                                                                          |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ROUTA_ROUTE_CONFIG_UNRESOLVED`          | The file must have a default export produced by the `createRouteRoot(path)` helper. Assigning the config to a variable that is exported later cannot be resolved statically. |
+| `ROUTA_MISSING_SUCCESS_RESPONSE`         | Every method needs at least one response with a 2xx status.                                                                                                                  |
+| `ROUTA_RESULT_TYPE`                      | The handler returned a name that is not a key of `responses`. Check for a typo or add the outcome.                                                                           |
+| The route returns 404 for every request. | Metadata is stale. Run `routa generate` and restart the server.                                                                                                              |
 
 <Aside type="tip" title="Contract first">
 	Write `input` and `responses` before writing `run`. Once both are declared, the handler

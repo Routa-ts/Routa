@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
-import { createMiddleware, createRoute } from "./index.js";
+import { createMiddleware, createRoute, createRouteRootFactory } from "./index.js";
 import { createLogger } from "./logger.js";
 import { createRequestExecutor, type RuntimeRouteContract } from "./request-execution.js";
 
@@ -20,18 +20,23 @@ describe("createRequestExecutor", () => {
 				return next({ user: input.params.id });
 			},
 		});
-		const contract = createRoute({
-			middleware: [addUser],
-			input: { query: z.object({ include: z.string() }) },
-			responses: {
-				success: { status: 200, schema: z.object({ user: z.string(), include: z.string() }) },
-			},
-			run: ({ input, ctx, response }) => {
-				events.push("handler");
-				return response.success({ user: ctx.user, include: input.query.include });
-			},
-		});
-		const execute = createRequestExecutor(contract as RuntimeRouteContract, executionOptions);
+		const contract = createRouteRootFactory<{ "/users": { get: { user: string } } }>()("/users")({
+			get: createRoute({
+				middleware: [addUser],
+				input: { query: z.object({ include: z.string() }) },
+				responses: {
+					success: { status: 200, schema: z.object({ user: z.string(), include: z.string() }) },
+				},
+				run: ({ input, ctx, response }) => {
+					events.push("handler");
+					return response.success({ user: ctx.user, include: input.query.include });
+				},
+			}),
+		}).get;
+		const execute = createRequestExecutor(
+			contract as unknown as RuntimeRouteContract,
+			executionOptions,
+		);
 
 		const response = await execute(new Request("http://local/users?include=posts"), {
 			id: "user_1",
@@ -61,7 +66,7 @@ describe("createRequestExecutor", () => {
 						: response.notFound({ message: "missing" });
 				},
 			});
-			const execute = createRequestExecutor(contract as RuntimeRouteContract, {
+			const execute = createRequestExecutor(contract as unknown as RuntimeRouteContract, {
 				...executionOptions,
 				validateResponses,
 			});
@@ -79,7 +84,10 @@ describe("createRequestExecutor", () => {
 			responses: { ok: { status: 200, schema: z.object({ id: z.string() }) } },
 			run: ({ response }) => response.ok({ id: 42 } as never),
 		});
-		const execute = createRequestExecutor(contract as RuntimeRouteContract, executionOptions);
+		const execute = createRequestExecutor(
+			contract as unknown as RuntimeRouteContract,
+			executionOptions,
+		);
 		const response = await execute(new Request("http://local/users"), {});
 		expect(response.status).toBe(500);
 		await expect(response.json()).resolves.toMatchObject({ title: "Invalid handler output" });
@@ -96,7 +104,10 @@ describe("createRequestExecutor", () => {
 					return build("value");
 				},
 			});
-			const execute = createRequestExecutor(contract as RuntimeRouteContract, executionOptions);
+			const execute = createRequestExecutor(
+				contract as unknown as RuntimeRouteContract,
+				executionOptions,
+			);
 			const response = await execute(new Request("http://local/status"), {});
 			expect(response.status).toBe(200);
 			await expect(response.json()).resolves.toBe("value");
@@ -110,7 +121,10 @@ describe("createRequestExecutor", () => {
 			},
 			run: () => ({ type: "missing", data: {} }) as never,
 		});
-		const execute = createRequestExecutor(contract as RuntimeRouteContract, executionOptions);
+		const execute = createRequestExecutor(
+			contract as unknown as RuntimeRouteContract,
+			executionOptions,
+		);
 
 		const response = await execute(new Request("http://local/status"), {});
 

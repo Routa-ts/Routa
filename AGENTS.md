@@ -65,7 +65,7 @@ These repository rules take precedence over installed skills' PR workflows and t
 - Create a pull request only when the user explicitly asks.
 - Open every pull request ready for review. Never create a draft, including through `implement-spec`.
 - Preserve the current branch scope unless the user asks to split it.
-- Before opening a PR, follow `CONTRIBUTING.md` and require `pnpm verify` to pass. Add a changeset when publishable package behavior changes.
+- Before opening a PR, follow `CONTRIBUTING.md` and require `vp run verify` to pass. Add a changeset when publishable package behavior changes.
 - Use a plain, imperative title. In the body, explain the problem, the change, verification, and the documentation or changeset decision.
 - Use `.github/PULL_REQUEST_TEMPLATE.md` for the body. It follows the `pr` skill's Summary, Evidence, and Merge danger structure with Routa's verification, documentation, changeset, and migration details.
 - Keep Dex task IDs out of commits, PRs, release notes, and permanent documentation.

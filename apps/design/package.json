@@ -8,9 +8,11 @@
 		"build": "node ./scripts/astro.mjs build",
 		"check": "node ./scripts/astro.mjs check",
 		"dev": "node ./scripts/astro.mjs dev",
-		"lint": "biome check .",
+		"lint": "vp lint",
 		"preview": "node ./scripts/astro.mjs preview",
-		"typecheck": "node ./scripts/astro.mjs check"
+		"typecheck": "node ./scripts/astro.mjs check",
+		"format": "vp fmt",
+		"sync": "vp exec node ./scripts/astro.mjs sync"
 	},
 	"dependencies": {
 		"@astrojs/starlight": "^0.42.6",

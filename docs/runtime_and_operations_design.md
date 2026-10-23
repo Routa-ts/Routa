@@ -13,12 +13,12 @@ This document records decisions for Group 5 in small parts.
 - Logging backends should be easy to plug in through a custom logger or adapter; Routa's public contract does not depend on any logging package.
 - Custom loggers must implement Routa's logger interface.
 - The logger interface supports common levels:
-	- `trace`
-	- `debug`
-	- `info`
-	- `warn`
-	- `error`
-	- `fatal`
+  - `trace`
+  - `debug`
+  - `info`
+  - `warn`
+  - `error`
+  - `fatal`
 - The logger interface includes a `silent` no-op for explicitly discarded events.
 - The logger interface supports child loggers with bindings.
 - The logger interface supports binding inspection and level checks.

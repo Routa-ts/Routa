@@ -64,12 +64,12 @@ Copper for seals and emphasis; cool gray stone for the page; warm ink for body c
 	</div>
 </div>
 
-| Token | Role | Feeling |
-| --- | --- | --- |
-| Copper | CTAs, links, seals | Authority without neon |
-| Stone ground | Page chrome | Quiet archive |
-| Newsreader | Headings + prose | Editorial, signed |
-| IBM Plex Mono | Schemas & CLI | Clerk’s hand |
+| Token         | Role               | Feeling                |
+| ------------- | ------------------ | ---------------------- |
+| Copper        | CTAs, links, seals | Authority without neon |
+| Stone ground  | Page chrome        | Quiet archive          |
+| Newsreader    | Headings + prose   | Editorial, signed      |
+| IBM Plex Mono | Schemas & CLI      | Clerk’s hand           |
 
 ## Status seals
 
@@ -136,28 +136,28 @@ Copper for seals and emphasis; cool gray stone for the page; warm ink for body c
 
 1. Open a new ledger (project).
 
-	```sh
-	pnpm create routa-ts@latest
-	```
+   ```sh
+   pnpm create routa-ts@latest
+   ```
 
 2. Enter the first line item — a route contract.
 
-	```ts
-	export default createRouteRoot("/users")({
-		get: createRoute({
-			responses: {
-				success: { status: 200, schema: UserSchema },
-			},
-			run: async ({ ctx }) => users.list(ctx),
-		}),
-	});
-	```
+   ```ts
+   export default createRouteRoot("/users")({
+   	get: createRoute({
+   		responses: {
+   			success: { status: 200, schema: UserSchema },
+   		},
+   		run: async ({ ctx }) => users.list(ctx),
+   	}),
+   });
+   ```
 
 3. Countersign with check, then serve.
 
-	```sh
-	pnpm routa check && pnpm routa start
-	```
+   ```sh
+   pnpm routa check && pnpm routa start
+   ```
 
 </Steps>
 
@@ -166,17 +166,17 @@ Copper for seals and emphasis; cool gray stone for the page; warm ink for body c
 <FileTree>
 
 - src/
-	- routes/
-		- auth/
-			- session/
-				- route.ts
-				- schemas.ts
-		- (private)/
-			- tenants/
-				- $tenantId/
-					- route.ts
-	- middleware/
-		- auth.ts
+  - routes/
+    - auth/
+      - session/
+        - route.ts
+        - schemas.ts
+    - (private)/
+      - tenants/
+        - $tenantId/
+          - route.ts
+  - middleware/
+    - auth.ts
 - openapi.yaml
 
 </FileTree>

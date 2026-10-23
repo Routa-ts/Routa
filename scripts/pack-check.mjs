@@ -15,13 +15,17 @@ const appDir = join(tmp, "app");
 const packages = ["@routa-ts/core", "create-routa-ts", "@routa-ts/cli"];
 const tarballs = new Map();
 
-run("pnpm", ["--filter", "./packages/*", "build"], root);
+run("vp", ["run", "build:packages"], root);
 mkdirSync(packDir, { recursive: true });
+writeFileSync(
+	join(tmp, "package.json"),
+	JSON.stringify({ private: true, packageManager: "pnpm@11.9.0" }),
+);
 
 for (const packageName of packages) {
 	const output = run(
-		"pnpm",
-		["--filter", packageName, "pack", "--pack-destination", packDir],
+		"vp",
+		["pm", "pack", "--filter", packageName, "--pack-destination", packDir],
 		root,
 	);
 	const tarball = output
@@ -58,7 +62,7 @@ for (const requiredFile of ["package/dist/cli.js", "package/dist/index.js"]) {
 }
 
 run(
-	"pnpm",
+	"vp",
 	["dlx", `file:${tarballs.get("create-routa-ts")}`, "app", "--no-git", "--no-install", "--yes"],
 	tmp,
 );
@@ -73,16 +77,16 @@ writeFileSync(
 	`overrides:\n  "@routa-ts/cli": "file:${tarballs.get("@routa-ts/cli")}"\n  "@routa-ts/core": "file:${tarballs.get("@routa-ts/core")}"\n  "create-routa-ts": "file:${tarballs.get("create-routa-ts")}"\nallowBuilds:\n  esbuild: true\n`,
 );
 
-run("pnpm", ["install"], appDir);
-run("pnpm", ["exec", "routa", "check"], appDir);
-run("pnpm", ["exec", "routa", "build"], appDir);
-run("pnpm", ["test"], appDir);
-run("pnpm", ["exec", "routa", "openapi", "check"], appDir);
+run("vp", ["install"], appDir);
+run("vp", ["exec", "routa", "check"], appDir);
+run("vp", ["exec", "routa", "build"], appDir);
+run("vp", ["run", "test"], appDir);
+run("vp", ["exec", "routa", "openapi", "check"], appDir);
 await smokeTestStart(appDir);
 
 const noOpenApiDir = join(tmp, "app-no-openapi");
 run(
-	"pnpm",
+	"vp",
 	[
 		"dlx",
 		`file:${tarballs.get("create-routa-ts")}`,
@@ -103,10 +107,10 @@ writeFileSync(
 	join(noOpenApiDir, "pnpm-workspace.yaml"),
 	`overrides:\n  "@routa-ts/cli": "file:${tarballs.get("@routa-ts/cli")}"\n  "@routa-ts/core": "file:${tarballs.get("@routa-ts/core")}"\n  "create-routa-ts": "file:${tarballs.get("create-routa-ts")}"\nallowBuilds:\n  esbuild: true\n`,
 );
-run("pnpm", ["install"], noOpenApiDir);
-run("pnpm", ["exec", "routa", "check"], noOpenApiDir);
-run("pnpm", ["exec", "routa", "build"], noOpenApiDir);
-run("pnpm", ["test"], noOpenApiDir);
+run("vp", ["install"], noOpenApiDir);
+run("vp", ["exec", "routa", "check"], noOpenApiDir);
+run("vp", ["exec", "routa", "build"], noOpenApiDir);
+run("vp", ["run", "test"], noOpenApiDir);
 
 process.stdout.write(`Pack check passed in ${basename(tmp)}.\n`);
 
@@ -118,9 +122,9 @@ process.stdout.write(`Pack check passed in ${basename(tmp)}.\n`);
  */
 async function smokeTestStart(cwd) {
 	const port = await freePort();
-	// detached puts the pnpm -> routa -> node chain in its own process group so
+	// detached puts the vp -> routa -> node chain in its own process group so
 	// the whole tree can be killed once the smoke test finishes.
-	const child = spawn("pnpm", ["exec", "routa", "start"], {
+	const child = spawn("vp", ["exec", "routa", "start"], {
 		cwd,
 		env: { ...process.env, PORT: String(port), HOST: "127.0.0.1" },
 		stdio: ["ignore", "pipe", "pipe"],

@@ -15,68 +15,68 @@ concurrency:
 jobs:
   repo-checks:
     name: Repo checks
-    uses: ./.github/workflows/node-pnpm-job.yml
+    uses: ./.github/workflows/node-vp-job.yml
     with:
-      command: pnpm check
+      command: vp run check
 
   lint:
     name: Lint
-    uses: ./.github/workflows/node-pnpm-job.yml
+    uses: ./.github/workflows/node-vp-job.yml
     with:
-      command: pnpm lint
+      command: vp run lint
 
   typecheck:
     name: Typecheck
-    uses: ./.github/workflows/node-pnpm-job.yml
+    uses: ./.github/workflows/node-vp-job.yml
     with:
-      command: pnpm typecheck
+      command: vp run typecheck
 
   test:
     name: Test
-    uses: ./.github/workflows/node-pnpm-job.yml
+    uses: ./.github/workflows/node-vp-job.yml
     with:
       command: |
-        pnpm --filter './packages/*' build
-        node scripts/link-local-cli.mjs --root "$GITHUB_WORKSPACE"
-        pnpm test
+        vp run build:packages
+        vp exec node scripts/link-local-cli.mjs --root "$GITHUB_WORKSPACE"
+        vp run test
 
   build:
     name: Build
-    uses: ./.github/workflows/node-pnpm-job.yml
+    uses: ./.github/workflows/node-vp-job.yml
     with:
       command: |
-        pnpm --filter './packages/*' build
-        node scripts/link-local-cli.mjs --root "$GITHUB_WORKSPACE"
-        pnpm build
+        vp run build:packages
+        vp exec node scripts/link-local-cli.mjs --root "$GITHUB_WORKSPACE"
+        vp run build
 
   docs:
     name: Docs
-    uses: ./.github/workflows/node-pnpm-job.yml
+    uses: ./.github/workflows/node-vp-job.yml
     with:
-      command: pnpm --filter @routa-ts/docs build
+      command: vp run --filter @routa-ts/docs build
 
   design:
     name: Design lab
-    uses: ./.github/workflows/node-pnpm-job.yml
+    uses: ./.github/workflows/node-vp-job.yml
     with:
-      command: pnpm --filter @routa-ts/design build
+      command: vp run --filter @routa-ts/design build
 
   cli-validation:
     name: CLI validation
-    uses: ./.github/workflows/node-pnpm-job.yml
+    uses: ./.github/workflows/node-vp-job.yml
     with:
       command: |
-        pnpm --filter './packages/*' build
-        node scripts/link-local-cli.mjs --root "$GITHUB_WORKSPACE"
-        pnpm build
-        pnpm --filter './examples/*' check
-        pnpm --filter './examples/*' openapi:check
-        node scripts/check-generated.mjs
+        vp run build:packages
+        vp exec node scripts/link-local-cli.mjs --root "$GITHUB_WORKSPACE"
+        vp run build
+        vp run --filter './examples/*' check
+        vp run --filter './examples/*' openapi:check
+        vp exec node scripts/check-generated.mjs
         scripts/scaffold-error-smoke.sh
 
   pack-check:
     name: Pack check
-    uses: ./.github/workflows/node-pnpm-job.yml
+    uses: ./.github/workflows/node-vp-job.yml
     with:
       timeout-minutes: 20
-      command: pnpm pack:check
+      command: vp run pack:check

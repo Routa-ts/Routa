@@ -78,8 +78,8 @@ export type MiddlewareOpenApi = {
 	permissions?: readonly string[];
 };
 
-export type MiddlewareProvidesKeys<TProvides extends MiddlewareProvidesSpec> = keyof TProvides &
-	string;
+export type MiddlewareProvidesKeys<TProvides extends MiddlewareProvidesSpec> = keyof TProvides
+	& string;
 
 export type MiddlewareProvidedCtx<TProvides extends MiddlewareProvidesSpec> = {
 	[K in keyof TProvides]: SchemaOutput<TProvides[K]>;
@@ -242,7 +242,7 @@ type CtxForMethod<TCtxByMethod, TMethod extends HttpMethod> = TMethod extends ke
 	? TCtxByMethod[TMethod]
 	: unknown;
 
-// biome-ignore lint/suspicious/noEmptyInterface: Augmented by generated .routa/routes.gen.ts files.
+// Augmented by generated .routa/routes.gen.ts files.
 export interface Register {}
 
 type RegisteredRouteCtxByPath = Register extends {
@@ -306,9 +306,9 @@ export function createRouteRootFactory<
 	TCtxByPath extends Record<string, Partial<Record<HttpMethod, unknown>>>,
 >() {
 	return function createRouteRoot<const TPath extends keyof TCtxByPath & string>(_path: TPath) {
-		return function routeRoot<const TConfig extends RouteRootConfigForCtx<TCtxByPath[TPath]>>(
-			config: TConfig & NoExtraRouteKeys<TConfig>,
-		): TConfig {
+		return function routeRoot<
+			const TConfig extends RouteRootConfigForCtx<TCtxByPath[TPath]> & NoExtraRouteKeys<TConfig>,
+		>(config: TConfig): TConfig {
 			return config;
 		};
 	};
@@ -324,8 +324,9 @@ export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPa
 	_path: TPath,
 ) {
 	return function routeRoot<
-		const TConfig extends RouteRootConfigForCtx<RegisteredRouteCtxByPath[TPath]>,
-	>(config: TConfig & NoExtraRouteKeys<TConfig>): TConfig {
+		const TConfig extends RouteRootConfigForCtx<RegisteredRouteCtxByPath[TPath]>
+			& NoExtraRouteKeys<TConfig>,
+	>(config: TConfig): TConfig {
 		return config;
 	};
 }

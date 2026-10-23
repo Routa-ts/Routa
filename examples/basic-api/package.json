@@ -7,8 +7,8 @@
 		"start": "routa start",
 		"check": "routa check",
 		"build": "routa build",
-		"lint": "biome check .",
-		"format": "biome check --write .",
+		"lint": "vp lint",
+		"format": "vp fmt",
 		"scaffold": "routa scaffold openapi.yaml",
 		"openapi:check": "routa openapi check"
 	},
@@ -20,7 +20,6 @@
 		"zod": "^4.6.7"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.5.12",
 		"@types/node": "26.6.5",
 		"typescript": "7.0.2"
 	}

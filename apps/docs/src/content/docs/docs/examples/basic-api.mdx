@@ -6,17 +6,23 @@ description: A minimal Routa example covering routes, schemas, and generated met
 import { Aside, CardGrid, FileTree, LinkCard } from "@astrojs/starlight/components";
 
 `examples/basic-api` in the Routa repository is the smallest complete project: a handful
-of routes, route-local schemas, and committed `.routa/` metadata. It is the shape the
-scaffolder produces, with enough routes to show nesting and dynamic segments.
+of routes, route-local schemas, and committed `.routa/` metadata. Its route layout follows
+the scaffolder, with enough routes to show nesting and dynamic segments. Repository
+examples use Vite Plus for development; newly generated projects keep Biome and Vitest.
 
 ```sh
-pnpm install
-pnpm --filter basic-api dev
+vp install --frozen-lockfile
+vp run prepare:local-cli
+vp run --filter basic-api dev
 ```
 
 ```sh
 curl http://127.0.0.1:3000/users/usr_1
 ```
+
+The response is a JSON user with ID `usr_1`.
+
+The development server listens on `http://127.0.0.1:3000`.
 
 ## What Is Inside
 
@@ -56,13 +62,13 @@ part of the resolved path.
 
 ## What to Study
 
-| File | Shows |
-| --- | --- |
-| `src/routa.ts` | The minimum configuration a project needs |
-| `src/routes/status/route.ts` | The smallest possible contract |
-| `src/routes/users/route.ts` | A collection with more than one method |
-| `src/routes/users/$userId/route.ts` | A validated path parameter |
-| `.routa/routes.gen.ts` | What Routa derived from all of the above |
+| File                                | Shows                                     |
+| ----------------------------------- | ----------------------------------------- |
+| `src/routa.ts`                      | The minimum configuration a project needs |
+| `src/routes/status/route.ts`        | The smallest possible contract            |
+| `src/routes/users/route.ts`         | A collection with more than one method    |
+| `src/routes/users/$userId/route.ts` | A validated path parameter                |
+| `.routa/routes.gen.ts`              | What Routa derived from all of the above  |
 
 ## Limits
 

@@ -10,9 +10,12 @@ middleware, route groups, tenant-scoped context, flat and directory routing, dep
 metadata, automatic `OPTIONS`, scaffold workflows, and a custom logger adapter.
 
 ```sh
-pnpm install
-pnpm --filter full-api dev
+vp install --frozen-lockfile
+vp run prepare:local-cli
+vp run --filter full-api dev
 ```
+
+The development server listens on `http://127.0.0.1:3000`.
 
 ## What Is Inside
 
@@ -61,15 +64,15 @@ declarative while the implementations live in application-owned modules.
 
 ## What to Study
 
-| File | Shows |
-| --- | --- |
-| `src/routes/middleware.ts` | Root middleware applied to every route |
-| `src/middleware/context.ts` | Middleware `input` reading headers and cookies |
-| `src/middleware/admin.ts` | `requires`, `provides`, `rejects`, and `openapi.permissions` together |
-| `src/routes/(private)/tenants/$tenantId/middleware.ts` | Context derived from a path parameter |
-| `src/routes/legacy.ts` | Deprecation metadata with a replacement |
-| `src/logger.ts` | Adapting Pino to the `RoutaLogger` contract |
-| `src/routes/showcase/$itemId/route.ts` | Logging from a handler through `ctx.logger` |
+| File                                                   | Shows                                                                 |
+| ------------------------------------------------------ | --------------------------------------------------------------------- |
+| `src/routes/middleware.ts`                             | Root middleware applied to every route                                |
+| `src/middleware/context.ts`                            | Middleware `input` reading headers and cookies                        |
+| `src/middleware/admin.ts`                              | `requires`, `provides`, `rejects`, and `openapi.permissions` together |
+| `src/routes/(private)/tenants/$tenantId/middleware.ts` | Context derived from a path parameter                                 |
+| `src/routes/legacy.ts`                                 | Deprecation metadata with a replacement                               |
+| `src/logger.ts`                                        | Adapting Pino to the `RoutaLogger` contract                           |
+| `src/routes/showcase/$itemId/route.ts`                 | Logging from a handler through `ctx.logger`                           |
 
 ## The Logger Showcase
 
@@ -82,9 +85,12 @@ To run it, start the example with the showcase enabled and exercise it from a se
 terminal:
 
 ```sh
-ROUTA_DEMO_LOGGER_SHOWCASE=on LOG_LEVEL=trace pnpm --filter full-api dev
-pnpm --filter full-api logger:exercise
+ROUTA_DEMO_LOGGER_SHOWCASE=on LOG_LEVEL=trace vp run --filter full-api dev
+vp run --filter full-api logger:exercise
 ```
+
+The exercise prints responses from the logger showcase while the server emits the
+configured log levels.
 
 Restarting with `ROUTA_DEMO_LOGGER=off` runs the identical handler through Routa's
 complete no-op logger, which is the point: handler code does not change when logging is

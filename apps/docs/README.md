@@ -15,11 +15,11 @@ apps/docs/
 
 ## Commands
 
-| Command | Action |
-| --- | --- |
-| `pnpm --filter @routa-ts/docs dev` | Start local site (landing + docs) |
-| `pnpm --filter @routa-ts/docs build` | Build to `apps/docs/dist` |
-| `pnpm --filter @routa-ts/docs preview` | Preview the build |
-| `pnpm --filter @routa-ts/docs check` | Run Astro checks |
+| Command                                  | Action                            |
+| ---------------------------------------- | --------------------------------- |
+| `vp run --filter @routa-ts/docs dev`     | Start local site (landing + docs) |
+| `vp run --filter @routa-ts/docs build`   | Build to `apps/docs/dist`         |
+| `vp run --filter @routa-ts/docs preview` | Preview the build                 |
+| `vp run --filter @routa-ts/docs check`   | Run Astro checks                  |
 
 Landing composition: **Schematic** (chosen from `apps/design` landings review).

@@ -64,12 +64,12 @@ Trail ochre for wayfinding; slate mist for atmosphere; soft frost for readable l
 	</div>
 </div>
 
-| Token | Role | Feeling |
-| --- | --- | --- |
-| Ochre | Links, CTAs, trail marks | Warm wayfinding |
-| Slate | Chrome + panels | Cool elevation |
-| Outfit | UI + headings | Friendly cartography |
-| Fira Code | Paths & schemas | Trail markers in mono |
+| Token     | Role                     | Feeling               |
+| --------- | ------------------------ | --------------------- |
+| Ochre     | Links, CTAs, trail marks | Warm wayfinding       |
+| Slate     | Chrome + panels          | Cool elevation        |
+| Outfit    | UI + headings            | Friendly cartography  |
+| Fira Code | Paths & schemas          | Trail markers in mono |
 
 ## Legend badges
 
@@ -136,32 +136,32 @@ Trail ochre for wayfinding; slate mist for atmosphere; soft frost for readable l
 
 1. Stake the trailhead.
 
-	```sh
-	pnpm create routa-ts@latest
-	```
+   ```sh
+   pnpm create routa-ts@latest
+   ```
 
 2. Cut a new path under `src/routes`.
 
-	```ts
-	// src/routes/users/$userId/route.ts
-	export default createRouteRoot("/users/:userId")({
-		get: createRoute({
-			input: { params: UserParams },
-			responses: {
-				success: { status: 200, schema: UserSchema },
-				notFound: { status: 404, schema: ErrorSchema },
-			},
-			run: async ({ input }) => users.get(input.params.userId),
-		}),
-	});
-	```
+   ```ts
+   // src/routes/users/$userId/route.ts
+   export default createRouteRoot("/users/:userId")({
+   	get: createRoute({
+   		input: { params: UserParams },
+   		responses: {
+   			success: { status: 200, schema: UserSchema },
+   			notFound: { status: 404, schema: ErrorSchema },
+   		},
+   		run: async ({ input }) => users.get(input.params.userId),
+   	}),
+   });
+   ```
 
 3. Survey, then hike.
 
-	```sh
-	pnpm routa check
-	pnpm routa start
-	```
+   ```sh
+   pnpm routa check
+   pnpm routa start
+   ```
 
 </Steps>
 
@@ -170,20 +170,20 @@ Trail ochre for wayfinding; slate mist for atmosphere; soft frost for readable l
 <FileTree>
 
 - src/routes/
-	- status/
-		- route.ts
-	- users/
-		- route.ts
-		- $userId/
-			- route.ts
-			- posts/
-				- route.ts
-	- (private)/
-		- tenants/
-			- $tenantId/
-				- projects/
-					- $projectId/
-						- route.ts
+  - status/
+    - route.ts
+  - users/
+    - route.ts
+    - $userId/
+      - route.ts
+      - posts/
+        - route.ts
+  - (private)/
+    - tenants/
+      - $tenantId/
+        - projects/
+          - $projectId/
+            - route.ts
 
 </FileTree>
 

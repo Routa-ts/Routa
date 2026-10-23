@@ -212,7 +212,6 @@ responses: {
 - Combining the function-level check into `authorizeResource` avoids repetitive route declarations for object-protected routes.
 - Named response variants preserve Routa's `{ type, data }` runtime model while still allowing OpenAPI to document a single `200` response with generated `oneOf`.
 
-
 ## Part 2.4: Rate Limiting and Request Protection
 
 > The rate-limiting proposals below are superseded. The accepted V1 contract adapts application-owned decisions through ordinary middleware; applications own identity, quota, algorithm, storage, and backend resources. Memory support is editable application-owned scaffold code. Framework token-bucket defaults, global store configuration, built-in adapters, and automatic policy defaults below are historical proposals. See [Rate-limit decision](../GLOSSARY.md#language) and [HTTP-boundary ownership](adr/0002-own-only-the-http-boundary.md). Runtime delivery remains pending.
@@ -265,7 +264,6 @@ responses: {
 - Hybrid outage mode balances security and availability during incidents.
 - Keeping only `ip` and `auth` as public keys avoids accidental cross-route sharing while keeping route scoping automatic.
 - The Hono adapter can reuse mature Hono-compatible middleware without exposing Hono-specific rate-limit APIs as Routa's public contract.
-
 
 ## Part 2.5: CORS, Security Headers, and HTTPS Posture
 

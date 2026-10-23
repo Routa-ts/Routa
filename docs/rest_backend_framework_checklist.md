@@ -61,7 +61,7 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Use OpenAPI for generated docs
 - [x] Use OpenAPI for testing or contract checks
 - [x] Use OpenAPI for SDK generation
-  Decision note: emit SDK-ready OpenAPI for external generators; no built-in SDK generator in v1.
+      Decision note: emit SDK-ready OpenAPI for external generators; no built-in SDK generator in v1.
 - [x] Built-in pagination primitives
 - [x] Cursor pagination
 - [x] Offset pagination
@@ -71,11 +71,11 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Filtering conventions
 - [x] Sorting conventions
 - [x] Allowlisted filter fields
-  Decision note: allowlisted filters are declared by the route query schema; Routa does not add a separate filter DSL in v1.
+      Decision note: allowlisted filters are declared by the route query schema; Routa does not add a separate filter DSL in v1.
 - [x] Sparse fieldsets or response projections
 - [x] Protection against unrestricted arbitrary query execution
 - [x] Backward-compatible API changes by default
-  Decision note: Routa defaults to additive evolution posture through `routa openapi breaking` baseline comparison, not runtime enforcement.
+      Decision note: Routa defaults to additive evolution posture through `routa openapi breaking` baseline comparison, not runtime enforcement.
 - [x] Deprecation metadata
 - [x] Deprecation headers
 - [x] Strategy for breaking changes
@@ -121,7 +121,7 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Security headers for browser-consumed APIs
 - [x] HTTPS assumption
 - [x] No stack traces in production responses
-  Decision note: duplicates the core error-surface item; production stack traces are hidden by default.
+      Decision note: duplicates the core error-surface item; production stack traces are hidden by default.
 - [x] Guardrails to discourage sensitive data in URLs
 - [x] Header normalization
 - [ ] HTTP method allowlists
@@ -150,7 +150,7 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] No hardcoded secrets
 - [x] Config validation at startup
 - [x] Separate build, release, and run concerns
-  Decision note: v0 splits `routa check` from `routa build`; build reuses Routa graph validation and does not need a redundant `tsc --noEmit` pass before emit.
+      Decision note: v0 splits `routa check` from `routa build`; build reuses Routa graph validation and does not need a redundant `tsc --noEmit` pass before emit.
 
 ## Framework Architecture
 
@@ -160,17 +160,17 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Schema integration
 - [x] Middleware composition
 - [x] Dependency injection or service container
-  Decision note: optional wiring for application-owned dependencies; Routa does not generate or own business logic services.
+      Decision note: optional wiring for application-owned dependencies; Routa does not generate or own business logic services.
 - [x] Testing helpers
 - [x] Good defaults
 - [x] Escape hatches for advanced use cases
 - [x] Plugin or module system
-  Decision note: no plugin/module system in v1; Routa uses CLI integrations and narrow adapters instead.
+      Decision note: no plugin/module system in v1; Routa uses CLI integrations and narrow adapters instead.
 - [x] Replaceable logger
 - [x] Replaceable validator
-  Decision note: Zod is the only public v0 validator; internal boundaries should preserve future adapter options.
+      Decision note: Zod is the only public v0 validator; internal boundaries should preserve future adapter options.
 - [x] Replaceable serializer
-  Decision note: v1 uses built-in response representation helpers; arbitrary serializer registries are deferred.
+      Decision note: v1 uses built-in response representation helpers; arbitrary serializer registries are deferred.
 - [x] Replaceable auth provider
 - [x] Startup lifecycle hooks
 - [x] Shutdown lifecycle hooks
@@ -181,12 +181,12 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Unit testing route handlers
 - [x] Integration testing HTTP requests
 - [x] Contract testing against OpenAPI
-  Decision note: owned by CLI commands `routa openapi check` and `routa openapi breaking`, not test helpers.
+      Decision note: owned by CLI commands `routa openapi check` and `routa openapi breaking`, not test helpers.
 - [x] Security regression tests
 - [x] Error shape snapshot tests
 - [x] Middleware ordering tests
 - [x] Internal framework test matrix
-  Decision note: Routa needs layered internal tests for type behavior, graph validation, generation, CLI commands, OpenAPI drift, Hono runtime behavior, diagnostics, regeneration safety, and guardrails.
+      Decision note: Routa needs layered internal tests for type behavior, graph validation, generation, CLI commands, OpenAPI drift, Hono runtime behavior, diagnostics, regeneration safety, and guardrails.
 - [x] Stateless process model
 - [x] Port binding
 - [x] Fast startup
@@ -212,13 +212,13 @@ Use this checklist to mark what the framework already covers and identify what i
 - [x] Typed response variants
 - [x] Minimal middleware contracts
 - [x] Global, group, segment, route-file, and method middleware inheritance
-  Decision note: v0 uses `middleware.ts`; `(group)` folders affect middleware but not URL paths, and middleware resolves before route handler ctx inference.
+      Decision note: v0 uses `middleware.ts`; `(group)` folders affect middleware but not URL paths, and middleware resolves before route handler ctx inference.
 - [x] Route-specific ctx generation
-  Decision note: v0 records resolved route and middleware metadata in `.routa/routes.gen.ts`; ctx belongs to the route, not a global AppCtx.
+      Decision note: v0 records resolved route and middleware metadata in `.routa/routes.gen.ts`; ctx belongs to the route, not a global AppCtx.
 - [x] OpenAPI/check validation for generated and scaffolded contracts
-  Decision note: v0 project validation is `routa check`; it runs Routa graph validation plus TypeScript typechecking without JavaScript emit.
+      Decision note: v0 project validation is `routa check`; it runs Routa graph validation plus TypeScript typechecking without JavaScript emit.
 - [x] Build blocked by Routa graph validation failures
-  Decision note: `routa build` runs Routa graph validation first and must not emit JavaScript when graph validation fails.
+      Decision note: `routa build` runs Routa graph validation first and must not emit JavaScript when graph validation fails.
 - [ ] Fastify or Express adapters
 - [ ] Non-Zod schema adapters
 - [ ] Generated flat route output

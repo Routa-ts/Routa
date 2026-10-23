@@ -35,20 +35,20 @@ the complete list.
 
 ### Implemented
 
-| Area | v0 behavior |
-| --- | --- |
-| Runtime | Hono, served through `@hono/node-server` |
-| Schemas | Zod for inputs, middleware context, rejects, and responses |
-| Routing | Directory style, flat style, dynamic `$` segments, and `(group)` folders |
-| Methods | `get`, `post`, `put`, `patch`, `delete`, and explicit `head`; `OPTIONS` is automatic |
-| Middleware | Typed `requires` / `provides` / `rejects`, folder inheritance, per-method chains |
-| OpenAPI in | Scaffolding source from `.yaml`, `.yml`, and `.json` documents |
-| OpenAPI out | Generation from route contracts, drift checks, and breaking-change checks |
-| Generated files | `.routa/routes.gen.ts`, `.routa/manifest.json`, `.routa/openapi-baseline.json` |
-| CLI | `create`, `scaffold`, `dev`, `start`, `check`, `generate`, `build`, `routes`, `openapi check`, `openapi breaking` |
-| Logging | Backend-neutral `RoutaLogger` contract with a built-in console implementation |
-| Lifecycle | Route `deprecation` metadata with optional `Deprecation`, `Sunset`, and `Link` headers |
-| Query helpers | `Sort` and `Fields` parsers from `@routa-ts/core/query/helpers` |
+| Area            | v0 behavior                                                                                                       |
+| --------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Runtime         | Hono, served through `@hono/node-server`                                                                          |
+| Schemas         | Zod for inputs, middleware context, rejects, and responses                                                        |
+| Routing         | Directory style, flat style, dynamic `$` segments, and `(group)` folders                                          |
+| Methods         | `get`, `post`, `put`, `patch`, `delete`, and explicit `head`; `OPTIONS` is automatic                              |
+| Middleware      | Typed `requires` / `provides` / `rejects`, folder inheritance, per-method chains                                  |
+| OpenAPI in      | Scaffolding source from `.yaml`, `.yml`, and `.json` documents                                                    |
+| OpenAPI out     | Generation from route contracts, drift checks, and breaking-change checks                                         |
+| Generated files | `.routa/routes.gen.ts`, `.routa/manifest.json`, `.routa/openapi-baseline.json`                                    |
+| CLI             | `create`, `scaffold`, `dev`, `start`, `check`, `generate`, `build`, `routes`, `openapi check`, `openapi breaking` |
+| Logging         | Backend-neutral `RoutaLogger` contract with a built-in console implementation                                     |
+| Lifecycle       | Route `deprecation` metadata with optional `Deprecation`, `Sunset`, and `Link` headers                            |
+| Query helpers   | `Sort` and `Fields` parsers from `@routa-ts/core/query/helpers`                                                   |
 
 ### Deferred
 
@@ -56,7 +56,7 @@ the complete list.
 - Non-Zod schema adapters
 - Client SDK generation
 - A plugin system
-- Built-in auth provider integrations; v0 makes security *visible* in OpenAPI but never
+- Built-in auth provider integrations; v0 makes security _visible_ in OpenAPI but never
   implements authentication
 - Response caching, rate limiting, and broad observability features
 - A generated hosted API reference UI

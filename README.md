@@ -65,20 +65,23 @@ examples/full-api/    Middleware, groups, and tenant-scoped example app
 scripts/              Build, packaging, and CI helper scripts
 ```
 
-The repo uses pnpm workspaces and Turborepo for package task orchestration.
+The repo uses pnpm workspace metadata and Vite Plus for development tooling and task orchestration.
 
 ## Development
 
-Developing Routa requires Node.js 24+ and pnpm 11.9.0. The repository includes
-`.nvmrc` and pins pnpm in `package.json`.
+Developing Routa requires Node.js 24.11+ on the Node 24 line, or Node.js 26+,
+and Vite Plus 1.3.0. The repository includes
+`.nvmrc` and pins the backing package manager to pnpm 11.9.0 in `package.json`.
+See [Contributing](./CONTRIBUTING.md) for Vite Plus installation.
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm verify
+vp install --frozen-lockfile
+vp run verify
 ```
 
-`pnpm verify` matches the full local pre-PR workflow. During iteration, use `pnpm quality`
-for formatting, typechecking, and unit tests; Turborepo caches repeated work.
+`vp run verify` matches the full local pre-PR workflow. During iteration, use `vp run quality`
+for formatting, typechecking, and unit tests. Vite Task caches package builds; validation
+always executes.
 
 ## Start Here
 

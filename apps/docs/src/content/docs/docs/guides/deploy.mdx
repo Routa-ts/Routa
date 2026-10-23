@@ -22,19 +22,19 @@ correct for local development and wrong inside a container.
 1. Build. Validation runs first, so a contract error stops the deploy before it produces
    an artifact.
 
-	<PackageManagers type="run" args="build" />
+    <PackageManagers type="run" args="build" />
 
 2. Bind to all interfaces. Set `HOST` in the environment rather than in `src/routa.ts`, so
    local development keeps its safe default.
 
-	<PackageManagers type="run" args="start" env="HOST=0.0.0.0" />
+   <PackageManagers type="run" args="start" env="HOST=0.0.0.0" />
 
 3. Accept a platform-assigned port when your host provides one.
 
-	Leave `PORT` unset so the platform can inject its assigned value. For example, if the
-	platform supplies `PORT=8080`, start with only the host override:
+   Leave `PORT` unset so the platform can inject its assigned value. For example, if the
+   platform supplies `PORT=8080`, start with only the host override:
 
-	<PackageManagers type="run" args="start" env="HOST=0.0.0.0" />
+   <PackageManagers type="run" args="start" env="HOST=0.0.0.0" />
 
 </Steps>
 
@@ -51,11 +51,11 @@ The start log confirms the bound address:
 `routa start` reads compiled JavaScript from `dist/`, but it still validates the route
 graph from source before starting. Keep all four in the image:
 
-| Path | Why |
-| --- | --- |
-| `src/` | Route validation reads the TypeScript source |
-| `.routa/` | Route metadata and the baseline used by validation |
-| `dist/` | The JavaScript that actually runs |
+| Path            | Why                                                |
+| --------------- | -------------------------------------------------- |
+| `src/`          | Route validation reads the TypeScript source       |
+| `.routa/`       | Route metadata and the baseline used by validation |
+| `dist/`         | The JavaScript that actually runs                  |
 | `node_modules/` | Production dependencies, including `@routa-ts/cli` |
 
 This is also why generated apps keep `@routa-ts/cli` in `dependencies` rather than
@@ -87,19 +87,19 @@ CMD ["npm", "run", "start"]
 
 Environment variables win over `src/routa.ts`, which wins over Routa's defaults:
 
-| Setting | Environment | Config | Default |
-| --- | --- | --- | --- |
-| Host | `HOST` | `host` | `127.0.0.1` |
-| Port | `PORT` | `port` | `3000` |
+| Setting | Environment | Config | Default     |
+| ------- | ----------- | ------ | ----------- |
+| Host    | `HOST`      | `host` | `127.0.0.1` |
+| Port    | `PORT`      | `port` | `3000`      |
 
 ## Troubleshooting
 
-| Problem | Fix |
-| --- | --- |
-| Health checks fail although the container is running | The server bound to `127.0.0.1`. Set `HOST=0.0.0.0`. |
-| `Missing compiled runtime output for … Run routa build first.` | `dist/` was not copied into the runtime stage, or the build stage was skipped. |
-| `Compiled runtime output for … is stale.` | Source files were copied after the build. Copy `src/` and `dist/` from the same stage. |
-| `ROUTA_PROJECT_REQUIRED` at startup | `src/` or `src/routa.ts` is missing from the image. Validation needs the source. |
+| Problem                                                        | Fix                                                                                    |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Health checks fail although the container is running           | The server bound to `127.0.0.1`. Set `HOST=0.0.0.0`.                                   |
+| `Missing compiled runtime output for … Run routa build first.` | `dist/` was not copied into the runtime stage, or the build stage was skipped.         |
+| `Compiled runtime output for … is stale.`                      | Source files were copied after the build. Copy `src/` and `dist/` from the same stage. |
+| `ROUTA_PROJECT_REQUIRED` at startup                            | `src/` or `src/routa.ts` is missing from the image. Validation needs the source.       |
 
 <Aside type="caution" title="v0 status">
 	Production builds and `routa start` are implemented in v0 for Node.js deployments.

@@ -26,18 +26,32 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 				<circle class="node" cx="820" cy="480" r="8" />
 				<circle class="node" cx="780" cy="180" r="7" />
 				<circle class="node lit" cx="980" cy="320" r="8" />
-				<text x="150" y="455">route</text>
-				<text x="390" y="255">schema</text>
-				<text x="500" y="120">middleware</text>
-				<text x="640" y="395">handler</text>
-				<text x="800" y="515">response</text>
-				<text x="760" y="160">openapi</text>
-				<text x="960" y="300">check</text>
+				<text x="150" y="455">
+					route
+				</text>
+				<text x="390" y="255">
+					schema
+				</text>
+				<text x="500" y="120">
+					middleware
+				</text>
+				<text x="640" y="395">
+					handler
+				</text>
+				<text x="800" y="515">
+					response
+				</text>
+				<text x="760" y="160">
+					openapi
+				</text>
+				<text x="960" y="300">
+					check
+				</text>
 			</svg>
 
 			<div class="hero-copy">
 				<div class="brand-mark">
-					<img src="/favicon.svg" alt="" width="40" height="40">
+					<img src="/favicon.svg" alt="" width="40" height="40" />
 					Routa
 					<span class="dot" aria-hidden="true"></span>
 				</div>
@@ -47,8 +61,12 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 					claim first — then the proof below.
 				</p>
 				<div class="cta-row">
-					<a class="btn btn-primary" href="https://routa-ts.dev/docs/">Get started</a>
-					<a class="btn btn-ghost" href="https://github.com/Routa-ts/Routa">GitHub</a>
+					<a class="btn btn-primary" href="https://routa-ts.dev/docs/">
+						Get started
+					</a>
+					<a class="btn btn-ghost" href="https://github.com/Routa-ts/Routa">
+						GitHub
+					</a>
 				</div>
 				<div class="cli" data-cmd="pnpm create routa-ts@latest">
 					<span>$ pnpm create routa-ts@latest</span>
@@ -67,9 +85,11 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 				</p>
 				<div class="compare">
 					<div class="code-panel">
-						<div class="code-panel__bar"><span>without Routa</span><span>vibes</span></div>
-						<pre
-						><code>app.post(<span class="str">"/users"</span>, <span class="kw">async</span> (c) => {"{"}
+						<div class="code-panel__bar">
+							<span>without Routa</span>
+							<span>vibes</span>
+						</div>
+						<pre><code>app.post(<span class="str">"/users"</span>, <span class="kw">async</span> (c) => {"{"}
   <span class="kw">const</span> body = <span class="kw">await</span> c.req.json();
   <span class="cm">// validate… somewhere?</span>
   <span class="kw">const</span> user = <span class="kw">await</span> create(body);
@@ -77,9 +97,11 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 {"}"});</code></pre>
 					</div>
 					<div class="code-panel">
-						<div class="code-panel__bar"><span>with Routa</span><span>contract</span></div>
-						<pre
-						><code><span class="kw">export default</span> <span class="fn">createRouteRoot</span>(<span class="str">"/users"</span>)({"{"}
+						<div class="code-panel__bar">
+							<span>with Routa</span>
+							<span>contract</span>
+						</div>
+						<pre><code><span class="kw">export default</span> <span class="fn">createRouteRoot</span>(<span class="str">"/users"</span>)({"{"}
   post: <span class="fn">createRoute</span>({"{"}
     input: {"{"} body: CreateUserSchema {"}"},
     responses: {"{"}
@@ -115,7 +137,9 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 					<li>OpenAPI</li>
 					<li>TypeScript</li>
 				</ul>
-				<p class="v0-note"><strong>v0</strong> — diagrammatic, not cosmic. No fake logos.</p>
+				<p class="v0-note">
+					<strong>v0</strong> — diagrammatic, not cosmic. No fake logos.
+				</p>
 			</div>
 		</section>
 
@@ -126,10 +150,12 @@ import LandingLayout from "../../layouts/LandingLayout.astro";
 					<p>From first route to OpenAPI lockstep.</p>
 				</div>
 				<div class="cta-row">
-					<a class="btn btn-primary" href="https://routa-ts.dev/docs/start/quickstart/"
-						>Quickstart</a
-					>
-					<a class="btn btn-ghost" href="/landings/">All options</a>
+					<a class="btn btn-primary" href="https://routa-ts.dev/docs/start/quickstart/">
+						Quickstart
+					</a>
+					<a class="btn btn-ghost" href="/landings/">
+						All options
+					</a>
 				</div>
 			</div>
 		</section>

@@ -30,8 +30,8 @@ Runtime configuration is executable and typed in `src/routa.ts`:
 | Public feature                                                          | Concrete example                                                                                     |
 | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | Typed route contracts and validated results                             | Every file in `src/routes`; `GET /showcase/:itemId` has route-owned `success` and `notFound` results |
-| GET, POST, PUT, PATCH, DELETE, HEAD                                    | Application-owned contracts; `src/routes/showcase/$itemId/route.ts` adds PUT and explicit HEAD       |
-| Automatic OPTIONS and derived `Allow`                                 | `OPTIONS /showcase/:itemId` advertises GET, HEAD, OPTIONS, and PUT                                   |
+| GET, POST, PUT, PATCH, DELETE, HEAD                                     | Application-owned contracts; `src/routes/showcase/$itemId/route.ts` adds PUT and explicit HEAD       |
+| Automatic OPTIONS and derived `Allow`                                   | `OPTIONS /showcase/:itemId` advertises GET, HEAD, OPTIONS, and PUT                                   |
 | 200, 201, 204, 400, 401, 403, 404, 405, 406, 415                        | Runnable requests below                                                                              |
 | Params, query, headers, cookies, JSON body                              | Project, session, audit, and showcase routes                                                         |
 | Zod parsing and coercion                                                | `verbose` uses `z.stringbool()`; scaffold query parameters generate boolean/number coercion          |
@@ -40,8 +40,8 @@ Runtime configuration is executable and typed in `src/routa.ts`:
 | `Fields()` and `Sort()` query helpers                                   | `GET /tenants/:tenantId/projects`                                                                    |
 | Directory, flat, dynamic-flat, group, and dynamic-segment routing       | `status/route.ts`, `legacy.ts`, `legacy.$id.ts`, `(private)`, `$tenantId`                            |
 | Local and absolute-URL deprecation replacements                         | `/legacy` points to `/status`; `/legacy/:id` points to a reserved `.invalid` external URL            |
-| Host, port, env overrides, disabled/custom logger                       | `src/routa.ts`, `src/logger.ts`, and start commands above                                             |
-| Complete typed logger in route context                                  | `POST /logger-showcase` and `pnpm logger:exercise` exercise every `RoutaLogger` capability             |
+| Host, port, env overrides, disabled/custom logger                       | `src/routa.ts`, `src/logger.ts`, and start commands above                                            |
+| Complete typed logger in route context                                  | `POST /logger-showcase` and `pnpm logger:exercise` exercise every `RoutaLogger` capability           |
 | OpenAPI drift and breaking-change baseline                              | `.routa/openapi-baseline.json` and scripts below                                                     |
 | Safe scaffold preview/update with manifest ownership                    | `scaffold/openapi.yaml` and `scaffold/.routa/manifest.json`                                          |
 | Scaffolded formats, nullable values, maps, unions, const                | `scaffold/src/routes/catalog/items/$itemId/schemas.ts`                                               |
@@ -112,14 +112,14 @@ pnpm logger:exercise
 
 The script sends one request for each capability:
 
-| Capability | Concrete behavior |
-| --- | --- |
-| `log` | Sends a complete structured Routa event at `info`. |
-| `trace`, `debug`, `info`, `warn`, `error`, `fatal` | Calls the matching typed method with event name, message, and structured data. |
-| `silent` | Calls the typed no-op; no route-owned event is emitted, though the normal `http.request` lifecycle event still appears. |
-| `child` | Derives a logger carrying `showcase` and middleware-provided `requestId` bindings. |
-| `bindings` | Reads the child bindings and returns only confirmation booleans, never backend-owned process or host fields. |
-| `isLevelEnabled` | Checks the requested level; the response shows both that result and whether the operation log was emitted. |
+| Capability                                         | Concrete behavior                                                                                                       |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `log`                                              | Sends a complete structured Routa event at `info`.                                                                      |
+| `trace`, `debug`, `info`, `warn`, `error`, `fatal` | Calls the matching typed method with event name, message, and structured data.                                          |
+| `silent`                                           | Calls the typed no-op; no route-owned event is emitted, though the normal `http.request` lifecycle event still appears. |
+| `child`                                            | Derives a logger carrying `showcase` and middleware-provided `requestId` bindings.                                      |
+| `bindings`                                         | Reads the child bindings and returns only confirmation booleans, never backend-owned process or host fields.            |
+| `isLevelEnabled`                                   | Checks the requested level; the response shows both that result and whether the operation log was emitted.              |
 
 This command intentionally produces `warn`, `error`, and `fatal` severity examples. Use it only for the local showcase; the explicit environment gate prevents accidental normal or production traffic from doing so.
 

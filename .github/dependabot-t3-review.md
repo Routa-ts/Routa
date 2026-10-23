@@ -42,10 +42,10 @@ delivery; inspect T3 history before recovering an ambiguous network failure.
 
 No variables, PAT, or GitHub App credentials are needed by the sender.
 
-| Name | Value |
-| --- | --- |
-| `T3_WEBHOOK_URL` | The complete private relay URL for the existing **Review Dependabot PR** T3 task. |
-| `T3_WEBHOOK_SECRET` | The exact shared secret configured for that task's HMAC signature verification. |
+| Name                | Value                                                                             |
+| ------------------- | --------------------------------------------------------------------------------- |
+| `T3_WEBHOOK_URL`    | The complete private relay URL for the existing **Review Dependabot PR** T3 task. |
+| `T3_WEBHOOK_SECRET` | The exact shared secret configured for that task's HMAC signature verification.   |
 
 Add **both names at each location**:
 

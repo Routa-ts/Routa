@@ -104,11 +104,11 @@ output, so it stays visible even though it is invisible in the URL.
 
 Inside `src/routes`, three names are never treated as routes:
 
-| File | Role |
-| --- | --- |
+| File            | Role                                                      |
+| --------------- | --------------------------------------------------------- |
 | `middleware.ts` | Middleware applied to that folder and everything below it |
-| `schemas.ts` | Zod schemas for nearby routes |
-| `*.test.ts` | Tests, ignored by route discovery |
+| `schemas.ts`    | Zod schemas for nearby routes                             |
+| `*.test.ts`     | Tests, ignored by route discovery                         |
 
 Any other `.ts` file is a route file.
 
