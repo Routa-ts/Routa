@@ -115,9 +115,10 @@ their declared Zod schemas. Defaults to `"development"`:
 | `"always"`      | Parse response data | Parse response data        |
 
 Routa always checks the result envelope and response type, selects the declared status,
-and performs JSON serialization. Skipping schema parsing also skips Zod transforms,
-defaults, and unknown-key stripping on response data. Set `"always"` when production must
-reject response drift or your response contract relies on Zod output transformations.
+and performs JSON serialization. Skipping schema parsing also skips unknown-key stripping
+on response data. Set `"always"` when production must reject response drift. Response
+schemas must not change values; `routa check` reports `ROUTA_RESPONSE_SCHEMA_MUTATION`
+when one does.
 
 ```ts title="src/routa.ts"
 import { createRouta } from "@routa-ts/core";
