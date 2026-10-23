@@ -7,11 +7,11 @@ This is **not** the public docs site (`apps/docs`). Docs ship **Lattice** at
 
 ## Commands
 
-| Command                                  | Action                      |
-| ---------------------------------------- | --------------------------- |
-| `pnpm --filter @routa-ts/design dev`     | Dev server on port **4322** |
-| `pnpm --filter @routa-ts/design build`   | Build to `apps/design/dist` |
-| `pnpm --filter @routa-ts/design preview` | Preview the build           |
+| Command                                    | Action                      |
+| ------------------------------------------ | --------------------------- |
+| `vp run --filter @routa-ts/design dev`     | Dev server on port **4322** |
+| `vp run --filter @routa-ts/design build`   | Build to `apps/design/dist` |
+| `vp run --filter @routa-ts/design preview` | Preview the build           |
 
 ## Brief for new landings
 
