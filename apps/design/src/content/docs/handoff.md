@@ -154,13 +154,13 @@ Sites studied: **Astro**, **Next.js**, **NestJS**, **Nuxt**, **Hono**, **Express
 4. Wire sidebar links in `apps/design/astro.config.mjs`.
 5. Do **not** copy deleted landings; do **not** ship a winner to `apps/docs` until the user picks one.
 6. Keep production `apps/docs` `/` as a minimal stub (or leave untouched) until a landing is chosen.
-7. `pnpm --filter @routa-ts/design build` must pass.
+7. `vp run --filter @routa-ts/design build` must pass.
 
 ### Commands
 
 ```sh
-pnpm --filter @routa-ts/design dev    # :4322
-pnpm --filter @routa-ts/docs dev      # :4321 — / and /docs/
+vp run --filter @routa-ts/design dev    # :4322
+vp run --filter @routa-ts/docs dev      # :4321 — / and /docs/
 ```
 
 ### Hard constraints (from project design rules)

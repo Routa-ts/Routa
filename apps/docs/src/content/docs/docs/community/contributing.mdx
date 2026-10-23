@@ -37,8 +37,8 @@ lab. Framework checks, tests, and package builds use the locally pinned Vite Plu
    vp run test
    ```
 
-   A successful run reports correctly formatted files, zero type/lint errors, and 204
-   passing tests across nine files. Oxlint can still print advisory warnings.
+   A successful run reports correctly formatted files, zero type/lint errors, and a
+   passing Vitest test summary. Oxlint can still print advisory warnings.
 
    `vp run check` first builds workspace declarations and runs Astro sync for both
    sites, then combines Oxfmt, type-aware Oxlint, compiler diagnostics, and the JavaScript plugins for dependency and secret checks. `vp run typecheck` also runs explicit TypeScript source and test programs

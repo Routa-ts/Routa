@@ -29,7 +29,7 @@ const baselineCacheDir = "/tmp/routa-vp-baseline-turbo-cache";
 const rounds = Number(option("--runs", "7"));
 const workflowRounds = Number(option("--workflow-runs", "3"));
 const output = resolve(option("--out", "docs/vite-plus-benchmarks.json"));
-const logs = join(root, ".dex/artifacts/vite-plus/benchmarks");
+const logs = join(root, ".artifacts/tooling/benchmarks");
 mkdirSync(logs, { recursive: true });
 if (!existsSync(join(baseline, "node_modules")))
 	throw new Error("Install the baseline dependencies with vp install first.");
@@ -84,7 +84,7 @@ const seed = new Map(
 const fixtureRoot = mkdtempSync(join(tmpdir(), "routa-vp-matched-"));
 const rootConfig = pathToFileURL(join(root, "vite.config.ts")).href;
 const fixtureConfig = (typed) =>
-	`import base from ${JSON.stringify(rootConfig)};\nconst rules={...base.lint.rules};\n${typed ? "" : 'delete rules["typescript/no-floating-promises"]; delete rules["typescript/no-misused-promises"];'}\nexport default {lint:{...base.lint,ignorePatterns:[],rules,options:{typeAware:${typed},typeCheck:${typed}}},fmt:{...base.fmt,ignorePatterns:[]}};\n`;
+	`import base from ${JSON.stringify(rootConfig)};\nconst rules={...base.lint.rules};\n${typed ? "" : 'delete rules["typescript/no-floating-promises"]; delete rules["typescript/no-misused-promises"]; delete rules["typescript/require-await"]; delete rules["typescript/prefer-optional-chain"];'}\nexport default {lint:{...base.lint,ignorePatterns:[],rules,options:{typeAware:${typed},typeCheck:${typed}}},fmt:{...base.fmt,ignorePatterns:[]}};\n`;
 function fixture(name) {
 	const dir = join(fixtureRoot, name);
 	mkdirSync(dir, { recursive: true });

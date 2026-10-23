@@ -36,16 +36,1655 @@
 				<p>
 					Oxfmt covers Markdown, MDX, CSS, YAML, JSON, HTML and Astro. The pinned Astro formatter
 					drops frontmatter comments, so frontmatter formatting is disabled to preserve them. Oxlint
-					still checks script blocks, and explicit Astro checks remain required. Template and CSS
-					lint coverage differs from Biome.
+					still checks script blocks, and explicit Astro checks remain required. Script rules,
+					import organization, template and CSS lint coverage differ from Biome; the audit below
+					lists the remaining gaps.
 				</p>
 			</section>
-			<h2>Current configuration: repeated before and after measurements</h2>
+			<section class="quality" id="review-followup">
+				<h2>After review: restored checks and measured costs</h2>
+				<p>
+					Six supported Biome checks are restored explicitly: useless constructors, wrapper types,
+					async functions without await, template strings, optional chains, and accumulating
+					spreads. Targeted negative probes trigger all six. Compiler use-before-declaration checks
+					are partial; broad Function/empty-object bans, JSX blank-target checks, test nesting
+					limits, and automatic import organization remain different. Import sorting is explicitly
+					disabled to preserve authored initialization order.
+				</p>
+				<details>
+					<summary>Explicit Biome rule audit and deliberate gaps</summary>
+					<div class="table-wrap">
+						<table>
+							<thead>
+								<tr>
+									<th>Former rule</th>
+									<th>Replacement</th>
+									<th>Limits and decision</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr>
+									<td><code>noInvalidUseBeforeDeclaration</code>, error</td>
+									<td>
+										Compiler diagnostics in <code>vp lint</code> and explicit TypeScript checks
+									</td>
+									<td>
+										Partial: compiler checks invalid lexical uses, not the same lint semantics.
+										Oxlint&#x27;s broader <code>no-use-before-define</code> is deliberately off
+										because hoisted functions and forward type references are valid in this
+										codebase.
+									</td>
+								</tr>
+								<tr>
+									<td><code>noUndeclaredDependencies</code>, error</td>
+									<td><code>dependency-checks/no-extraneous-dependencies</code>, error</td>
+									<td>
+										Runtime package source only, excluding tests. Plugin semantics differ from
+										Biome; packed consumer checks remain required.
+									</td>
+								</tr>
+								<tr>
+									<td><code>noUnusedImports</code>, error</td>
+									<td><code>no-unused-vars</code>, error</td>
+									<td>Includes import bindings; no automatic import removal on a check.</td>
+								</tr>
+								<tr>
+									<td><code>noUnusedVariables</code>, error</td>
+									<td><code>no-unused-vars</code>, error</td>
+									<td>Naming and type-only-use semantics differ.</td>
+								</tr>
+								<tr>
+									<td><code>useImportExtensions</code>, off</td>
+									<td>No extension lint rule enabled</td>
+									<td>Preserve TypeScript/ESM build handling.</td>
+								</tr>
+								<tr>
+									<td><code>useJsonImportAttributes</code>, off</td>
+									<td>No matching lint rule enabled</td>
+									<td>Preserve compiler/runtime checks.</td>
+								</tr>
+								<tr>
+									<td><code>noConsole</code>, warn</td>
+									<td><code>no-console</code>, warn</td>
+									<td>Tests exempt; same intentional console usage remains advisory.</td>
+								</tr>
+								<tr>
+									<td><code>noDebugger</code>, error</td>
+									<td><code>no-debugger</code>, error</td>
+									<td>Explicitly enabled.</td>
+								</tr>
+								<tr>
+									<td><code>noExplicitAny</code>, off</td>
+									<td><code>typescript/no-explicit-any</code> off</td>
+									<td>No new ban on explicit <code>any</code>.</td>
+								</tr>
+								<tr>
+									<td><code>noFocusedTests</code>, error</td>
+									<td><code>vitest/no-focused-tests</code>, error</td>
+									<td>Recognizes bundled <code>vite-plus/test</code>.</td>
+								</tr>
+								<tr>
+									<td><code>noSkippedTests</code>, error</td>
+									<td><code>vitest/no-disabled-tests</code>, error</td>
+									<td>Test runner semantics differ; focused/skipped checks are explicit.</td>
+								</tr>
+								<tr>
+									<td><code>noTsIgnore</code>, error</td>
+									<td><code>typescript/ban-ts-comment</code>, error</td>
+									<td>
+										Rejects <code>ts-ignore</code> and <code>ts-nocheck</code>; allows intentional
+										<code>ts-expect-error</code>, whose use is compiler-checked.
+									</td>
+								</tr>
+								<tr>
+									<td><code>useAwait</code>, warn</td>
+									<td><code>typescript/require-await</code>, warn</td>
+									<td>
+										Type-aware: allows returning a promise without <code>await</code>; not identical
+										to Biome&#x27;s syntax rule.
+									</td>
+								</tr>
+								<tr>
+									<td><code>noDefaultExport</code>, off</td>
+									<td>No default-export ban</td>
+									<td>Vite/Astro configuration uses default exports.</td>
+								</tr>
+								<tr>
+									<td><code>noInferrableTypes</code>, off</td>
+									<td>No inferrable-type restriction enabled</td>
+									<td>No added style restriction.</td>
+								</tr>
+								<tr>
+									<td><code>noMagicNumbers</code>, off</td>
+									<td>No magic-number restriction enabled</td>
+									<td>No added style restriction.</td>
+								</tr>
+								<tr>
+									<td><code>useExportType</code>, warn</td>
+									<td><code>typescript/consistent-type-exports</code>, warn</td>
+									<td>Type-aware counterpart.</td>
+								</tr>
+								<tr>
+									<td><code>useImportType</code>, error</td>
+									<td><code>typescript/consistent-type-imports</code>, error</td>
+									<td>Inline type import fixes.</td>
+								</tr>
+								<tr>
+									<td><code>useNodejsImportProtocol</code>, error</td>
+									<td><code>unicorn/prefer-node-protocol</code>, error</td>
+									<td>Explicitly enabled.</td>
+								</tr>
+								<tr>
+									<td><code>useTemplate</code>, warn</td>
+									<td><code>prefer-template</code>, warn</td>
+									<td>Explicitly enabled; fix semantics differ.</td>
+								</tr>
+								<tr>
+									<td><code>noBannedTypes</code>, error</td>
+									<td><code>typescript/no-wrapper-object-types</code>, error</td>
+									<td>
+										Partial: primitive wrappers are rejected; Biome&#x27;s bans on broad
+										<code>Function</code> and <code>{}</code> types are not reproduced. The
+										framework deliberately uses structurally empty extension contracts.
+									</td>
+								</tr>
+								<tr>
+									<td><code>noUselessConstructor</code>, error</td>
+									<td><code>no-useless-constructor</code>, error</td>
+									<td>Explicitly enabled.</td>
+								</tr>
+								<tr>
+									<td><code>useOptionalChain</code>, warn</td>
+									<td><code>typescript/prefer-optional-chain</code>, warn</td>
+									<td>Type-aware counterpart; may select different safe rewrites.</td>
+								</tr>
+								<tr>
+									<td><code>noBlankTarget</code>, error</td>
+									<td>No equivalent enabled</td>
+									<td>
+										Gap: no JSX rule/plugin added for a repository with no JSX components. Astro
+										template safety is not covered by script lint; Astro checks/builds do not
+										establish this rule&#x27;s equivalence.
+									</td>
+								</tr>
+								<tr>
+									<td><code>noGlobalEval</code>, error</td>
+									<td><code>no-eval</code>, error</td>
+									<td>Explicitly enabled.</td>
+								</tr>
+								<tr>
+									<td><code>noSecrets</code>, error</td>
+									<td><code>no-secrets/no-secrets</code>, error</td>
+									<td>JavaScript plugin with tolerance 4.5; heuristics differ. Tests exempt.</td>
+								</tr>
+								<tr>
+									<td><code>noAccumulatingSpread</code>, warn</td>
+									<td><code>oxc/no-accumulating-spread</code>, warn</td>
+									<td>Explicitly enabled.</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+				</details>
+				<p>
+					Fresh matched measurements on 2026-10-23 use the same 28-file seed, alternating
+					before/after pairs, and a discarded warmup. Both sides use vp. These 28 measured commands
+					passed. The syntax tier omits type-aware-only rules; the typed tier includes them. Checks
+					differ in semantics, so timings compare the stated configurations, not identical
+					diagnostics.
+				</p>
+				<div class="table-wrap">
+					<table>
+						<thead>
+							<tr>
+								<th>Workload</th>
+								<th>Original tools via vp</th>
+								<th>After review fixes</th>
+								<th>Change</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<th scope="row">Syntax lint: identical bytes<small>7 runs per side</small></th>
+								<td>111 ms<small>109 to 112 ms</small></td>
+								<td>353 ms<small>351 to 371 ms</small></td>
+								<td class="slower">+218.3%</td>
+							</tr>
+							<tr>
+								<th scope="row">
+									Lint plus type diagnostics on identical source<small>7 runs per side</small>
+								</th>
+								<td>477 ms<small>471 to 491 ms</small></td>
+								<td>703 ms<small>675 to 746 ms</small></td>
+								<td class="slower">+47.4%</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+				<p class="note">
+					Syntax lint: identical bytes: median peak RSS 65 → 209 MiB; CPU 0.23 → 0.59 s. Lint plus
+					type diagnostics on identical source: median peak RSS 259 → 362 MiB; CPU 1.41 → 1.73 s.
+				</p>
+				<p>
+					The pristine OpenAPI scaffold preview previously reported two conflicts after formatting.
+					Restored files now match all four manifest entries and the preview shows every entry
+					unchanged. The formatter excludes this fixture, and the normal verification gate checks
+					its hashes. Generator templates and their original consumer-tool defaults are preserved.
+				</p>
+				<p>
+					Dependency baseline: <strong>619 → 812 lockfile package entries</strong>, an increase of
+					<strong>193 entries, 31.2%</strong>. This counts package entries, not installation bytes.
+					Tooling log outputs now live under gitignored <code>.artifacts/tooling/</code>, separate
+					from Dex. Those logs are local rerun outputs, not portable evidence links; commands,
+					outcomes and individual samples are embedded below.
+				</p>
+				<details>
+					<summary>Fresh lint measurement JSON: commands and all 28 samples</summary>
+					<pre>
+{
+&quot;schemaVersion&quot;: 1,
+&quot;date&quot;: &quot;2026-10-23T13:15:22.596Z&quot;,
+&quot;baselineCommit&quot;: &quot;f07c761e8475deb6e0d4e868fadcb3bdcff66c60&quot;,
+&quot;environment&quot;: {
+&quot;platform&quot;: &quot;darwin&quot;,
+&quot;arch&quot;: &quot;arm64&quot;,
+&quot;node&quot;: &quot;v24.18.0&quot;,
+&quot;cpu&quot;: &quot;Apple M4 Pro&quot;,
+&quot;logicalCpus&quot;: 12,
+&quot;memoryGiB&quot;: 24,
+&quot;vitePlus&quot;: &quot;1.3.0&quot;
+},
+&quot;methodology&quot;: {
+&quot;smallRuns&quot;: 7,
+&quot;workflowRuns&quot;: 3,
+&quot;warmups&quot;: 1,
+&quot;order&quot;: &quot;Alternating AB/BA pairs, serial execution&quot;,
+&quot;timing&quot;: &quot;Wall time includes vp launch and all child processes; /usr/bin/time -l measures peak RSS and CPU on macOS&quot;,
+&quot;cold&quot;: &quot;Task caches removed, dependencies installed and OS file cache warm; not a cold machine&quot;,
+&quot;matchedCorpus&quot;: {
+&quot;fileCount&quot;: 28,
+&quot;bytes&quot;: 463555,
+&quot;sha256&quot;: &quot;7914b6207ef053b16a7717a6bba3afb3a6b2348f2d53e03397dec83d2397945f&quot;,
+&quot;files&quot;: [
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+]
+},
+&quot;baselineHarness&quot;: &quot;Only command orchestration is translated to vp; original tools, source and test exclusions remain. Legacy test user-agent is fixed to its previous pnpm context. Node symlinks in baseline .bin directories ensure Node 24.18.0 for Turbo child workloads. Turbo cache is isolated.&quot;
+},
+&quot;comparisons&quot;: [
+{
+&quot;id&quot;: &quot;syntax-lint&quot;,
+&quot;title&quot;: &quot;Syntax lint: identical bytes&quot;,
+&quot;runs&quot;: 7,
+&quot;beforeCommand&quot;: [
+&quot;vp&quot;,
+&quot;exec&quot;,
+&quot;biome&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;afterCommand&quot;: [
+&quot;vp&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;before&quot;: {
+&quot;wallSeconds&quot;: {
+&quot;median&quot;: 0.11076195800000005,
+&quot;min&quot;: 0.10911570800000005,
+&quot;max&quot;: 0.1122215000000001
+},
+&quot;peakRssMiB&quot;: {
+&quot;median&quot;: 64.9375,
+&quot;min&quot;: 64.828125,
+&quot;max&quot;: 65.171875
+},
+&quot;cpuSeconds&quot;: {
+&quot;median&quot;: 0.23,
+&quot;min&quot;: 0.22,
+&quot;max&quot;: 0.23
+},
+&quot;engineMs&quot;: {
+&quot;median&quot;: 29,
+&quot;min&quot;: 28,
+&quot;max&quot;: 31
+}
+},
+&quot;after&quot;: {
+&quot;wallSeconds&quot;: {
+&quot;median&quot;: 0.35259304199999997,
+&quot;min&quot;: 0.351087708,
+&quot;max&quot;: 0.3707645
+},
+&quot;peakRssMiB&quot;: {
+&quot;median&quot;: 209.3125,
+&quot;min&quot;: 208.03125,
+&quot;max&quot;: 211.921875
+},
+&quot;cpuSeconds&quot;: {
+&quot;median&quot;: 0.59,
+&quot;min&quot;: 0.59,
+&quot;max&quot;: 0.63
+},
+&quot;engineMs&quot;: null
+},
+&quot;changePercent&quot;: 218.33406375860548,
+&quot;note&quot;: &quot;Same files and bytes. Oxlint type-aware rules and compiler diagnostics are disabled in this tier. Rule sets differ.&quot;
+},
+{
+&quot;id&quot;: &quot;typed-check&quot;,
+&quot;title&quot;: &quot;Lint plus type diagnostics on identical source&quot;,
+&quot;runs&quot;: 7,
+&quot;beforeCommand&quot;: [
+&quot;vp&quot;,
+&quot;exec&quot;,
+&quot;-c&quot;,
+&quot;biome lint packages/cli/src/ast.ts packages/cli/src/index.test.ts packages/cli/src/index.ts packages/cli/src/openapi.ts packages/cli/src/project.ts packages/cli/src/runtime.ts packages/cli/src/scaffold-plan.test.ts packages/cli/src/scaffold-plan.ts packages/cli/src/scaffold.ts packages/cli/src/typescript-runner.ts packages/cli/src/typescript.test.ts packages/cli/src/typescript.ts packages/cli/src/ui.ts packages/core/src/hono.test.ts packages/core/src/hono.ts packages/core/src/index.test.ts packages/core/src/index.ts packages/core/src/logger.test.ts packages/core/src/logger.ts packages/core/src/query/helpers.test.ts packages/core/src/query/helpers.ts packages/core/src/request-execution.test.ts packages/core/src/request-execution.ts packages/create-routa-ts/src/cli.ts packages/create-routa-ts/src/create-project.ts packages/create-routa-ts/src/index.test.ts packages/create-routa-ts/src/index.ts packages/create-routa-ts/src/ui.ts &amp;&amp; tsc -p packages/core/tsconfig.test.json --noEmit &amp;&amp; tsc -p packages/cli/tsconfig.test.json --noEmit &amp;&amp; tsc -p packages/create-routa-ts/tsconfig.test.json --noEmit&quot;
+],
+&quot;afterCommand&quot;: [
+&quot;vp&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;before&quot;: {
+&quot;wallSeconds&quot;: {
+&quot;median&quot;: 0.47704966699999934,
+&quot;min&quot;: 0.47055891599999994,
+&quot;max&quot;: 0.49078745900000104
+},
+&quot;peakRssMiB&quot;: {
+&quot;median&quot;: 259.109375,
+&quot;min&quot;: 252.6875,
+&quot;max&quot;: 261.96875
+},
+&quot;cpuSeconds&quot;: {
+&quot;median&quot;: 1.41,
+&quot;min&quot;: 1.39,
+&quot;max&quot;: 1.45
+},
+&quot;engineMs&quot;: {
+&quot;median&quot;: 30,
+&quot;min&quot;: 29,
+&quot;max&quot;: 33
+}
+},
+&quot;after&quot;: {
+&quot;wallSeconds&quot;: {
+&quot;median&quot;: 0.7030618329999998,
+&quot;min&quot;: 0.6749169999999994,
+&quot;max&quot;: 0.745827292
+},
+&quot;peakRssMiB&quot;: {
+&quot;median&quot;: 362.0625,
+&quot;min&quot;: 342.140625,
+&quot;max&quot;: 401.890625
+},
+&quot;cpuSeconds&quot;: {
+&quot;median&quot;: 1.73,
+&quot;min&quot;: 1.68,
+&quot;max&quot;: 1.76
+},
+&quot;engineMs&quot;: null
+},
+&quot;changePercent&quot;: 47.37707237514972,
+&quot;note&quot;: &quot;Baseline Biome plus explicit TypeScript programs includes all nine tests for this matched tier. Oxlint combines lint and experimental diagnostics; explicit tsc remains in the real migrated gate.&quot;
+}
+],
+&quot;records&quot;: [
+{
+&quot;seconds&quot;: 0.11097562499999993,
+&quot;peakRssMiB&quot;: 64.828125,
+&quot;cpuSeconds&quot;: 0.23,
+&quot;engineMs&quot;: 29,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;343-syntax-lint-before-1.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;syntax-lint-before-1&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;exec&quot;,
+&quot;biome&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.3707645,
+&quot;peakRssMiB&quot;: 209.9375,
+&quot;cpuSeconds&quot;: 0.63,
+&quot;engineMs&quot;: null,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;344-syntax-lint-after-1.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;syntax-lint-after-1&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.361374875,
+&quot;peakRssMiB&quot;: 211.921875,
+&quot;cpuSeconds&quot;: 0.62,
+&quot;engineMs&quot;: null,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;345-syntax-lint-after-2.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;syntax-lint-after-2&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.11005933400000004,
+&quot;peakRssMiB&quot;: 65.015625,
+&quot;cpuSeconds&quot;: 0.23,
+&quot;engineMs&quot;: 29,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;346-syntax-lint-before-2.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;syntax-lint-before-2&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;exec&quot;,
+&quot;biome&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.10911570800000005,
+&quot;peakRssMiB&quot;: 64.96875,
+&quot;cpuSeconds&quot;: 0.22,
+&quot;engineMs&quot;: 29,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;347-syntax-lint-before-3.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;syntax-lint-before-3&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;exec&quot;,
+&quot;biome&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.35259304199999997,
+&quot;peakRssMiB&quot;: 209.5625,
+&quot;cpuSeconds&quot;: 0.59,
+&quot;engineMs&quot;: null,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;348-syntax-lint-after-3.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;syntax-lint-after-3&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.35209008300000005,
+&quot;peakRssMiB&quot;: 209.046875,
+&quot;cpuSeconds&quot;: 0.59,
+&quot;engineMs&quot;: null,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;349-syntax-lint-after-4.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;syntax-lint-after-4&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.11076195800000005,
+&quot;peakRssMiB&quot;: 65.171875,
+&quot;cpuSeconds&quot;: 0.23,
+&quot;engineMs&quot;: 28,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;350-syntax-lint-before-4.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;syntax-lint-before-4&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;exec&quot;,
+&quot;biome&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.10995345799999995,
+&quot;peakRssMiB&quot;: 64.9375,
+&quot;cpuSeconds&quot;: 0.23,
+&quot;engineMs&quot;: 30,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;351-syntax-lint-before-5.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;syntax-lint-before-5&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;exec&quot;,
+&quot;biome&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.351087708,
+&quot;peakRssMiB&quot;: 209.3125,
+&quot;cpuSeconds&quot;: 0.59,
+&quot;engineMs&quot;: null,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;352-syntax-lint-after-5.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;syntax-lint-after-5&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.35361629200000017,
+&quot;peakRssMiB&quot;: 208.03125,
+&quot;cpuSeconds&quot;: 0.59,
+&quot;engineMs&quot;: null,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;353-syntax-lint-after-6.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;syntax-lint-after-6&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.11117112499999984,
+&quot;peakRssMiB&quot;: 64.90625,
+&quot;cpuSeconds&quot;: 0.23,
+&quot;engineMs&quot;: 29,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;354-syntax-lint-before-6.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;syntax-lint-before-6&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;exec&quot;,
+&quot;biome&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.1122215000000001,
+&quot;peakRssMiB&quot;: 64.84375,
+&quot;cpuSeconds&quot;: 0.22,
+&quot;engineMs&quot;: 31,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;355-syntax-lint-before-7.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;syntax-lint-before-7&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;exec&quot;,
+&quot;biome&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.35135212500000035,
+&quot;peakRssMiB&quot;: 208.9375,
+&quot;cpuSeconds&quot;: 0.6,
+&quot;engineMs&quot;: null,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;356-syntax-lint-after-7.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;syntax-lint-after-7&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.47055891599999994,
+&quot;peakRssMiB&quot;: 256.5,
+&quot;cpuSeconds&quot;: 1.42,
+&quot;engineMs&quot;: 29,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;359-typed-check-before-1.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;typed-check-before-1&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;exec&quot;,
+&quot;-c&quot;,
+&quot;biome lint packages/cli/src/ast.ts packages/cli/src/index.test.ts packages/cli/src/index.ts packages/cli/src/openapi.ts packages/cli/src/project.ts packages/cli/src/runtime.ts packages/cli/src/scaffold-plan.test.ts packages/cli/src/scaffold-plan.ts packages/cli/src/scaffold.ts packages/cli/src/typescript-runner.ts packages/cli/src/typescript.test.ts packages/cli/src/typescript.ts packages/cli/src/ui.ts packages/core/src/hono.test.ts packages/core/src/hono.ts packages/core/src/index.test.ts packages/core/src/index.ts packages/core/src/logger.test.ts packages/core/src/logger.ts packages/core/src/query/helpers.test.ts packages/core/src/query/helpers.ts packages/core/src/request-execution.test.ts packages/core/src/request-execution.ts packages/create-routa-ts/src/cli.ts packages/create-routa-ts/src/create-project.ts packages/create-routa-ts/src/index.test.ts packages/create-routa-ts/src/index.ts packages/create-routa-ts/src/ui.ts &amp;&amp; tsc -p packages/core/tsconfig.test.json --noEmit &amp;&amp; tsc -p packages/cli/tsconfig.test.json --noEmit &amp;&amp; tsc -p packages/create-routa-ts/tsconfig.test.json --noEmit&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.7296208750000005,
+&quot;peakRssMiB&quot;: 393.515625,
+&quot;cpuSeconds&quot;: 1.75,
+&quot;engineMs&quot;: null,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;360-typed-check-after-1.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;typed-check-after-1&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.6749169999999994,
+&quot;peakRssMiB&quot;: 342.140625,
+&quot;cpuSeconds&quot;: 1.69,
+&quot;engineMs&quot;: null,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;361-typed-check-after-2.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;typed-check-after-2&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.48178870800000007,
+&quot;peakRssMiB&quot;: 259.109375,
+&quot;cpuSeconds&quot;: 1.4,
+&quot;engineMs&quot;: 30,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;362-typed-check-before-2.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;typed-check-before-2&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;exec&quot;,
+&quot;-c&quot;,
+&quot;biome lint packages/cli/src/ast.ts packages/cli/src/index.test.ts packages/cli/src/index.ts packages/cli/src/openapi.ts packages/cli/src/project.ts packages/cli/src/runtime.ts packages/cli/src/scaffold-plan.test.ts packages/cli/src/scaffold-plan.ts packages/cli/src/scaffold.ts packages/cli/src/typescript-runner.ts packages/cli/src/typescript.test.ts packages/cli/src/typescript.ts packages/cli/src/ui.ts packages/core/src/hono.test.ts packages/core/src/hono.ts packages/core/src/index.test.ts packages/core/src/index.ts packages/core/src/logger.test.ts packages/core/src/logger.ts packages/core/src/query/helpers.test.ts packages/core/src/query/helpers.ts packages/core/src/request-execution.test.ts packages/core/src/request-execution.ts packages/create-routa-ts/src/cli.ts packages/create-routa-ts/src/create-project.ts packages/create-routa-ts/src/index.test.ts packages/create-routa-ts/src/index.ts packages/create-routa-ts/src/ui.ts &amp;&amp; tsc -p packages/core/tsconfig.test.json --noEmit &amp;&amp; tsc -p packages/cli/tsconfig.test.json --noEmit &amp;&amp; tsc -p packages/create-routa-ts/tsconfig.test.json --noEmit&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.47610312500000057,
+&quot;peakRssMiB&quot;: 261.96875,
+&quot;cpuSeconds&quot;: 1.39,
+&quot;engineMs&quot;: 29,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;363-typed-check-before-3.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;typed-check-before-3&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;exec&quot;,
+&quot;-c&quot;,
+&quot;biome lint packages/cli/src/ast.ts packages/cli/src/index.test.ts packages/cli/src/index.ts packages/cli/src/openapi.ts packages/cli/src/project.ts packages/cli/src/runtime.ts packages/cli/src/scaffold-plan.test.ts packages/cli/src/scaffold-plan.ts packages/cli/src/scaffold.ts packages/cli/src/typescript-runner.ts packages/cli/src/typescript.test.ts packages/cli/src/typescript.ts packages/cli/src/ui.ts packages/core/src/hono.test.ts packages/core/src/hono.ts packages/core/src/index.test.ts packages/core/src/index.ts packages/core/src/logger.test.ts packages/core/src/logger.ts packages/core/src/query/helpers.test.ts packages/core/src/query/helpers.ts packages/core/src/request-execution.test.ts packages/core/src/request-execution.ts packages/create-routa-ts/src/cli.ts packages/create-routa-ts/src/create-project.ts packages/create-routa-ts/src/index.test.ts packages/create-routa-ts/src/index.ts packages/create-routa-ts/src/ui.ts &amp;&amp; tsc -p packages/core/tsconfig.test.json --noEmit &amp;&amp; tsc -p packages/cli/tsconfig.test.json --noEmit &amp;&amp; tsc -p packages/create-routa-ts/tsconfig.test.json --noEmit&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.695516583999999,
+&quot;peakRssMiB&quot;: 350.3125,
+&quot;cpuSeconds&quot;: 1.72,
+&quot;engineMs&quot;: null,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;364-typed-check-after-3.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;typed-check-after-3&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.7030618329999998,
+&quot;peakRssMiB&quot;: 359.265625,
+&quot;cpuSeconds&quot;: 1.73,
+&quot;engineMs&quot;: null,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;365-typed-check-after-4.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;typed-check-after-4&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.48287958400000025,
+&quot;peakRssMiB&quot;: 260.671875,
+&quot;cpuSeconds&quot;: 1.39,
+&quot;engineMs&quot;: 33,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;366-typed-check-before-4.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;typed-check-before-4&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;exec&quot;,
+&quot;-c&quot;,
+&quot;biome lint packages/cli/src/ast.ts packages/cli/src/index.test.ts packages/cli/src/index.ts packages/cli/src/openapi.ts packages/cli/src/project.ts packages/cli/src/runtime.ts packages/cli/src/scaffold-plan.test.ts packages/cli/src/scaffold-plan.ts packages/cli/src/scaffold.ts packages/cli/src/typescript-runner.ts packages/cli/src/typescript.test.ts packages/cli/src/typescript.ts packages/cli/src/ui.ts packages/core/src/hono.test.ts packages/core/src/hono.ts packages/core/src/index.test.ts packages/core/src/index.ts packages/core/src/logger.test.ts packages/core/src/logger.ts packages/core/src/query/helpers.test.ts packages/core/src/query/helpers.ts packages/core/src/request-execution.test.ts packages/core/src/request-execution.ts packages/create-routa-ts/src/cli.ts packages/create-routa-ts/src/create-project.ts packages/create-routa-ts/src/index.test.ts packages/create-routa-ts/src/index.ts packages/create-routa-ts/src/ui.ts &amp;&amp; tsc -p packages/core/tsconfig.test.json --noEmit &amp;&amp; tsc -p packages/cli/tsconfig.test.json --noEmit &amp;&amp; tsc -p packages/create-routa-ts/tsconfig.test.json --noEmit&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.49078745900000104,
+&quot;peakRssMiB&quot;: 254.890625,
+&quot;cpuSeconds&quot;: 1.43,
+&quot;engineMs&quot;: 30,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;367-typed-check-before-5.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;typed-check-before-5&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;exec&quot;,
+&quot;-c&quot;,
+&quot;biome lint packages/cli/src/ast.ts packages/cli/src/index.test.ts packages/cli/src/index.ts packages/cli/src/openapi.ts packages/cli/src/project.ts packages/cli/src/runtime.ts packages/cli/src/scaffold-plan.test.ts packages/cli/src/scaffold-plan.ts packages/cli/src/scaffold.ts packages/cli/src/typescript-runner.ts packages/cli/src/typescript.test.ts packages/cli/src/typescript.ts packages/cli/src/ui.ts packages/core/src/hono.test.ts packages/core/src/hono.ts packages/core/src/index.test.ts packages/core/src/index.ts packages/core/src/logger.test.ts packages/core/src/logger.ts packages/core/src/query/helpers.test.ts packages/core/src/query/helpers.ts packages/core/src/request-execution.test.ts packages/core/src/request-execution.ts packages/create-routa-ts/src/cli.ts packages/create-routa-ts/src/create-project.ts packages/create-routa-ts/src/index.test.ts packages/create-routa-ts/src/index.ts packages/create-routa-ts/src/ui.ts &amp;&amp; tsc -p packages/core/tsconfig.test.json --noEmit &amp;&amp; tsc -p packages/cli/tsconfig.test.json --noEmit &amp;&amp; tsc -p packages/create-routa-ts/tsconfig.test.json --noEmit&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.7399633750000012,
+&quot;peakRssMiB&quot;: 362.0625,
+&quot;cpuSeconds&quot;: 1.68,
+&quot;engineMs&quot;: null,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;368-typed-check-after-5.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;typed-check-after-5&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.745827292,
+&quot;peakRssMiB&quot;: 390.21875,
+&quot;cpuSeconds&quot;: 1.75,
+&quot;engineMs&quot;: null,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;369-typed-check-after-6.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;typed-check-after-6&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.47704966699999934,
+&quot;peakRssMiB&quot;: 252.6875,
+&quot;cpuSeconds&quot;: 1.45,
+&quot;engineMs&quot;: 30,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;370-typed-check-before-6.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;typed-check-before-6&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;exec&quot;,
+&quot;-c&quot;,
+&quot;biome lint packages/cli/src/ast.ts packages/cli/src/index.test.ts packages/cli/src/index.ts packages/cli/src/openapi.ts packages/cli/src/project.ts packages/cli/src/runtime.ts packages/cli/src/scaffold-plan.test.ts packages/cli/src/scaffold-plan.ts packages/cli/src/scaffold.ts packages/cli/src/typescript-runner.ts packages/cli/src/typescript.test.ts packages/cli/src/typescript.ts packages/cli/src/ui.ts packages/core/src/hono.test.ts packages/core/src/hono.ts packages/core/src/index.test.ts packages/core/src/index.ts packages/core/src/logger.test.ts packages/core/src/logger.ts packages/core/src/query/helpers.test.ts packages/core/src/query/helpers.ts packages/core/src/request-execution.test.ts packages/core/src/request-execution.ts packages/create-routa-ts/src/cli.ts packages/create-routa-ts/src/create-project.ts packages/create-routa-ts/src/index.test.ts packages/create-routa-ts/src/index.ts packages/create-routa-ts/src/ui.ts &amp;&amp; tsc -p packages/core/tsconfig.test.json --noEmit &amp;&amp; tsc -p packages/cli/tsconfig.test.json --noEmit &amp;&amp; tsc -p packages/create-routa-ts/tsconfig.test.json --noEmit&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.4743701249999995,
+&quot;peakRssMiB&quot;: 261.09375,
+&quot;cpuSeconds&quot;: 1.41,
+&quot;engineMs&quot;: 30,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;371-typed-check-before-7.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;typed-check-before-7&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;exec&quot;,
+&quot;-c&quot;,
+&quot;biome lint packages/cli/src/ast.ts packages/cli/src/index.test.ts packages/cli/src/index.ts packages/cli/src/openapi.ts packages/cli/src/project.ts packages/cli/src/runtime.ts packages/cli/src/scaffold-plan.test.ts packages/cli/src/scaffold-plan.ts packages/cli/src/scaffold.ts packages/cli/src/typescript-runner.ts packages/cli/src/typescript.test.ts packages/cli/src/typescript.ts packages/cli/src/ui.ts packages/core/src/hono.test.ts packages/core/src/hono.ts packages/core/src/index.test.ts packages/core/src/index.ts packages/core/src/logger.test.ts packages/core/src/logger.ts packages/core/src/query/helpers.test.ts packages/core/src/query/helpers.ts packages/core/src/request-execution.test.ts packages/core/src/request-execution.ts packages/create-routa-ts/src/cli.ts packages/create-routa-ts/src/create-project.ts packages/create-routa-ts/src/index.test.ts packages/create-routa-ts/src/index.ts packages/create-routa-ts/src/ui.ts &amp;&amp; tsc -p packages/core/tsconfig.test.json --noEmit &amp;&amp; tsc -p packages/cli/tsconfig.test.json --noEmit &amp;&amp; tsc -p packages/create-routa-ts/tsconfig.test.json --noEmit&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+},
+{
+&quot;seconds&quot;: 0.695632125,
+&quot;peakRssMiB&quot;: 401.890625,
+&quot;cpuSeconds&quot;: 1.76,
+&quot;engineMs&quot;: null,
+&quot;exitCode&quot;: 0,
+&quot;log&quot;: &quot;372-typed-check-after-7.log&quot;,
+&quot;legacyCacheHits&quot;: 0,
+&quot;legacyTestCacheHits&quot;: 0,
+&quot;executedTestCounts&quot;: [],
+&quot;cacheHits&quot;: 0,
+&quot;label&quot;: &quot;typed-check-after-7&quot;,
+&quot;command&quot;: [
+&quot;vp&quot;,
+&quot;lint&quot;,
+&quot;packages/cli/src/ast.ts&quot;,
+&quot;packages/cli/src/index.test.ts&quot;,
+&quot;packages/cli/src/index.ts&quot;,
+&quot;packages/cli/src/openapi.ts&quot;,
+&quot;packages/cli/src/project.ts&quot;,
+&quot;packages/cli/src/runtime.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.test.ts&quot;,
+&quot;packages/cli/src/scaffold-plan.ts&quot;,
+&quot;packages/cli/src/scaffold.ts&quot;,
+&quot;packages/cli/src/typescript-runner.ts&quot;,
+&quot;packages/cli/src/typescript.test.ts&quot;,
+&quot;packages/cli/src/typescript.ts&quot;,
+&quot;packages/cli/src/ui.ts&quot;,
+&quot;packages/core/src/hono.test.ts&quot;,
+&quot;packages/core/src/hono.ts&quot;,
+&quot;packages/core/src/index.test.ts&quot;,
+&quot;packages/core/src/index.ts&quot;,
+&quot;packages/core/src/logger.test.ts&quot;,
+&quot;packages/core/src/logger.ts&quot;,
+&quot;packages/core/src/query/helpers.test.ts&quot;,
+&quot;packages/core/src/query/helpers.ts&quot;,
+&quot;packages/core/src/request-execution.test.ts&quot;,
+&quot;packages/core/src/request-execution.ts&quot;,
+&quot;packages/create-routa-ts/src/cli.ts&quot;,
+&quot;packages/create-routa-ts/src/create-project.ts&quot;,
+&quot;packages/create-routa-ts/src/index.test.ts&quot;,
+&quot;packages/create-routa-ts/src/index.ts&quot;,
+&quot;packages/create-routa-ts/src/ui.ts&quot;
+],
+&quot;cwd&quot;: &quot;matched fixture&quot;
+}
+],
+&quot;configurationSnapshot&quot;: {
+&quot;baseCommit&quot;: &quot;98d1e64b0ea819102f01c742b63067ed7a93f2ba&quot;,
+&quot;note&quot;: &quot;Measured the review-fix worktree; rules restored after the prior 62-sample report. Syntax tier excludes type-aware-only rules.&quot;,
+&quot;viteConfigSha256&quot;: &quot;9fe3473d08a77845b44b274e754d67d6cf0085315cbf355c7a591cbc3d69e764&quot;,
+&quot;restoredRules&quot;: [
+&quot;no-useless-constructor&quot;,
+&quot;prefer-template&quot;,
+&quot;oxc/no-accumulating-spread&quot;,
+&quot;typescript/require-await&quot;,
+&quot;typescript/prefer-optional-chain&quot;,
+&quot;typescript/no-wrapper-object-types&quot;
+],
+&quot;sortImports&quot;: false
+}
+}</pre>
+				</details>
+			</section>
+			<h2>Pre-review measurements retained for comparison</h2>
 			<p class="note">
 				The first four cases use the same 28-file source seed, about 453 KiB. Seven runs per side
 				follow a discarded warmup. Full verification uses three runs per side with task caches
 				cleared; it compares real workflows with different file and type-check coverage. All 62
-				measured commands passed. Positive change means slower.
+				measured commands passed. These samples predate the review rule restoration and explicit
+				Astro sync preparation. They are historical, not timings of the final gate. Positive change
+				means slower.
 			</p>
 			<div class="table-wrap">
 				<table>
@@ -166,23 +1805,24 @@
 				comment preservation.
 			</p>
 			<p>
-				Clean lint jobs now build workspace declarations before type-aware analysis. This fixes the
-				initial CI failure where core and creator declarations were missing.
+				Clean lint jobs build workspace declarations and run Astro sync before type-aware analysis.
+				This fixes missing workspace declarations and Astro virtual-module types in fresh CI
+				checkouts.
 			</p>
 			<p>
-				The current root has 8 direct development dependencies and the lockfile has 812 package
-				entries. Biome has no entry in the workspace lockfile. Oxlint's plugin APIs and compiler
-				diagnostics remain experimental; dependency and secret checks are tested replacements, not a
-				claim of identical detection.
+				The current root has 8 direct development dependencies; lockfile package entries increased
+				from 619 to 812, an increase of 193 entries or 31.2%. Biome has no entry in the workspace
+				lockfile. Oxlint's plugin APIs and compiler diagnostics remain experimental; dependency and
+				secret checks are tested replacements, not a claim of identical detection.
 			</p>
 			<details>
 				<summary>Commands and method</summary>
 				<p>
 					Pairs run serially in alternating before/after order. Both sides use vp. The original
 					source checkout is f07c761; only its orchestration and isolated environment were adapted,
-					as recorded in the evidence JSON. Dependencies and OS file caches remain warm. The current
-					full gate covers 239 formatted files and 96 linted files, including apps and examples;
-					legacy coverage differs.
+					as recorded in the evidence JSON. Dependencies and OS file caches remain warm. The
+					recorded pre-review gate covered 239 formatted files and 96 linted files, including apps
+					and examples; legacy coverage differs.
 				</p>
 				<details>
 					<summary>Format check: same file set: exact commands</summary>
@@ -243,7 +1883,7 @@ vp run verify</pre>
 				</details>
 			</details>
 			<details id="current-evidence">
-				<summary>Current samples and correctness evidence</summary>
+				<summary>Pre-review samples and correctness evidence</summary>
 				<pre>
 {
   &quot;schemaVersion&quot;: 1,
@@ -9180,7 +10820,7 @@ vp run pack:check</code></pre>
       &quot;expectedDiagnostic&quot;: null,
       &quot;passed&quot;: true,
       &quot;seconds&quot;: 0.326,
-      &quot;log&quot;: &quot;.dex/artifacts/vite-plus/before-probe-source-type-error.log&quot;
+      &quot;log&quot;: &quot;.artifacts/tooling/before-probe-source-type-error.log&quot;
     },
     {
       &quot;name&quot;: &quot;after-probe-source-type-error&quot;,
@@ -9194,7 +10834,7 @@ vp run pack:check</code></pre>
       &quot;expectedDiagnostic&quot;: &quot;TS2322&quot;,
       &quot;passed&quot;: true,
       &quot;seconds&quot;: 0.596,
-      &quot;log&quot;: &quot;.dex/artifacts/vite-plus/after-probe-source-type-error.log&quot;
+      &quot;log&quot;: &quot;.artifacts/tooling/after-probe-source-type-error.log&quot;
     },
     {
       &quot;name&quot;: &quot;before-probe-test-type-error&quot;,
@@ -9210,7 +10850,7 @@ vp run pack:check</code></pre>
       &quot;expectedDiagnostic&quot;: null,
       &quot;passed&quot;: true,
       &quot;seconds&quot;: 0.263,
-      &quot;log&quot;: &quot;.dex/artifacts/vite-plus/before-probe-test-type-error.log&quot;
+      &quot;log&quot;: &quot;.artifacts/tooling/before-probe-test-type-error.log&quot;
     },
     {
       &quot;name&quot;: &quot;after-probe-test-type-error&quot;,
@@ -9224,7 +10864,7 @@ vp run pack:check</code></pre>
       &quot;expectedDiagnostic&quot;: &quot;TS2322&quot;,
       &quot;passed&quot;: true,
       &quot;seconds&quot;: 0.6,
-      &quot;log&quot;: &quot;.dex/artifacts/vite-plus/after-probe-test-type-error.log&quot;
+      &quot;log&quot;: &quot;.artifacts/tooling/after-probe-test-type-error.log&quot;
     },
     {
       &quot;name&quot;: &quot;before-probe-unused-expect-error&quot;,
@@ -9240,7 +10880,7 @@ vp run pack:check</code></pre>
       &quot;expectedDiagnostic&quot;: null,
       &quot;passed&quot;: true,
       &quot;seconds&quot;: 0.312,
-      &quot;log&quot;: &quot;.dex/artifacts/vite-plus/before-probe-unused-expect-error.log&quot;
+      &quot;log&quot;: &quot;.artifacts/tooling/before-probe-unused-expect-error.log&quot;
     },
     {
       &quot;name&quot;: &quot;after-probe-unused-expect-error&quot;,
@@ -9254,7 +10894,7 @@ vp run pack:check</code></pre>
       &quot;expectedDiagnostic&quot;: &quot;TS2578&quot;,
       &quot;passed&quot;: true,
       &quot;seconds&quot;: 0.609,
-      &quot;log&quot;: &quot;.dex/artifacts/vite-plus/after-probe-unused-expect-error.log&quot;
+      &quot;log&quot;: &quot;.artifacts/tooling/after-probe-unused-expect-error.log&quot;
     },
     {
       &quot;name&quot;: &quot;before-probe-floating-promise&quot;,
@@ -9270,7 +10910,7 @@ vp run pack:check</code></pre>
       &quot;expectedDiagnostic&quot;: null,
       &quot;passed&quot;: true,
       &quot;seconds&quot;: 0.264,
-      &quot;log&quot;: &quot;.dex/artifacts/vite-plus/before-probe-floating-promise.log&quot;
+      &quot;log&quot;: &quot;.artifacts/tooling/before-probe-floating-promise.log&quot;
     },
     {
       &quot;name&quot;: &quot;after-probe-floating-promise&quot;,
@@ -9284,7 +10924,7 @@ vp run pack:check</code></pre>
       &quot;expectedDiagnostic&quot;: &quot;no-floating-promises&quot;,
       &quot;passed&quot;: true,
       &quot;seconds&quot;: 0.565,
-      &quot;log&quot;: &quot;.dex/artifacts/vite-plus/after-probe-floating-promise.log&quot;
+      &quot;log&quot;: &quot;.artifacts/tooling/after-probe-floating-promise.log&quot;
     },
     {
       &quot;name&quot;: &quot;before-probe-focused-test&quot;,
@@ -9300,7 +10940,7 @@ vp run pack:check</code></pre>
       &quot;expectedDiagnostic&quot;: null,
       &quot;passed&quot;: true,
       &quot;seconds&quot;: 0.26,
-      &quot;log&quot;: &quot;.dex/artifacts/vite-plus/before-probe-focused-test.log&quot;
+      &quot;log&quot;: &quot;.artifacts/tooling/before-probe-focused-test.log&quot;
     },
     {
       &quot;name&quot;: &quot;after-probe-focused-test&quot;,
@@ -9314,7 +10954,7 @@ vp run pack:check</code></pre>
       &quot;expectedDiagnostic&quot;: &quot;no-focused-tests&quot;,
       &quot;passed&quot;: true,
       &quot;seconds&quot;: 0.585,
-      &quot;log&quot;: &quot;.dex/artifacts/vite-plus/after-probe-focused-test.log&quot;
+      &quot;log&quot;: &quot;.artifacts/tooling/after-probe-focused-test.log&quot;
     },
     {
       &quot;name&quot;: &quot;after-probe-dependency&quot;,
@@ -9330,7 +10970,7 @@ vp run pack:check</code></pre>
       &quot;expectedDiagnostic&quot;: &quot;noUndeclaredDependencies&quot;,
       &quot;passed&quot;: true,
       &quot;seconds&quot;: 0.278,
-      &quot;log&quot;: &quot;.dex/artifacts/vite-plus/after-probe-dependency.log&quot;
+      &quot;log&quot;: &quot;.artifacts/tooling/after-probe-dependency.log&quot;
     },
     {
       &quot;name&quot;: &quot;before-probe-format&quot;,
@@ -9346,7 +10986,7 @@ vp run pack:check</code></pre>
       &quot;expectedDiagnostic&quot;: null,
       &quot;passed&quot;: true,
       &quot;seconds&quot;: 0.088,
-      &quot;log&quot;: &quot;.dex/artifacts/vite-plus/before-probe-format.log&quot;
+      &quot;log&quot;: &quot;.artifacts/tooling/before-probe-format.log&quot;
     },
     {
       &quot;name&quot;: &quot;after-probe-format&quot;,
@@ -9361,7 +11001,7 @@ vp run pack:check</code></pre>
       &quot;expectedDiagnostic&quot;: null,
       &quot;passed&quot;: true,
       &quot;seconds&quot;: 0.146,
-      &quot;log&quot;: &quot;.dex/artifacts/vite-plus/after-probe-format.log&quot;
+      &quot;log&quot;: &quot;.artifacts/tooling/after-probe-format.log&quot;
     },
     {
       &quot;name&quot;: &quot;after-probe-format-fix&quot;,
@@ -9375,7 +11015,7 @@ vp run pack:check</code></pre>
       &quot;expectedDiagnostic&quot;: null,
       &quot;passed&quot;: true,
       &quot;seconds&quot;: 0.142,
-      &quot;log&quot;: &quot;.dex/artifacts/vite-plus/after-probe-format-fix.log&quot;
+      &quot;log&quot;: &quot;.artifacts/tooling/after-probe-format-fix.log&quot;
     },
     {
       &quot;name&quot;: &quot;after-probe-format-fixed&quot;,
@@ -9390,7 +11030,7 @@ vp run pack:check</code></pre>
       &quot;expectedDiagnostic&quot;: null,
       &quot;passed&quot;: true,
       &quot;seconds&quot;: 0.139,
-      &quot;log&quot;: &quot;.dex/artifacts/vite-plus/after-probe-format-fixed.log&quot;
+      &quot;log&quot;: &quot;.artifacts/tooling/after-probe-format-fixed.log&quot;
     },
     {
       &quot;name&quot;: &quot;package-lint&quot;,
@@ -9742,9 +11382,18 @@ vp run pack:check</code></pre>
 						still require explicit TypeScript and packed-consumer checks.
 					</p>
 					<p>
-						<a href="vite-plus-benchmarks.json">Numerical JSON</a>,
-						<a href="vite-plus-tooling-research.md">cited research</a>,
-						<a href="vite-plus-feature-map.html">feature map</a>. CI setup uses the
+						<a
+							href="https://github.com/Routa-ts/Routa/blob/chore/vite-plus-toolchain/docs/vite-plus-benchmarks.json"
+							>Numerical JSON</a
+						>,
+						<a
+							href="https://github.com/Routa-ts/Routa/blob/chore/vite-plus-toolchain/docs/vite-plus-tooling-research.md"
+							>cited research</a
+						>,
+						<a
+							href="https://github.com/Routa-ts/Routa/blob/chore/vite-plus-toolchain/docs/vite-plus-feature-map.html"
+							>feature map</a
+						>. CI setup uses the
 						<a
 							href="https://github.com/voidzero-dev/setup-vp/tree/68f39c78aaf39be468cabd2afb09c162574c84af"
 							>pinned official Vite Plus action</a
@@ -9754,9 +11403,26 @@ vp run pack:check</code></pre>
 			</details>
 			<footer>
 				<p>
-					<a href="vite-plus-oxc-benchmarks.json">Current numerical JSON</a>,
-					<a href="vite-plus-tooling-research.md">original cited research</a>,
-					<a href="vite-plus-feature-map.html">original feature map</a>.
+					<a
+						href="https://github.com/Routa-ts/Routa/blob/chore/vite-plus-toolchain/docs/vite-plus-review-benchmarks.json"
+						>Fresh lint measurements</a
+					>,
+					<a
+						href="https://github.com/Routa-ts/Routa/blob/chore/vite-plus-toolchain/docs/vite-plus-rule-equivalence.md"
+						>rule audit</a
+					>,
+					<a
+						href="https://github.com/Routa-ts/Routa/blob/chore/vite-plus-toolchain/docs/vite-plus-oxc-benchmarks.json"
+						>pre-review measurements</a
+					>,
+					<a
+						href="https://github.com/Routa-ts/Routa/blob/chore/vite-plus-toolchain/docs/vite-plus-tooling-research.md"
+						>original cited research</a
+					>,
+					<a
+						href="https://github.com/Routa-ts/Routa/blob/chore/vite-plus-toolchain/docs/vite-plus-feature-map.html"
+						>original feature map</a
+					>.
 				</p>
 				<p>
 					Oxc documents

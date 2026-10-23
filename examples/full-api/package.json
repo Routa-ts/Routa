@@ -10,7 +10,7 @@
 		"build": "routa build",
 		"lint": "vp lint",
 		"format": "vp fmt",
-		"scaffold": "cd scaffold && routa scaffold openapi.yaml --preview",
+		"scaffold": "vp run scaffold:preview",
 		"scaffold:preview": "cd scaffold && routa scaffold openapi.yaml --preview",
 		"scaffold:update": "cd scaffold && routa scaffold openapi.yaml --yes",
 		"openapi:check": "routa openapi check",

@@ -7,6 +7,8 @@ const generatedIgnores = [
 	"**/.routa/**",
 	"**/.turbo/**",
 	".dex/**",
+	".artifacts/**",
+	"examples/full-api/scaffold/src/**",
 	"**/.astro/**",
 ];
 
@@ -43,6 +45,12 @@ export default defineConfig({
 			"no-eval": "error",
 			"no-secrets/no-secrets": ["error", { tolerance: 4.5 }],
 			"no-unused-vars": "error",
+			"no-useless-constructor": "error",
+			"prefer-template": "warn",
+			"oxc/no-accumulating-spread": "warn",
+			"typescript/require-await": "warn",
+			"typescript/prefer-optional-chain": "warn",
+			"typescript/no-wrapper-object-types": "error",
 			"typescript/ban-ts-comment": [
 				"error",
 				{ "ts-ignore": true, "ts-nocheck": true, "ts-expect-error": false },
@@ -78,6 +86,8 @@ export default defineConfig({
 		semi: true,
 		trailingComma: "all",
 		experimentalOperatorPosition: "start",
+		// Preserve authored import order; see docs/vite-plus-rule-equivalence.md.
+		sortImports: false,
 		sortPackageJson: false,
 		embeddedLanguageFormatting: "off",
 	},

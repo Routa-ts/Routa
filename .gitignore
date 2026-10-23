@@ -12,3 +12,6 @@ dist/
 **/dist/
 coverage/
 **/coverage/
+
+# Reproducible local tooling logs, separate from Dex task state
+.artifacts/

@@ -51,8 +51,9 @@ metadata, example contracts, scaffold diagnostics, and packed-package validation
   Its frontmatter formatting is disabled because the pinned formatter drops comments;
   Astro checks and Oxlint still inspect those scripts.
   Oxlint checks supported scripts, with JavaScript plugins for runtime dependency
-  declarations and secret detection. Template/CSS lint coverage differs from Biome;
-  Astro checks and site builds remain required.
+  declarations and secret detection. Script rules, import organization, and template/CSS lint coverage differ from Biome;
+  Astro checks and site builds remain required. The complete explicit-rule audit and
+  deliberate gaps are in [Biome to Oxc coverage decisions](docs/vite-plus-rule-equivalence.md).
 
 Vite Plus package configs preserve the published `.js` entry points, including the
 CLI's spawned `runtime.js`. Declaration generation uses the existing TypeScript 7
@@ -65,7 +66,9 @@ dependency to avoid mixing plugin types from two Vite distributions.
 
 The [tooling comparison](docs/vite-plus-migration-results.html) records repeated timings,
 CPU, memory, dependency counts, and comparison limits. Its numerical evidence is in
-`docs/vite-plus-oxc-benchmarks.json`. The earlier hybrid snapshot remains in
+`docs/vite-plus-oxc-benchmarks.json`; post-review lint measurements are in
+`docs/vite-plus-review-benchmarks.json`. Local raw logs are recreated under gitignored
+`.artifacts/tooling/`, outside Dex task storage. The earlier hybrid snapshot remains in
 `docs/vite-plus-benchmarks.json`. `scripts/benchmark-tooling.mjs` reruns the measurements
 against the isolated baseline and environment adjustments recorded there.
 

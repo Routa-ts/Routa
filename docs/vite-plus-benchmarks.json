@@ -4374,7 +4374,7 @@
 			"expectedDiagnostic": null,
 			"passed": true,
 			"seconds": 0.326,
-			"log": ".dex/artifacts/vite-plus/before-probe-source-type-error.log"
+			"log": ".artifacts/tooling/before-probe-source-type-error.log"
 		},
 		{
 			"name": "after-probe-source-type-error",
@@ -4384,7 +4384,7 @@
 			"expectedDiagnostic": "TS2322",
 			"passed": true,
 			"seconds": 0.596,
-			"log": ".dex/artifacts/vite-plus/after-probe-source-type-error.log"
+			"log": ".artifacts/tooling/after-probe-source-type-error.log"
 		},
 		{
 			"name": "before-probe-test-type-error",
@@ -4394,7 +4394,7 @@
 			"expectedDiagnostic": null,
 			"passed": true,
 			"seconds": 0.263,
-			"log": ".dex/artifacts/vite-plus/before-probe-test-type-error.log"
+			"log": ".artifacts/tooling/before-probe-test-type-error.log"
 		},
 		{
 			"name": "after-probe-test-type-error",
@@ -4404,7 +4404,7 @@
 			"expectedDiagnostic": "TS2322",
 			"passed": true,
 			"seconds": 0.6,
-			"log": ".dex/artifacts/vite-plus/after-probe-test-type-error.log"
+			"log": ".artifacts/tooling/after-probe-test-type-error.log"
 		},
 		{
 			"name": "before-probe-unused-expect-error",
@@ -4414,7 +4414,7 @@
 			"expectedDiagnostic": null,
 			"passed": true,
 			"seconds": 0.312,
-			"log": ".dex/artifacts/vite-plus/before-probe-unused-expect-error.log"
+			"log": ".artifacts/tooling/before-probe-unused-expect-error.log"
 		},
 		{
 			"name": "after-probe-unused-expect-error",
@@ -4424,7 +4424,7 @@
 			"expectedDiagnostic": "TS2578",
 			"passed": true,
 			"seconds": 0.609,
-			"log": ".dex/artifacts/vite-plus/after-probe-unused-expect-error.log"
+			"log": ".artifacts/tooling/after-probe-unused-expect-error.log"
 		},
 		{
 			"name": "before-probe-floating-promise",
@@ -4434,7 +4434,7 @@
 			"expectedDiagnostic": null,
 			"passed": true,
 			"seconds": 0.264,
-			"log": ".dex/artifacts/vite-plus/before-probe-floating-promise.log"
+			"log": ".artifacts/tooling/before-probe-floating-promise.log"
 		},
 		{
 			"name": "after-probe-floating-promise",
@@ -4444,7 +4444,7 @@
 			"expectedDiagnostic": "no-floating-promises",
 			"passed": true,
 			"seconds": 0.565,
-			"log": ".dex/artifacts/vite-plus/after-probe-floating-promise.log"
+			"log": ".artifacts/tooling/after-probe-floating-promise.log"
 		},
 		{
 			"name": "before-probe-focused-test",
@@ -4454,7 +4454,7 @@
 			"expectedDiagnostic": null,
 			"passed": true,
 			"seconds": 0.26,
-			"log": ".dex/artifacts/vite-plus/before-probe-focused-test.log"
+			"log": ".artifacts/tooling/before-probe-focused-test.log"
 		},
 		{
 			"name": "after-probe-focused-test",
@@ -4464,7 +4464,7 @@
 			"expectedDiagnostic": "no-focused-tests",
 			"passed": true,
 			"seconds": 0.585,
-			"log": ".dex/artifacts/vite-plus/after-probe-focused-test.log"
+			"log": ".artifacts/tooling/after-probe-focused-test.log"
 		},
 		{
 			"name": "after-probe-dependency",
@@ -4474,7 +4474,7 @@
 			"expectedDiagnostic": "noUndeclaredDependencies",
 			"passed": true,
 			"seconds": 0.278,
-			"log": ".dex/artifacts/vite-plus/after-probe-dependency.log"
+			"log": ".artifacts/tooling/after-probe-dependency.log"
 		},
 		{
 			"name": "before-probe-format",
@@ -4484,7 +4484,7 @@
 			"expectedDiagnostic": null,
 			"passed": true,
 			"seconds": 0.088,
-			"log": ".dex/artifacts/vite-plus/before-probe-format.log"
+			"log": ".artifacts/tooling/before-probe-format.log"
 		},
 		{
 			"name": "after-probe-format",
@@ -4494,7 +4494,7 @@
 			"expectedDiagnostic": null,
 			"passed": true,
 			"seconds": 0.146,
-			"log": ".dex/artifacts/vite-plus/after-probe-format.log"
+			"log": ".artifacts/tooling/after-probe-format.log"
 		},
 		{
 			"name": "after-probe-format-fix",
@@ -4504,7 +4504,7 @@
 			"expectedDiagnostic": null,
 			"passed": true,
 			"seconds": 0.142,
-			"log": ".dex/artifacts/vite-plus/after-probe-format-fix.log"
+			"log": ".artifacts/tooling/after-probe-format-fix.log"
 		},
 		{
 			"name": "after-probe-format-fixed",
@@ -4514,7 +4514,7 @@
 			"expectedDiagnostic": null,
 			"passed": true,
 			"seconds": 0.139,
-			"log": ".dex/artifacts/vite-plus/after-probe-format-fixed.log"
+			"log": ".artifacts/tooling/after-probe-format-fixed.log"
 		},
 		{
 			"name": "package-lint",
