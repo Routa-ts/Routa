@@ -26,6 +26,8 @@ lab. Framework checks, tests, and package builds use the locally pinned Vite Plu
     vp install --frozen-lockfile
     ```
 
+    Installation completes without changing the lockfile.
+
 2. Run the full check suite before making changes, so you know the baseline is green.
 
    ```sh
@@ -35,7 +37,11 @@ lab. Framework checks, tests, and package builds use the locally pinned Vite Plu
    vp run test
    ```
 
-   `vp run check` combines Oxfmt, type-aware Oxlint, compiler diagnostics, and the JavaScript plugins for dependency and secret checks. `vp run typecheck` also runs explicit TypeScript source and test programs
+   A successful run reports correctly formatted files, zero type/lint errors, and 204
+   passing tests across nine files. Oxlint can still print advisory warnings.
+
+   `vp run check` first builds workspace declarations and runs Astro sync for both
+   sites, then combines Oxfmt, type-aware Oxlint, compiler diagnostics, and the JavaScript plugins for dependency and secret checks. `vp run typecheck` also runs explicit TypeScript source and test programs
    and Astro checks. `vp run build` builds the packages, examples, and sites. `vp run test`
    runs all framework tests with Vite Plus's bundled Vitest.
 
@@ -62,11 +68,17 @@ lab. Framework checks, tests, and package builds use the locally pinned Vite Plu
    vp run --filter full-api dev
    ```
 
+   Preparation links the local CLI. The example check exits with status zero, and
+   the development command starts a server with file watching.
+
 5. Add a changeset for any change to a published package.
 
    ```sh
    vp run changeset
    ```
+
+   Changesets prompts for packages and release notes, then writes a new file under
+   `.changeset/`.
 
 6. Update the documentation in the same pull request. Read `apps/docs/AGENTS.md` first; it
    defines the required page frame, the package-manager command component, and the
@@ -84,6 +96,9 @@ ready when it passes and the docs site builds.
 vp run verify
 vp run --filter @routa-ts/docs build
 ```
+
+The verification log ends with `Pack check passed in ...` and a successful task
+summary. The docs build reports `[build] Complete!`. Both commands exit with status zero.
 
 ## Documentation Expectations
 

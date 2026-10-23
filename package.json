@@ -10,12 +10,12 @@
 	"packageManager": "pnpm@11.9.0",
 	"scripts": {
 		"build": "vp run prepare:local-cli && vp run --filter './apps/*' --filter './examples/*' build",
-		"check": "vp run prepare:local-cli && vp check",
+		"check": "vp run prepare:checks && vp check",
 		"changeset": "vp exec changeset",
 		"format": "vp fmt",
 		"format:check": "vp fmt --check",
 		"generated:check": "vp run prepare:local-cli && vp run --filter './examples/*' build && vp exec node scripts/check-generated.mjs",
-		"lint": "vp run prepare:local-cli && vp lint",
+		"lint": "vp run prepare:checks && vp lint",
 		"lint:repo": "vp run lint",
 		"pack:check": "vp exec node scripts/pack-check.mjs",
 		"prepare:local-cli": "vp run build:packages && vp exec node scripts/link-local-cli.mjs",
@@ -25,7 +25,8 @@
 		"typecheck": "vp run build:packages && vp run --filter './packages/*' --filter './apps/*' typecheck",
 		"verify": "vp run check && vp run typecheck && vp run test && vp run generated:check && vp run --filter './examples/*' check && vp run --filter './examples/*' openapi:check && scripts/scaffold-error-smoke.sh && vp run pack:check",
 		"version": "vp exec changeset version",
-		"build:packages": "vp run compile"
+		"build:packages": "vp run compile",
+		"prepare:checks": "vp run prepare:local-cli && vp run --filter './apps/*' sync"
 	},
 	"devDependencies": {
 		"@changesets/cli": "3.0.3",

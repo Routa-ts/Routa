@@ -16,6 +16,7 @@ import { tmpdir, cpus, totalmem, platform, arch } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { performance } from "node:perf_hooks";
+import { stripVTControlCharacters } from "node:util";
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => {
@@ -24,6 +25,7 @@ const option = (name, fallback) => {
 };
 const root = resolve(import.meta.dirname, "..");
 const baseline = resolve(option("--baseline", "/tmp/routa-vp-baseline-f07c761"));
+const baselineCacheDir = "/tmp/routa-vp-baseline-turbo-cache";
 const rounds = Number(option("--runs", "7"));
 const workflowRounds = Number(option("--workflow-runs", "3"));
 const output = resolve(option("--out", "docs/vite-plus-benchmarks.json"));
@@ -37,6 +39,21 @@ const baselineCommit = spawnSync("git", ["rev-parse", "HEAD"], {
 }).stdout.trim();
 if (baseline === root || !baselineCommit.startsWith("f07c761"))
 	throw new Error("Use an isolated checkout of baseline f07c761.");
+const baselineScripts = Object.entries(
+	JSON.parse(readFileSync(join(baseline, "package.json"), "utf8")).scripts,
+).filter(
+	([name, command]) =>
+		["build", "test", "typecheck", "verify"].includes(name) && /\bturbo\s+run\b/.test(command),
+);
+if (
+	!baselineScripts.length
+	|| baselineScripts.some(([, command]) => !command.includes(`--cache-dir=${baselineCacheDir}`))
+)
+	throw new Error(
+		"Apply baselineHarnessPatch from the recorded JSON before benchmarking. Every measured baseline Turbo script must use --cache-dir="
+			+ baselineCacheDir,
+	);
+
 const walk = (dir) =>
 	readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
 		e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)],
@@ -160,10 +177,24 @@ function run(command, cwd, label, warmup = false) {
 	);
 	const seconds = (performance.now() - start) / 1000;
 	const text = (r.stdout ?? "") + (r.stderr ?? "");
+	const plainText = stripVTControlCharacters(text);
+	const legacyCacheHits = Math.max(
+		0,
+		...[...plainText.matchAll(/Cached:\s*(\d+)\s+cached/g)].map((match) => Number(match[1])),
+		(plainText.match(/: cache hit,/g) ?? []).length,
+	);
 	const name = `${String(serial++).padStart(3, "0")}-${label}.log`;
 	writeFileSync(join(logs, name), text);
 	if (r.status !== 0)
 		throw new Error(`${label} failed (${r.status}). See ${join(logs, name)}\n${text.slice(-2500)}`);
+	if (
+		cwd === baseline
+		&& /^(verify-cold-tasks|workspace-build-cold)-before-/.test(label)
+		&& legacyCacheHits > 0
+	)
+		throw new Error(
+			`${label} reused ${legacyCacheHits} baseline task results. Rejecting the cold-cache sample; see ${join(logs, name)}`,
+		);
 	const memory = Number(text.match(/(\d+)\s+maximum resident set size/)?.[1]);
 	const cpu = text.match(/[\d.]+\s+real\s+([\d.]+)\s+user\s+([\d.]+)\s+sys/);
 	const engine =
@@ -180,6 +211,7 @@ function run(command, cwd, label, warmup = false) {
 		engineMs,
 		exitCode: r.status,
 		log: name,
+		legacyCacheHits,
 		legacyTestCacheHits: (text.match(/:test: cache hit/g) ?? []).length,
 		executedTestCounts: [...text.matchAll(/Tests\s+(\d+) passed/g)].map((m) => Number(m[1])),
 		cacheHits: Number(text.match(/vp run: (\d+)\/\d+ cache hit/)?.[1] ?? 0),
@@ -377,7 +409,7 @@ compare(
 		"run",
 		"build",
 		"--filter=./packages/*",
-		"--cache-dir=/tmp/routa-vp-baseline-turbo-cache",
+		`--cache-dir=${baselineCacheDir}`,
 	),
 	spec(root, "vp", "run", "build:packages"),
 	rounds,
@@ -411,7 +443,7 @@ compare(
 	spec(baseline, "vp", "run", "verify"),
 	spec(root, "vp", "run", "verify"),
 	workflowRounds,
-	() => rmSync("/tmp/routa-vp-baseline-turbo-cache", { recursive: true, force: true }),
+	() => rmSync(baselineCacheDir, { recursive: true, force: true }),
 	() => rmSync(join(root, "node_modules/.vite/task-cache"), { recursive: true, force: true }),
 	"Task caches cleared before every sample; dependency installations and OS caches remain warm. Both must execute all framework tests. Includes packed installs and network-sensitive registry resolution.",
 );
@@ -432,7 +464,7 @@ compare(
 	spec(baseline, "vp", "run", "build"),
 	spec(root, "vp", "run", "build"),
 	workflowRounds,
-	() => rmSync("/tmp/routa-vp-baseline-turbo-cache", { recursive: true, force: true }),
+	() => rmSync(baselineCacheDir, { recursive: true, force: true }),
 	() => rmSync(join(root, "node_modules/.vite/task-cache"), { recursive: true, force: true }),
 	"Both build three packages, two examples, docs and design. Task caches are cleared; installed dependencies and OS caches stay warm.",
 );

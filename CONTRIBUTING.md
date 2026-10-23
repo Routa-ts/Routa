@@ -31,8 +31,9 @@ metadata, example contracts, scaffold diagnostics, and packed-package validation
 
 ## Framework tooling
 
-- `vp run check` builds workspace declarations, then runs Oxfmt and Oxlint together
-  with type-aware rules and compiler diagnostics. The compiler-diagnostics integration is experimental, so `vp run typecheck`
+- `vp run check` and `vp run lint` first build workspace declarations and run Astro
+  sync for both sites, so clean checkouts have the generated types needed for lint.
+  `vp run check` then runs Oxfmt and type-aware Oxlint with compiler diagnostics. The compiler-diagnostics integration is experimental, so `vp run typecheck`
   also runs TypeScript against explicit source and test programs, plus Astro checks.
 - `vp run test` runs all framework tests with the Vitest version bundled with Vite Plus.
   Tests always execute. Use `vp exec --filter @routa-ts/core vp test watch` while working

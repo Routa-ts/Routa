@@ -69,7 +69,8 @@ The repo uses pnpm workspace metadata and Vite Plus for development tooling and 
 
 ## Development
 
-Developing Routa requires Node.js 24+ and Vite Plus 1.3.0. The repository includes
+Developing Routa requires Node.js 24.11+ on the Node 24 line, or Node.js 26+,
+and Vite Plus 1.3.0. The repository includes
 `.nvmrc` and pins the backing package manager to pnpm 11.9.0 in `package.json`.
 See [Contributing](./CONTRIBUTING.md) for Vite Plus installation.
 

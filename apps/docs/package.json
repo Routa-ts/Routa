@@ -11,7 +11,8 @@
 		"lint": "vp lint",
 		"preview": "node ./scripts/astro.mjs preview",
 		"typecheck": "node ./scripts/astro.mjs check",
-		"format": "vp fmt"
+		"format": "vp fmt",
+		"sync": "vp exec node ./scripts/astro.mjs sync"
 	},
 	"dependencies": {
 		"@astrojs/starlight": "^0.42.6",
