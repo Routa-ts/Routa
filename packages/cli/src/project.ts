@@ -13,18 +13,20 @@ import { fileURLToPath } from "node:url";
 import {
 	callName,
 	localInitializer,
+	resolveImportFile,
 	objectLiteral,
 	objectProperties,
 	objectProperty,
 	propertyName,
 	unwrapExpression,
 } from "./ast.js";
+import { projectContractSchemas } from "./contract-schemas.js";
 import * as ts from "./typescript.js";
 import { runTypeScript } from "./typescript-runner.js";
 
 export type Diagnostic = {
 	code: string;
-	severity: "error";
+	severity: "error" | "warning";
 	message: string;
 	file?: string;
 	routePath?: string;
@@ -77,6 +79,7 @@ export type RouteDeprecationMetadata = {
 export type ProjectValidationResult = {
 	routes: RouteMetadata[];
 	diagnostics: Diagnostic[];
+	warnings: Diagnostic[];
 };
 
 const generatedHeader =
@@ -137,6 +140,7 @@ function validateProjectInSession(
 	const write = options.write ?? true;
 	const discovery = discoverRoutes(cwd, parser);
 	const routes = discovery.routes;
+	const schemas = projectContractSchemas(cwd, routes, parser);
 	const diagnostics = [
 		...projectStructureDiagnostics(cwd),
 		...discovery.diagnostics,
@@ -147,13 +151,14 @@ function validateProjectInSession(
 		...duplicateSchemaDiagnostics(cwd, parser),
 		...middlewareOrderDiagnostics(routes),
 		...middlewareRejectStatusDiagnostics(routes),
+		...schemas.diagnostics,
 	];
 
 	if (write && diagnostics.length === 0) {
 		writeRoutesMetadata(cwd, routes);
 	}
 
-	return { routes, diagnostics };
+	return { routes, diagnostics, warnings: schemas.warnings };
 }
 
 /**
@@ -167,11 +172,12 @@ export function runProjectCheck(cwd = process.cwd()): {
 	stderr?: string;
 } {
 	const validation = validateProject(cwd);
+	const warnings = validation.warnings.length > 0 ? [formatDiagnostics(validation.warnings)] : [];
 
 	if (validation.diagnostics.length > 0) {
 		return {
 			code: 1,
-			stderr: formatDiagnostics(validation.diagnostics),
+			stderr: [formatDiagnostics(validation.diagnostics), ...warnings].join("\n"),
 		};
 	}
 
@@ -185,13 +191,14 @@ export function runProjectCheck(cwd = process.cwd()): {
 		return {
 			code: typecheck.code,
 			stdout: appendOutput(stdout, typecheck.stdout),
-			stderr: appendOutput(["TypeScript check failed."], typecheck.stderr),
+			stderr: appendOutput([...warnings, "TypeScript check failed."], typecheck.stderr),
 		};
 	}
 
 	return {
 		code: 0,
 		stdout: appendOutput([...stdout, "TypeScript check passed.", "Routa check passed."]),
+		...(warnings.length > 0 ? { stderr: appendOutput(warnings) } : {}),
 	};
 }
 
@@ -1621,30 +1628,6 @@ function namedImportMap(
 }
 
 /**
- * Resolves a relative module specifier to an existing TypeScript file.
- *
- * @param cwd - The project root used to resolve candidate paths.
- * @param fromFile - The file containing the import or re-export.
- * @param specifier - The module specifier to resolve.
- * @returns The first matching file path relative to `cwd`, or `undefined` if no relative file exists.
- */
-function resolveImportFile(cwd: string, fromFile: string, specifier: string): string | undefined {
-	if (!specifier.startsWith(".")) {
-		return;
-	}
-
-	const base = join(dirname(fromFile), specifier);
-	const candidates = [
-		base,
-		base.endsWith(".js") ? `${base.slice(0, -3)}.ts` : undefined,
-		base.endsWith(".ts") ? base : `${base}.ts`,
-		join(base, "index.ts"),
-	].filter((item): item is string => Boolean(item));
-
-	return candidates.find((candidate) => existsSync(join(cwd, candidate)));
-}
-
-/**
  * Extracts middleware metadata declared in a route file.
  *
  * @param cwd - The project root directory.
@@ -2964,9 +2947,10 @@ function appendOutput(lines: string[], output?: string): string {
 function formatDiagnostics(diagnostics: Diagnostic[]): string {
 	return diagnostics
 		.map((diagnostic) => {
+			const severity = diagnostic.severity === "warning" ? "Warning: " : "";
 			const location = diagnostic.file ? `${diagnostic.file}: ` : "";
 			const suggestion = diagnostic.suggestion ? `\nSuggestion: ${diagnostic.suggestion}` : "";
-			return `${diagnostic.code}: ${location}${diagnostic.message}${suggestion}`;
+			return `${severity}${diagnostic.code}: ${location}${diagnostic.message}${suggestion}`;
 		})
 		.join("\n");
 }

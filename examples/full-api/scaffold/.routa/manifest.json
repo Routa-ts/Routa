@@ -24,7 +24,7 @@
 				"inspectCatalogItem"
 			],
 			"kind": "schema",
-			"sha256": "4faa8ec786e4dec4ec9b310117107e476b7a5043bf17f7559b5d047a98d7d9c6"
+			"sha256": "a33611d9a583429bddbecd81515528b987053b45e7ef3f3e79e451fa2027770c"
 		},
 		{
 			"path": ".routa/routes.gen.ts",
