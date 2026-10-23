@@ -26,7 +26,7 @@ create_project() {
 	"type": "module",
 	"dependencies": {
 		"@routa-ts/core": "workspace:*",
-		"zod": "^4.4.3"
+		"zod": "^4.6.7"
 	},
 	"devDependencies": {
 		"typescript": "^7.0.2"

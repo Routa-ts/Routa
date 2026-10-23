@@ -10,7 +10,6 @@ import { setTimeout as sleep } from "node:timers/promises";
 const root = resolve(import.meta.dirname, "..");
 const tmp = mkdtempSync(join(tmpdir(), "routa-pack-check-"));
 const packDir = join(tmp, "packs");
-const appDir = join(tmp, "app");
 
 const packages = ["@routa-ts/core", "create-routa-ts", "@routa-ts/cli"];
 const tarballs = new Map();
@@ -61,28 +60,73 @@ for (const requiredFile of ["package/dist/cli.js", "package/dist/index.js"]) {
 	}
 }
 
-run(
-	"vp",
-	["dlx", `file:${tarballs.get("create-routa-ts")}`, "app", "--no-git", "--no-install", "--yes"],
-	tmp,
+const zodRange = readJson(join(root, "packages/core/package.json")).peerDependencies.zod;
+const zodFloor = /^\^(\d+\.\d+\.\d+)$/.exec(zodRange)?.[1];
+
+if (!zodFloor) {
+	throw new Error(`@routa-ts/core must declare its Zod peer as ^x.y.z, found ${zodRange}.`);
+}
+
+for (const example of ["examples/basic-api", "examples/full-api"]) {
+	const range = readJson(join(root, example, "package.json")).dependencies.zod;
+
+	if (range !== zodRange) {
+		throw new Error(`${example} declares zod ${range}; the @routa-ts/core peer is ${zodRange}.`);
+	}
+}
+
+// Prove the packed packages against the minimum supported Zod and the version
+// the repository resolves, so the peer floor stays honest.
+const zodVersions = new Map([[zodFloor, "minimum supported"]]);
+const resolvedZod = readJson(join(root, "packages/core/node_modules/zod/package.json")).version;
+zodVersions.set(
+	resolvedZod,
+	zodVersions.has(resolvedZod)
+		? "minimum supported and repository-resolved"
+		: "repository-resolved",
 );
 
-const manifestPath = join(appDir, "package.json");
-const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-manifest.dependencies["@routa-ts/core"] = `file:${tarballs.get("@routa-ts/core")}`;
-manifest.dependencies["@routa-ts/cli"] = `file:${tarballs.get("@routa-ts/cli")}`;
-writeFileSync(manifestPath, `${JSON.stringify(manifest, null, "\t")}\n`);
-writeFileSync(
-	join(appDir, "pnpm-workspace.yaml"),
-	`overrides:\n  "@routa-ts/cli": "file:${tarballs.get("@routa-ts/cli")}"\n  "@routa-ts/core": "file:${tarballs.get("@routa-ts/core")}"\n  "create-routa-ts": "file:${tarballs.get("create-routa-ts")}"\nallowBuilds:\n  esbuild: true\n`,
-);
+for (const [zodVersion, label] of zodVersions) {
+	const name = `app-zod-${zodVersion}`;
+	const appDir = join(tmp, name);
+	run(
+		"vp",
+		["dlx", `file:${tarballs.get("create-routa-ts")}`, name, "--no-git", "--no-install", "--yes"],
+		tmp,
+	);
 
-run("vp", ["install"], appDir);
-run("vp", ["exec", "routa", "check"], appDir);
-run("vp", ["exec", "routa", "build"], appDir);
-run("vp", ["run", "test"], appDir);
-run("vp", ["exec", "routa", "openapi", "check"], appDir);
-await smokeTestStart(appDir);
+	const manifestPath = join(appDir, "package.json");
+	const manifest = readJson(manifestPath);
+
+	if (manifest.dependencies.zod !== zodRange) {
+		throw new Error(
+			`Generated projects declare zod ${manifest.dependencies.zod}; the @routa-ts/core peer is ${zodRange}.`,
+		);
+	}
+
+	manifest.dependencies["@routa-ts/core"] = `file:${tarballs.get("@routa-ts/core")}`;
+	manifest.dependencies["@routa-ts/cli"] = `file:${tarballs.get("@routa-ts/cli")}`;
+	manifest.dependencies.zod = zodVersion;
+	writeFileSync(manifestPath, `${JSON.stringify(manifest, null, "\t")}\n`);
+	writeFileSync(
+		join(appDir, "pnpm-workspace.yaml"),
+		`overrides:\n  "@routa-ts/cli": "file:${tarballs.get("@routa-ts/cli")}"\n  "@routa-ts/core": "file:${tarballs.get("@routa-ts/core")}"\n  "create-routa-ts": "file:${tarballs.get("create-routa-ts")}"\n  zod: "${zodVersion}"\nallowBuilds:\n  esbuild: true\n`,
+	);
+
+	run("vp", ["install"], appDir);
+	const installedZod = readJson(join(appDir, "node_modules/zod/package.json")).version;
+
+	if (installedZod !== zodVersion) {
+		throw new Error(`Expected zod ${zodVersion} (${label}), but installed ${installedZod}.`);
+	}
+
+	run("vp", ["exec", "routa", "check"], appDir);
+	run("vp", ["exec", "routa", "build"], appDir);
+	run("vp", ["run", "test"], appDir);
+	run("vp", ["exec", "routa", "openapi", "check"], appDir);
+	await smokeTestStart(appDir);
+	process.stdout.write(`Packed consumer passed with zod ${zodVersion} (${label}).\n`);
+}
 
 const noOpenApiDir = join(tmp, "app-no-openapi");
 run(
@@ -99,7 +143,7 @@ run(
 	tmp,
 );
 const noOpenApiManifestPath = join(noOpenApiDir, "package.json");
-const noOpenApiManifest = JSON.parse(readFileSync(noOpenApiManifestPath, "utf8"));
+const noOpenApiManifest = readJson(noOpenApiManifestPath);
 noOpenApiManifest.dependencies["@routa-ts/core"] = `file:${tarballs.get("@routa-ts/core")}`;
 noOpenApiManifest.dependencies["@routa-ts/cli"] = `file:${tarballs.get("@routa-ts/cli")}`;
 writeFileSync(noOpenApiManifestPath, `${JSON.stringify(noOpenApiManifest, null, "\t")}\n`);
@@ -215,6 +259,10 @@ function freePort() {
 			server.close(() => resolvePort(port));
 		});
 	});
+}
+
+function readJson(file) {
+	return JSON.parse(readFileSync(file, "utf8"));
 }
 
 function run(command, args, cwd) {
