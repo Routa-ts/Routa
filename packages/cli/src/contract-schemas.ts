@@ -47,6 +47,11 @@ export type ProjectedResponse = {
 	schema?: JsonSchema;
 	headers?: Record<string, ProjectedHeader>;
 	cookies?: ProjectedResponseCookie[];
+	/**
+	 * Every response at this status has at least one `Set-Cookie` field: each outcome under it
+	 * requires some cookie, though not necessarily the same one.
+	 */
+	setCookieRequired?: true;
 };
 
 /**
@@ -442,6 +447,11 @@ function stringNode(format: string): SchemaNode {
 
 const componentPrefix = "#/components/schemas/";
 
+/** Whether an outcome always sends at least one cookie effect. */
+function requiresCookie(outcome: ProjectedResponse): boolean {
+	return outcome.cookies?.some((cookie) => cookie.required) ?? false;
+}
+
 /**
  * The single string, number, or boolean value a schema allows (a `const` or one-value `enum`), as
  * text, or `undefined` when it allows other values.
@@ -641,7 +651,10 @@ class SchemaProjector {
 				label: _label,
 				...response
 			} = alternatives[0]!;
-			return response;
+			return {
+				...response,
+				...(requiresCookie(alternatives[0]!) ? { setCookieRequired: true } : {}),
+			};
 		}
 
 		const list = (outcomes: readonly ProjectedOutcome[]) =>
@@ -685,6 +698,7 @@ class SchemaProjector {
 			...(schema ? { schema } : {}),
 			...(headers ? { headers } : {}),
 			...(cookies ? { cookies } : {}),
+			...(alternatives.every(requiresCookie) ? { setCookieRequired: true } : {}),
 		};
 	}
 
@@ -819,7 +833,8 @@ class SchemaProjector {
 
 	/**
 	 * Lists the cookies of same-status alternatives once. One identity must come from one
-	 * `createCookie` declaration; it is always set only when every alternative requires it.
+	 * `createCookie` declaration; it is always set only when every alternative requires that
+	 * identity. Whether `Set-Cookie` itself is always present is `setCookieRequired`.
 	 */
 	private composeCookies(
 		alternatives: readonly ProjectedOutcome[],

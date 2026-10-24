@@ -380,6 +380,54 @@ export const SameTag = z.string().describe("Tag");
 		expect(setCookie.description).not.toContain("always sets");
 	});
 
+	it("requires Set-Cookie when every alternative requires some cookie, even different ones", () => {
+		const setCookieOf = (routeOutcomes: string, rejects?: string) =>
+			(
+				responseOf(
+					generateOpenApi(
+						project({
+							"src/cookies.ts": cookies,
+							...(rejects
+								? {
+										"src/routes/projects/middleware.ts": `import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+import { theme } from "../../cookies";
+
+export const guard = createMiddleware({ rejects: { ${rejects} }, run: ({ next }) => next() });
+`,
+									}
+								: {}),
+							"src/routes/projects/route.ts": route(
+								routeOutcomes,
+								'import { session, theme } from "../../cookies";',
+							),
+						}),
+					),
+					400,
+				).headers as Record<string, Json>
+			)["Set-Cookie"]!;
+		const a = `a: { status: 400, schema: z.object({ kind: z.literal("a") }), cookies: [{ handle: session, required: true }] }`;
+		const routeOnly = setCookieOf(
+			`ok: { status: 200 }, ${a}, b: { status: 400, schema: z.object({ kind: z.literal("b") }), cookies: [{ handle: theme, required: true }] }`,
+		);
+		const withReject = setCookieOf(
+			`ok: { status: 200 }, ${a}`,
+			`b: { status: 400, schema: z.object({ kind: z.literal("b") }), cookies: [{ handle: theme, required: true }] }`,
+		);
+		const oneOptional = setCookieOf(
+			`ok: { status: 200 }, ${a}`,
+			`b: { status: 400, schema: z.object({ kind: z.literal("b") }), cookies: [theme] }`,
+		);
+
+		for (const setCookie of [routeOnly, withReject]) {
+			expect(setCookie.required).toBe(true);
+			// Neither cookie is set by every alternative, so neither is listed as always set.
+			expect(setCookie.description).not.toContain("always sets");
+		}
+
+		expect(oneOptional.required).toBeUndefined();
+	});
+
 	it("rejects different cookie declarations that claim one identity under one status", () => {
 		const diagnostics = errorsOf(
 			project({
