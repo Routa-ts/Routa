@@ -427,7 +427,6 @@ export type MiddlewareNext<TProvides extends MiddlewareProvidesSpec> = keyof TPr
 export type MiddlewareRunArgs<
 	TRequires extends readonly RegisteredCtxKey[],
 	TProvides extends MiddlewareProvidesSpec,
-	TRejects extends MiddlewareRejectsSpec,
 	TInput extends RouteInput | undefined,
 > = {
 	input: InferInput<TInput>;
@@ -441,7 +440,7 @@ export type MiddlewareRun<
 	TRejects extends MiddlewareRejectsSpec,
 	TInput extends RouteInput | undefined,
 > = (
-	args: MiddlewareRunArgs<TRequires, TProvides, TRejects, TInput>,
+	args: MiddlewareRunArgs<TRequires, TProvides, TInput>,
 ) => MaybePromise<MiddlewareRejectResult<NoInfer<TRejects>> | MiddlewareContinuation>;
 
 export type MiddlewareContract<
@@ -470,7 +469,7 @@ type RegisteredCtxByKey = Register extends {
 		: Record<string, unknown>
 	: Record<string, unknown>;
 
-type RegisteredCtxKey = keyof RegisteredCtxByKey  ;
+type RegisteredCtxKey = keyof RegisteredCtxByKey & string;
 
 type RequiredMiddlewareCtx<TRequires extends readonly string[]> = {
 	[K in TRequires[number]]: K extends keyof RegisteredCtxByKey ? RegisteredCtxByKey[K] : unknown;
@@ -694,7 +693,7 @@ export function createRouteRootFactory<
  * @param _path - The route path used to select the matching context type
  * @returns A function that accepts a route configuration for the selected path
  */
-export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPath  >(
+export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPath & string>(
 	_path: TPath,
 ) {
 	return function routeRoot<

@@ -151,10 +151,6 @@ function generateOpenApiInSession(cwd: string, parser: ts.SourceFileParser): Ope
 				const operation = operations[method];
 				const input = operationInput(route.path, operation?.input);
 				const middleware = route.methodMiddleware[method] ?? route.middleware;
-				const responseSchemas = new Map<number, ProjectedResponse>([
-					...(operation?.rejects ?? new Map()),
-					...(operation?.responses ?? new Map()),
-				]);
 
 				return [
 					method,
@@ -163,7 +159,7 @@ function generateOpenApiInSession(cwd: string, parser: ts.SourceFileParser): Ope
 						...middlewareOpenApiMetadata(middleware),
 						...deprecationMetadata(operation?.deprecation),
 						...input,
-						responses: operationResponses(statuses, responseSchemas),
+						responses: operationResponses(statuses, operation?.responses),
 					},
 				];
 			}),
@@ -257,7 +253,7 @@ function deprecationMetadata(
  * Builds OpenAPI responses for a route operation from its source statuses.
  *
  * @param statuses - The response statuses discovered from route code.
- * @param projected - The projected outcomes discovered from route code.
+ * @param projected - One composed response per status, from route outcomes and middleware rejects.
  * @returns OpenAPI response entries for the operation.
  */
 function operationResponses(
