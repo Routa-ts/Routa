@@ -557,8 +557,47 @@ function comparableOperation(
 		requestBody: normalizeRequestBody(
 			inline(operation.requestBody) as Record<string, unknown> | undefined,
 		),
-		responses: normalize(inline(operation.responses ?? {})),
+		responses: normalize(keepSetCookieContract(inline(operation.responses ?? {}))),
 	};
+}
+
+/**
+ * Keeps the `Set-Cookie` Header Object's description in the comparison.
+ *
+ * Descriptions are prose and do not count as drift, but Routa writes the cookie names and
+ * attributes only into this one description, so it carries contract facts. It moves to a key
+ * `normalize` keeps.
+ */
+function keepSetCookieContract(responses: unknown): unknown {
+	if (typeof responses !== "object" || responses === null) {
+		return responses;
+	}
+
+	return Object.fromEntries(
+		Object.entries(responses).map(([status, response]) => {
+			const headers = (response as { headers?: unknown } | null)?.headers;
+
+			if (typeof headers !== "object" || headers === null) {
+				return [status, response];
+			}
+
+			return [
+				status,
+				{
+					...(response as object),
+					headers: Object.fromEntries(
+						Object.entries(headers).map(([name, header]) => {
+							const { description, ...rest } = (header ?? {}) as Record<string, unknown>;
+
+							return name.toLowerCase() === "set-cookie" && typeof description === "string"
+								? [name, { ...rest, setCookieContract: description }]
+								: [name, header];
+						}),
+					),
+				},
+			];
+		}),
+	);
 }
 
 /**

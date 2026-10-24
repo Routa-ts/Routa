@@ -135,6 +135,98 @@ describe("response cookie OpenAPI", () => {
 	});
 });
 
+describe("response cookie drift", () => {
+	const drifted = async (change: (cookies: string) => string) => {
+		const cwd = project({
+			"src/cookies.ts": cookieFile(session, theme),
+			"src/routes/items/route.ts": route("/items", "ok: { status: 200, cookies: [session] }", {
+				imports: 'import { session, theme } from "../../cookies";',
+			}),
+		});
+		writeFileSync(
+			join(cwd, ".routa/openapi-baseline.json"),
+			JSON.stringify(generateOpenApi(cwd), null, "\t"),
+		);
+		writeFileSync(join(cwd, "src/cookies.ts"), change(cookieFile(session, theme)));
+
+		return run(["openapi", "check"], { cwd });
+	};
+
+	it("reports no drift when nothing changed", async () => {
+		expect(await drifted((cookies) => cookies)).toMatchObject({ code: 0 });
+	});
+
+	it("detects changes to a cookie while the Set-Cookie header stays present", async () => {
+		for (const [label, from, to] of [
+			["httpOnly", "httpOnly: true", "httpOnly: false"],
+			["secure", 'secure: true,\n\tsameSite: "lax"', 'secure: false,\n\tsameSite: "lax"'],
+			["sameSite", 'sameSite: "lax"', 'sameSite: "strict"'],
+			["name", 'name: "session"', 'name: "sid"'],
+			["scope", 'path: "/",\n\tmaxAge', 'path: "/x",\n\tmaxAge'],
+			["lifetime", "maxAge: 3600", "maxAge: 7200"],
+		] as const) {
+			const check = await drifted((cookies) => {
+				expect(cookies, label).toContain(from);
+				return cookies.replace(from, to);
+			});
+
+			expect(check.code, label).toBe(1);
+			expect(check.stderr, label).toContain("OPENAPI_DRIFT: GET /items schema changed");
+		}
+	});
+
+	it("detects a cookie added to or removed from an outcome that keeps another", async () => {
+		for (const [before, after] of [
+			["[session]", "[session, theme]"],
+			["[session, theme]", "[session]"],
+		] as const) {
+			const cwd = project({
+				"src/cookies.ts": cookieFile(session, theme),
+				"src/routes/items/route.ts": route("/items", `ok: { status: 200, cookies: ${before} }`, {
+					imports: 'import { session, theme } from "../../cookies";',
+				}),
+			});
+			writeFileSync(
+				join(cwd, ".routa/openapi-baseline.json"),
+				JSON.stringify(generateOpenApi(cwd), null, "\t"),
+			);
+			writeFileSync(
+				join(cwd, "src/routes/items/route.ts"),
+				route("/items", `ok: { status: 200, cookies: ${after} }`, {
+					imports: 'import { session, theme } from "../../cookies";',
+				}),
+			);
+
+			const check = await run(["openapi", "check"], { cwd });
+			expect(check.code, `${before} -> ${after}`).toBe(1);
+			expect(check.stderr).toContain("OPENAPI_DRIFT: GET /items schema changed");
+		}
+	});
+
+	it("still ignores ordinary prose descriptions", async () => {
+		const cwd = project({
+			"src/cookies.ts": cookieFile(session),
+			"src/routes/items/route.ts": route(
+				"/items",
+				'ok: { status: 200, description: "First wording", cookies: [session] }',
+				{ imports: 'import { session } from "../../cookies";' },
+			),
+		});
+		writeFileSync(
+			join(cwd, ".routa/openapi-baseline.json"),
+			JSON.stringify(generateOpenApi(cwd), null, "\t"),
+		);
+		writeFileSync(
+			join(cwd, "src/routes/items/route.ts"),
+			route("/items", 'ok: { status: 200, description: "Second wording", cookies: [session] }', {
+				imports: 'import { session } from "../../cookies";',
+			}),
+		);
+
+		expect(await run(["openapi", "check"], { cwd })).toMatchObject({ code: 0 });
+	});
+});
+
 describe("response cookie handle resolution", () => {
 	const codes = (cwd: string) =>
 		validateProject(cwd, { write: false }).diagnostics.map((item) => [item.code, item.message]);
