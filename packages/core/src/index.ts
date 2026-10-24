@@ -409,12 +409,20 @@ export type MiddlewareProvidedCtx<TProvides extends MiddlewareProvidesSpec> = {
 	[K in keyof TProvides]: SchemaOutput<TProvides[K]>;
 };
 
-export type MiddlewareNext<
-	TProvides extends MiddlewareProvidesSpec,
-	TRejects extends MiddlewareRejectsSpec,
-> = keyof TProvides extends never
-	? (ctx?: MiddlewareProvidedCtx<TProvides>) => Promise<MiddlewareRejectResult<TRejects>>
-	: (ctx: MiddlewareProvidedCtx<TProvides>) => Promise<MiddlewareRejectResult<TRejects>>;
+declare class SelectedOutcome {
+	private readonly selectedOutcome: never;
+}
+
+/**
+ * What `next()` resolves to: the outcome the rest of the chain selected. It is opaque, so a
+ * continuing middleware can only return it unchanged. It cannot read, copy, or add headers or
+ * cookies to it, and Routa fails a middleware that returns anything else after calling `next()`.
+ */
+export type MiddlewareContinuation = SelectedOutcome;
+
+export type MiddlewareNext<TProvides extends MiddlewareProvidesSpec> = keyof TProvides extends never
+	? (ctx?: MiddlewareProvidedCtx<TProvides>) => Promise<MiddlewareContinuation>
+	: (ctx: MiddlewareProvidedCtx<TProvides>) => Promise<MiddlewareContinuation>;
 
 export type MiddlewareRunArgs<
 	TRequires extends readonly RegisteredCtxKey[],
@@ -424,7 +432,7 @@ export type MiddlewareRunArgs<
 > = {
 	input: InferInput<TInput>;
 	ctx: RequiredMiddlewareCtx<TRequires>;
-	next: MiddlewareNext<TProvides, TRejects>;
+	next: MiddlewareNext<TProvides>;
 };
 
 export type MiddlewareRun<
@@ -434,7 +442,7 @@ export type MiddlewareRun<
 	TInput extends RouteInput | undefined,
 > = (
 	args: MiddlewareRunArgs<TRequires, TProvides, TRejects, TInput>,
-) => MaybePromise<MiddlewareRejectResult<NoInfer<TRejects>>>;
+) => MaybePromise<MiddlewareRejectResult<NoInfer<TRejects>> | MiddlewareContinuation>;
 
 export type MiddlewareContract<
 	TRequires extends readonly RegisteredCtxKey[] = readonly RegisteredCtxKey[],
@@ -462,7 +470,7 @@ type RegisteredCtxByKey = Register extends {
 		: Record<string, unknown>
 	: Record<string, unknown>;
 
-type RegisteredCtxKey = keyof RegisteredCtxByKey & string;
+type RegisteredCtxKey = keyof RegisteredCtxByKey  ;
 
 type RequiredMiddlewareCtx<TRequires extends readonly string[]> = {
 	[K in TRequires[number]]: K extends keyof RegisteredCtxByKey ? RegisteredCtxByKey[K] : unknown;
@@ -686,7 +694,7 @@ export function createRouteRootFactory<
  * @param _path - The route path used to select the matching context type
  * @returns A function that accepts a route configuration for the selected path
  */
-export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPath & string>(
+export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPath  >(
 	_path: TPath,
 ) {
 	return function routeRoot<

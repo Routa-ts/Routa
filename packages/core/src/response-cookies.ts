@@ -50,7 +50,7 @@ function isIsoDateTime(value: string): boolean {
 
 /** One `Set-Cookie` field a response plan will send, with the identity that decides who owns it. */
 export type CookieEntry = {
-	/** Who produced the cookie, for conflict messages: the selected outcome today, later others. */
+	/** Who produced the cookie, for conflict messages, such as `outcome "ok"` or `middleware[0] reject "expired"`. */
 	producer: string;
 	name: string;
 	domain?: string;
@@ -432,7 +432,7 @@ export function planCookies(entries: readonly CookieEntry[]): string[] {
 
 		if (earlier) {
 			throw new InvalidHandlerOutputError(
-				`Cookie ${describeIdentity(entry)} is produced by "${earlier.producer}" and "${entry.producer}", so Routa will not choose one.`,
+				`Cookie ${describeIdentity(entry)} is produced by ${earlier.producer} and ${entry.producer}, so Routa will not choose one.`,
 			);
 		}
 
