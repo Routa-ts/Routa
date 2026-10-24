@@ -419,7 +419,9 @@ function driftDiagnostics(baseline: OpenApiLike, current: OpenApiLike): string[]
 				diagnostics.push(`OPENAPI_DRIFT: ${method.toUpperCase()} ${path} schema changed`);
 			}
 
-			if (comparableSecurity(operation.security) !== comparableSecurity(currentOperation.security)) {
+			if (
+				comparableSecurity(operation.security) !== comparableSecurity(currentOperation.security)
+			) {
 				diagnostics.push(`OPENAPI_DRIFT: ${method.toUpperCase()} ${path} security changed`);
 			}
 		}

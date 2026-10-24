@@ -539,7 +539,8 @@ export const FlagBody = z.object({ enabled: Flag });
 
 	it("reports one exported schema whose input and output projections differ as a component collision", () => {
 		const cwd = project({
-			"src/routes/contacts/schemas.ts": schemasFile(`export const Contact = z.string().pipe(z.email());
+			"src/routes/contacts/schemas.ts":
+				schemasFile(`export const Contact = z.string().pipe(z.email());
 export const ContactBody = z.object({ contact: Contact });
 export const ContactResponse = z.object({ contact: Contact });
 `),

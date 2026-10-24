@@ -143,10 +143,7 @@ describe("OpenAPI generated from source", () => {
 				"src/routes/users/$id/route.ts": userRoute(),
 			});
 			acceptedBaseline(cwd);
-			writeFileSync(
-				join(cwd, "src/routes/users/$id/route.ts"),
-				userRoute({ notFound: false }),
-			);
+			writeFileSync(join(cwd, "src/routes/users/$id/route.ts"), userRoute({ notFound: false }));
 
 			const result = await run(["openapi", "check"], { cwd });
 
@@ -257,13 +254,13 @@ describe("OpenAPI generated from source", () => {
 						get: {
 							operationId: "getUserById",
 							security: [{ sessionCookie: [] }],
-							parameters: [
-								{ name: "id", in: "path", required: true, schema: { type: "string" } },
-							],
+							parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
 							responses: {
 								"200": {
 									description: "OK",
-									content: { "application/json": { schema: { $ref: "#/components/schemas/User" } } },
+									content: {
+										"application/json": { schema: { $ref: "#/components/schemas/User" } },
+									},
 								},
 								"404": {
 									description: "Not found",
@@ -275,7 +272,11 @@ describe("OpenAPI generated from source", () => {
 				},
 				components: {
 					schemas: {
-						User: { type: "object", required: ["id", "name"], properties: { id: { type: "string" }, name: { type: "string" } } },
+						User: {
+							type: "object",
+							required: ["id", "name"],
+							properties: { id: { type: "string" }, name: { type: "string" } },
+						},
 						Orphan: { type: "string" },
 					},
 				},
@@ -345,7 +346,10 @@ function operation(document: unknown, path: string, method: string): Json {
 }
 
 function writeBaseline(cwd: string, document: unknown): void {
-	writeFileSync(join(cwd, ".routa/openapi-baseline.json"), `${JSON.stringify(document, null, "\t")}\n`);
+	writeFileSync(
+		join(cwd, ".routa/openapi-baseline.json"),
+		`${JSON.stringify(document, null, "\t")}\n`,
+	);
 }
 
 function readBaseline(cwd: string): Json {
