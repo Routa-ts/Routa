@@ -248,8 +248,8 @@ returning the same handle twice, or declaring two handles with one identity in a
 fails instead of choosing one. Two cookies that share a name but differ in domain or path are
 allowed, and Routa warns about them in `routa check` and at startup. Routa sends each cookie
 as its own `Set-Cookie` field, never joined with commas. Terminal middleware `rejects` accept
-`cookies` and send them through the same path as route outcomes, but `routa check` and
-OpenAPI do not read them yet, so app startup is the first place a bad reject cookie fails.
+`headers` and `cookies` and follow every rule on this page: TypeScript, `routa check`,
+startup, runtime validation, and OpenAPI treat them like route outcomes.
 
 Routa checks declared handles, required effects, one effect per identity, and safe encoding in every mode. It
 parses a `set` value with the handle's schema and compares the result with the value you

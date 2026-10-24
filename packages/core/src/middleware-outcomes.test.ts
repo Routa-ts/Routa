@@ -71,6 +71,38 @@ describe("continuing middleware (types)", () => {
 	});
 });
 
+describe("outcome names (types)", () => {
+	it("fails a route outcome named like a reject of the route's own middleware", () => {
+		const guard = createMiddleware({
+			rejects: { unauthorized: { status: 401 } },
+			run: ({ next }) => next(),
+		});
+
+		typesOnly(() => {
+			createRoute({
+				middleware: [guard],
+				responses: { ok: { status: 200 }, notFound: { status: 404 } },
+				run: () => ({ type: "ok" }),
+			});
+
+			createRoute({
+				middleware: [guard],
+				responses: {
+					ok: { status: 200 },
+					// @ts-expect-error The handler result names its outcome, so names must be distinct.
+					unauthorized: { status: 401 },
+				},
+				run: () => ({ type: "ok" }),
+			});
+
+			createRoute({
+				responses: { ok: { status: 200 }, unauthorized: { status: 401 } },
+				run: () => ({ type: "ok" }),
+			});
+		});
+	});
+});
+
 describe("continuing middleware (runtime)", () => {
 	const route = (middleware: AnyMiddlewareContract): HonoRoute => ({
 		method: "get",
@@ -208,4 +240,95 @@ describe("terminal middleware reject declarations at registration", () => {
 			/Outcome "ok" on GET \/a is declared by the route and by middleware\[0\]/,
 		);
 	});
+});
+
+describe("response validation policy across route outcomes and middleware rejects", () => {
+	type Mode = { name: string; options: Parameters<typeof createHonoApp>[1]; parses: boolean };
+
+	const modes: Mode[] = [
+		{ name: "development", options: { runtimeMode: "dev" }, parses: true },
+		{
+			name: "production by default",
+			options: { runtimeMode: "start", responseValidation: "development" },
+			parses: false,
+		},
+		{
+			name: "production with always",
+			options: { runtimeMode: "start", responseValidation: "always" },
+			parses: true,
+		},
+	];
+	const outcome = {
+		status: 403,
+		schema: z.object({ message: z.string().trim(), code: z.enum(["denied"]) }),
+		headers: z.object({ "x-reason": z.string().toLowerCase().optional() }),
+		cookies: [createCookie({ ...session, name: "flag", schema: z.string().trim() })],
+	} as const;
+	const [flag] = outcome.cookies;
+	const valid = { data: { message: "No", code: "denied" } };
+
+	/** Each case is a result for `outcome`, and whether only Zod parsing can find the problem. */
+	const cases: Array<{ name: string; result: Record<string, unknown>; zodOnly: boolean }> = [
+		{ name: "a valid result", result: valid, zodOnly: false },
+		{ name: "an invalid body", result: { data: { message: "No", code: "other" } }, zodOnly: true },
+		{
+			name: "a body the schema would change",
+			result: { data: { message: " No ", code: "denied" } },
+			zodOnly: true,
+		},
+		{ name: "a header the schema would change", result: { ...valid, headers: { "x-reason": "LOUD" } }, zodOnly: true },
+		{ name: "a cookie the schema would change", result: { ...valid, cookies: [flag.set(" x ")] }, zodOnly: true },
+		{ name: "an undeclared header", result: { ...valid, headers: { "x-other": "1" } }, zodOnly: false },
+		{ name: "an unsafe header value", result: { ...valid, headers: { "x-reason": "a\nb" } }, zodOnly: false },
+		{ name: "a missing body", result: {}, zodOnly: false },
+		{ name: "an undeclared cookie", result: { ...valid, cookies: [session.set("s")] }, zodOnly: false },
+	];
+	const producers = {
+		"route outcome": (result: Record<string, unknown>): HonoRoute => ({
+			method: "get",
+			path: "/a",
+			contract: createRoute({
+				responses: { ok: { status: 200 }, denied: outcome },
+				run: () => ({ type: "denied", ...result }) as never,
+			}),
+		}),
+		"middleware reject": (result: Record<string, unknown>): HonoRoute => ({
+			method: "get",
+			path: "/a",
+			contract: createRoute({
+				middleware: [
+					createMiddleware({
+						rejects: { denied: outcome },
+						run: () => ({ type: "denied", ...result }) as never,
+					}),
+				],
+				responses: { ok: { status: 200 } },
+				run: () => ({ type: "ok" }),
+			}),
+		}),
+	};
+
+	for (const [producer, routeFor] of Object.entries(producers)) {
+		for (const mode of modes) {
+			it(`applies the ${mode.name} policy to a ${producer}`, async () => {
+				for (const { name, result, zodOnly } of cases) {
+					const response = await createHonoApp([routeFor(result)], mode.options).request("/a");
+					const fails = name !== "a valid result" && (!zodOnly || mode.parses);
+
+					expect(response.status, name).toBe(fails ? 500 : 403);
+
+					if (!fails) {
+						// Routa sends the handler's values, never values Zod changed.
+						await expect(response.json(), name).resolves.toEqual(result.data);
+						expect(response.headers.get("x-reason"), name).toBe(
+							(result.headers as Record<string, string> | undefined)?.["x-reason"] ?? null,
+						);
+						expect(response.headers.getSetCookie().map((field) => field.split(";")[0]), name).toEqual(
+							result.cookies ? ["flag=%20x%20"] : [],
+						);
+					}
+				}
+			});
+		}
+	}
 });

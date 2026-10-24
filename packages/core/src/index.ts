@@ -349,6 +349,25 @@ export type ResponseChecks<TResponses extends RouteResponses> = {
 	readonly [K in keyof TResponses]: OutcomeChecks<TResponses[K]>;
 };
 
+/** The reject names a route's own `middleware` declares; middleware from `middleware.ts` files is not visible here. */
+type MiddlewareRejectNames<TMiddleware> = TMiddleware extends readonly (infer TItem)[]
+	? TItem extends { readonly rejects?: infer TRejects }
+		? string extends keyof NonNullable<TRejects>
+			? never
+			: keyof NonNullable<TRejects>
+		: never
+	: never;
+
+/**
+ * Fails a route outcome named like a reject of the route's own middleware: the handler result names
+ * its outcome, so the names must be distinct. `routa check` and registration cover every middleware.
+ */
+type OutcomeNameChecks<TResponses, TMiddleware> = {
+	readonly [K in keyof TResponses & MiddlewareRejectNames<TMiddleware> & string]: {
+		readonly [M in `Outcome "${K}" is also a reject of this route's middleware. Give each outcome its own name.`]: never;
+	};
+};
+
 export type RoutaResult<TResponses extends RouteResponses> = {
 	[K in keyof TResponses & string]: OutcomeResult<K, TResponses[K]>;
 }[keyof TResponses & string];
@@ -656,7 +675,8 @@ export function createRoute<
 	TCtx = InferMiddlewareCtx<TMiddleware>,
 >(
 	contract: RouteContract<TInput, TResponses, TCtx, TMiddleware> & {
-		readonly responses: ResponseChecks<NoInfer<TResponses>>;
+		readonly responses: ResponseChecks<NoInfer<TResponses>>
+			& OutcomeNameChecks<NoInfer<TResponses>, NoInfer<TMiddleware>>;
 	},
 ): RouteContract<TInput, NoInfer<TResponses>, TCtx, TMiddleware> {
 	return contract;
