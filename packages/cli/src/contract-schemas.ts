@@ -941,7 +941,6 @@ class SchemaProjector {
 			}
 		}
 
-		const facts: Partial<ProjectedCookie> = {};
 		const text = (key: string, required: boolean) => {
 			const value = propertyValue(config, key);
 
