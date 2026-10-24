@@ -82,7 +82,7 @@ export const Report = z.object({
 	count: z.coerce.number(),
 	tags: z.array(z.string()).default([]),
 	label: z.string().transform((value) => value.toUpperCase()),
-	code: z.string().pipe(z.coerce.number()),
+	code: z.string().pipe(z.transform((value) => Number(value))),
 	raw: z.preprocess((value) => String(value), z.string()),
 });
 `),
@@ -122,7 +122,7 @@ export const Report = z.object({
 			[
 				"ROUTA_RESPONSE_SCHEMA_MUTATION",
 				"src/routes/items/schemas.ts",
-				"Response schema changes values with .pipe() into a different schema: z.string().pipe(z.coerce.number())",
+				"Response schema changes values with z.transform(): z.transform((value) => Number(value))",
 			],
 			[
 				"ROUTA_RESPONSE_SCHEMA_MUTATION",
@@ -214,6 +214,304 @@ export const guard = createMiddleware({
 				"Response schema changes values with .trim(): z.string().trim()",
 			],
 		]);
+	});
+
+	it("reports mutations hidden in record keys, local check declarations, and URL normalization", () => {
+		const cwd = project({
+			"src/routes/items/schemas.ts": schemasFile(`const tidy = z.trim();
+const tidyAlias = tidy;
+const lower = z.overwrite((value: string) => value.toLowerCase());
+const urlOptions = { normalize: true };
+export const Item = z.object({
+	counts: z.record(z.string().toLowerCase(), z.number()),
+	labels: z.record(z.string().meta({ type: "integer" }), z.string()),
+	tidy: z.string().check(tidyAlias),
+	lower: z.string().check(lower),
+	unknown: z.string().check(makeCheck()),
+	link: z.url({ normalize: true }),
+	shared: z.url(urlOptions),
+	legacy: z.string().url({ normalize: true }),
+	http: z.httpUrl({ normalize: true }),
+	plain: z.url({ normalize: false }),
+	computed: z.url({ normalize: process.env.NORMALIZE === "1" }),
+	checked: z.string().check(z.minLength(1), (ctx) => {
+		if (ctx.value === "") ctx.issues.push({ code: "custom", message: "empty", input: ctx.value });
+	}),
+});
+`),
+			"src/routes/items/route.ts": routeFile("/items", {
+				imports: 'import { guard } from "../../middleware/guard.js";',
+				responses: "ok: { status: 200, schema: Item }",
+			}).replace("\tget: createRoute({", "\tmiddleware: [guard],\n\tget: createRoute({"),
+			"src/middleware/guard.ts": `import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+
+const tidy = z.trim();
+
+export const guard = createMiddleware({
+	rejects: {
+		denied: { status: 403, schema: z.object({ message: z.string().check(tidy) }) },
+	},
+	run: ({ next }) => next({}),
+});
+`,
+		});
+
+		const { diagnostics } = validateProject(cwd, { write: false });
+
+		expect(diagnostics.map((item) => [item.code, item.file, item.message])).toEqual([
+			[
+				"ROUTA_RESPONSE_SCHEMA_MUTATION",
+				"src/routes/items/schemas.ts",
+				"Response schema changes values with .toLowerCase(): z.string().toLowerCase()",
+			],
+			[
+				"ROUTA_SCHEMA_META_STRUCTURAL",
+				"src/routes/items/schemas.ts",
+				'Metadata "type" would override the schema structure Zod already defines: type: "integer"',
+			],
+			[
+				"ROUTA_RESPONSE_SCHEMA_MUTATION",
+				"src/routes/items/schemas.ts",
+				"Response schema changes values with z.trim(): z.trim()",
+			],
+			[
+				"ROUTA_RESPONSE_SCHEMA_MUTATION",
+				"src/routes/items/schemas.ts",
+				"Response schema changes values with z.overwrite(): z.overwrite((value: string) => value.toLowerCase())",
+			],
+			[
+				"ROUTA_SCHEMA_UNSUPPORTED",
+				"src/routes/items/schemas.ts",
+				"Unsupported schema for OpenAPI (Routa cannot tell whether this check changes values): makeCheck()",
+			],
+			[
+				"ROUTA_RESPONSE_SCHEMA_MUTATION",
+				"src/routes/items/schemas.ts",
+				"Response schema changes values with URL normalization: z.url({ normalize: true })",
+			],
+			[
+				"ROUTA_RESPONSE_SCHEMA_MUTATION",
+				"src/routes/items/schemas.ts",
+				"Response schema changes values with URL normalization: z.url(urlOptions)",
+			],
+			[
+				"ROUTA_RESPONSE_SCHEMA_MUTATION",
+				"src/routes/items/schemas.ts",
+				"Response schema changes values with URL normalization: z.string().url({ normalize: true })",
+			],
+			[
+				"ROUTA_RESPONSE_SCHEMA_MUTATION",
+				"src/routes/items/schemas.ts",
+				"Response schema changes values with URL normalization: z.httpUrl({ normalize: true })",
+			],
+			[
+				"ROUTA_SCHEMA_UNSUPPORTED",
+				"src/routes/items/schemas.ts",
+				'Unsupported schema for OpenAPI (Routa cannot tell whether these URL options normalize the value): z.url({ normalize: process.env.NORMALIZE === "1" })',
+			],
+			[
+				"ROUTA_RESPONSE_SCHEMA_MUTATION",
+				"src/middleware/guard.ts",
+				"Response schema changes values with z.trim(): z.trim()",
+			],
+		]);
+	});
+
+	it("projects record key schemas as propertyNames, agreeing with z.toJSONSchema", () => {
+		const schemas = `export const Scores = z.object({
+	byLevel: z.record(z.enum(["low", "high"]), z.number()),
+	byFlag: z.record(z.literal("on"), z.boolean()),
+	byName: z.record(z.string(), z.number()),
+});
+`;
+		const cwd = project({
+			"src/routes/scores/schemas.ts": schemasFile(schemas),
+			"src/routes/scores/route.ts": routeFile("/scores", {
+				responses: "ok: { status: 200, schema: Scores }",
+			}),
+		});
+
+		const document = generateOpenApi(cwd);
+		const components = document.components?.schemas ?? {};
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect((components.Scores as Json).properties).toEqual({
+			byLevel: {
+				type: "object",
+				propertyNames: { type: "string", enum: ["low", "high"] },
+				required: ["low", "high"],
+				additionalProperties: { type: "number" },
+			},
+			byFlag: {
+				type: "object",
+				propertyNames: { type: "string", const: "on" },
+				required: ["on"],
+				additionalProperties: { type: "boolean" },
+			},
+			byName: { type: "object", additionalProperties: { type: "number" } },
+		});
+		expect(semantic(responseSchema(document, "/scores", "get", 200), components)).toEqual(
+			nativeSchema(runtimeSchemas(schemas).Scores),
+		);
+	});
+
+	it("keeps allOf when an intersection member constrains additional properties", () => {
+		const schemas = `export const Labels = z.intersection(
+	z.record(z.string(), z.string()),
+	z.object({ name: z.string() }),
+);
+`;
+		const cwd = project({
+			"src/routes/labels/schemas.ts": schemasFile(schemas),
+			"src/routes/labels/route.ts": routeFile("/labels", {
+				responses: "ok: { status: 200, schema: Labels }",
+			}),
+		});
+
+		const document = generateOpenApi(cwd);
+		const components = document.components?.schemas ?? {};
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(components.Labels).toEqual({
+			allOf: [
+				{ type: "object", additionalProperties: { type: "string" } },
+				{ type: "object", required: ["name"], properties: { name: { type: "string" } } },
+			],
+		});
+		expect(semantic(responseSchema(document, "/labels", "get", 200), components)).toEqual(
+			nativeSchema(runtimeSchemas(schemas).Labels),
+		);
+	});
+
+	it("does not report response pipes into schemas that only add documentation or validation", () => {
+		const cwd = project({
+			"src/routes/labels/route.ts": routeFile("/labels", {
+				responses: `ok: { status: 200, schema: z.object({
+			label: z.string().pipe(z.string().describe("A label")),
+			email: z.string().pipe(z.email()),
+		}) }`,
+			}),
+		});
+
+		const document = generateOpenApi(cwd);
+
+		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
+		expect((responseSchema(document, "/labels", "get", 200) as Json).properties).toEqual({
+			label: { type: "string", description: "A label" },
+			email: { type: "string", format: "email" },
+		});
+	});
+
+	it("reports outcomes whose schema cannot be read instead of documenting a generic object", () => {
+		const cwd = project({
+			"src/routes/payloads/route.ts": routeFile("/payloads", {
+				responses: "ok: { status: 200, ...payload }",
+			}).replace(
+				"export default",
+				"const payload = { schema: z.string().trim() };\n\nexport default",
+			),
+		});
+
+		const { diagnostics } = validateProject(cwd, { write: false });
+
+		expect(diagnostics.map((item) => [item.code, item.file, item.message])).toEqual([
+			[
+				"ROUTA_SCHEMA_UNSUPPORTED",
+				"src/routes/payloads/route.ts",
+				"Unsupported schema for OpenAPI (route outcomes need static status and schema properties without spreads): ok: { status: 200, ...payload }",
+			],
+		]);
+	});
+
+	it("splits wrapped exported object schemas into parameters without making them components", () => {
+		const schemas = `export const Base = z.object({ q: z.string(), page: z.coerce.number().optional() });
+export const Query = Base.transform((value) => value);
+export const OptionalQuery = Base.optional();
+`;
+		const cwd = project({
+			"src/routes/search/schemas.ts": schemasFile(schemas),
+			"src/routes/search/route.ts": routeFile("/search", {
+				input: "query: Query",
+				responses: "ok: { status: 200, schema: z.object({ ok: z.boolean() }) }",
+			}),
+			"src/routes/find/schemas.ts": schemasFile(schemas),
+			"src/routes/find/route.ts": routeFile("/find", {
+				input: "query: OptionalQuery",
+				responses: "ok: { status: 200, schema: z.object({ ok: z.boolean() }) }",
+			}),
+		});
+
+		const document = generateOpenApi(cwd);
+		const paths = document.paths as Record<string, Record<string, Json>>;
+		const parameters = [
+			{ name: "q", in: "query", required: true, schema: { type: "string" } },
+			{ name: "page", in: "query", required: false, schema: { type: "number" } },
+		];
+
+		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
+		expect(paths["/search"].get.parameters).toEqual(parameters);
+		expect(paths["/find"].get.parameters).toEqual(parameters);
+		expect(document.components?.schemas ?? {}).toEqual({});
+	});
+
+	it("projects the incoming side of readable input pipes without reading the outgoing side", () => {
+		const schemas = `export const EventBody = z.object({
+	at: z.string().pipe(z.coerce.date()),
+	tags: z.string().pipe(z.transform((value) => value.split(","))),
+});
+`;
+		const cwd = project({
+			"src/routes/events/schemas.ts": schemasFile(schemas),
+			"src/routes/events/route.ts": routeFile("/events", {
+				method: "post",
+				input: "body: EventBody",
+				responses: "ok: { status: 200, schema: z.object({ ok: z.boolean() }) }",
+			}),
+		});
+
+		const { diagnostics, warnings } = validateProject(cwd, { write: false });
+		const document = generateOpenApi(cwd);
+
+		expect([...diagnostics, ...warnings]).toEqual([]);
+		expect(document.components?.schemas?.EventBody).toEqual({
+			type: "object",
+			required: ["at", "tags"],
+			properties: { at: { type: "string" }, tags: { type: "string" } },
+		});
+		expect(semantic(document.components?.schemas?.EventBody)).toEqual(
+			nativeSchema(runtimeSchemas(schemas).EventBody, "input"),
+		);
+	});
+
+	it("documents z.stringbool() as a boolean parameter and as a string JSON body property", () => {
+		const schemas = `export const FlagQuery = z.object({ verbose: z.stringbool().optional() });
+export const FlagBody = z.object({ enabled: z.stringbool() });
+`;
+		const cwd = project({
+			"src/routes/flags/schemas.ts": schemasFile(schemas),
+			"src/routes/flags/route.ts": routeFile("/flags", {
+				method: "post",
+				input: "query: FlagQuery, body: FlagBody",
+				responses: "ok: { status: 200, schema: z.object({ ok: z.boolean() }) }",
+			}),
+		});
+
+		const document = generateOpenApi(cwd);
+		const operation = (document.paths as Record<string, Record<string, Json>>)["/flags"].post;
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(operation.parameters).toEqual([
+			{ name: "verbose", in: "query", required: false, schema: { type: "boolean" } },
+		]);
+		expect(document.components?.schemas?.FlagBody).toEqual({
+			type: "object",
+			required: ["enabled"],
+			properties: { enabled: { type: "string" } },
+		});
+		expect(semantic(document.components?.schemas?.FlagBody)).toEqual(
+			nativeSchema(runtimeSchemas(schemas).FlagBody, "input"),
+		);
 	});
 
 	it("projects the incoming side of transformed and coerced input, agreeing with z.toJSONSchema", () => {
@@ -823,6 +1121,8 @@ function responseSchema(document: unknown, path: string, method: string, status:
  * - Bare-type `type` arrays become `anyOf`.
  * - `allOf` members that are plain objects fold into one object.
  * - OpenAPI `discriminator` is dropped, because JSON Schema has no equivalent.
+ * - `propertyNames: { type: "string" }` is dropped, because JSON keys are
+ *   always strings.
  */
 function semantic(schema: unknown, components: Record<string, unknown> = {}): unknown {
 	if (Array.isArray(schema)) {
@@ -845,6 +1145,7 @@ function semantic(schema: unknown, components: Record<string, unknown> = {}): un
 	for (const [key, item] of Object.entries(rest)) {
 		if (key === "$schema" || key === "$defs" || key === "discriminator") continue;
 		if (key === "additionalProperties" && item === false) continue;
+		if (key === "propertyNames" && JSON.stringify(item) === '{"type":"string"}') continue;
 		value[key] = semantic(item, components);
 	}
 
