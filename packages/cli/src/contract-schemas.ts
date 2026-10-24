@@ -773,7 +773,9 @@ class SchemaProjector {
 
 	/**
 	 * Projects the headers of same-status alternatives once. One name must have one projected
-	 * schema; it is required only when every alternative declares it required.
+	 * schema, compared by content so an inline schema and a reference to an equal component
+	 * agree; the first alternative's spelling is kept. A header is required only when every
+	 * alternative declares it required.
 	 */
 	private composeHeaders(
 		alternatives: readonly ProjectedOutcome[],
@@ -792,7 +794,10 @@ class SchemaProjector {
 					continue;
 				}
 
-				if (stableJson(earlier.headers![name]!.schema) !== stableJson(header.schema)) {
+				if (
+					stableJson(this.resolved(earlier.headers![name]!.schema))
+					!== stableJson(this.resolved(header.schema))
+				) {
 					this.operationProblem(site, {
 						code: "ROUTA_RESPONSE_HEADER_INCOMPATIBLE",
 						message: `Header "${name}" has different schemas in outcomes ${earlier.label} and ${outcome.label}, which share status ${outcome.status}`,

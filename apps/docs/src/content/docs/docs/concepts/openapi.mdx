@@ -55,8 +55,10 @@ in its chain. Composition never depends on the order they are written in:
 - A body outcome and a bodyless outcome cannot share a status, and neither can two bodyless
   outcomes; clients could not tell them apart.
 - A header declared by several of the outcomes must have the same schema, metadata included
-  (`ROUTA_RESPONSE_HEADER_INCOMPATIBLE`). It is projected once and is `required` only when
-  every outcome under the status requires it.
+  (`ROUTA_RESPONSE_HEADER_INCOMPATIBLE`). Schemas are compared by content, so a component
+  reference and an equal inline schema agree. The header is projected once, as the first
+  outcome in name order writes it, and is `required` only when every outcome under the
+  status requires it.
 - A cookie identity listed by several of the outcomes must come from the same `createCookie`
   handle (`ROUTA_RESPONSE_COOKIE_CONFLICT`). The `Set-Cookie` description lists it once, as
   always set or cleared only when every outcome requires it.

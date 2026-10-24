@@ -326,6 +326,40 @@ export const KindC = z.object({ kind: z.literal("c") }).describe("C");
 		]);
 	});
 
+	it("compares header schemas by their content, not by how they are referenced", () => {
+		const document = (a: string, b: string, c = 'z.string().describe("Tag")') =>
+			generateOpenApi(
+				project({
+					"src/routes/projects/schemas.ts": `import { z } from "zod";
+
+export const Tag = z.string().describe("Tag");
+export const SameTag = z.string().describe("Tag");
+`,
+					"src/routes/projects/route.ts": route(
+						`a: { status: 200, schema: z.object({ kind: z.literal("a") }), headers: z.object({ etag: ${a} }) },
+		b: { status: 200, schema: z.object({ kind: z.literal("b") }), headers: z.object({ etag: ${b} }) },
+		c: { status: 200, schema: z.object({ kind: z.literal("c") }), headers: z.object({ etag: ${c} }) }`,
+						'import { SameTag, Tag } from "./schemas";',
+					),
+				}),
+			);
+		const incompatible = [expect.objectContaining({ code: "ROUTA_RESPONSE_HEADER_INCOMPATIBLE" })];
+		const inlineAndReferenced = document("Tag", 'z.string().describe("Tag")');
+
+		expect(diagnosticsOf(inlineAndReferenced)).toEqual([]);
+		// The first alternative in outcome-name order decides how the header is written.
+		expect(responseOf(inlineAndReferenced, 200).headers).toMatchObject({
+			etag: { required: true, schema: { $ref: "#/components/schemas/Tag" } },
+		});
+		expect(diagnosticsOf(document("Tag", "SameTag", "Tag"))).toEqual([]);
+		expect(diagnosticsOf(document("Tag", 'z.string().describe("Other")'))).toEqual(incompatible);
+		// Metadata added to a component counts as content.
+		expect(
+			diagnosticsOf(document('Tag.describe("Other")', "Tag", 'z.string().describe("Other")')),
+		).toEqual(incompatible);
+		expect(diagnosticsOf(document("Tag", 'z.literal("v1").describe("Tag")'))).toEqual(incompatible);
+	});
+
 	it("lists a cookie once and marks it always set only when every alternative requires it", () => {
 		const document = generateOpenApi(
 			project({
