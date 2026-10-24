@@ -3680,6 +3680,51 @@ export default createRouteRoot("/items")({
 		);
 	});
 
+	it("rejects forbidden body schemas written as shorthand properties", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-outcome-shorthand-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/items"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/items/route.ts"),
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+const schema = z.string();
+
+export default createRouteRoot("/items")({
+\tget: createRoute({
+\t\tresponses: {
+\t\t\tempty: { status: 204, schema },
+\t\t\treset: { status: 205, schema },
+\t\t\tunchanged: { status: 304, schema },
+\t\t},
+\t\trun: () => ({ type: "empty" }),
+\t}),
+\thead: createRoute({
+\t\tresponses: { ok: { status: 200, schema } },
+\t\trun: () => ({ type: "ok", data: "x" }),
+\t}),
+});
+`,
+		);
+
+		const result = await run(["check"], { cwd });
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain(
+			'Outcome "empty" on GET /items declares a schema, but status 204 has no body.',
+		);
+		expect(result.stderr).toContain(
+			'Outcome "reset" on GET /items declares a schema, but status 205 has no body.',
+		);
+		expect(result.stderr).toContain(
+			'Outcome "unchanged" on GET /items declares a schema, but status 304 has no body.',
+		);
+		expect(result.stderr).toContain(
+			'Outcome "ok" on HEAD /items declares a schema, but HEAD responses have no body.',
+		);
+	});
+
 	it("preserves operationIds from the OpenAPI baseline during source generation", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-operation-id-"));
 		createTypeScriptProject(cwd);

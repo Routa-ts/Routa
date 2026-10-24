@@ -1197,7 +1197,7 @@ function responseOutcomes(routeContract: ts.ObjectLiteralExpression): ResponseOu
 			{
 				name,
 				...(status ? { status: numericValue(status.initializer) } : {}),
-				hasSchema: Boolean(objectProperty(outcome, "schema")),
+				hasSchema: Boolean(propertyValue(outcome, "schema")),
 			},
 		];
 	});
