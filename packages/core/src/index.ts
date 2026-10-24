@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { RoutaLogger } from "./logger.js";
+import type { reservedHeaders } from "./response-headers.js";
 
 export type {
 	CreateLoggerOptions,
@@ -150,12 +151,7 @@ type ValueChangeMessage<TKey extends string> = {
 };
 
 /** Header names Routa owns on every response. */
-type ReservedHeaderName =
-	| "content-type"
-	| "content-length"
-	| "transfer-encoding"
-	| "connection"
-	| "set-cookie";
+type ReservedHeaderName = (typeof reservedHeaders)[number];
 
 type HeaderNameProblem<TName extends string> = TName extends ReservedHeaderName
 	? `Header "${TName}" is reserved: Routa owns it, so an outcome cannot declare it.`

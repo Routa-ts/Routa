@@ -4,14 +4,19 @@ import { InvalidHandlerOutputError } from "./handler-output-error.js";
 /** What an outcome's `headers` result field holds after structural checks: declared, defined values. */
 export type HeaderValues = Record<string, unknown>;
 
-/** Header names Routa owns on every response, so no outcome can declare them. */
-const reservedHeaderNames = new Set([
+/**
+ * Header names Routa owns on every response, so no outcome can declare them. The declaration
+ * types derive their reserved names from this list.
+ */
+export const reservedHeaders = [
 	"content-type",
 	"content-length",
 	"transfer-encoding",
 	"connection",
 	"set-cookie",
-]);
+] as const;
+
+const reservedHeaderNames: ReadonlySet<string> = new Set(reservedHeaders);
 
 const tokenPattern = /^[!#$%&'*+\-.^_`|~0-9a-z]+$/;
 const safeValuePattern = /^[\t\x20-\x7e\x80-\xff]*$/;
@@ -279,16 +284,24 @@ function zodDef(schema: unknown): ZodDef | undefined {
 	return (schema as { _zod?: { def?: ZodDef } } | null | undefined)?._zod?.def;
 }
 
-/** Whether a schema accepts only strings, numbers, and booleans (optionally absent). */
+/**
+ * Whether a schema accepts only strings, numbers, and booleans (optionally absent) and returns
+ * them unchanged. Wrappers and compositions count when everything inside them does; anything that
+ * rewrites a value in the declaration, such as a transform, a default, or coercion, does not.
+ * Same-type rewrites like `.trim()` are not visible here; response validation catches them.
+ */
 function isScalarSchema(schema: unknown): boolean {
 	const def = zodDef(schema);
 
-	switch (def?.type) {
+	if (!def || def.coerce === true) {
+		return false;
+	}
+
+	switch (def.type) {
 		case "string":
 		case "number":
 		case "boolean":
 		case "enum":
-		case "template_literal":
 			return true;
 		case "literal":
 			return (def.values as unknown[]).every(
@@ -296,10 +309,15 @@ function isScalarSchema(schema: unknown): boolean {
 					typeof value === "string" || typeof value === "number" || typeof value === "boolean",
 			);
 		case "optional":
+		case "nonoptional":
 		case "readonly":
 			return isScalarSchema(def.innerType);
 		case "union":
 			return (def.options as unknown[]).every(isScalarSchema);
+		case "intersection":
+			return isScalarSchema(def.left) && isScalarSchema(def.right);
+		case "pipe":
+			return isScalarSchema(def.in) && isScalarSchema(def.out);
 		default:
 			return false;
 	}

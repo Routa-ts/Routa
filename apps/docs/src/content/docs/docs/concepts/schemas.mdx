@@ -116,8 +116,11 @@ route still runs.
 
 An outcome can declare the headers it sends. `headers` is a Zod object keyed by lowercase
 header names, and its values are strings, numbers, or booleans (or literals and enums of
-them). A required header becomes a required property of the handler result's `headers`, an
-optional one becomes optional, and an outcome that declares none forbids `headers`.
+them), optionally wrapped with `.optional()`, `.readonly()`, or `.nonoptional()`, combined
+with `z.union()` or `z.intersection()`, or piped into another scalar schema such as
+`z.string().pipe(z.email())`. A required header becomes a required property of the handler
+result's `headers`, an optional one becomes optional, and an outcome that declares none
+forbids `headers`.
 
 ```ts title="src/routes/users/route.ts"
 import { createRoute } from "@routa-ts/core";
