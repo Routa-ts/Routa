@@ -4,8 +4,17 @@ import type { RoutaLogger } from "./logger.js";
 
 type RuntimeResult = {
 	type: string;
-	data: unknown;
+	data?: unknown;
 };
+
+type RuntimeOutcome = {
+	status: number;
+	description?: string;
+	schema?: z.ZodTypeAny;
+};
+
+/** A validated handler result: either a JSON body or an intentionally empty body. */
+type ValidatedResult = { status: number } & ({ body: false } | { body: true; data: unknown });
 
 type HandlerOutputIssue = {
 	code: string;
@@ -16,7 +25,7 @@ export type RuntimeRouteContract = AnyRouteContract & {
 	run: (args: {
 		input: Record<string, unknown>;
 		ctx: Record<string, unknown>;
-		response: Readonly<Record<string, (data: unknown) => RuntimeResult>>;
+		response: Readonly<Record<string, (...data: [] | [unknown]) => RuntimeResult>>;
 	}) => RuntimeResult | Promise<RuntimeResult>;
 	middleware?: readonly RuntimeMiddlewareContract[];
 };
@@ -56,11 +65,11 @@ export function createRequestExecutor(
 			const result = await runWithMiddleware(contract, input, ctx, inputReader, options.logger);
 			const response = validateResult(contract, result, options.validateResponses);
 
-			return json(
-				response.data,
-				response.status,
-				lifecycleHeaders(contract, options.lifecycleHeaders),
-			);
+			const headers = lifecycleHeaders(contract, options.lifecycleHeaders);
+
+			return response.body
+				? json(response.data, response.status, headers)
+				: new Response(null, { status: response.status, headers });
 		} catch (error) {
 			const response = errorResponse(error);
 			logRequestError(options.requestLogger, request, error, response);
@@ -95,9 +104,12 @@ async function runWithMiddleware(
 		if (!item) {
 			// Framework-owned context is applied last so middleware or a low-level
 			// createContext implementation cannot replace the configured logger.
-			const response = Object.create(null) as Record<string, (data: unknown) => RuntimeResult>;
+			const response = Object.create(null) as Record<
+				string,
+				(...data: [] | [unknown]) => RuntimeResult
+			>;
 			for (const type of Object.keys(contract.responses)) {
-				response[type] = (data) => ({ type, data });
+				response[type] = (...data) => (data.length === 0 ? { type } : { type, data: data[0] });
 			}
 			const result = await contract.run({
 				input: routeInput,
@@ -415,7 +427,7 @@ function problem(
 			type,
 			title,
 			status,
-			...(extra ?? {}),
+			...extra,
 		},
 		status,
 	);
@@ -423,6 +435,10 @@ function problem(
 
 /**
  * Validates a handler result against the declared response contract.
+ *
+ * Structural checks (known outcome, data presence, transport safety) always run.
+ * Zod parsing is gated by `validateResponse`. It only checks that the handler value is
+ * valid and unchanged: the handler value is always what gets sent, never the parsed one.
  *
  * @param contract - The route contract that defines allowed response types and schemas.
  * @param result - The value returned by a handler.
@@ -433,41 +449,143 @@ function validateResult(
 	contract: RuntimeRouteContract,
 	result: unknown,
 	validateResponse: boolean,
-): RuntimeResult & { status: number } {
+): ValidatedResult {
 	if (!isRuntimeResult(result)) {
 		throw new InvalidHandlerOutputError("Handler returned invalid output.");
 	}
 
-	const response = contract.responses[result.type] ?? middlewareResponses(contract)[result.type];
+	const response = declaredOutcome(contract, result.type);
 
 	if (!response) {
 		throw new InvalidHandlerOutputError(`Handler returned unknown response type "${result.type}".`);
 	}
 
-	if (!validateResponse) {
-		return {
-			type: result.type,
-			data: result.data,
-			status: response.status,
-		};
-	}
-
-	try {
-		return {
-			type: result.type,
-			data: parseSchema(response.schema, result.data),
-			status: response.status,
-		};
-	} catch (error) {
-		if (error instanceof ZodError) {
+	if (!response.schema) {
+		if (result.data !== undefined) {
 			throw new InvalidHandlerOutputError(
-				"Handler returned response data that does not match schema.",
-				handlerOutputIssues(error),
+				`Response type "${result.type}" declares no schema and cannot return data.`,
 			);
 		}
 
-		throw error;
+		return { body: false, status: response.status };
 	}
+
+	if (!("data" in result)) {
+		throw new InvalidHandlerOutputError(
+			`Response type "${result.type}" declares a schema and requires data.`,
+		);
+	}
+
+	if (isBodylessStatus(response.status)) {
+		throw new InvalidHandlerOutputError(
+			`Response type "${result.type}" uses status ${response.status}, which cannot have a body.`,
+		);
+	}
+
+	if (validateResponse) {
+		try {
+			assertUnchanged(parseSchema(response.schema, result.data), result.data);
+		} catch (error) {
+			if (error instanceof ZodError) {
+				throw new InvalidHandlerOutputError(
+					"Handler returned response data that does not match schema.",
+					handlerOutputIssues(error),
+				);
+			}
+
+			throw error;
+		}
+	}
+
+	return { body: true, data: result.data, status: response.status };
+}
+
+function declaredOutcome(contract: RuntimeRouteContract, type: string): RuntimeOutcome | undefined {
+	if (Object.hasOwn(contract.responses, type)) {
+		return contract.responses[type];
+	}
+
+	return middlewareResponses(contract)[type];
+}
+
+/**
+ * Fails when parsing changed the handler value, so a mutating schema is caught in
+ * development instead of silently producing a different body in production.
+ */
+function assertUnchanged(parsed: unknown, original: unknown): void {
+	const path = firstChange(parsed, original, []);
+
+	if (path) {
+		throw new InvalidHandlerOutputError(
+			"Handler returned response data that its schema would change. Response schemas must not change values.",
+			[{ code: "response_value_changed", path }],
+		);
+	}
+}
+
+/** Returns the path of the first difference between two JSON-like values, if any. */
+function firstChange(
+	parsed: unknown,
+	original: unknown,
+	path: readonly PropertyKey[],
+): readonly PropertyKey[] | undefined {
+	const left = toJsonValue(parsed);
+	const right = toJsonValue(original);
+
+	if (Array.isArray(left) && Array.isArray(right)) {
+		if (left.length !== right.length) {
+			return path;
+		}
+
+		for (const [index, item] of left.entries()) {
+			const change = firstChange(item, right[index], [...path, index]);
+
+			if (change) {
+				return change;
+			}
+		}
+
+		return undefined;
+	}
+
+	if (isPlainObject(left) && isPlainObject(right)) {
+		const keys = new Set([...definedKeys(left), ...definedKeys(right)]);
+
+		for (const key of keys) {
+			const change = firstChange(left[key], right[key], [...path, key]);
+
+			if (change) {
+				return change;
+			}
+		}
+
+		return undefined;
+	}
+
+	return Object.is(left, right) || left === right ? undefined : path;
+}
+
+/** Applies `toJSON` so dates and similar values compare as they would on the wire. */
+function toJsonValue(value: unknown): unknown {
+	if (
+		typeof value === "object"
+		&& value !== null
+		&& "toJSON" in value
+		&& typeof value.toJSON === "function"
+	) {
+		return value.toJSON();
+	}
+
+	return value;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Keys that survive JSON serialization. */
+function definedKeys(value: Record<string, unknown>): string[] {
+	return Object.keys(value).filter((key) => value[key] !== undefined);
 }
 
 function handlerOutputIssues(
@@ -480,14 +598,12 @@ function handlerOutputIssues(
 	}));
 }
 
-function middlewareResponses(
-	contract: RuntimeRouteContract,
-): Record<string, { status: number; schema: z.ZodTypeAny }> {
-	const responses: Record<string, { status: number; schema: z.ZodTypeAny }> = {};
+function middlewareResponses(contract: RuntimeRouteContract): Record<string, RuntimeOutcome> {
+	const responses: Record<string, RuntimeOutcome> = Object.create(null);
 
 	for (const item of contract.middleware ?? []) {
 		for (const [type, response] of Object.entries(item.rejects ?? {}) as Array<
-			[string, { status: number; schema: z.ZodTypeAny }]
+			[string, RuntimeOutcome]
 		>) {
 			responses[type] = response;
 		}
@@ -499,15 +615,11 @@ function middlewareResponses(
  * Determines whether a value matches the runtime result shape.
  *
  * @param value - The value to check
- * @returns `true` if the value is a non-null object with a string `type` property and a `data` property, `false` otherwise.
+ * @returns `true` if the value is a non-null object with a string `type` property, `false` otherwise.
  */
 function isRuntimeResult(value: unknown): value is RuntimeResult {
 	return (
-		typeof value === "object"
-		&& value !== null
-		&& "type" in value
-		&& typeof value.type === "string"
-		&& "data" in value
+		typeof value === "object" && value !== null && "type" in value && typeof value.type === "string"
 	);
 }
 
@@ -530,19 +642,12 @@ function toRecord(value: unknown): Record<string, unknown> {
 /**
  * Creates a JSON response.
  *
- * Statuses that forbid a body (204, 205, 304) produce an empty response because
- * the `Response` constructor throws when given a body for those statuses.
- *
  * @param data - The response body to serialize as JSON
  * @param status - The HTTP status code for the response
  * @returns A `Response` with a JSON body and `application/json; charset=utf-8` content type
  */
 function json(data: unknown, status: number, headers: HeadersInit = {}): Response {
-	if (isBodylessStatus(status)) {
-		return new Response(null, { status, headers });
-	}
-
-	let body: string;
+	let body: string | undefined;
 
 	try {
 		body = JSON.stringify(data);
@@ -550,6 +655,10 @@ function json(data: unknown, status: number, headers: HeadersInit = {}): Respons
 		throw new InvalidHandlerOutputError(
 			`Failed to serialize response as JSON: ${error instanceof Error ? error.message : String(error)}`,
 		);
+	}
+
+	if (body === undefined) {
+		throw new InvalidHandlerOutputError("Response data cannot be serialized as JSON.");
 	}
 
 	return new Response(body, {
@@ -576,7 +685,9 @@ function lifecycleHeaders(
 }
 
 /**
- * Determines whether an HTTP status forbids a response body.
+ * Determines whether HTTP forbids a response body for a status (204, 205, and 304).
+ *
+ * This describes the status only. An outcome without a `schema` is also bodyless, whatever its status.
  */
 export function isBodylessStatus(status: number): boolean {
 	return status === 204 || status === 205 || status === 304;
