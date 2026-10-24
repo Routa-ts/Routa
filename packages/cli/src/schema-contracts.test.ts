@@ -621,6 +621,29 @@ export const FlagBody = z.object({ enabled: Flag });
 		]);
 	});
 
+	it("reports one exported schema whose input and output projections differ as a component collision", () => {
+		const cwd = project({
+			"src/routes/contacts/schemas.ts": schemasFile(`export const Contact = z.string().pipe(z.email());
+export const ContactBody = z.object({ contact: Contact });
+export const ContactResponse = z.object({ contact: Contact });
+`),
+			"src/routes/contacts/route.ts": routeFile("/contacts", {
+				method: "post",
+				input: "body: ContactBody",
+				responses: "ok: { status: 200, schema: ContactResponse }",
+			}),
+		});
+
+		const { diagnostics } = validateProject(cwd, { write: false });
+
+		expect(diagnostics.map((item) => [item.code, item.message])).toEqual([
+			[
+				"ROUTA_SCHEMA_COMPONENT_COLLISION",
+				"Schema Contact in src/routes/contacts/schemas.ts projects differently as a request body and as a response, so it cannot be one OpenAPI component.",
+			],
+		]);
+	});
+
 	it("projects the incoming side of transformed and coerced input, agreeing with z.toJSONSchema", () => {
 		const schemas = `export const SearchQuery = z.object({
 	limit: z.coerce.number().int().optional(),
