@@ -1716,9 +1716,7 @@ export function createScaffoldPlan(raw: string, extension: string, source: strin
 				method,
 			});
 			const names = operationNames(method, openApiPath, operationWithParameters);
-			operationIds.push(
-				operationWithParameters.operationId ?? operationId(method, openApiPath),
-			);
+			operationIds.push(operationWithParameters.operationId ?? operationId(method, openApiPath));
 			const inputParts: string[] = [];
 			const paramsSchema = schemaForPathParams(openApiPath, operationWithParameters);
 			const querySchema = schemaForParameters(operationWithParameters, "query");

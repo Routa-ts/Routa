@@ -104,10 +104,10 @@ link: </users>; rel="successor-version"
 
 ## Which Check to Use
 
-| Command                  | Fails on                                     | Use it                                    |
-| ------------------------ | -------------------------------------------- | ----------------------------------------- |
+| Command                  | Fails on                                          | Use it                                    |
+| ------------------------ | ------------------------------------------------- | ----------------------------------------- |
 | `routa openapi check`    | Drift in operations, responses, schemas, security | Locally, to see that a change was noticed |
-| `routa openapi breaking` | Removed operations and newly required inputs | In CI, as a merge gate                    |
+| `routa openapi breaking` | Removed operations and newly required inputs      | In CI, as a merge gate                    |
 
 `openapi check` is strict by design: adding an optional field or removing a response
 status trips it. That makes it a
