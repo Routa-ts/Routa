@@ -6,6 +6,7 @@ import {
 	isBodylessStatus,
 	type RuntimeRouteContract,
 } from "./request-execution.js";
+import { cookieDeclarationProblem, cookieScopeWarnings } from "./response-cookies.js";
 import { headerDeclarationProblem, lifecycleOwnedHeaders } from "./response-headers.js";
 
 export { isBodylessStatus };
@@ -91,7 +92,13 @@ export function createHonoApp(
 			throw new Error(`${route.method.toUpperCase()} ${route.path} cannot declare a request body.`);
 		}
 
-		assertOutcomeDeclarations(contract, route.path, route.method, options.lifecycleHeaders);
+		assertOutcomeDeclarations(
+			contract,
+			route.path,
+			route.method,
+			options.lifecycleHeaders,
+			routeLogger,
+		);
 		assertUniqueMiddlewareRejects(contract, route.path, method);
 
 		const methods = methodsByPath.get(route.path) ?? new Set<string>();
@@ -183,6 +190,7 @@ function assertOutcomeDeclarations(
 	path: string,
 	method: HttpMethod,
 	lifecycleHeaders: boolean | undefined,
+	logger: RoutaLogger,
 ): void {
 	const label = `${method.toUpperCase()} ${path}`;
 	const lifecycleOwned = lifecycleOwnedHeaders(contract.deprecation, lifecycleHeaders);
@@ -193,23 +201,38 @@ function assertOutcomeDeclarations(
 		if (problem) {
 			throw new Error(`Outcome "${name}" on ${label} ${problem}`);
 		}
+
+		warnCookieScopes(logger, `Outcome "${name}" on ${label}`, outcome);
 	}
 
 	for (const item of contract.middleware ?? []) {
 		for (const [name, outcome] of Object.entries(item.rejects ?? {}) as Array<
-			[string, { status: number; schema?: unknown; headers?: unknown }]
+			[string, { status: number; schema?: unknown; headers?: unknown; cookies?: unknown }]
 		>) {
 			const problem = outcomeProblem(outcome, undefined, lifecycleOwned);
 
 			if (problem) {
 				throw new Error(`Middleware reject "${name}" on ${label} ${problem}`);
 			}
+
+			warnCookieScopes(logger, `Middleware reject "${name}" on ${label}`, outcome);
 		}
 	}
 }
 
+/** Logs a warning for each name an outcome declares with more than one scope. */
+function warnCookieScopes(
+	logger: RoutaLogger,
+	label: string,
+	outcome: { cookies?: unknown },
+): void {
+	for (const warning of cookieScopeWarnings(outcome.cookies)) {
+		logger.warn("cookies.scope", `${label}: ${warning}`);
+	}
+}
+
 function outcomeProblem(
-	outcome: { status: number; schema?: unknown; headers?: unknown },
+	outcome: { status: number; schema?: unknown; headers?: unknown; cookies?: unknown },
 	method: HttpMethod | undefined,
 	lifecycleOwned: ReadonlySet<string>,
 ): string | undefined {
@@ -232,7 +255,15 @@ function outcomeProblem(
 	}
 
 	if (outcome.headers !== undefined) {
-		return headerDeclarationProblem(outcome.headers, lifecycleOwned);
+		const problem = headerDeclarationProblem(outcome.headers, lifecycleOwned);
+
+		if (problem) {
+			return problem;
+		}
+	}
+
+	if (outcome.cookies !== undefined) {
+		return cookieDeclarationProblem(outcome.cookies);
 	}
 
 	return undefined;

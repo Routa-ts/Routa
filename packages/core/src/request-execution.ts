@@ -2,6 +2,12 @@ import { ZodError, type z } from "zod";
 import type { AnyRouteContract, MiddlewareContract, RouteInput } from "./index.js";
 import { type HandlerOutputIssue, InvalidHandlerOutputError } from "./handler-output-error.js";
 import type { RoutaLogger } from "./logger.js";
+import {
+	type CookieEntry,
+	planCookies,
+	resolveCookieEffects,
+	serializeCookieEffect,
+} from "./response-cookies.js";
 import { lifecycleHeaders, resolveHeaders, serializeHeaders } from "./response-headers.js";
 
 type RuntimeResult = {
@@ -14,15 +20,17 @@ type RuntimeOutcome = {
 	description?: string;
 	schema?: z.ZodTypeAny;
 	headers?: z.ZodTypeAny;
+	cookies?: readonly unknown[];
 };
 
 /**
  * A validated handler result: either a JSON body or an intentionally empty body, with the
- * serialized response headers its outcome declared.
+ * serialized response headers and cookies its outcome declared.
  */
 type ValidatedResult = {
 	status: number;
 	headers: ReadonlyArray<readonly [string, string]>;
+	cookies: readonly CookieEntry[];
 } & ({ body: false } | { body: true; data: unknown });
 
 export type RuntimeRouteContract = AnyRouteContract & {
@@ -479,6 +487,7 @@ function validateResult(
 	}
 
 	const headers = validatedHeaders(result, response, validateResponse);
+	const cookies = validatedCookies(result, response, validateResponse);
 
 	if (!response.schema) {
 		if (result.data !== undefined) {
@@ -487,7 +496,7 @@ function validateResult(
 			);
 		}
 
-		return { body: false, status: response.status, headers };
+		return { body: false, status: response.status, headers, cookies };
 	}
 
 	if (!("data" in result)) {
@@ -522,7 +531,7 @@ function validateResult(
 		}
 	}
 
-	return { body: true, data: result.data, status: response.status, headers };
+	return { body: true, data: result.data, status: response.status, headers, cookies };
 }
 
 /**
@@ -555,6 +564,43 @@ function validatedHeaders(
 	}
 
 	return serialized;
+}
+
+/**
+ * Checks and serializes the cookie effects a result writes for its outcome.
+ *
+ * Declared handles, one effect per identity, and safe encoding are checked in every mode. Zod
+ * parsing and the comparison with the handler value follow `validateResponse`, like the body.
+ * Route outcomes and terminal middleware rejects both come through here, so they share one path.
+ */
+function validatedCookies(
+	result: RuntimeResult & { cookies?: unknown },
+	outcome: RuntimeOutcome,
+	validateResponse: boolean,
+): readonly CookieEntry[] {
+	return resolveCookieEffects(result.type, outcome, result.cookies).map((effect) => {
+		const entry = serializeCookieEffect(result.type, effect, `outcome "${result.type}"`);
+
+		if (validateResponse && effect.kind === "set") {
+			try {
+				assertUnchanged(parseSchema(effect.cookie.schema, effect.value), effect.value, [
+					"cookies",
+					effect.cookie.name,
+				]);
+			} catch (error) {
+				if (error instanceof ZodError) {
+					throw new InvalidHandlerOutputError(
+						"Handler returned a cookie value that does not match schema.",
+						handlerOutputIssues(error, ["cookies", effect.cookie.name]),
+					);
+				}
+
+				throw error;
+			}
+		}
+
+		return entry;
+	});
 }
 
 function declaredOutcome(contract: RuntimeRouteContract, type: string): RuntimeOutcome | undefined {
@@ -597,7 +643,7 @@ function assertUnchanged(
 
 	if (path) {
 		throw new InvalidHandlerOutputError(
-			`Handler returned response ${root[0] === "headers" ? "headers" : "data"} that its schema would change. Response schemas must not change values.`,
+			`Handler returned response ${root[0] === "headers" ? "headers" : root[0] === "cookies" ? "cookies" : "data"} that its schema would change. Response schemas must not change values.`,
 			[{ code: "response_value_changed", path }],
 		);
 	}
@@ -723,7 +769,8 @@ function toRecord(value: unknown): Record<string, unknown> {
  * The one place a handled outcome becomes a `Response`.
  *
  * It combines the transport headers Routa owns (`content-type` for a JSON body, none for a bodyless
- * outcome), the outcome's declared headers, and the lifecycle headers. A header has one owner:
+ * outcome), the outcome's declared headers, the lifecycle headers, and the cookie plan, which
+ * becomes repeated `Set-Cookie` fields. A header has one owner:
  * a declared header that a lifecycle header or a transport header also claims fails instead of
  * overwriting.
  *
@@ -749,6 +796,10 @@ function finalizeResponse(
 
 	for (const [name, value] of Object.entries(lifecycle)) {
 		headers.set(name, value);
+	}
+
+	for (const field of planCookies(response.cookies)) {
+		headers.append("set-cookie", field);
 	}
 
 	return response.body
