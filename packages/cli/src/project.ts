@@ -12,19 +12,23 @@ import { basename, dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	callName,
-	localInitializer,
+	createRouteObject,
 	objectLiteral,
 	objectProperties,
 	objectProperty,
 	propertyName,
+	propertyValue,
+	resolveImportFile,
+	routeConfigObject,
 	unwrapExpression,
 } from "./ast.js";
+import { type ContractSchemaProjection, projectContractSchemas } from "./contract-schemas.js";
 import * as ts from "./typescript.js";
 import { runTypeScript } from "./typescript-runner.js";
 
 export type Diagnostic = {
 	code: string;
-	severity: "error";
+	severity: "error" | "warning";
 	message: string;
 	file?: string;
 	routePath?: string;
@@ -77,6 +81,8 @@ export type RouteDeprecationMetadata = {
 export type ProjectValidationResult = {
 	routes: RouteMetadata[];
 	diagnostics: Diagnostic[];
+	warnings: Diagnostic[];
+	schemas: ContractSchemaProjection;
 };
 
 const generatedHeader =
@@ -137,6 +143,7 @@ function validateProjectInSession(
 	const write = options.write ?? true;
 	const discovery = discoverRoutes(cwd, parser);
 	const routes = discovery.routes;
+	const schemas = projectContractSchemas(cwd, routes, parser);
 	const diagnostics = [
 		...projectStructureDiagnostics(cwd),
 		...discovery.diagnostics,
@@ -147,13 +154,14 @@ function validateProjectInSession(
 		...duplicateSchemaDiagnostics(cwd, parser),
 		...middlewareOrderDiagnostics(routes),
 		...middlewareRejectStatusDiagnostics(routes),
+		...schemas.diagnostics,
 	];
 
 	if (write && diagnostics.length === 0) {
 		writeRoutesMetadata(cwd, routes);
 	}
 
-	return { routes, diagnostics };
+	return { routes, diagnostics, warnings: schemas.warnings, schemas };
 }
 
 /**
@@ -167,11 +175,12 @@ export function runProjectCheck(cwd = process.cwd()): {
 	stderr?: string;
 } {
 	const validation = validateProject(cwd);
+	const warnings = validation.warnings.length > 0 ? [formatDiagnostics(validation.warnings)] : [];
 
 	if (validation.diagnostics.length > 0) {
 		return {
 			code: 1,
-			stderr: formatDiagnostics(validation.diagnostics),
+			stderr: [formatDiagnostics(validation.diagnostics), ...warnings].join("\n"),
 		};
 	}
 
@@ -185,13 +194,14 @@ export function runProjectCheck(cwd = process.cwd()): {
 		return {
 			code: typecheck.code,
 			stdout: appendOutput(stdout, typecheck.stdout),
-			stderr: appendOutput(["TypeScript check failed."], typecheck.stderr),
+			stderr: appendOutput([...warnings, "TypeScript check failed."], typecheck.stderr),
 		};
 	}
 
 	return {
 		code: 0,
 		stdout: appendOutput([...stdout, "TypeScript check passed.", "Routa check passed."]),
+		...(warnings.length > 0 ? { stderr: appendOutput(warnings) } : {}),
 	};
 }
 
@@ -1470,6 +1480,16 @@ function parseMiddlewareFile(
 	);
 }
 
+type MiddlewareDeclaration = {
+	/** The file that declares the middleware. */
+	file: string;
+	/** The declared variable name in `file`. */
+	name: string;
+	/** The name the inspected module exports it under. */
+	exportedName: string;
+	contract: ts.ObjectLiteralExpression;
+};
+
 /**
  * Resolves exported middleware declarations from a module and its re-exports.
  *
@@ -1484,18 +1504,14 @@ function exportedMiddlewareDeclarations(
 	sourceFile: ts.SourceFile,
 	parser: ts.SourceFileParser,
 	seen = new Set<string>(),
-): Array<{ file: string; name: string; contract: ts.ObjectLiteralExpression }> {
+): MiddlewareDeclaration[] {
 	if (seen.has(file)) {
 		return [];
 	}
 
 	seen.add(file);
 
-	const declarations: Array<{
-		file: string;
-		name: string;
-		contract: ts.ObjectLiteralExpression;
-	}> = [];
+	const declarations: MiddlewareDeclaration[] = [];
 	const imports = namedImportMap(cwd, file, sourceFile);
 
 	for (const statement of sourceFile.statements) {
@@ -1508,7 +1524,8 @@ function exportedMiddlewareDeclarations(
 				const contract = createMiddlewareObject(declaration.initializer);
 
 				if (contract) {
-					declarations.push({ file, name: declaration.name.text, contract });
+					const name = declaration.name.text;
+					declarations.push({ file, name, exportedName: name, contract });
 				}
 			}
 			continue;
@@ -1546,13 +1563,10 @@ function exportedMiddlewareDeclarations(
 				parser,
 				seen,
 			);
-			const declaration = targetDeclarations.find((item) => item.name === source.name);
+			const declaration = targetDeclarations.find((item) => item.exportedName === source.name);
 
 			if (declaration) {
-				declarations.push({
-					...declaration,
-					name: source.name,
-				});
+				declarations.push({ ...declaration, exportedName });
 				continue;
 			}
 
@@ -1561,7 +1575,12 @@ function exportedMiddlewareDeclarations(
 			);
 
 			if (direct) {
-				declarations.push({ file: source.file, name: source.name, contract: direct.contract });
+				declarations.push({
+					file: source.file,
+					name: source.name,
+					exportedName,
+					contract: direct.contract,
+				});
 				continue;
 			}
 
@@ -1570,7 +1589,12 @@ function exportedMiddlewareDeclarations(
 			);
 
 			if (local && exportedName === source.name) {
-				declarations.push({ file: source.file, name: source.name, contract: local.contract });
+				declarations.push({
+					file: source.file,
+					name: source.name,
+					exportedName,
+					contract: local.contract,
+				});
 			}
 		}
 	}
@@ -1621,27 +1645,42 @@ function namedImportMap(
 }
 
 /**
- * Resolves a relative module specifier to an existing TypeScript file.
+ * Resolves an imported middleware binding to the declaration that defines it,
+ * following re-export chains and aliases.
  *
- * @param cwd - The project root used to resolve candidate paths.
- * @param fromFile - The file containing the import or re-export.
- * @param specifier - The module specifier to resolve.
- * @returns The first matching file path relative to `cwd`, or `undefined` if no relative file exists.
+ * @param source - The imported module and the name it exports the middleware under
+ * @returns The declaring file, declared name, and contract, or `undefined` when unresolved
  */
-function resolveImportFile(cwd: string, fromFile: string, specifier: string): string | undefined {
-	if (!specifier.startsWith(".")) {
-		return;
-	}
+function importedMiddlewareDeclaration(
+	cwd: string,
+	source: { file: string; name: string },
+	parser: ts.SourceFileParser,
+): MiddlewareDeclaration | undefined {
+	const targetAst = parseTypeScriptFile(join(cwd, source.file), parser);
+	return exportedMiddlewareDeclarations(cwd, source.file, targetAst, parser).find(
+		(item) => item.exportedName === source.name,
+	);
+}
 
-	const base = join(dirname(fromFile), specifier);
-	const candidates = [
-		base,
-		base.endsWith(".js") ? `${base.slice(0, -3)}.ts` : undefined,
-		base.endsWith(".ts") ? base : `${base}.ts`,
-		join(base, "index.ts"),
-	].filter((item): item is string => Boolean(item));
-
-	return candidates.find((candidate) => existsSync(join(cwd, candidate)));
+/**
+ * Finds the file that declares a middleware a module uses. Route files record
+ * middleware they import under their own path, so follow the import and any
+ * re-exports to the declaring file.
+ *
+ * @param cwd - The project root directory
+ * @param file - The module that declares or imports the middleware
+ * @param name - The middleware's local name in `file`
+ * @returns The declaring file, or `file` when the middleware is not imported or unresolved
+ */
+export function middlewareDeclarationFile(
+	cwd: string,
+	file: string,
+	name: string,
+	parser: ts.SourceFileParser,
+): string {
+	const sourceFile = parseTypeScriptFile(join(cwd, file), parser);
+	const source = namedImportMap(cwd, file, sourceFile).get(name);
+	return (source && importedMiddlewareDeclaration(cwd, source, parser)?.file) ?? file;
 }
 
 /**
@@ -1687,16 +1726,7 @@ function parseRouteFileMiddleware(
 		}
 
 		const source = imports.get(unwrapped.text);
-
-		if (!source) {
-			return;
-		}
-
-		const targetAst = parseTypeScriptFile(join(cwd, source.file), parser);
-		const declaration =
-			exportedMiddlewareDeclarations(cwd, source.file, targetAst, parser).find(
-				(item) => item.name === source.name,
-			) ?? middlewareDeclarations(targetAst, true).find((item) => item.name === source.name);
+		const declaration = source && importedMiddlewareDeclaration(cwd, source, parser);
 
 		if (!declaration) {
 			return;
@@ -2334,90 +2364,6 @@ function parseTypeScriptFile(file: string, parser: ts.SourceFileParser): ts.Sour
 }
 
 /**
- * Extracts the exported route configuration object from a source file.
- *
- * Follows `export default identifier` to a local initializer when possible.
- *
- * @param sourceFile - The parsed TypeScript source file to inspect
- * @returns The exported route configuration object, if present
- */
-function routeConfigObject(sourceFile: ts.SourceFile): ts.ObjectLiteralExpression | undefined {
-	for (const statement of sourceFile.statements) {
-		if (!ts.isExportAssignment(statement) || statement.isExportEquals) {
-			continue;
-		}
-
-		const expression = resolveExportedExpression(sourceFile, statement.expression);
-		return routeRootObject(sourceFile, expression);
-	}
-}
-
-/**
- * Resolves an exported expression to a local initializer when it is an identifier.
- */
-function resolveExportedExpression(
-	sourceFile: ts.SourceFile,
-	expression: ts.Expression,
-): ts.Expression {
-	const unwrapped = unwrapExpression(expression);
-
-	if (!ts.isIdentifier(unwrapped)) {
-		return unwrapped;
-	}
-
-	const initializer = localInitializer(sourceFile, unwrapped.text);
-	return initializer ? unwrapExpression(initializer) : unwrapped;
-}
-
-/**
- * Finds the initializer for a local `const`/`let`/`var` binding in a source file.
- */
-/**
- * Extracts the route configuration object from a `createRouteRoot(path)(...)` call.
- *
- * @returns The first argument as an object literal, if the expression is a `createRouteRoot` call.
- */
-function routeRootObject(
-	sourceFile: ts.SourceFile,
-	expression: ts.Expression,
-): ts.ObjectLiteralExpression | undefined {
-	const unwrapped = unwrapExpression(expression);
-
-	if (!ts.isCallExpression(unwrapped)) {
-		return;
-	}
-
-	const callee = unwrapExpression(unwrapped.expression);
-	const routeRootCall = ts.isIdentifier(callee)
-		? localInitializer(sourceFile, callee.text)
-		: ts.isCallExpression(callee)
-			? callee
-			: undefined;
-
-	if (!routeRootCall || callName(unwrapExpression(routeRootCall)) !== "createRouteRoot") {
-		return;
-	}
-
-	return objectLiteral(unwrapped.arguments[0]);
-}
-
-/**
- * Extracts the route contract object from a `createRoute` call.
- *
- * @param expression - The expression to inspect
- * @returns The first argument object literal when the expression is a `createRoute(...)` call; otherwise `undefined`
- */
-function createRouteObject(expression: ts.Expression): ts.ObjectLiteralExpression | undefined {
-	const unwrapped = unwrapExpression(expression);
-
-	if (!ts.isCallExpression(unwrapped) || callName(unwrapped) !== "createRoute") {
-		return;
-	}
-
-	return objectLiteral(unwrapped.arguments[0]);
-}
-
-/**
  * Collects middleware declarations from a source file.
  *
  * @param sourceFile - The TypeScript source file to inspect.
@@ -2556,11 +2502,11 @@ function routeInputs(routeContract: ts.ObjectLiteralExpression): RouteMethodInpu
 	const inputObject = input ? objectLiteral(input.initializer) : undefined;
 
 	return {
-		params: Boolean(inputObject && objectProperty(inputObject, "params")),
-		query: Boolean(inputObject && objectProperty(inputObject, "query")),
-		headers: Boolean(inputObject && objectProperty(inputObject, "headers")),
-		cookies: Boolean(inputObject && objectProperty(inputObject, "cookies")),
-		body: Boolean(inputObject && objectProperty(inputObject, "body")),
+		params: Boolean(inputObject && propertyValue(inputObject, "params")),
+		query: Boolean(inputObject && propertyValue(inputObject, "query")),
+		headers: Boolean(inputObject && propertyValue(inputObject, "headers")),
+		cookies: Boolean(inputObject && propertyValue(inputObject, "cookies")),
+		body: Boolean(inputObject && propertyValue(inputObject, "body")),
 	};
 }
 
@@ -2964,9 +2910,10 @@ function appendOutput(lines: string[], output?: string): string {
 function formatDiagnostics(diagnostics: Diagnostic[]): string {
 	return diagnostics
 		.map((diagnostic) => {
+			const severity = diagnostic.severity === "warning" ? "Warning: " : "";
 			const location = diagnostic.file ? `${diagnostic.file}: ` : "";
 			const suggestion = diagnostic.suggestion ? `\nSuggestion: ${diagnostic.suggestion}` : "";
-			return `${diagnostic.code}: ${location}${diagnostic.message}${suggestion}`;
+			return `${severity}${diagnostic.code}: ${location}${diagnostic.message}${suggestion}`;
 		})
 		.join("\n");
 }

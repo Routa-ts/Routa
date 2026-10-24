@@ -308,7 +308,7 @@ function packageJson(name: string, routaVersion: string, openApi: boolean): stri
 				"@routa-ts/cli": routaVersion,
 				"@routa-ts/core": routaVersion,
 				hono: "^4.12.27",
-				zod: "^4.4.3",
+				zod: "^4.6.7",
 			},
 			devDependencies: {
 				"@biomejs/biome": "^2.5.2",

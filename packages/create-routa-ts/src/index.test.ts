@@ -72,6 +72,19 @@ describe("create-routa-ts", () => {
 		);
 	});
 
+	it("declares the same Zod range as the @routa-ts/core peer", async () => {
+		const cwd = await mkdtemp(join(tmpdir(), "create-routa-ts-zod-"));
+		createProject("my-api", cwd);
+		const core = JSON.parse(
+			readFileSync(new URL("../../core/package.json", import.meta.url), "utf8"),
+		) as { peerDependencies: { zod: string } };
+		const app = JSON.parse(readFileSync(join(cwd, "my-api/package.json"), "utf8")) as {
+			dependencies: { zod: string };
+		};
+
+		expect(app.dependencies.zod).toBe(core.peerDependencies.zod);
+	});
+
 	it("uses the target directory basename as the package name", async () => {
 		const cwd = await mkdtemp(join(tmpdir(), "create-routa-ts-nested-"));
 		createProject("apps/my-api", cwd);

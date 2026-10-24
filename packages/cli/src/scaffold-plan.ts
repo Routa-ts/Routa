@@ -336,7 +336,8 @@ type OpenApiSchema = {
 	properties?: Record<string, OpenApiSchema>;
 	required?: string[];
 	$ref?: string;
-	oneOf?: unknown[];
+	oneOf?: OpenApiSchema[];
+	discriminator?: { propertyName?: unknown };
 	anyOf?: OpenApiSchema[];
 	allOf?: unknown[];
 	nullable?: boolean;
@@ -915,14 +916,14 @@ function validateSchema(
 		return;
 	}
 
-	if (schema.oneOf || schema.allOf) {
+	if (schema.allOf || (schema.oneOf && !discriminatesVariants(schema, document))) {
 		throw new Error(
 			scaffoldError(
 				"ROUTA_OPENAPI_UNSUPPORTED_SCHEMA",
 				`Unsupported composed schema in ${location}.`,
 				[
-					"Routa v0 supports object, array, string, number, integer, boolean, enum, const, anyOf unions, and local component refs.",
-					"oneOf and allOf are not supported by scaffold yet. Use anyOf for unions.",
+					"Routa v0 supports object, array, string, number, integer, boolean, enum, const, anyOf unions, discriminated oneOf unions, and local component refs.",
+					"allOf is not supported by scaffold yet, and oneOf needs a discriminator.propertyName whose required const values differ in every variant.",
 				],
 			),
 		);
@@ -1017,6 +1018,10 @@ function validateSchema(
 
 	for (const [index, entry] of (schema.anyOf ?? []).entries()) {
 		validateSchema(entry, document, `${location} anyOf[${index}]`);
+	}
+
+	for (const [index, entry] of (schema.oneOf ?? []).entries()) {
+		validateSchema(entry, document, `${location} oneOf[${index}]`);
 	}
 
 	if (typeof schema.additionalProperties === "object" && schema.additionalProperties !== null) {
@@ -1300,13 +1305,11 @@ function zodForSchema(schema: OpenApiSchema | undefined): string {
 			return zodForSchema(schema.anyOf[0]);
 		}
 
-		const discriminator = discriminatorForAnyOf(schema.anyOf);
-
-		if (discriminator) {
-			return `z.discriminatedUnion(${JSON.stringify(discriminator)}, [${schema.anyOf.map((entry) => zodForSchema(entry)).join(", ")}])`;
-		}
-
 		return `z.union([${schema.anyOf.map((entry) => zodForSchema(entry)).join(", ")}])`;
+	}
+
+	if (schema.oneOf && typeof schema.discriminator?.propertyName === "string") {
+		return `z.discriminatedUnion(${JSON.stringify(schema.discriminator.propertyName)}, [${schema.oneOf.map((entry) => zodForSchema(entry)).join(", ")}])`;
 	}
 
 	if (schema.enum?.every((item) => typeof item === "string")) {
@@ -1371,39 +1374,34 @@ function zodForSchema(schema: OpenApiSchema | undefined): string {
 }
 
 /**
- * Finds a required property whose unique literal values discriminate every
- * inline object variant in an OpenAPI `anyOf` schema.
+ * Checks that a `oneOf` names a `discriminator.propertyName` that every
+ * variant requires with a distinct literal value, which is the shape
+ * `z.discriminatedUnion` describes.
  *
- * @param variants - The union variants to inspect.
- * @returns The discriminator property name, or `undefined` when the union is not safely discriminated.
+ * @param schema - The schema with `oneOf` variants.
+ * @param document - The OpenAPI document used to resolve component refs.
+ * @returns `true` when the variants are safely discriminated.
  */
-function discriminatorForAnyOf(variants: OpenApiSchema[]): string | undefined {
-	const [first] = variants;
+function discriminatesVariants(schema: OpenApiSchema, document: OpenApiDocument): boolean {
+	const name = schema.discriminator?.propertyName;
+	const variants = schema.oneOf ?? [];
 
-	if (!first || !(first.type === "object" || first.properties)) {
-		return undefined;
+	if (typeof name !== "string" || variants.length < 2) {
+		return false;
 	}
 
-	for (const name of Object.keys(first.properties ?? {})) {
-		const values = variants.map((variant) => {
-			if (!(variant.type === "object" || variant.properties)) {
-				return undefined;
-			}
+	const values = variants.map((entry) => {
+		const variant = entry.$ref ? document.components?.schemas?.[refName(entry.$ref)] : entry;
 
-			if (!variant.required?.includes(name)) {
-				return undefined;
-			}
-
-			const value = variant.properties?.[name]?.const;
-			return ["string", "number", "boolean"].includes(typeof value) ? value : undefined;
-		});
-
-		if (values.every((value) => value !== undefined) && new Set(values).size === variants.length) {
-			return name;
+		if (!variant?.required?.includes(name)) {
+			return undefined;
 		}
-	}
 
-	return undefined;
+		const value = variant.properties?.[name]?.const;
+		return ["string", "number", "boolean"].includes(typeof value) ? value : undefined;
+	});
+
+	return values.every((value) => value !== undefined) && new Set(values).size === variants.length;
 }
 
 /**
@@ -1490,6 +1488,10 @@ function placeholderForSchema(
 
 	if (schema?.anyOf && schema.anyOf.length > 0) {
 		return placeholderForSchema(schema.anyOf[0], document, seen);
+	}
+
+	if (schema?.oneOf && schema.oneOf.length > 0) {
+		return placeholderForSchema(schema.oneOf[0], document, seen);
 	}
 
 	if (schema?.type === "array") {
@@ -1609,7 +1611,7 @@ function addReferencedComponents(
  * Collects all schema references contained in an OpenAPI schema.
  *
  * @param schema - The schema to inspect.
- * @returns The `$ref` values found in the schema, including nested array items and object properties.
+ * @returns The `$ref` values found in the schema, including nested array items, object properties, record values, and union variants.
  */
 function refsInSchema(schema: OpenApiSchema | undefined): string[] {
 	if (!schema) {
@@ -1620,6 +1622,10 @@ function refsInSchema(schema: OpenApiSchema | undefined): string[] {
 		...(schema.$ref ? [schema.$ref] : []),
 		...refsInSchema(schema.items),
 		...Object.values(schema.properties ?? {}).flatMap((property) => refsInSchema(property)),
+		...(typeof schema.additionalProperties === "object" && schema.additionalProperties !== null
+			? refsInSchema(schema.additionalProperties as OpenApiSchema)
+			: []),
+		...[...(schema.anyOf ?? []), ...(schema.oneOf ?? [])].flatMap((entry) => refsInSchema(entry)),
 	];
 }
 

@@ -7,7 +7,7 @@ Routa route contracts keep HTTP behavior explicit in source: inputs, responses, 
 ## Install
 
 ```sh
-pnpm add @routa-ts/core@0.1.2 hono@^4.12.27 zod@^4.4.3
+pnpm add @routa-ts/core@0.1.2 hono@^4.12.27 zod@^4.6.7
 ```
 
 ## Usage
