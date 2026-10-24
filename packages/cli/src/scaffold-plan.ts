@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { parse as parseYaml } from "yaml";
+import { operationId, pascalCase } from "./operation-id.js";
 import {
 	type RouteMetadata,
 	type RouteMethodInputMetadata,
@@ -557,7 +558,7 @@ function validateOpenApiDocument(document: OpenApiDocument): void {
 					scaffoldError(
 						"ROUTA_OPENAPI_MISSING_OPERATION_ID",
 						`${method.toUpperCase()} ${path} is missing operationId.`,
-						[`Add operationId: ${suggestOperationId(method as HttpMethod, path)} under ${method}.`],
+						[`Add operationId: ${operationId(method, path)} under ${method}.`],
 					),
 				);
 			}
@@ -1045,15 +1046,6 @@ function validateSchema(
  */
 function isOpenApiPathItemMetadata(key: string): boolean {
 	return ["parameters", "summary", "description", "servers"].includes(key);
-}
-
-/**
- * Suggests an operation ID for an HTTP method and path.
- *
- * @returns A PascalCase identifier built from the method and path.
- */
-function suggestOperationId(method: HttpMethod, path: string): string {
-	return `${method}${pascalCase(path)}`;
 }
 
 /**
@@ -1687,25 +1679,6 @@ function validateGeneratedIdentifier(name: string, context: string): void {
 	}
 }
 
-/**
- * Converts a string to PascalCase.
- *
- * @param value - The input text
- * @returns The PascalCase form of `value`, or `Operation` when the input is empty after normalization
- */
-function pascalCase(value: string): string {
-	const text = value.replaceAll(/[^a-zA-Z0-9]+/g, " ").trim();
-
-	if (!text) {
-		return "Operation";
-	}
-
-	return text
-		.split(/\s+/)
-		.map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-		.join("");
-}
-
 /** Converts source text into deterministic generated output without filesystem access. */
 export function createScaffoldPlan(raw: string, extension: string, source: string): ScaffoldPlan {
 	const document = parseOpenApi(raw, extension, source);
@@ -1744,7 +1717,7 @@ export function createScaffoldPlan(raw: string, extension: string, source: strin
 			});
 			const names = operationNames(method, openApiPath, operationWithParameters);
 			operationIds.push(
-				operationWithParameters.operationId ?? `${method}${pascalCase(openApiPath)}`,
+				operationWithParameters.operationId ?? operationId(method, openApiPath),
 			);
 			const inputParts: string[] = [];
 			const paramsSchema = schemaForPathParams(openApiPath, operationWithParameters);

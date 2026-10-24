@@ -3725,7 +3725,7 @@ export default createRouteRoot("/items")({
 		);
 	});
 
-	it("preserves operationIds from the OpenAPI baseline during source generation", async () => {
+	it("generates operationIds from the method and path, not from the OpenAPI baseline", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-operation-id-"));
 		createTypeScriptProject(cwd);
 		writeSimpleUsersOpenApi(cwd);
@@ -3733,8 +3733,9 @@ export default createRouteRoot("/items")({
 
 		const openapi = generateOpenApi(cwd);
 
-		expect(openapi.paths?.["/users"]?.get?.operationId).toBe("listUsers");
-		expect(openapi.paths?.["/users"]?.post?.operationId).toBe("createUser");
+		expect(openapi.paths?.["/users"]?.get?.operationId).toBe("getUsers");
+		expect(openapi.paths?.["/users"]?.post?.operationId).toBe("postUsers");
+		expect((await run(["openapi", "check"], { cwd })).code).toBe(0);
 	});
 
 	it("reports removed methods in openapi breaking checks", async () => {
