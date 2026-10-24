@@ -25,6 +25,7 @@ export const Report = z.object({
 	owner: Owner,
 	result: SearchResult,
 	inline: z.object({ a: z.string() }).and(z.object({ b: z.number().optional() })),
+	described: z.intersection(z.object({ a: z.string() }).describe("Left side"), z.object({ b: z.number() })),
 });
 `;
 		const cwd = project({
@@ -53,6 +54,17 @@ export const Report = z.object({
 				type: "object",
 				required: ["a"],
 				properties: { a: { type: "string" }, b: { type: "number" } },
+			},
+			described: {
+				allOf: [
+					{
+						type: "object",
+						required: ["a"],
+						properties: { a: { type: "string" } },
+						description: "Left side",
+					},
+					{ type: "object", required: ["b"], properties: { b: { type: "number" } } },
+				],
 			},
 		});
 		expect(semantic(responseSchema(document, "/report", "get", 200), components)).toEqual(
@@ -123,6 +135,71 @@ export const Report = z.object({
 			"ROUTA_RESPONSE_SCHEMA_MUTATION: src/routes/items/schemas.ts: Response schema changes values with .trim()",
 		);
 		expect(check.stderr).toContain("Suggestion: Response schemas describe wire-ready JSON.");
+	});
+
+	it("reports the remaining output-changing constructs in route outcomes and middleware rejects", () => {
+		const cwd = project({
+			"src/routes/items/schemas.ts": schemasFile(`export const Item = z.object({
+	code: z.string().toUpperCase(),
+	text: z.string().normalize(),
+	rounded: z.number().overwrite((value) => Math.round(value)),
+	status: z.enum(["on", "off"]).catch("off"),
+	when: z.codec(z.iso.datetime(), z.date(), {
+		decode: (value) => new Date(value),
+		encode: (value) => value.toISOString(),
+	}),
+});
+`),
+			"src/routes/items/route.ts": routeFile("/items", {
+				imports: 'import { guard } from "../../middleware/guard.js";',
+				responses: "ok: { status: 200, schema: Item }",
+			}).replace("\tget: createRoute({", "\tmiddleware: [guard],\n\tget: createRoute({"),
+			"src/middleware/guard.ts": `import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+
+export const guard = createMiddleware({
+	rejects: {
+		denied: { status: 403, schema: z.object({ message: z.string().trim() }) },
+	},
+	run: ({ next }) => next({}),
+});
+`,
+		});
+
+		const { diagnostics } = validateProject(cwd, { write: false });
+
+		expect(diagnostics.map((item) => [item.code, item.file, item.message])).toEqual([
+			[
+				"ROUTA_RESPONSE_SCHEMA_MUTATION",
+				"src/routes/items/schemas.ts",
+				"Response schema changes values with .toUpperCase(): z.string().toUpperCase()",
+			],
+			[
+				"ROUTA_RESPONSE_SCHEMA_MUTATION",
+				"src/routes/items/schemas.ts",
+				"Response schema changes values with .normalize(): z.string().normalize()",
+			],
+			[
+				"ROUTA_RESPONSE_SCHEMA_MUTATION",
+				"src/routes/items/schemas.ts",
+				"Response schema changes values with .overwrite(): z.number().overwrite((value) => Math.round(value))",
+			],
+			[
+				"ROUTA_RESPONSE_SCHEMA_MUTATION",
+				"src/routes/items/schemas.ts",
+				'Response schema changes values with .catch(): z.enum(["on", "off"]).catch("off")',
+			],
+			[
+				"ROUTA_RESPONSE_SCHEMA_MUTATION",
+				"src/routes/items/schemas.ts",
+				"Response schema changes values with a codec: z.codec(z.iso.datetime(), z.date(), { decode: (value) => new Date(value), encode",
+			],
+			[
+				"ROUTA_RESPONSE_SCHEMA_MUTATION",
+				"src/middleware/guard.ts",
+				"Response schema changes values with .trim(): z.string().trim()",
+			],
+		]);
 	});
 
 	it("projects the incoming side of transformed and coerced input, agreeing with z.toJSONSchema", () => {
