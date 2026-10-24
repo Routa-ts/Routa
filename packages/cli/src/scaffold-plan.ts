@@ -1851,9 +1851,7 @@ export function createScaffoldPlan(raw: string, extension: string, source: strin
 		const routeImportLines = [
 			'import { createRoute, createRouteRoot } from "@routa-ts/core";',
 			// Only placeholders for body outcomes reference z.output, so schema-less routes need no zod import.
-			...(usesZodOutputType
-				? ['import type { z } from "zod";']
-				: []),
+			...(usesZodOutputType ? ['import type { z } from "zod";'] : []),
 			...(routeImports.size > 0 ? [formatNamedImport(Array.from(routeImports).sort())] : []),
 		];
 		const routePath = openApiPath.replaceAll(/\{([^}]+)\}/g, ":$1");
