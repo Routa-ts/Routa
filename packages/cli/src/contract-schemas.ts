@@ -1044,7 +1044,7 @@ class SchemaProjector {
 			"path",
 			path,
 			cookiePathPattern.test(path ?? ""),
-			'must start with "/" and contain no ";" or control characters',
+			'must start with "/", end without a space, and use only printable ASCII without ";" (write non-ASCII characters percent-encoded)',
 		);
 		check("domain", domain, cookieDomainPattern.test(domain ?? ""), "must be a valid host name");
 		check(
@@ -2200,7 +2200,7 @@ class SchemaProjector {
 const zodRegistryNames = new Set(["globalRegistry", "registry"]);
 
 const cookieNamePattern = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
-const cookiePathPattern = /^\/[^;\p{Cc}]*$/u;
+const cookiePathPattern = /^\/(?:[\x20-\x3a\x3c-\x7e]*[\x21-\x3a\x3c-\x7e])?$/;
 const cookieDomainPattern =
 	/^\.?[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$/;
 const isoDateTimePattern =

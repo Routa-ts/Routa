@@ -244,6 +244,16 @@ describe("response cookie rules", () => {
 			["__Host-", { name: "__Host-a", domain: "example.com" }],
 			["path", { path: "app" }],
 			["path", { path: "/a;b" }],
+			["path", { path: "/app " }],
+			["path", { path: "/app\t" }],
+			["path", { path: " /app" }],
+			["path", { path: "/Ā" }],
+			["path", { path: "/日本" }],
+			["path", { path: "/é" }],
+			["path", { path: "/a\u007fb" }],
+			["domain", { domain: " example.com" }],
+			["domain", { domain: "example.com " }],
+			["domain", { domain: "例え.com" }],
 			["domain", { domain: "bad domain" }],
 			["domain", { domain: "a;b.com" }],
 			["maxAge", { maxAge: -1 }],
@@ -390,6 +400,49 @@ describe("response cookie encoding", () => {
 				expect(response.status, `${mode.name} ${String(value)}`).toBe(500);
 				expect(response.headers.getSetCookie()).toEqual([]);
 			}
+		}
+	});
+});
+
+describe("response cookie path safety", () => {
+	it("accepts printable ASCII paths and percent-encoded literals", () => {
+		for (const path of ["/", "/app", "/a b", "/caf%C3%A9", "/a/b?c=d#e"]) {
+			expect(() => createCookie({ ...base, name: "a", path }), path).not.toThrow();
+		}
+	});
+
+	it("rejects the /app and /app-with-a-space pair, so they never collide on the wire", () => {
+		expect(() => createCookie({ ...base, name: "session", path: "/app" })).not.toThrow();
+		expect(() => createCookie({ ...base, name: "session", path: "/app " })).toThrow(/path/);
+	});
+
+	it("sends an encoded non-ASCII scope, keeping distinct encoded scopes distinct, in every mode", async () => {
+		const accented = createCookie({ ...base, name: "session", path: "/caf%C3%A9" });
+		const spaced = createCookie({ ...base, name: "session", path: "/app%20" });
+		const plain = createCookie({ ...base, name: "session", path: "/app" });
+
+		for (const mode of modes) {
+			const response = await appFor(
+				{
+					method: "get",
+					path: "/a",
+					contract: createRoute({
+						responses: { ok: { status: 200, cookies: [accented, spaced, plain] } },
+						run: () => ({
+							type: "ok",
+							cookies: [accented.set("x"), spaced.set("y"), plain.set("z")],
+						}),
+					}),
+				},
+				mode,
+			).request("/a");
+
+			expect(response.status, mode.name).toBe(200);
+			expect(response.headers.getSetCookie(), mode.name).toEqual([
+				"session=x; Path=/caf%C3%A9; HttpOnly; Secure; SameSite=Lax",
+				"session=y; Path=/app%20; HttpOnly; Secure; SameSite=Lax",
+				"session=z; Path=/app; HttpOnly; Secure; SameSite=Lax",
+			]);
 		}
 	});
 });

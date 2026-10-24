@@ -385,6 +385,24 @@ describe("response cookie declaration checks", () => {
 		]);
 	});
 
+	it("fails a path that would trim into another handle's scope instead of only warning", () => {
+		const cwd = project({
+			"src/cookies.ts": cookieFile(
+				handle(`${complete.replace('path: "/"', 'path: "/app"')}`).replace("cookie", "plain"),
+				handle(`${complete.replace('path: "/"', 'path: "/app "')}`).replace("cookie", "spaced"),
+			),
+			"src/routes/items/route.ts": route(
+				"/items",
+				"ok: { status: 200, cookies: [plain, spaced] }",
+				{ imports: 'import { plain, spaced } from "../../cookies";' },
+			),
+		});
+
+		expect(codes(cwd)).toEqual([
+			["ROUTA_RESPONSE_COOKIE_ATTRIBUTE", expect.stringContaining("path")],
+		]);
+	});
+
 	it("warns, without failing, when the same name has different scopes", () => {
 		const cwd = project({
 			"src/cookies.ts": cookieFile(session, adminSession),
@@ -525,6 +543,18 @@ describe("response cookie rule parity", () => {
 			accepted: false,
 		},
 		{ name: "path with semicolon", overrides: { path: '"/a;b"' }, accepted: false },
+		{ name: "path with trailing space", overrides: { path: '"/app "' }, accepted: false },
+		{ name: "path with trailing tab", overrides: { path: '"/app\\t"' }, accepted: false },
+		{ name: "path with leading space", overrides: { path: '" /app"' }, accepted: false },
+		{ name: "path with inner space", overrides: { path: '"/a b"' }, accepted: true },
+		{ name: "path with DEL", overrides: { path: '"/a\\u007fb"' }, accepted: false },
+		{ name: "path with Latin-1", overrides: { path: '"/é"' }, accepted: false },
+		{ name: "path beyond Latin-1", overrides: { path: '"/Ā"' }, accepted: false },
+		{ name: "path with CJK", overrides: { path: '"/日本"' }, accepted: false },
+		{ name: "percent-encoded path", overrides: { path: '"/caf%C3%A9"' }, accepted: true },
+		{ name: "domain with leading space", overrides: { domain: '" example.com"' }, accepted: false },
+		{ name: "domain with trailing space", overrides: { domain: '"example.com "' }, accepted: false },
+		{ name: "non-ASCII domain", overrides: { domain: '"例え.com"' }, accepted: false },
 		{ name: "token punctuation", overrides: { name: '"a!#$%&\'*+-.^_`|~1"' }, accepted: true },
 		{ name: "name with comma", overrides: { name: '"a,b"' }, accepted: false },
 		{ name: "number value", overrides: { schema: "z.number().int()" }, accepted: true },

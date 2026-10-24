@@ -5,7 +5,9 @@ import { isScalarSchema } from "./response-headers.js";
 const handles = new WeakSet<object>();
 
 const cookieNamePattern = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
-const cookiePathPattern = /^\/[^;\p{Cc}]*$/u;
+// A path starts with "/" and uses printable ASCII except ";", with no trailing space: user agents
+// trim attribute values, so a trailing space would change the scope Routa promises.
+const cookiePathPattern = /^\/(?:[\x20-\x3a\x3c-\x7e]*[\x21-\x3a\x3c-\x7e])?$/;
 const cookieDomainPattern =
 	/^\.?[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$/;
 const isoDateTimePattern =
@@ -86,7 +88,7 @@ export function cookieConfigProblem(config: Partial<CookieConfig>): string | und
 	}
 
 	if (typeof path !== "string" || !cookiePathPattern.test(path)) {
-		return 'must declare a path that starts with "/" and has no ";" or control characters.';
+		return 'must declare a path that starts with "/", ends without a space, and uses only printable ASCII without ";". Write non-ASCII characters percent-encoded.';
 	}
 
 	if (domain !== undefined && (typeof domain !== "string" || !cookieDomainPattern.test(domain))) {
