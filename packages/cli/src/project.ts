@@ -1506,7 +1506,7 @@ function runReturnObjectDiagnostics(
 		for (const property of objectProperties(object)) {
 			const name = propertyName(property.name);
 
-			if (!name || name === "type" || name === "data" || name === "headers") {
+			if (!name || name === "type" || name === "data" || name === "headers" || name === "cookies") {
 				continue;
 			}
 
@@ -1514,7 +1514,7 @@ function runReturnObjectDiagnostics(
 			diagnostics.push({
 				code: "ROUTA_RESULT_SHAPE",
 				severity: "error",
-				message: `Run result includes unsupported field "${name}". Route and middleware results may only include "type", "data", and "headers".`,
+				message: `Run result includes unsupported field "${name}". Route and middleware results may only include "type", "data", "headers", and "cookies".`,
 				file: `${file}:${position.line + 1}:${position.character + 1}`,
 				suggestion: `Remove "${name}" from the returned result object.`,
 			});
@@ -1660,6 +1660,9 @@ function parseMiddlewareFile(
 	);
 }
 
+/** Reads the object a declaration's initializer passes to its factory, or `undefined`. */
+type DeclarationReader = (expression: ts.Expression) => ts.ObjectLiteralExpression | undefined;
+
 type MiddlewareDeclaration = {
 	/** The file that declares the middleware. */
 	file: string;
@@ -1684,6 +1687,7 @@ function exportedMiddlewareDeclarations(
 	sourceFile: ts.SourceFile,
 	parser: ts.SourceFileParser,
 	seen = new Set<string>(),
+	read: DeclarationReader = createMiddlewareObject,
 ): MiddlewareDeclaration[] {
 	if (seen.has(file)) {
 		return [];
@@ -1701,7 +1705,7 @@ function exportedMiddlewareDeclarations(
 					continue;
 				}
 
-				const contract = createMiddlewareObject(declaration.initializer);
+				const contract = read(declaration.initializer);
 
 				if (contract) {
 					const name = declaration.name.text;
@@ -1742,6 +1746,7 @@ function exportedMiddlewareDeclarations(
 				targetAst,
 				parser,
 				new Set(seen),
+				read,
 			);
 			const declaration = targetDeclarations.find((item) => item.exportedName === source.name);
 
@@ -1750,7 +1755,7 @@ function exportedMiddlewareDeclarations(
 				continue;
 			}
 
-			const direct = middlewareDeclarations(targetAst, true).find(
+			const direct = middlewareDeclarations(targetAst, true, read).find(
 				(item) => item.name === source.name,
 			);
 
@@ -1764,7 +1769,7 @@ function exportedMiddlewareDeclarations(
 				continue;
 			}
 
-			const local = middlewareDeclarations(targetAst, false).find(
+			const local = middlewareDeclarations(targetAst, false, read).find(
 				(item) => item.name === source.name,
 			);
 
@@ -1862,6 +1867,60 @@ export function middlewareDeclaration(
 	const source = namedImportMap(cwd, file, sourceFile).get(name);
 	const declaration = source && importedMiddlewareDeclaration(cwd, source, parser);
 	return declaration ? { file: declaration.file, name: declaration.name } : { file, name };
+}
+
+/**
+ * Finds the `createCookie({ ... })` declaration a module binds to a name, whether the module
+ * declares it or imports it. Imports follow relative modules and re-export chains, the way
+ * middleware does.
+ *
+ * @param file - The module that uses the cookie, relative to `cwd`
+ * @param name - The cookie's local name in `file`
+ * @returns The declaring file, declared name, and `createCookie` argument, or `undefined`
+ */
+export function cookieDeclaration(
+	cwd: string,
+	file: string,
+	name: string,
+	parser: ts.SourceFileParser,
+): MiddlewareDeclaration | undefined {
+	const sourceFile = parseTypeScriptFile(join(cwd, file), parser);
+	const local = middlewareDeclarations(sourceFile, false, createCookieObject).find(
+		(item) => item.name === name,
+	);
+
+	if (local) {
+		return { file, name, exportedName: name, contract: local.contract };
+	}
+
+	const source = namedImportMap(cwd, file, sourceFile).get(name);
+
+	if (!source) {
+		return undefined;
+	}
+
+	const targetAst = parseTypeScriptFile(join(cwd, source.file), parser);
+	return exportedMiddlewareDeclarations(
+		cwd,
+		source.file,
+		targetAst,
+		parser,
+		new Set(),
+		createCookieObject,
+	).find((item) => item.exportedName === source.name);
+}
+
+/**
+ * Extracts the configuration object from a `createCookie` call.
+ */
+function createCookieObject(expression: ts.Expression): ts.ObjectLiteralExpression | undefined {
+	const unwrapped = unwrapExpression(expression);
+
+	if (!ts.isCallExpression(unwrapped) || callName(unwrapped) !== "createCookie") {
+		return;
+	}
+
+	return objectLiteral(unwrapped.arguments[0]);
 }
 
 /**
@@ -2559,6 +2618,7 @@ function parseTypeScriptFile(file: string, parser: ts.SourceFileParser): ts.Sour
 function middlewareDeclarations(
 	sourceFile: ts.SourceFile,
 	exportedOnly: boolean,
+	read: DeclarationReader = createMiddlewareObject,
 ): Array<{ name: string; contract: ts.ObjectLiteralExpression }> {
 	const declarations: Array<{ name: string; contract: ts.ObjectLiteralExpression }> = [];
 
@@ -2576,7 +2636,7 @@ function middlewareDeclarations(
 				continue;
 			}
 
-			const contract = createMiddlewareObject(declaration.initializer);
+			const contract = read(declaration.initializer);
 
 			if (!contract) {
 				continue;

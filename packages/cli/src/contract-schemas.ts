@@ -10,6 +10,7 @@ import {
 	unwrapExpression,
 } from "./ast.js";
 import {
+	cookieDeclaration,
 	type Diagnostic,
 	middlewareDeclaration,
 	type MiddlewareMetadata,
@@ -43,6 +44,23 @@ export type ProjectedResponse = {
 	description: string;
 	schema?: JsonSchema;
 	headers?: Record<string, ProjectedHeader>;
+	cookies?: ProjectedCookie[];
+};
+
+/**
+ * One declared response cookie: the static facts of its `createCookie` handle. No value is ever
+ * part of the projection.
+ */
+export type ProjectedCookie = {
+	name: string;
+	httpOnly: boolean;
+	secure: boolean;
+	sameSite: "strict" | "lax" | "none";
+	path: string;
+	domain?: string;
+	maxAge?: number;
+	expires?: string;
+	partitioned?: boolean;
 };
 
 /**
@@ -402,6 +420,7 @@ class SchemaProjector {
 	private readonly components = new Map<string, ComponentIdentity & { content: JsonSchema }>();
 	private readonly rejectCache = new Map<string, JsonSchema>();
 	private readonly scannedRegistries = new Set<string>();
+	private readonly cookieHandles = new Map<string, ProjectedCookie | null>();
 
 	constructor(
 		private readonly cwd: string,
@@ -589,11 +608,14 @@ class SchemaProjector {
 			const projectedHeaders = headers
 				? this.responseHeaders(headers, context, lifecycleOwned)
 				: undefined;
+			const cookies = propertyValue(outcome, "cookies");
+			const projectedCookies = cookies ? this.responseCookies(cookies, context) : undefined;
 
 			result.set(status, {
 				description: text ?? humanizeOutcomeName(name ?? String(status)),
 				...(schema ? { schema: this.materialize(this.node(schema, context)) } : {}),
 				...(projectedHeaders ? { headers: projectedHeaders } : {}),
+				...(projectedCookies?.length ? { cookies: projectedCookies } : {}),
 			});
 		}
 
@@ -743,7 +765,7 @@ class SchemaProjector {
 				});
 			}
 
-			if (!this.isScalarHeaderValue(value)) {
+			if (!this.isScalarValue(value)) {
 				fail(
 					"ROUTA_RESPONSE_HEADER_VALUE",
 					`Header "${name}" must be a string, number, or boolean`,
@@ -760,6 +782,342 @@ class SchemaProjector {
 		}
 
 		return headers;
+	}
+
+	/**
+	 * Projects an outcome's `cookies` declaration: the static facts of each handle. Reports handles
+	 * Routa cannot resolve, and declarations that list one identity twice (an error) or one name in
+	 * several scopes (a warning).
+	 */
+	private responseCookies(
+		expression: ts.Expression,
+		context: Context,
+	): ProjectedCookie[] | undefined {
+		const list = unwrapExpression(expression);
+
+		if (!ts.isArrayLiteralExpression(list)) {
+			this.unresolvedCookie(
+				expression,
+				context.source,
+				"cookies must be an array literal of createCookie handles",
+			);
+			return undefined;
+		}
+
+		const cookies: ProjectedCookie[] = [];
+		const identities = new Map<string, ProjectedCookie>();
+
+		for (const element of list.elements) {
+			const handle = ts.isIdentifier(unwrapExpression(element))
+				? this.cookieHandle((unwrapExpression(element) as ts.Identifier).text, context.source)
+				: undefined;
+
+			if (handle === undefined) {
+				this.unresolvedCookie(element, context.source, "cookies must be createCookie handles");
+				continue;
+			}
+
+			// A declaration Routa found but could not accept was reported where it is declared.
+			if (handle === null) {
+				continue;
+			}
+
+			const identity = cookieIdentity(handle);
+
+			if (identities.has(identity)) {
+				this.report(context.source, list, {
+					code: "ROUTA_RESPONSE_COOKIE_CONFLICT",
+					message: `Outcome declares cookie ${describeCookie(handle)} more than once`,
+					suggestion:
+						"A cookie identity (name, domain, and path) has one owner. Declare it once per outcome.",
+				});
+				continue;
+			}
+
+			identities.set(identity, handle);
+			cookies.push(handle);
+		}
+
+		const byName = new Map<string, ProjectedCookie[]>();
+
+		for (const cookie of cookies) {
+			byName.set(cookie.name, [...(byName.get(cookie.name) ?? []), cookie]);
+		}
+
+		for (const [name, scoped] of byName) {
+			if (scoped.length > 1) {
+				this.report(context.source, list, {
+					code: "ROUTA_RESPONSE_COOKIE_SCOPE",
+					severity: "warning",
+					message: `Cookies named "${name}" have different scopes: ${scoped.map(describeCookie).join(", ")}`,
+					suggestion:
+						"They are separate cookies, which clients can confuse. Give them different names unless the scopes are intended.",
+				});
+			}
+		}
+
+		return cookies;
+	}
+
+	private unresolvedCookie(node: ts.Node, source: SchemaSource, what: string): void {
+		this.report(source, node, {
+			code: "ROUTA_RESPONSE_COOKIE_UNRESOLVED",
+			message: `Routa cannot read a cookie declaration: ${what}`,
+			suggestion:
+				"List identifiers declared with createCookie({ ... }) in this file or imported from a relative module or re-export.",
+		});
+	}
+
+	/**
+	 * Finds a handle's `createCookie` declaration, in the route file or the schemas file beside
+	 * it, and reads its static facts once. `undefined` means no declaration was found; `null` means
+	 * one was found and reported as invalid.
+	 */
+	private cookieHandle(name: string, source: SchemaSource): ProjectedCookie | null | undefined {
+		for (const file of [source.file, source.fallback?.file]) {
+			const declaration = file && cookieDeclaration(this.cwd, file, name, this.parser);
+
+			if (declaration) {
+				const key = `${declaration.file}#${declaration.name}`;
+
+				if (!this.cookieHandles.has(key)) {
+					this.cookieHandles.set(
+						key,
+						this.readCookie(declaration.contract, declaration.file) ?? null,
+					);
+				}
+
+				return this.cookieHandles.get(key);
+			}
+		}
+
+		return undefined;
+	}
+
+	/**
+	 * Reads one `createCookie` configuration. Every attribute is a contract fact, so each must be
+	 * a literal; the same rules as `createCookie` then apply.
+	 */
+	private readCookie(
+		config: ts.ObjectLiteralExpression,
+		file: string,
+	): ProjectedCookie | undefined {
+		const source = this.source(file);
+		let readable = true;
+		const fail = (code: string, node: ts.Node, message: string, suggestion: string): undefined => {
+			readable = false;
+			this.report(source, node, { code, message, suggestion });
+			return undefined;
+		};
+		const attribute = (code: string, node: ts.Node, key: string, expected: string): undefined =>
+			fail(
+				code,
+				node,
+				`Cookie attribute ${key} ${expected}`,
+				`Fix ${key} in createCookie({ ... }). ${cookieRuleReminder}`,
+			);
+		const literalSuggestion =
+			"Routa reads cookie names and attributes from source without running it. Write each one as a literal in createCookie({ ... }).";
+
+		const hasSpread = config.properties.some(
+			(property) =>
+				ts.isSpreadAssignment(property)
+				|| (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property))
+				|| !propertyName(property.name),
+		);
+
+		for (const property of config.properties) {
+			if (
+				ts.isSpreadAssignment(property)
+				|| (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property))
+				|| !propertyName(property.name)
+			) {
+				fail(
+					"ROUTA_RESPONSE_COOKIE_STATIC",
+					property,
+					"Cookie attributes must be literal properties without spreads or computed names",
+					literalSuggestion,
+				);
+			}
+		}
+
+		const facts: Partial<ProjectedCookie> = {};
+		const text = (key: string, required: boolean) => {
+			const value = propertyValue(config, key);
+
+			if (!value) {
+				if (required && !hasSpread) {
+					attribute("ROUTA_RESPONSE_COOKIE_ATTRIBUTE", config, key, "is required");
+				}
+
+				return undefined;
+			}
+
+			const literal = stringLiteral(value);
+
+			if (literal === undefined) {
+				const code = isLiteralToken(value)
+					? key === "name"
+						? "ROUTA_RESPONSE_COOKIE_NAME"
+						: "ROUTA_RESPONSE_COOKIE_ATTRIBUTE"
+					: "ROUTA_RESPONSE_COOKIE_STATIC";
+				return code === "ROUTA_RESPONSE_COOKIE_STATIC"
+					? fail(code, value, `Cookie ${key} must be a literal`, literalSuggestion)
+					: attribute(code, value, key, "must be a string");
+			}
+
+			return literal;
+		};
+		const flag = (key: string, required: boolean) => {
+			const value = propertyValue(config, key);
+
+			if (!value) {
+				if (required && !hasSpread) {
+					attribute("ROUTA_RESPONSE_COOKIE_ATTRIBUTE", config, key, "is required");
+				}
+
+				return undefined;
+			}
+
+			const unwrapped = unwrapExpression(value);
+
+			if (unwrapped.kind === ts.SyntaxKind.TrueKeyword) return true;
+			if (unwrapped.kind === ts.SyntaxKind.FalseKeyword) return false;
+
+			return isLiteralToken(unwrapped)
+				? attribute("ROUTA_RESPONSE_COOKIE_ATTRIBUTE", value, key, "must be true or false")
+				: fail(
+						"ROUTA_RESPONSE_COOKIE_STATIC",
+						value,
+						`Cookie ${key} must be a literal`,
+						literalSuggestion,
+					);
+		};
+
+		const name = text("name", true);
+		const httpOnly = flag("httpOnly", true);
+		const secure = flag("secure", true);
+		const sameSite = text("sameSite", true);
+		const path = text("path", true);
+		const domain = text("domain", false);
+		const expires = text("expires", false);
+		const partitioned = flag("partitioned", false);
+		const maxAgeValue = propertyValue(config, "maxAge");
+		let maxAge: number | undefined;
+
+		if (maxAgeValue) {
+			maxAge = signedNumber(maxAgeValue);
+
+			if (maxAge === undefined) {
+				if (isLiteralToken(maxAgeValue)) {
+					attribute("ROUTA_RESPONSE_COOKIE_ATTRIBUTE", maxAgeValue, "maxAge", "must be a number");
+				} else {
+					fail(
+						"ROUTA_RESPONSE_COOKIE_STATIC",
+						maxAgeValue,
+						"Cookie maxAge must be a literal",
+						literalSuggestion,
+					);
+				}
+			}
+		}
+
+		const nameNode = propertyValue(config, "name") ?? config;
+
+		if (name !== undefined && !cookieNamePattern.test(name)) {
+			fail(
+				"ROUTA_RESPONSE_COOKIE_NAME",
+				nameNode,
+				"Cookie name must be a valid cookie name",
+				"Use letters, digits, and the characters ! # $ % & ' * + - . ^ _ ` | ~. A name cannot be empty or contain spaces, semicolons, commas, or equals signs.",
+			);
+		}
+
+		const check = (key: string, value: unknown, valid: boolean, expected: string) => {
+			if (value !== undefined && !valid) {
+				attribute(
+					"ROUTA_RESPONSE_COOKIE_ATTRIBUTE",
+					propertyValue(config, key) ?? config,
+					key,
+					expected,
+				);
+			}
+		};
+
+		check(
+			"sameSite",
+			sameSite,
+			["strict", "lax", "none"].includes(sameSite ?? ""),
+			'must be "strict", "lax", or "none"',
+		);
+		check(
+			"path",
+			path,
+			cookiePathPattern.test(path ?? ""),
+			'must start with "/" and contain no ";" or control characters',
+		);
+		check("domain", domain, cookieDomainPattern.test(domain ?? ""), "must be a valid host name");
+		check(
+			"maxAge",
+			maxAge,
+			Number.isSafeInteger(maxAge) && (maxAge ?? 0) >= 0,
+			"must be a non-negative whole number of seconds",
+		);
+		check(
+			"expires",
+			expires,
+			isoDateTimePattern.test(expires ?? "") && Number.isFinite(Date.parse(expires ?? "")),
+			'must be an ISO 8601 date-time such as "2030-01-01T00:00:00Z"',
+		);
+
+		const schemaExpression = propertyValue(config, "schema");
+
+		if (!schemaExpression) {
+			if (!hasSpread) {
+				attribute("ROUTA_RESPONSE_COOKIE_ATTRIBUTE", config, "schema", "is required");
+			}
+		} else {
+			const schema = this.materialize(this.node(schemaExpression, { source, io: "output" }));
+
+			if (!this.isScalarValue(schema)) {
+				fail(
+					"ROUTA_RESPONSE_COOKIE_VALUE",
+					schemaExpression,
+					"Cookie value must be a string, number, or boolean",
+					"Declare a string, number, or boolean schema (or a literal or enum of them). Routa encodes only those values.",
+				);
+			}
+		}
+
+		if (
+			!readable
+			|| name === undefined
+			|| httpOnly === undefined
+			|| secure === undefined
+			|| !sameSite
+			|| !path
+		) {
+			return undefined;
+		}
+
+		const rule = cookieRuleProblem({ name, secure, sameSite, path, domain, partitioned });
+
+		if (rule) {
+			fail("ROUTA_RESPONSE_COOKIE_RULE", nameNode, rule, cookieRuleReminder);
+			return undefined;
+		}
+
+		return {
+			name,
+			httpOnly,
+			secure,
+			sameSite: sameSite as ProjectedCookie["sameSite"],
+			path,
+			...(domain === undefined ? {} : { domain }),
+			...(maxAge === undefined ? {} : { maxAge }),
+			...(expires === undefined ? {} : { expires }),
+			...(partitioned === undefined ? {} : { partitioned }),
+		};
 	}
 
 	/**
@@ -783,7 +1141,7 @@ class SchemaProjector {
 	}
 
 	/** Whether a projected schema accepts only strings, numbers, and booleans. */
-	private isScalarHeaderValue(schema: JsonSchema): boolean {
+	private isScalarValue(schema: JsonSchema): boolean {
 		const value = this.resolved(schema);
 		const scalarTypes = ["string", "number", "integer", "boolean"];
 		const isScalar = (item: unknown) =>
@@ -791,7 +1149,7 @@ class SchemaProjector {
 
 		if (Array.isArray(value.anyOf) || Array.isArray(value.oneOf) || Array.isArray(value.allOf)) {
 			const members = (value.anyOf ?? value.oneOf ?? value.allOf) as JsonSchema[];
-			return members.every((member) => this.isScalarHeaderValue(member));
+			return members.every((member) => this.isScalarValue(member));
 		}
 
 		if (Array.isArray(value.enum)) {
@@ -1850,6 +2208,86 @@ class SchemaProjector {
 }
 
 const zodRegistryNames = new Set(["globalRegistry", "registry"]);
+
+const cookieNamePattern = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+const cookiePathPattern = /^\/[^;\p{Cc}]*$/u;
+const cookieDomainPattern =
+	/^\.?[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$/;
+const isoDateTimePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+const cookieRuleReminder =
+	'SameSite=None and Partitioned need secure: true. A __Secure- name needs secure: true. A __Host- name needs secure: true, path: "/", and no domain.';
+
+/**
+ * The first cookie rule a declaration breaks, in the order `createCookie` checks them at runtime.
+ */
+function cookieRuleProblem(cookie: {
+	name: string;
+	secure: boolean;
+	sameSite: string;
+	path: string;
+	domain?: string;
+	partitioned?: boolean;
+}): string | undefined {
+	if (cookie.sameSite === "none" && !cookie.secure) {
+		return "Cookie sets SameSite=None, which requires secure: true";
+	}
+
+	if (cookie.partitioned && !cookie.secure) {
+		return "Cookie sets Partitioned, which requires secure: true";
+	}
+
+	const prefix = cookie.name.toLowerCase();
+
+	if (prefix.startsWith("__secure-") && !cookie.secure) {
+		return "Cookie uses the __Secure- prefix, which requires secure: true";
+	}
+
+	if (prefix.startsWith("__host-")) {
+		if (!cookie.secure) return "Cookie uses the __Host- prefix, which requires secure: true";
+		if (cookie.path !== "/") return 'Cookie uses the __Host- prefix, which requires path: "/"';
+		if (cookie.domain !== undefined)
+			return "Cookie uses the __Host- prefix, which forbids a domain";
+	}
+
+	return undefined;
+}
+
+/** The identity of a cookie: name, domain without case or a leading dot, and path. */
+function cookieIdentity(cookie: { name: string; domain?: string; path: string }): string {
+	return `${cookie.name}\0${(cookie.domain ?? "").toLowerCase().replace(/^\./, "")}\0${cookie.path}`;
+}
+
+function describeCookie(cookie: { name: string; domain?: string; path: string }): string {
+	return `"${cookie.name}" (${cookie.domain ? `Domain=${cookie.domain}; ` : ""}Path=${cookie.path})`;
+}
+
+/** Whether an expression is a literal token (string, number, boolean, null), not a computed value. */
+function isLiteralToken(expression: ts.Expression): boolean {
+	const unwrapped = unwrapExpression(expression);
+	return (
+		ts.isStringLiteralLike(unwrapped)
+		|| ts.isNumericLiteral(unwrapped)
+		|| unwrapped.kind === ts.SyntaxKind.TrueKeyword
+		|| unwrapped.kind === ts.SyntaxKind.FalseKeyword
+		|| unwrapped.kind === ts.SyntaxKind.NullKeyword
+		|| (ts.isPrefixUnaryExpression(unwrapped) && ts.isNumericLiteral(unwrapped.operand))
+	);
+}
+
+/** Reads a numeric literal, including a leading minus. */
+function signedNumber(expression: ts.Expression): number | undefined {
+	const unwrapped = unwrapExpression(expression);
+
+	if (
+		ts.isPrefixUnaryExpression(unwrapped)
+		&& unwrapped.operator === ts.SyntaxKind.MinusToken
+		&& ts.isNumericLiteral(unwrapped.operand)
+	) {
+		return -Number(unwrapped.operand.text);
+	}
+
+	return numericLiteral(unwrapped);
+}
 
 /** The header names the lifecycle owns on a route, and a deprecation expression that could not be read. */
 type LifecycleOwnership = { owned: ReadonlySet<string>; unreadable?: ts.Expression };
