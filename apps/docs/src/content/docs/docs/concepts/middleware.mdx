@@ -61,7 +61,9 @@ A middleware that calls `next()` continues the request, and must return what `ne
 resolves to. That value is opaque: middleware cannot read it, copy it, or add headers or
 cookies to it, so the outcome the handler (or a later middleware) selected is the response.
 TypeScript rejects a changed value, and Routa answers `500 Invalid handler output` when a
-middleware returns anything else after `next()`, including one of its own rejects.
+middleware returns anything else after `next()`, including one of its own rejects. Routa
+validates and serializes the selected outcome before `next()` resolves, so changing the
+handler's data, header, or cookie objects afterwards does not change the response.
 
 `input` is optional and works exactly like a route's `input`. It lets middleware read
 validated headers, cookies, or query values without the route declaring them:

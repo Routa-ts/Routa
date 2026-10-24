@@ -176,6 +176,105 @@ describe("continuing middleware (runtime)", () => {
 	});
 });
 
+describe("selection boundary", () => {
+	const modes: Array<Parameters<typeof createHonoApp>[1]> = [
+		{ runtimeMode: "dev" },
+		{ runtimeMode: "start" },
+		{ runtimeMode: "start", responseValidation: "always" },
+	];
+	const outcome = {
+		schema: z.object({ message: z.string() }),
+		headers: z.object({ etag: z.string() }),
+		cookies: [session],
+	};
+
+	/** Shared objects a producer returns and a middleware later changes in place. */
+	function shared() {
+		const data = { message: "selected" };
+		const headers = { etag: '"1"' };
+		const cookies = [session.set("selected")];
+
+		return {
+			result: { data, headers, cookies },
+			mutate: () => {
+				data.message = "late";
+				headers.etag = '"late"';
+				cookies[0] = session.set("late");
+				cookies.push(session.clear());
+			},
+		};
+	}
+
+	/** A middleware that continues, then changes the selected result's objects in place. */
+	const lateWriter = (mutate: () => void) =>
+		createMiddleware({
+			run: async ({ next }) => {
+				const result = await next();
+				mutate();
+				return result;
+			},
+		});
+
+	const producers = {
+		"route outcome": (): { route: HonoRoute; status: number } => {
+			const { result, mutate } = shared();
+
+			return {
+				status: 200,
+				route: {
+					method: "get",
+					path: "/a",
+					contract: createRoute({
+						middleware: [lateWriter(mutate)],
+						responses: { ok: { status: 200, ...outcome } },
+						run: () => ({ type: "ok" as const, ...result }),
+					}),
+				},
+			};
+		},
+		"middleware reject": (): { route: HonoRoute; status: number } => {
+			const { result, mutate } = shared();
+
+			return {
+				status: 403,
+				route: {
+					method: "get",
+					path: "/a",
+					contract: createRoute({
+						middleware: [
+							lateWriter(mutate),
+							createMiddleware({
+								rejects: { denied: { status: 403, ...outcome } },
+								run: () => ({ type: "denied" as const, ...result }),
+							}),
+						],
+						responses: { ok: { status: 200 } },
+						run: () => ({ type: "ok" }),
+					}),
+				},
+			};
+		},
+	};
+
+	for (const [producer, build] of Object.entries(producers)) {
+		it(`sends the ${producer} as selected when middleware later changes its objects`, async () => {
+			for (const options of modes) {
+				const { route, status } = build();
+				const response = await createHonoApp([route], options).request("/a");
+				const mode = JSON.stringify(options);
+
+				expect(response.status, mode).toBe(status);
+				await expect(response.json(), mode).resolves.toEqual({ message: "selected" });
+				expect(response.headers.get("etag"), mode).toBe('"1"');
+				expect(
+					response.headers.getSetCookie().map((field) => field.split(";")[0]),
+					mode,
+				).toEqual(["session=selected"]);
+			}
+		});
+	}
+});
+
 describe("outcome producers", () => {
 	const guard = createMiddleware({
 		rejects: { unauthorized: { status: 401, schema: z.object({ message: z.string() }) } },
