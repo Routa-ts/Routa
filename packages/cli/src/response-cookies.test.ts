@@ -164,6 +164,114 @@ describe("response cookie handle resolution", () => {
 		expect(setCookieOf(cwd)).toContain('"session"');
 	});
 
+	const localThenExport = (extra: string) =>
+		cookieFile(session.replace("export const", "const"), extra);
+	const viaImport = (file: string, name = "session") =>
+		project({
+			"src/cookies/session.ts": file,
+			"src/routes/items/route.ts": route("/items", `ok: { status: 200, cookies: [${name}] }`, {
+				imports: `import { ${name} } from "../../cookies/session";`,
+			}),
+		});
+
+	it("resolves a local declaration exported by name later", () => {
+		const cwd = viaImport(localThenExport("export { session };"));
+
+		expect(codes(cwd)).toEqual([]);
+		expect(setCookieOf(cwd)).toContain('"session"');
+	});
+
+	it("resolves a local declaration exported under another name", () => {
+		const cwd = viaImport(localThenExport("export { session as s };"), "s");
+
+		expect(codes(cwd)).toEqual([]);
+		expect(setCookieOf(cwd)).toContain('"session"');
+	});
+
+	it("resolves late-exported declarations through named and wildcard barrels", () => {
+		for (const barrel of [
+			'export { session } from "./session";\n',
+			'export { s as session } from "./session";\n',
+			'export * from "./session";\n',
+			'export * from "./mid";\n',
+		]) {
+			const cwd = project({
+				"src/cookies/session.ts": localThenExport(
+					barrel.includes("s as session") ? "export { session as s };" : "export { session };",
+				),
+				"src/cookies/mid.ts": 'export * from "./session";\n',
+				"src/cookies/index.ts": barrel,
+				"src/routes/items/route.ts": route("/items", "ok: { status: 200, cookies: [session] }", {
+					imports: 'import { session } from "../../cookies";',
+				}),
+			});
+
+			expect(codes(cwd), barrel).toEqual([]);
+			expect(setCookieOf(cwd), barrel).toContain('"session"');
+		}
+	});
+
+	it("resolves a handle exported with export * and renamed by a later re-export", () => {
+		const cwd = project({
+			"src/cookies/session.ts": cookieFile(session),
+			"src/cookies/all.ts": 'export * from "./session";\n',
+			"src/cookies/index.ts": 'export { session as auth } from "./all";\n',
+			"src/routes/items/route.ts": route("/items", "ok: { status: 200, cookies: [auth] }", {
+				imports: 'import { auth } from "../../cookies";',
+			}),
+		});
+
+		expect(codes(cwd)).toEqual([]);
+		expect(setCookieOf(cwd)).toContain('"session"');
+	});
+
+	it("prefers an explicit export over a wildcard of the same name", () => {
+		const cwd = project({
+			"src/cookies/wild.ts": cookieFile(session.replace('"session"', '"wild"')),
+			"src/cookies/own.ts": cookieFile(session),
+			"src/cookies/index.ts": 'export * from "./wild";\nexport { session } from "./own";\n',
+			"src/routes/items/route.ts": route("/items", "ok: { status: 200, cookies: [session] }", {
+				imports: 'import { session } from "../../cookies";',
+			}),
+		});
+
+		expect(codes(cwd)).toEqual([]);
+		expect(setCookieOf(cwd)).toContain('"session"');
+		expect(setCookieOf(cwd)).not.toContain('"wild"');
+	});
+
+	it("resolves two handles re-exported through one barrel", () => {
+		const cwd = project({
+			"src/cookies/declare.ts": cookieFile(session, theme),
+			"src/cookies/barrel.ts": 'export { session, theme } from "./declare";\n',
+			"src/cookies/index.ts":
+				'export { session } from "./barrel";\nexport { theme } from "./barrel";\n',
+			"src/routes/items/route.ts": route(
+				"/items",
+				"ok: { status: 200, cookies: [session, theme] }",
+				{ imports: 'import { session, theme } from "../../cookies";' },
+			),
+		});
+
+		expect(codes(cwd)).toEqual([]);
+		expect(setCookieOf(cwd)).toContain('"session"');
+		expect(setCookieOf(cwd)).toContain('"theme"');
+	});
+
+	it("stops at wildcard cycles and reports the handle as unresolved", () => {
+		const cwd = project({
+			"src/cookies/a.ts": 'export * from "./b";\n',
+			"src/cookies/b.ts": 'export * from "./a";\n',
+			"src/routes/items/route.ts": route("/items", "ok: { status: 200, cookies: [session] }", {
+				imports: 'import { session } from "../../cookies/a";',
+			}),
+		});
+
+		expect(codes(cwd)).toEqual([
+			["ROUTA_RESPONSE_COOKIE_UNRESOLVED", expect.stringContaining("createCookie")],
+		]);
+	});
+
 	it("resolves a handle declared next to the route's schemas", () => {
 		const cwd = project({
 			"src/routes/items/schemas.ts": cookieFile(session),
@@ -553,7 +661,11 @@ describe("response cookie rule parity", () => {
 		{ name: "path with CJK", overrides: { path: '"/日本"' }, accepted: false },
 		{ name: "percent-encoded path", overrides: { path: '"/caf%C3%A9"' }, accepted: true },
 		{ name: "domain with leading space", overrides: { domain: '" example.com"' }, accepted: false },
-		{ name: "domain with trailing space", overrides: { domain: '"example.com "' }, accepted: false },
+		{
+			name: "domain with trailing space",
+			overrides: { domain: '"example.com "' },
+			accepted: false,
+		},
 		{ name: "non-ASCII domain", overrides: { domain: '"例え.com"' }, accepted: false },
 		{ name: "token punctuation", overrides: { name: '"a!#$%&\'*+-.^_`|~1"' }, accepted: true },
 		{ name: "name with comma", overrides: { name: '"a,b"' }, accepted: false },

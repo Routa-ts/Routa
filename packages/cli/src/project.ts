@@ -1674,12 +1674,16 @@ type MiddlewareDeclaration = {
 };
 
 /**
- * Resolves exported middleware declarations from a module and its re-exports.
+ * Resolves exported declarations from a module and its re-exports: `export const`, names exported
+ * later with `export { name }`, named re-exports (aliases included), and `export *`.
+ *
+ * Each branch of the walk carries its own copy of the visited files, so a cycle ends the branch
+ * that closes it while sibling re-exports of the same module still resolve.
  *
  * @param cwd - The project root directory
  * @param file - The module being inspected
  * @param sourceFile - The parsed TypeScript source file for `file`
- * @returns Middleware declarations found in the module graph
+ * @returns Declarations found in the module graph, explicit exports before wildcard ones
  */
 function exportedMiddlewareDeclarations(
 	cwd: string,
@@ -1696,7 +1700,17 @@ function exportedMiddlewareDeclarations(
 	seen.add(file);
 
 	const declarations: MiddlewareDeclaration[] = [];
+	const wildcard: MiddlewareDeclaration[] = [];
 	const imports = namedImportMap(cwd, file, sourceFile);
+	const walk = (target: string) =>
+		exportedMiddlewareDeclarations(
+			cwd,
+			target,
+			parseTypeScriptFile(join(cwd, target), parser),
+			parser,
+			new Set(seen),
+			read,
+		);
 
 	for (const statement of sourceFile.statements) {
 		if (ts.isVariableStatement(statement) && hasExportModifier(statement)) {
@@ -1715,11 +1729,7 @@ function exportedMiddlewareDeclarations(
 			continue;
 		}
 
-		if (!ts.isExportDeclaration(statement) || !statement.exportClause) {
-			continue;
-		}
-
-		if (!ts.isNamedExports(statement.exportClause)) {
+		if (!ts.isExportDeclaration(statement)) {
 			continue;
 		}
 
@@ -1728,9 +1738,32 @@ function exportedMiddlewareDeclarations(
 				? resolveImportFile(cwd, file, statement.moduleSpecifier.text)
 				: undefined;
 
+		if (!statement.exportClause) {
+			if (targetFile) {
+				wildcard.push(...walk(targetFile));
+			}
+			continue;
+		}
+
+		if (!ts.isNamedExports(statement.exportClause)) {
+			continue;
+		}
+
 		for (const specifier of statement.exportClause.elements) {
 			const exportedName = specifier.name.text;
 			const importedName = specifier.propertyName?.text ?? specifier.name.text;
+
+			if (!statement.moduleSpecifier) {
+				const local = middlewareDeclarations(sourceFile, false, read).find(
+					(item) => item.name === importedName,
+				);
+
+				if (local) {
+					declarations.push({ file, name: importedName, exportedName, contract: local.contract });
+					continue;
+				}
+			}
+
 			const source = targetFile
 				? { file: targetFile, name: importedName }
 				: imports.get(importedName);
@@ -1739,52 +1772,15 @@ function exportedMiddlewareDeclarations(
 				continue;
 			}
 
-			const targetAst = parseTypeScriptFile(join(cwd, source.file), parser);
-			const targetDeclarations = exportedMiddlewareDeclarations(
-				cwd,
-				source.file,
-				targetAst,
-				parser,
-				new Set(seen),
-				read,
-			);
-			const declaration = targetDeclarations.find((item) => item.exportedName === source.name);
+			const declaration = walk(source.file).find((item) => item.exportedName === source.name);
 
 			if (declaration) {
 				declarations.push({ ...declaration, exportedName });
-				continue;
-			}
-
-			const direct = middlewareDeclarations(targetAst, true, read).find(
-				(item) => item.name === source.name,
-			);
-
-			if (direct) {
-				declarations.push({
-					file: source.file,
-					name: source.name,
-					exportedName,
-					contract: direct.contract,
-				});
-				continue;
-			}
-
-			const local = middlewareDeclarations(targetAst, false, read).find(
-				(item) => item.name === source.name,
-			);
-
-			if (local && exportedName === source.name) {
-				declarations.push({
-					file: source.file,
-					name: source.name,
-					exportedName,
-					contract: local.contract,
-				});
 			}
 		}
 	}
 
-	return declarations;
+	return [...declarations, ...wildcard];
 }
 
 /**
