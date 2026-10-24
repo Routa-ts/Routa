@@ -145,11 +145,16 @@ These codes name the schemas it cannot read faithfully. See
 A schema uses a construct Routa cannot describe in OpenAPI, such as `z.tuple()`,
 `.extend()`, `z.date()`, a schema built by calling your own function, or a value that is
 not a Zod schema. Route `input` also needs static `params`, `query`, `headers`, `cookies`,
-or `body` properties, not a spread or a shared variable.
+or `body` properties, not a spread or a shared variable, and each outcome in `responses`
+needs a literal `status` and a `schema` written in place, not spread in.
+
+In response schemas, Routa also reports a `.check()` argument it cannot classify, such as
+a check built by your own function, and URL options whose `normalize` value it cannot read.
 
 **Fix:** write the schema with supported Zod constructs. Compose objects with
 `z.intersection()` or `.and()`, and describe dates on the wire with `z.iso.datetime()` or
-`z.iso.date()`.
+`z.iso.date()`. Pass `.check()` a Zod check such as `z.minLength(1)` or an inline function,
+and write URL options as an object literal.
 
 ### `ROUTA_SCHEMA_UNRESOLVED`
 
@@ -162,7 +167,8 @@ file that declares the middleware. It does not follow imports.
 ### `ROUTA_RESPONSE_SCHEMA_MUTATION`
 
 A response schema changes the value it validates, for example with `.transform()`,
-`.default()`, `z.coerce.number()`, `.trim()`, or `.check(z.trim())`.
+`.default()`, `z.coerce.number()`, `.trim()`, `.check(z.trim())`,
+`z.url({ normalize: true })`, or a record key such as `z.string().toLowerCase()`.
 
 **Fix:** return the wire-ready value from the handler and keep the response schema
 validation-only.
