@@ -470,9 +470,9 @@ describe("response headers at runtime", () => {
 							},
 						},
 						run: () => ({
-				type: "unauthorized" as const,
-				headers: { "www-authenticate": "Bearer" },
-			}),
+							type: "unauthorized" as const,
+							headers: { "www-authenticate": "Bearer" },
+						}),
 					}),
 				],
 				responses: { ok: { status: 200 } },

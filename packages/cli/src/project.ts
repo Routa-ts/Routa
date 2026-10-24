@@ -145,7 +145,9 @@ function validateProjectInSession(
 	const write = options.write ?? true;
 	const discovery = discoverRoutes(cwd, parser);
 	const routes = discovery.routes;
-	const schemas = projectContractSchemas(cwd, routes, parser);
+	const schemas = projectContractSchemas(cwd, routes, parser, {
+		lifecycleHeaders: lifecycleHeadersEnabled(cwd, parser),
+	});
 	const diagnostics = [
 		...projectStructureDiagnostics(cwd),
 		...discovery.diagnostics,
@@ -1125,6 +1127,34 @@ function parseRouteContract(
 	}
 
 	return { configFound: true, explicitOptions, contract };
+}
+
+/**
+ * Reads whether `src/routa.ts` turns lifecycle headers on with a literal `lifecycleHeaders: true`.
+ *
+ * Generation never executes application modules, so a computed value counts as off here. Runtime
+ * registration still rejects a conflicting declaration when the configured value is on.
+ */
+function lifecycleHeadersEnabled(cwd: string, parser: ts.SourceFileParser): boolean {
+	const file = join(cwd, "src/routa.ts");
+
+	if (!existsSync(file)) {
+		return false;
+	}
+
+	let enabled = false;
+	const visit = (node: ts.Node): void => {
+		if (ts.isCallExpression(node) && callName(node.expression) === "createRouta") {
+			const config = objectLiteral(node.arguments[0]);
+			const value = config && propertyValue(config, "lifecycleHeaders");
+			enabled ||= Boolean(value && unwrapExpression(value).kind === ts.SyntaxKind.TrueKeyword);
+		}
+
+		ts.forEachChild(node, visit);
+	};
+
+	visit(parseTypeScriptFile(file, parser));
+	return enabled;
 }
 
 function routeDeprecation(
