@@ -101,6 +101,33 @@ describe("schema-less outcomes", () => {
 			// @ts-expect-error Even null data is rejected for a schema-less outcome.
 			run: () => ({ type: "gone", data: null }),
 		});
+
+		createRoute({
+			responses: {
+				gone: { status: 410 },
+			},
+			run: () => ({
+				type: "gone",
+				// @ts-expect-error The diagnostic message is not data that a schema-less outcome accepts.
+				data: "Outcome gone declares no schema, so it cannot return data." as const,
+			}),
+		});
+
+		createRoute({
+			responses: {
+				gone: { status: 410 },
+			},
+			// @ts-expect-error No string is data for a schema-less outcome.
+			run: () => ({ type: "gone", data: "text" }),
+		});
+
+		createRoute({
+			responses: {
+				gone: { status: 410 },
+			},
+			// An explicit undefined carries no body, so it is the same as omitting data.
+			run: () => ({ type: "gone", data: undefined }),
+		});
 	});
 });
 
