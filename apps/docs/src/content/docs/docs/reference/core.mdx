@@ -83,7 +83,10 @@ optional text for the OpenAPI response; without it, Routa uses the outcome name,
 `data`. `data` is required for an outcome with a `schema` and forbidden for one without.
 TypeScript also rejects a `schema` on a `204`, `205`, or `304` outcome and on any `HEAD`
 outcome, an informational `1xx` status, a `304` outside `GET` and `HEAD`, and response
-schemas that change values. Hand-built contracts fail when the app registers them.
+schemas that change values. A hand-built contract that breaks the status and method rules
+fails when the app registers it. A response schema that changes values is caught by
+`routa check`, or at request time when response validation is on and the schema changes
+the returned value.
 
 ```ts
 import { createRoute } from "@routa-ts/core";
