@@ -48,12 +48,9 @@ describe("createHonoApp", () => {
 						params: z.object({ id: z.string() }),
 					},
 					responses: {
-						success: {
-							status: 204,
-							schema: z.null(),
-						},
+						success: { status: 204 },
 					},
-					run: async () => ({ type: "success", data: null }),
+					run: async () => ({ type: "success" }),
 				}),
 			},
 		]);
@@ -85,12 +82,9 @@ describe("createHonoApp", () => {
 				path: "/status",
 				contract: createRoute({
 					responses: {
-						success: {
-							status: 204,
-							schema: z.null(),
-						},
+						success: { status: 204 },
 					},
-					run: () => ({ type: "success", data: null }),
+					run: () => ({ type: "success" }),
 				}),
 			},
 		]);
@@ -362,7 +356,8 @@ describe("createHonoApp", () => {
 		await expect(response.json()).resolves.toEqual({ ok: "yes" });
 	});
 
-	it("applies response transforms only when response validation is enabled", async () => {
+	it("never sends a parsed value that differs from the handler value", async () => {
+		const events: RoutaLogEvent[] = [];
 		const routes = [
 			{
 				method: "get" as const,
@@ -371,6 +366,7 @@ describe("createHonoApp", () => {
 					responses: {
 						success: {
 							status: 200,
+							// @ts-expect-error Response schemas must not change values.
 							schema: z.object({ name: z.string().transform((name) => name.toUpperCase()) }),
 						},
 					},
@@ -378,18 +374,42 @@ describe("createHonoApp", () => {
 				}),
 			},
 		];
-		const developmentApp = createHonoApp(routes, { runtimeMode: "dev" });
+		const developmentApp = createHonoApp(routes, {
+			runtimeMode: "dev",
+			logger: createLogger({ sink: (event) => events.push(event) }),
+		});
 		const productionApp = createHonoApp(routes, {
 			runtimeMode: "start",
 			responseValidation: "development",
 		});
+		const alwaysApp = createHonoApp(routes, {
+			runtimeMode: "start",
+			responseValidation: "always",
+		});
 
-		await expect((await developmentApp.request("/profile")).json()).resolves.toEqual({
-			name: "JANE",
+		const development = await developmentApp.request("/profile");
+		expect(development.status).toBe(500);
+		await expect(development.json()).resolves.toMatchObject({
+			title: "Invalid handler output",
+			status: 500,
 		});
-		await expect((await productionApp.request("/profile")).json()).resolves.toEqual({
-			name: "Jane",
-		});
+		expect(events).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					event: "http.error",
+					data: expect.objectContaining({
+						issues: [{ code: "response_value_changed", path: ["name"] }],
+					}),
+				}),
+			]),
+		);
+		expect(JSON.stringify(events)).not.toContain("JANE");
+
+		const production = await productionApp.request("/profile");
+		expect(production.status).toBe(200);
+		await expect(production.json()).resolves.toEqual({ name: "Jane" });
+
+		expect((await alwaysApp.request("/profile")).status).toBe(500);
 	});
 
 	it("validates middleware rejection responses", async () => {
@@ -1446,8 +1466,8 @@ describe("createHonoApp", () => {
 					method: "options" as never,
 					path: "/status",
 					contract: createRoute({
-						responses: { success: { status: 204, schema: z.null() } },
-						run: () => ({ type: "success", data: null }),
+						responses: { success: { status: 204 } },
+						run: () => ({ type: "success" }),
 					}),
 				},
 			]),
