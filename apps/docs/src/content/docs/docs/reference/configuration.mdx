@@ -110,10 +110,10 @@ Controls when Routa parses handler responses and middleware reject responses thr
 their declared Zod schemas and compares the parsed value with the handler value. Defaults to
 `"development"`:
 
-| Value           | `routa dev`                        | `routa start`                   |
-| --------------- | ---------------------------------- | ------------------------------- |
-| `"development"` | Parse and compare response data    | Do not parse or compare         |
-| `"always"`      | Parse and compare response data    | Parse and compare response data |
+| Value           | `routa dev`                     | `routa start`                   |
+| --------------- | ------------------------------- | ------------------------------- |
+| `"development"` | Parse and compare response data | Do not parse or compare         |
+| `"always"`      | Parse and compare response data | Parse and compare response data |
 
 Routa always checks the result envelope and response type, requires `data` for an outcome
 with a `schema` and rejects it for one without, selects the declared status, and performs
