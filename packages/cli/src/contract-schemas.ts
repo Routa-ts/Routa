@@ -1,11 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
-	callName,
+	createRouteObject,
 	localInitializer,
 	objectLiteral,
 	propertyName,
+	propertyValue,
 	resolveImportFile,
+	routeConfigObject,
 	unwrapExpression,
 } from "./ast.js";
 import type { Diagnostic, MiddlewareMetadata, RouteMetadata } from "./project.js";
@@ -59,7 +61,7 @@ export function projectContractSchemas(
 	const operations = new Map<string, Record<string, ProjectedOperation>>();
 
 	for (const route of routes) {
-		const contracts = projector.routeContracts(route.file);
+		const contracts = projector.routeContracts(route.file, Object.keys(route.responses));
 		const methods: Record<string, ProjectedOperation> = {};
 
 		for (const method of Object.keys(route.responses)) {
@@ -99,6 +101,7 @@ type SchemaSource = {
 	imports: Set<string>;
 	importFiles: Map<string, string>;
 	zodNamespaces: Set<string>;
+	zodRegistries: Set<string>;
 	routaHelpers: Map<string, "Sort" | "Fields">;
 	fallback?: SchemaSource;
 };
@@ -245,7 +248,8 @@ const checkMethods = new Set([
 ]);
 
 /**
- * Methods that keep the receiver's type but rewrite the parsed value.
+ * Methods, and the matching `.check()` factories such as `z.trim()`, that keep
+ * the receiver's type but rewrite the parsed value.
  */
 const valueMutatingMethods = new Set([
 	"normalize",
@@ -338,21 +342,19 @@ class SchemaProjector {
 	/**
 	 * Projects the `createRoute` contracts declared in a route file.
 	 */
-	routeContracts(routeFile: string): Record<string, Omit<ProjectedOperation, "rejects">> {
+	routeContracts(
+		routeFile: string,
+		methods: readonly string[],
+	): Record<string, Omit<ProjectedOperation, "rejects">> {
 		const schemasFile = join(dirname(routeFile), "schemas.ts");
 		const schemas = existsSync(join(this.cwd, schemasFile)) ? this.source(schemasFile) : undefined;
 		const route = this.source(routeFile, schemas);
-		const ast = this.parse(routeFile);
+		const config = routeConfigObject(this.parse(routeFile));
 		const contracts: Record<string, Omit<ProjectedOperation, "rejects">> = {};
 
-		for (const property of routeConfigProperties(ast)) {
-			const method = propertyName(property.name);
-
-			if (!method || !httpMethods.has(method)) {
-				continue;
-			}
-
-			const contract = createRouteConfig(property.initializer);
+		for (const method of methods) {
+			const value = config && propertyValue(config, method);
+			const contract = value && createRouteObject(value);
 
 			if (!contract) {
 				continue;
@@ -426,43 +428,62 @@ class SchemaProjector {
 		contract: ts.ObjectLiteralExpression,
 		source: SchemaSource,
 	): ProjectedOperation["input"] {
-		const input = objectLiteral(objectPropertyInitializer(contract, "input"));
+		const value = propertyValue(contract, "input");
+		const input = objectLiteral(value);
 		const result: ProjectedOperation["input"] = {};
 
+		if (value && !input) {
+			this.unreadableInput(value, source);
+		}
+
 		for (const property of input?.properties ?? []) {
-			if (!ts.isPropertyAssignment(property)) {
+			const name =
+				ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)
+					? propertyName(property.name)
+					: undefined;
+
+			if (!name) {
+				this.unreadableInput(property, source);
 				continue;
 			}
 
-			const name = propertyName(property.name);
+			const expression = input && propertyValue(input, name);
 
-			if (!name || !isInputField(name)) {
+			if (!expression || !isInputField(name)) {
 				continue;
 			}
 
-			const node = this.node(property.initializer, { source, io: "input" });
+			const node = this.node(expression, { source, io: "input" });
 			result[name] =
 				name === "body"
 					? this.materialize(node)
-					: this.parameterContainer(node, name, property.initializer, source);
+					: this.parameterContainer(node, name, expression, source);
 		}
 
 		return result;
+	}
+
+	private unreadableInput(node: ts.Node, source: SchemaSource): void {
+		this.unsupported(
+			node,
+			{ source, io: "input" },
+			"route input needs static params, query, headers, cookies, or body properties",
+		);
 	}
 
 	private responseSchemas(
 		contract: ts.ObjectLiteralExpression,
 		source: SchemaSource,
 	): Map<number, JsonSchema> {
-		const responses = objectLiteral(objectPropertyInitializer(contract, "responses"));
+		const responses = objectLiteral(propertyValue(contract, "responses"));
 		const result = new Map<number, JsonSchema>();
 
 		for (const response of responses?.properties ?? []) {
 			const outcome = ts.isPropertyAssignment(response)
 				? objectLiteral(response.initializer)
 				: undefined;
-			const status = outcome && numericLiteral(objectPropertyInitializer(outcome, "status"));
-			const schema = outcome && objectPropertyInitializer(outcome, "schema");
+			const status = outcome && numericLiteral(propertyValue(outcome, "status"));
+			const schema = outcome && propertyValue(outcome, "schema");
 
 			if (status && schema) {
 				result.set(status, this.materialize(this.node(schema, { source, io: "output" })));
@@ -512,6 +533,7 @@ class SchemaProjector {
 			imports: new Set(),
 			importFiles: new Map(),
 			zodNamespaces: new Set(),
+			zodRegistries: new Set(),
 			routaHelpers: new Map(),
 			fallback,
 		};
@@ -571,15 +593,22 @@ class SchemaProjector {
 		this.scannedRegistries.add(source.file);
 
 		const visit = (node: ts.Node): void => {
-			if (
+			const registry =
 				ts.isPropertyAccessExpression(node)
 				&& ts.isIdentifier(node.expression)
 				&& source.zodNamespaces.has(node.expression.text)
-				&& (node.name.text === "globalRegistry" || node.name.text === "registry")
-			) {
+				&& zodRegistryNames.has(node.name.text)
+					? node.name.text
+					: ts.isIdentifier(node)
+						  && source.zodRegistries.has(node.text)
+						  && !ts.isImportSpecifier(node.parent)
+						? node.text
+						: undefined;
+
+			if (registry) {
 				this.report(source, node, {
 					code: "ROUTA_SCHEMA_REGISTRY",
-					message: `Zod ${node.name.text} metadata is not part of the route contract`,
+					message: `Zod ${registry} metadata is not part of the route contract`,
 					suggestion:
 						"Attach documentation with .meta({ ... }) or .describe() on the schema the route uses.",
 				});
@@ -687,8 +716,13 @@ class SchemaProjector {
 
 		switch (name) {
 			case "string":
-			case "date":
 				return plainNode({ type: "string" });
+			case "date":
+				return this.unsupported(
+					call,
+					context,
+					"z.date() values are not JSON; use z.iso.datetime()",
+				);
 			case "boolean":
 				return plainNode({ type: "boolean" });
 			case "null":
@@ -729,6 +763,8 @@ class SchemaProjector {
 			case "nullish":
 				return first ? this.wrapper(name, this.node(first, context)) : this.missing(call, context);
 			case "stringbool":
+				// Like z.coerce.number() as `number`, this documents the parameter
+				// convention, where `type: boolean` means the strings "true" and "false".
 				return this.mutation(call, context, "z.stringbool()", plainNode({ type: "boolean" }));
 			case "coerce.string":
 			case "coerce.number":
@@ -793,6 +829,19 @@ class SchemaProjector {
 			return this.withMeta(receiver(), call, context);
 		}
 
+		if (name === "check" && context.io === "output") {
+			for (const argument of call.arguments) {
+				const check = unwrapExpression(argument);
+				const factory = ts.isCallExpression(check)
+					? zodFactory(unwrapExpression(check.expression), context.source)
+					: undefined;
+
+				if (factory && valueMutatingMethods.has(factory)) {
+					this.reportMutation(check, context, `z.${factory}()`);
+				}
+			}
+		}
+
 		if (checkMethods.has(name)) {
 			return this.clone(receiver(), {});
 		}
@@ -837,9 +886,7 @@ class SchemaProjector {
 
 		if (name === "or") {
 			return first
-				? plainNode({
-						anyOf: [receiver(), this.node(first, context)].map((node) => this.materialize(node)),
-					})
+				? this.anyOf([receiver(), this.node(first, context)])
 				: this.missing(call, context);
 		}
 
@@ -971,7 +1018,10 @@ class SchemaProjector {
 			return this.unsupported(call, context, "z.union() needs an inline array of schemas");
 		}
 
-		const nodes = members.elements.map((element) => this.node(element, context));
+		return this.anyOf(members.elements.map((element) => this.node(element, context)));
+	}
+
+	private anyOf(nodes: SchemaNode[]): SchemaNode {
 		return {
 			schema: { anyOf: nodes.map((node) => this.materialize(node)) },
 			meta: {},
@@ -1322,7 +1372,7 @@ class SchemaProjector {
 	}
 }
 
-const httpMethods = new Set(["get", "post", "put", "patch", "delete", "head"]);
+const zodRegistryNames = new Set(["globalRegistry", "registry"]);
 
 function isInputField(value: string): value is InputField {
 	return ["params", "query", "headers", "cookies", "body"].includes(value);
@@ -1388,6 +1438,8 @@ function readImport(
 
 			if (isZod && imported === "z") {
 				source.zodNamespaces.add(element.name.text);
+			} else if (isZod && zodRegistryNames.has(imported)) {
+				source.zodRegistries.add(element.name.text);
 			} else if (isRouta && (imported === "Sort" || imported === "Fields")) {
 				source.routaHelpers.set(element.name.text, imported);
 			} else {
@@ -1557,124 +1609,14 @@ function stableJson(value: unknown): string {
 	);
 }
 
-function objectPropertyInitializer(
-	object: ts.ObjectLiteralExpression,
-	name: string,
-): ts.Expression | undefined {
-	for (const property of object.properties) {
-		if (ts.isPropertyAssignment(property) && propertyName(property.name) === name) {
-			return property.initializer;
-		}
-	}
-
-	return undefined;
-}
-
 function readDeprecation(contract: ts.ObjectLiteralExpression): ProjectedOperation["deprecation"] {
-	const value = objectLiteral(objectPropertyInitializer(contract, "deprecation"));
+	const value = objectLiteral(propertyValue(contract, "deprecation"));
 	if (!value) return undefined;
 	const string = (name: string) => {
-		const item = objectPropertyInitializer(value, name);
+		const item = propertyValue(value, name);
 		return item ? stringLiteral(item) : undefined;
 	};
 	const sunset = string("sunset");
 	const replacement = string("replacement");
 	return sunset || replacement ? { sunset, replacement } : undefined;
-}
-
-/**
- * Collects HTTP method property assignments from `createRouteRoot` route config
- * object literals (same call shapes `project.ts` walks).
- */
-function routeConfigProperties(ast: ts.SourceFile): ts.PropertyAssignment[] {
-	const properties: ts.PropertyAssignment[] = [];
-
-	function collectFromConfig(config: ts.ObjectLiteralExpression): void {
-		for (const property of config.properties) {
-			if (ts.isPropertyAssignment(property)) {
-				properties.push(property);
-			}
-		}
-	}
-
-	function isRouteConfigCall(node: ts.CallExpression): boolean {
-		const callee = unwrapExpression(node.expression);
-
-		// Inline `createRouteRoot("/path")({ ... })`
-		if (ts.isCallExpression(callee) && callName(callee.expression) === "createRouteRoot") {
-			return true;
-		}
-
-		// `const route = createRouteRoot("/path"); export default route({ ... })`
-		if (ts.isIdentifier(callee)) {
-			const initializer = localInitializer(ast, callee.text);
-
-			if (initializer) {
-				const unwrapped = unwrapExpression(initializer);
-				return (
-					ts.isCallExpression(unwrapped) && callName(unwrapped.expression) === "createRouteRoot"
-				);
-			}
-		}
-
-		return false;
-	}
-
-	function visit(node: ts.Node): void {
-		if (
-			ts.isCallExpression(node)
-			&& node.arguments.length > 0
-			&& ts.isObjectLiteralExpression(node.arguments[0])
-			&& isRouteConfigCall(node)
-		) {
-			collectFromConfig(node.arguments[0]);
-		}
-
-		ts.forEachChild(node, visit);
-	}
-
-	visit(ast);
-
-	// Also accept bare `export default { get: createRoute(...) }` like project.ts.
-	if (properties.length === 0) {
-		for (const statement of ast.statements) {
-			if (!ts.isExportAssignment(statement) || statement.isExportEquals) {
-				continue;
-			}
-
-			const expression = unwrapExpression(statement.expression);
-			const resolved = ts.isIdentifier(expression)
-				? localInitializer(ast, expression.text)
-				: expression;
-			const config = resolved ? unwrapExpression(resolved) : undefined;
-
-			if (config && ts.isObjectLiteralExpression(config)) {
-				collectFromConfig(config);
-			} else if (config && ts.isCallExpression(config) && isRouteConfigCall(config)) {
-				const arg = config.arguments[0];
-				if (arg && ts.isObjectLiteralExpression(arg)) {
-					collectFromConfig(arg);
-				}
-			}
-		}
-	}
-
-	return properties;
-}
-
-/**
- * Extracts the route configuration object from a `createRoute` call.
- */
-function createRouteConfig(expression: ts.Expression): ts.ObjectLiteralExpression | undefined {
-	const unwrapped = unwrapExpression(expression);
-
-	if (
-		ts.isCallExpression(unwrapped)
-		&& callName(unwrapped.expression) === "createRoute"
-		&& ts.isObjectLiteralExpression(unwrapped.arguments[0])
-	) {
-		return unwrapped.arguments[0];
-	}
-
-	return undefined;
 }

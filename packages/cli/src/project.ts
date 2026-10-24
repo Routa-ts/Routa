@@ -12,15 +12,17 @@ import { basename, dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	callName,
-	localInitializer,
-	resolveImportFile,
+	createRouteObject,
 	objectLiteral,
 	objectProperties,
 	objectProperty,
 	propertyName,
+	propertyValue,
+	resolveImportFile,
+	routeConfigObject,
 	unwrapExpression,
 } from "./ast.js";
-import { projectContractSchemas } from "./contract-schemas.js";
+import { type ContractSchemaProjection, projectContractSchemas } from "./contract-schemas.js";
 import * as ts from "./typescript.js";
 import { runTypeScript } from "./typescript-runner.js";
 
@@ -80,6 +82,7 @@ export type ProjectValidationResult = {
 	routes: RouteMetadata[];
 	diagnostics: Diagnostic[];
 	warnings: Diagnostic[];
+	schemas: ContractSchemaProjection;
 };
 
 const generatedHeader =
@@ -158,7 +161,7 @@ function validateProjectInSession(
 		writeRoutesMetadata(cwd, routes);
 	}
 
-	return { routes, diagnostics, warnings: schemas.warnings };
+	return { routes, diagnostics, warnings: schemas.warnings, schemas };
 }
 
 /**
@@ -2317,90 +2320,6 @@ function parseTypeScriptFile(file: string, parser: ts.SourceFileParser): ts.Sour
 }
 
 /**
- * Extracts the exported route configuration object from a source file.
- *
- * Follows `export default identifier` to a local initializer when possible.
- *
- * @param sourceFile - The parsed TypeScript source file to inspect
- * @returns The exported route configuration object, if present
- */
-function routeConfigObject(sourceFile: ts.SourceFile): ts.ObjectLiteralExpression | undefined {
-	for (const statement of sourceFile.statements) {
-		if (!ts.isExportAssignment(statement) || statement.isExportEquals) {
-			continue;
-		}
-
-		const expression = resolveExportedExpression(sourceFile, statement.expression);
-		return routeRootObject(sourceFile, expression);
-	}
-}
-
-/**
- * Resolves an exported expression to a local initializer when it is an identifier.
- */
-function resolveExportedExpression(
-	sourceFile: ts.SourceFile,
-	expression: ts.Expression,
-): ts.Expression {
-	const unwrapped = unwrapExpression(expression);
-
-	if (!ts.isIdentifier(unwrapped)) {
-		return unwrapped;
-	}
-
-	const initializer = localInitializer(sourceFile, unwrapped.text);
-	return initializer ? unwrapExpression(initializer) : unwrapped;
-}
-
-/**
- * Finds the initializer for a local `const`/`let`/`var` binding in a source file.
- */
-/**
- * Extracts the route configuration object from a `createRouteRoot(path)(...)` call.
- *
- * @returns The first argument as an object literal, if the expression is a `createRouteRoot` call.
- */
-function routeRootObject(
-	sourceFile: ts.SourceFile,
-	expression: ts.Expression,
-): ts.ObjectLiteralExpression | undefined {
-	const unwrapped = unwrapExpression(expression);
-
-	if (!ts.isCallExpression(unwrapped)) {
-		return;
-	}
-
-	const callee = unwrapExpression(unwrapped.expression);
-	const routeRootCall = ts.isIdentifier(callee)
-		? localInitializer(sourceFile, callee.text)
-		: ts.isCallExpression(callee)
-			? callee
-			: undefined;
-
-	if (!routeRootCall || callName(unwrapExpression(routeRootCall)) !== "createRouteRoot") {
-		return;
-	}
-
-	return objectLiteral(unwrapped.arguments[0]);
-}
-
-/**
- * Extracts the route contract object from a `createRoute` call.
- *
- * @param expression - The expression to inspect
- * @returns The first argument object literal when the expression is a `createRoute(...)` call; otherwise `undefined`
- */
-function createRouteObject(expression: ts.Expression): ts.ObjectLiteralExpression | undefined {
-	const unwrapped = unwrapExpression(expression);
-
-	if (!ts.isCallExpression(unwrapped) || callName(unwrapped) !== "createRoute") {
-		return;
-	}
-
-	return objectLiteral(unwrapped.arguments[0]);
-}
-
-/**
  * Collects middleware declarations from a source file.
  *
  * @param sourceFile - The TypeScript source file to inspect.
@@ -2539,11 +2458,11 @@ function routeInputs(routeContract: ts.ObjectLiteralExpression): RouteMethodInpu
 	const inputObject = input ? objectLiteral(input.initializer) : undefined;
 
 	return {
-		params: Boolean(inputObject && objectProperty(inputObject, "params")),
-		query: Boolean(inputObject && objectProperty(inputObject, "query")),
-		headers: Boolean(inputObject && objectProperty(inputObject, "headers")),
-		cookies: Boolean(inputObject && objectProperty(inputObject, "cookies")),
-		body: Boolean(inputObject && objectProperty(inputObject, "body")),
+		params: Boolean(inputObject && propertyValue(inputObject, "params")),
+		query: Boolean(inputObject && propertyValue(inputObject, "query")),
+		headers: Boolean(inputObject && propertyValue(inputObject, "headers")),
+		cookies: Boolean(inputObject && propertyValue(inputObject, "cookies")),
+		body: Boolean(inputObject && propertyValue(inputObject, "body")),
 	};
 }
 
