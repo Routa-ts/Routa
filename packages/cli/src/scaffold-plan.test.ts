@@ -46,6 +46,54 @@ function snapshot(plan: ScaffoldPlan) {
 }
 
 describe("scaffold plan", () => {
+	describe("response bodies", () => {
+		function routeFor(
+			method: string,
+			responses: Record<string, unknown>,
+		): { route: string; schemas: string } {
+			const plan = createScaffoldPlan(
+				JSON.stringify({
+					openapi: "3.1.0",
+					info: { title: "Test", version: "1" },
+					paths: { "/item": { [method]: { operationId: `${method}Item`, responses } } },
+				}),
+				".json",
+				"openapi.json",
+			);
+
+			return {
+				route: plan.files.get(join("src", "routes", "item", "route.ts")) ?? "",
+				schemas: plan.files.get(join("src", "routes", "item", "schemas.ts")) ?? "",
+			};
+		}
+
+		it("keeps an unconstrained body when JSON content declares no schema", () => {
+			const { route, schemas } = routeFor("get", {
+				"200": { description: "JSON", content: { "application/json": {} } },
+			});
+
+			expect(schemas).toContain("z.unknown()");
+			expect(route).toContain("schema: ");
+			expect(route).toContain("data: ");
+		});
+
+		it("omits the schema when there is no content or HTTP and the method forbid a body", () => {
+			const jsonContent = { "application/json": { schema: { type: "string" } } };
+
+			for (const { method, responses } of [
+				{ method: "get", responses: { "200": { description: "No content" } } },
+				{ method: "get", responses: { "204": { description: "Gone", content: jsonContent } } },
+				{ method: "head", responses: { "200": { description: "Head", content: jsonContent } } },
+			]) {
+				const { route, schemas } = routeFor(method, responses);
+
+				expect(route, method).not.toContain("schema:");
+				expect(route, method).toContain('return { type: "success" }');
+				expect(schemas, method).not.toContain("z.");
+			}
+		});
+	});
+
 	it.each([undefined, ""])("blocks overwriting a retained file with hash %s", (hash) => {
 		const plan = planWith(["/status"]);
 		const state = snapshot(plan);

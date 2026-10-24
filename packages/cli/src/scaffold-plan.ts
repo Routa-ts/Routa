@@ -1207,17 +1207,19 @@ function schemasForResponses(
 
 	return entries.map(([rawStatus, response]) => {
 		const status = Number.isFinite(Number(rawStatus)) ? Number(rawStatus) : 200;
-		// A response without JSON content, and any response HTTP forbids a body for, is a schema-less outcome.
-		const schema =
+		// A response without content, and any response HTTP forbids a body for, is a schema-less outcome.
+		// JSON content without a schema still has a body, so it keeps an unconstrained one.
+		const content =
 			method === "head" || status === 204 || status === 205 || status === 304
 				? undefined
-				: firstJsonContent(response.content)?.schema;
+				: firstJsonContent(response.content);
+		const schema = content?.schema;
 
 		return {
 			status,
-			schema: schema ? zodForSchema(schema) : undefined,
+			schema: content ? (schema ? zodForSchema(schema) : "z.unknown()") : undefined,
 			schemaSource: schema,
-			placeholder: schema ? placeholderForSchema(schema, document) : undefined,
+			placeholder: content ? placeholderForSchema(schema, document) : undefined,
 		};
 	});
 }
