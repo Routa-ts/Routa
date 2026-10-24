@@ -208,18 +208,32 @@ export default createRouteRoot("/session")({
 `"2030-01-01T00:00:00Z"`. Routa reads the name and every attribute from source without
 running it, so write each one as a literal. A computed attribute fails `routa check`.
 Handles are shared: import one from any module, through relative imports and re-exports,
-and list it in every outcome that may emit it.
+and list it in every outcome that may emit it. Routa follows `export const`, a name exported
+later with `export { session }` or `export { session as auth }`, `export { session } from`,
+and `export * from`, all through relative modules. It does not follow package imports.
 
-Every declared cookie is optional in the result, so an outcome only sends the effects it
-returns. The `cookies` result field is forbidden when the outcome declares none, and an effect
-from a handle the outcome does not list fails TypeScript. Builders (`response.created(...)`)
-do not take cookies; return the result object. A cookie handle has these rules:
+A bare handle in `cookies` is optional: the outcome sends the effects it returns. To require
+an effect, write the entry as a literal `{ handle, required: true }`:
+
+```ts
+cookies: [{ handle: session, required: true }, theme],
+```
+
+Every required handle needs a `set` or `clear` effect in the result. TypeScript rejects a
+result that leaves one out, including an empty `cookies` array, and Routa fails the response
+in every validation mode if it still happens. An outcome with a required cookie has no
+builder, so return the result object. The `cookies` result field is forbidden when the
+outcome declares none, and an effect from a handle the outcome does not list fails
+TypeScript. Builders (`response.created(...)`) do not take cookies; return the result object.
+A cookie handle has these rules:
 
 - `sameSite: "none"` and `partitioned: true` require `secure: true`.
 - A `__Secure-` name requires `secure: true`. A `__Host-` name requires `secure: true`,
   `path: "/"`, and no `domain`. The prefixes match without regard to case.
-- The name is an RFC 6265 token, the path starts with `/`, and `maxAge` is a non-negative
-  whole number of seconds.
+- The name is an RFC 6265 token. The path starts with `/`, uses printable ASCII without `;`,
+  and has no trailing space: write non-ASCII characters percent-encoded, such as
+  `"/caf%C3%A9"`. Routa sends the path exactly as written, so the identity you declare is the
+  scope a browser applies. `maxAge` is a non-negative whole number of seconds.
 - The value schema accepts a string, number, or boolean (or a literal or enum of them) and
   must not change values, like any response schema.
 
@@ -237,7 +251,7 @@ as its own `Set-Cookie` field, never joined with commas. Terminal middleware `re
 `cookies` and send them through the same path as route outcomes, but `routa check` and
 OpenAPI do not read them yet, so app startup is the first place a bad reject cookie fails.
 
-Routa checks declared handles, one effect per identity, and safe encoding in every mode. It
+Routa checks declared handles, required effects, one effect per identity, and safe encoding in every mode. It
 parses a `set` value with the handle's schema and compares the result with the value you
 returned under the same `responseValidation` policy as the body. A raw `Set-Cookie` header is
 not declarable.

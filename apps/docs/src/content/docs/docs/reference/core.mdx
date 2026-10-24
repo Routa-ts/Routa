@@ -85,7 +85,8 @@ is required, optional when all are, and forbidden when the outcome declares none
 with `lifecycleHeaders` on it owns `deprecation`, `sunset`, and the successor `link`. See
 [Schemas](/docs/concepts/schemas/#response-headers).
 
-An outcome's `cookies` lists the `createCookie` handles it may emit. The result's `cookies`
+An outcome's `cookies` lists the `createCookie` handles it may emit. A bare handle is optional;
+`{ handle, required: true }` requires a `set` or `clear` effect for it. The result's `cookies`
 field is an array of `set` and `clear` effects for those handles, and it is forbidden when the
 outcome declares none. See [`createCookie`](#createcookie).
 
@@ -301,7 +302,7 @@ function createCookie<const TConfig extends CookieConfig>(
 | `httpOnly`    | `boolean`                      | Yes      | Adds `HttpOnly`                                      |
 | `secure`      | `boolean`                      | Yes      | Adds `Secure`                                        |
 | `sameSite`    | `"strict" \| "lax" \| "none"`  | Yes      | Sets `SameSite`; `"none"` requires `secure: true`    |
-| `path`        | `string`                       | Yes      | Starts with `/`                                      |
+| `path`        | `string`                       | Yes      | Starts with `/`; printable ASCII, no trailing space  |
 | `domain`      | `string`                       | No       | Host name, with or without a leading dot             |
 | `maxAge`      | `number`                       | No       | Non-negative whole seconds                           |
 | `expires`     | `string`                       | No       | ISO 8601 date-time, such as `"2030-01-01T00:00:00Z"` |
@@ -511,7 +512,7 @@ type UsersRouteConfig = RouteRootConfigForCtx<{
 `MiddlewareRunArgs`, `MiddlewareNext`, `MiddlewareProvidesSpec`, `MiddlewareProvidesKeys`,
 `MiddlewareProvidedCtx`, `MiddlewareProvides`, `MiddlewareRejectsSpec`,
 `MiddlewareRejectResult`, `MiddlewareOpenApi`, `InferMiddlewareCtx`, `CookieConfig`,
-`CookieHandle`, `CookieEffect`, `CookieSameSite`, `AnyCookie`, and `Register`.
+`CookieHandle`, `CookieEffect`, `CookieSameSite`, `RequiredCookie`, `AnyCookie`, and `Register`.
 
 From `@routa-ts/core/hono`: `HonoRoute`, `CreateHonoAppOptions`. From
 `@routa-ts/core/logger`: `RoutaLogger`, `RoutaLogLevel`, `RoutaLogLevelWithSilent`,

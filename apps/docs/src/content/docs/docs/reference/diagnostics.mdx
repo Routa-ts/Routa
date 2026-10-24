@@ -166,18 +166,20 @@ support.
 
 ### `ROUTA_RESPONSE_COOKIE_UNRESOLVED`
 
-An outcome's `cookies` is not an array literal of identifiers that resolve to a
-`createCookie({ ... })` declaration. Routa follows identifiers declared in the route file or
-its `schemas.ts`, and imports and re-exports through relative modules. It does not follow
-package imports, aliases of other variables, or spreads.
+An outcome's `cookies` is not an array literal of identifiers, or of
+`{ handle, required: true }` entries, that resolve to a `createCookie({ ... })` declaration.
+Routa follows identifiers declared in the route file or its `schemas.ts`, and relative imports
+and re-exports: `export const`, `export { name }`, aliases, `export { name } from`, and
+`export * from`. It does not follow package imports, aliases of other variables, or spreads.
 
-**Fix:** list handles by name, and declare each one with `createCookie` in a module the route
-imports by relative path.
+**Fix:** list handles by name, write a required one as `{ handle: session, required: true }`,
+and declare each handle with `createCookie` in a module the route imports by relative path.
 
 ### `ROUTA_RESPONSE_COOKIE_STATIC`
 
 A `createCookie` call writes its name or an attribute as something other than a literal, or
-spreads another object. Cookie names and attributes are contract facts that `routa check` and
+spreads another object. A required cookie entry in `cookies` must also be a literal, with
+`required: true`. Cookie names and attributes are contract facts that `routa check` and
 OpenAPI read without running your code.
 
 **Fix:** write each name and attribute as a literal inside `createCookie({ ... })`.
@@ -186,6 +188,7 @@ OpenAPI read without running your code.
 
 A `createCookie` call omits `httpOnly`, `secure`, `sameSite`, `path`, or `schema`, or gives an
 attribute a value it cannot have, such as a negative `maxAge`, a `path` without a leading `/`,
+with a trailing space, or with characters outside printable ASCII (write those percent-encoded),
 or an `expires` that is not an ISO 8601 date-time.
 
 **Fix:** declare the required attributes and correct the value.
