@@ -48,15 +48,25 @@ export type MiddlewareRejectsSpec = RouteResponses;
 
 type MaybePromise<T> = T | Promise<T>;
 
-/** The handler result for one outcome: body outcomes require `data`, schema-less outcomes forbid it. */
+/**
+ * The type of `data` on a schema-less outcome. It requires a property whose type is `never`, so no
+ * value can satisfy it, and the property name carries the compiler message: the message is a missing
+ * key, never a value that `data` could hold.
+ */
+type ForbiddenData<TName extends string> = {
+	readonly [K in `Outcome ${TName} declares no schema, so it cannot return data.`]: never;
+};
+
+/**
+ * The handler result for one outcome: body outcomes require `data`, schema-less outcomes forbid it.
+ * An explicit `data: undefined` is accepted and means no data, because TypeScript cannot tell it
+ * from an omitted property unless `exactOptionalPropertyTypes` is on.
+ */
 export type OutcomeResult<TName extends string, TOutcome> = TOutcome extends {
 	readonly schema: infer TSchema extends z.ZodTypeAny;
 }
 	? { readonly type: TName; readonly data: SchemaOutput<TSchema> }
-	: {
-			readonly type: TName;
-			readonly data?: `Outcome ${TName} declares no schema, so it cannot return data.`;
-		};
+	: { readonly type: TName; readonly data?: ForbiddenData<TName> };
 
 /** `true` when any member of a union of booleans is `true`. */
 type AnyTrue<T> = true extends T ? true : false;
