@@ -509,6 +509,17 @@ describe("response cookie rule parity", () => {
 		{ name: "expires", overrides: { expires: '"2030-01-01T00:00:00.500+02:00"' }, accepted: true },
 		{ name: "date-only expires", overrides: { expires: '"2030-01-01"' }, accepted: false },
 		{
+			name: "calendar-invalid expires",
+			overrides: { expires: '"2030-02-31T00:00:00Z"' },
+			accepted: false,
+		},
+		{ name: "hour 24 expires", overrides: { expires: '"2030-01-01T24:00:00Z"' }, accepted: false },
+		{
+			name: "leap-day expires",
+			overrides: { expires: '"2028-02-29T23:59:59-05:30"' },
+			accepted: true,
+		},
+		{
 			name: "impossible expires",
 			overrides: { expires: '"2030-13-45T00:00:00Z"' },
 			accepted: false,

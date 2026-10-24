@@ -919,19 +919,10 @@ class SchemaProjector {
 		const literalSuggestion =
 			"Routa reads cookie names and attributes from source without running it. Write each one as a literal in createCookie({ ... }).";
 
-		const hasSpread = config.properties.some(
-			(property) =>
-				ts.isSpreadAssignment(property)
-				|| (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property))
-				|| !propertyName(property.name),
-		);
+		const hasSpread = config.properties.some(isUnreadableProperty);
 
 		for (const property of config.properties) {
-			if (
-				ts.isSpreadAssignment(property)
-				|| (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property))
-				|| !propertyName(property.name)
-			) {
+			if (isUnreadableProperty(property)) {
 				fail(
 					"ROUTA_RESPONSE_COOKIE_STATIC",
 					property,
@@ -1065,7 +1056,7 @@ class SchemaProjector {
 		check(
 			"expires",
 			expires,
-			isoDateTimePattern.test(expires ?? "") && Number.isFinite(Date.parse(expires ?? "")),
+			isIsoDateTime(expires ?? ""),
 			'must be an ISO 8601 date-time such as "2030-01-01T00:00:00Z"',
 		);
 
@@ -2212,7 +2203,40 @@ const cookieNamePattern = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const cookiePathPattern = /^\/[^;\p{Cc}]*$/u;
 const cookieDomainPattern =
 	/^\.?[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$/;
-const isoDateTimePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+const isoDateTimePattern =
+	/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/;
+/** Whether a string is an ISO 8601 date-time naming a real calendar moment. */
+function isIsoDateTime(value: string): boolean {
+	const match = isoDateTimePattern.exec(value);
+
+	if (!match) {
+		return false;
+	}
+
+	const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number) as [
+		number,
+		number,
+		number,
+		number,
+		number,
+		number,
+	];
+	const date = new Date(Date.UTC(year, month - 1, day));
+	const offsetHour = match[7] === undefined ? 0 : Number(match[7]);
+	const offsetMinute = match[8] === undefined ? 0 : Number(match[8]);
+
+	return (
+		date.getUTCFullYear() === year
+		&& date.getUTCMonth() === month - 1
+		&& date.getUTCDate() === day
+		&& hour < 24
+		&& minute < 60
+		&& second < 60
+		&& offsetHour < 24
+		&& offsetMinute < 60
+	);
+}
+
 const cookieRuleReminder =
 	'SameSite=None and Partitioned need secure: true. A __Secure- name needs secure: true. A __Host- name needs secure: true, path: "/", and no domain.';
 
@@ -2258,6 +2282,15 @@ function cookieIdentity(cookie: { name: string; domain?: string; path: string })
 
 function describeCookie(cookie: { name: string; domain?: string; path: string }): string {
 	return `"${cookie.name}" (${cookie.domain ? `Domain=${cookie.domain}; ` : ""}Path=${cookie.path})`;
+}
+
+/** Whether an object property is a spread, a method, or has a computed name. */
+function isUnreadableProperty(property: ts.ObjectLiteralElementLike): boolean {
+	return (
+		ts.isSpreadAssignment(property)
+		|| (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property))
+		|| !propertyName(property.name)
+	);
 }
 
 /** Whether an expression is a literal token (string, number, boolean, null), not a computed value. */

@@ -290,7 +290,7 @@ export const withRequestId = createMiddleware({
 
 ```ts
 function createCookie<const TConfig extends CookieConfig>(
-	config: TConfig,
+	config: TConfig, // also constrained by the cookie rules TypeScript can check
 ): CookieHandle<TConfig>
 ```
 
@@ -313,9 +313,11 @@ bound to the handle, and Routa turns the effects an outcome returns into repeate
 effects. `routa check` and OpenAPI read the name and attributes from source, so write them
 as literals.
 
-**Errors:** a name, attribute, or value schema that breaks a rule fails TypeScript where the
-literal types allow it, `routa check` (`ROUTA_RESPONSE_COOKIE_*`), and `createCookie` itself,
-which throws. Returning an effect for a handle the outcome does not list, the same identity
+**Errors:** TypeScript rejects missing required attributes, a value schema that is not scalar
+or that changes values, `SameSite=None` or `Partitioned` without `secure: true`, and the
+`__Secure-` and `__Host-` prefix rules. `routa check` (`ROUTA_RESPONSE_COOKIE_*`) and
+`createCookie` itself, which throws, also reject an invalid name, path, domain, `maxAge`, or
+`expires`. Returning an effect for a handle the outcome does not list, the same identity
 twice, or a value that cannot be encoded safely produces an `Invalid handler output`
 response. See [Schemas](/docs/concepts/schemas/#response-cookies) for the rules, encoding, and
 clearing.

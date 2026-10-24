@@ -8,9 +8,42 @@ const cookieNamePattern = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const cookiePathPattern = /^\/[^;\p{Cc}]*$/u;
 const cookieDomainPattern =
 	/^\.?[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$/;
-const isoDateTimePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+const isoDateTimePattern =
+	/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/;
 const sameSiteValues = ["strict", "lax", "none"] as const;
 const epoch = "Thu, 01 Jan 1970 00:00:00 GMT";
+
+/** Whether a string is an ISO 8601 date-time naming a real calendar moment. */
+function isIsoDateTime(value: string): boolean {
+	const match = isoDateTimePattern.exec(value);
+
+	if (!match) {
+		return false;
+	}
+
+	const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number) as [
+		number,
+		number,
+		number,
+		number,
+		number,
+		number,
+	];
+	const date = new Date(Date.UTC(year, month - 1, day));
+	const offsetHour = match[7] === undefined ? 0 : Number(match[7]);
+	const offsetMinute = match[8] === undefined ? 0 : Number(match[8]);
+
+	return (
+		date.getUTCFullYear() === year
+		&& date.getUTCMonth() === month - 1
+		&& date.getUTCDate() === day
+		&& hour < 24
+		&& minute < 60
+		&& second < 60
+		&& offsetHour < 24
+		&& offsetMinute < 60
+	);
+}
 
 /** One `Set-Cookie` field a response plan will send, with the identity that decides who owns it. */
 export type CookieEntry = {
@@ -64,12 +97,7 @@ export function cookieConfigProblem(config: Partial<CookieConfig>): string | und
 		return "declares a maxAge that is not a non-negative whole number of seconds.";
 	}
 
-	if (
-		expires !== undefined
-		&& (typeof expires !== "string"
-			|| !isoDateTimePattern.test(expires)
-			|| !Number.isFinite(Date.parse(expires)))
-	) {
+	if (expires !== undefined && (typeof expires !== "string" || !isIsoDateTime(expires))) {
 		return 'declares an expires that is not an ISO 8601 date-time string such as "2030-01-01T00:00:00Z".';
 	}
 
