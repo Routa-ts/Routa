@@ -6,11 +6,15 @@ import {
 	objectLiteral,
 	propertyName,
 	propertyValue,
-	resolveImportFile,
 	routeConfigObject,
 	unwrapExpression,
 } from "./ast.js";
-import type { Diagnostic, MiddlewareMetadata, RouteMetadata } from "./project.js";
+import {
+	type Diagnostic,
+	middlewareDeclarationFile,
+	type MiddlewareMetadata,
+	type RouteMetadata,
+} from "./project.js";
 import * as ts from "./typescript.js";
 
 /**
@@ -99,7 +103,6 @@ type SchemaSource = {
 	file: string;
 	declarations: Map<string, Declaration>;
 	imports: Set<string>;
-	importFiles: Map<string, string>;
 	zodNamespaces: Set<string>;
 	zodRegistries: Set<string>;
 	routaHelpers: Map<string, "Sort" | "Fields">;
@@ -438,15 +441,10 @@ class SchemaProjector {
 	}
 
 	/**
-	 * Finds the file that declares a middleware. Route files record middleware
-	 * they import under their own path, so follow that import one step.
+	 * Finds the file that declares a middleware, following imports and re-exports.
 	 */
 	private middlewareSource(item: MiddlewareMetadata): SchemaSource {
-		const source = this.source(item.file);
-		const imported = source.declarations.has(item.name)
-			? undefined
-			: source.importFiles.get(item.name);
-		return imported ? this.source(imported) : source;
+		return this.source(middlewareDeclarationFile(this.cwd, item.file, item.name, this.parser));
 	}
 
 	/**
@@ -590,7 +588,6 @@ class SchemaProjector {
 			file,
 			declarations: new Map(),
 			imports: new Set(),
-			importFiles: new Map(),
 			zodNamespaces: new Set(),
 			zodRegistries: new Set(),
 			routaHelpers: new Map(),
@@ -600,7 +597,7 @@ class SchemaProjector {
 		for (const statement of ast.statements) {
 			if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
 				const specifier = statement.moduleSpecifier.text;
-				readImport(statement, specifier, source, resolveImportFile(this.cwd, file, specifier));
+				readImport(statement, specifier, source);
 				continue;
 			}
 
@@ -1586,7 +1583,6 @@ function readImport(
 	statement: ts.ImportDeclaration,
 	specifier: string,
 	source: SchemaSource,
-	resolvedFile: string | undefined,
 ): void {
 	const clause = statement.importClause;
 
@@ -1619,7 +1615,6 @@ function readImport(
 				source.routaHelpers.set(element.name.text, imported);
 			} else {
 				source.imports.add(element.name.text);
-				if (resolvedFile) source.importFiles.set(element.name.text, resolvedFile);
 			}
 		}
 	}

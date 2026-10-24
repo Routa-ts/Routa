@@ -960,6 +960,30 @@ export const guard = createMiddleware({
 			properties: { message: { type: "string" } },
 		});
 
+		for (const [binding, barrel] of [
+			["guard", 'export { guard } from "./guard.js";\n'],
+			["adminGuard", 'export { guard as adminGuard } from "./guard.js";\n'],
+			["adminGuard", 'export { adminGuard } from "./admin.js";\n'],
+		]) {
+			const barrelled = project({
+				"src/routes/admin/route.ts": routes["src/routes/admin/route.ts"]
+					.replace(
+						'import { guard } from "../../middleware/guard.js";',
+						`import { ${binding} as check } from "../../middleware/index.js";`,
+					)
+					.replace("middleware: [guard]", "middleware: [check]"),
+				"src/middleware/index.ts": barrel,
+				"src/middleware/admin.ts": 'export { guard as adminGuard } from "./guard.js";\n',
+				"src/middleware/guard.ts": middleware("Problem"),
+			});
+			const barrelledDocument = generateOpenApi(barrelled);
+
+			expect(diagnosticsOf(barrelledDocument)).toEqual([]);
+			expect(responseSchema(barrelledDocument, "/admin", "get", 403)).toEqual(
+				responseSchema(localDocument, "/admin", "get", 403),
+			);
+		}
+
 		const imported = project({
 			...routes,
 			"src/middleware/guard.ts": middleware("Shared", 'import { Shared } from "./shared.js";'),
