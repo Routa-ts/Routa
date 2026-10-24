@@ -427,7 +427,7 @@ function problem(
 			type,
 			title,
 			status,
-			...extra,
+			...(extra ?? {}),
 		},
 		status,
 	);

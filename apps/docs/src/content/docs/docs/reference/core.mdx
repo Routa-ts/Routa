@@ -101,6 +101,7 @@ export const getStatus = createRoute({
 
 ```ts
 import type { RouteResponses, SchemaOutput } from "@routa-ts/core";
+import type { z } from "zod";
 
 type ResponseBuilders<TResponses extends RouteResponses> = {
 	readonly [K in keyof TResponses & string]: TResponses[K] extends {
@@ -228,14 +229,14 @@ function createMiddleware<TRequires, TProvides, TRejects, TInput>(
 ): MiddlewareContract<TRequires, TProvides, TRejects, TInput>
 ```
 
-| Field      | Type                                                  | Purpose                                 |
-| ---------- | ----------------------------------------------------- | --------------------------------------- |
-| `requires` | `readonly string[]`                                   | Context keys that must already exist    |
-| `provides` | `Record<string, ZodType>`                             | Context keys this middleware adds       |
-| `rejects`  | `Record<string, { status: number; schema: ZodType }>` | Early responses it can return           |
-| `input`    | Same shape as a route `input`                         | Request data the middleware needs       |
-| `openapi`  | `{ security?, permissions? }`                         | Metadata emitted into generated OpenAPI |
-| `run`      | `({ input, ctx, next }) => …`                         | The implementation                      |
+| Field      | Type                                                | Purpose                                 |
+| ---------- | --------------------------------------------------- | --------------------------------------- |
+| `requires` | `readonly string[]`                                 | Context keys that must already exist    |
+| `provides` | `Record<string, ZodType>`                           | Context keys this middleware adds       |
+| `rejects`  | `Record<string, { status; description?; schema? }>` | Early responses it can return           |
+| `input`    | Same shape as a route `input`                       | Request data the middleware needs       |
+| `openapi`  | `{ security?, permissions? }`                       | Metadata emitted into generated OpenAPI |
+| `run`      | `({ input, ctx, next }) => …`                       | The implementation                      |
 
 `run` either returns a reject outcome or returns `next(providedCtx)`. Routa parses every
 declared `provides` value before merging any of them into `ctx`, and downstream code

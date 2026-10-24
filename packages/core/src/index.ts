@@ -58,8 +58,13 @@ export type OutcomeResult<TName extends string, TOutcome> = TOutcome extends {
 			readonly data?: `Outcome ${TName} declares no schema, so it cannot return data.`;
 		};
 
+/** `true` when any member of a union of booleans is `true`. */
 type AnyTrue<T> = true extends T ? true : false;
 
+/**
+ * Whether a response schema, or anything nested in it, rewrites a value by a wrapper TypeScript can see:
+ * transforms, codecs, defaults, and catches. Nesting beyond eight levels is not inspected.
+ */
 type ChangesValue<TSchema, TDepth extends unknown[] = []> = TDepth["length"] extends 8
 	? false
 	: TSchema extends
@@ -93,6 +98,7 @@ type ChangesValue<TSchema, TDepth extends unknown[] = []> = TDepth["length"] ext
 												? AnyTrue<ChangesValue<TItems[number], [...TDepth, 0]>>
 												: false;
 
+/** Whether a schema parses to the same type it accepts. */
 type SameValueType<TSchema extends z.ZodTypeAny> = [z.input<TSchema>] extends [z.output<TSchema>]
 	? [z.output<TSchema>] extends [z.input<TSchema>]
 		? true
@@ -223,7 +229,7 @@ type RegisteredCtxByKey = Register extends {
 		: Record<string, unknown>
 	: Record<string, unknown>;
 
-type RegisteredCtxKey = keyof RegisteredCtxByKey;
+type RegisteredCtxKey = keyof RegisteredCtxByKey & string;
 
 type RequiredMiddlewareCtx<TRequires extends readonly string[]> = {
 	[K in TRequires[number]]: K extends keyof RegisteredCtxByKey ? RegisteredCtxByKey[K] : unknown;
@@ -432,7 +438,9 @@ export function createRouteRootFactory<
  * @param _path - The route path used to select the matching context type
  * @returns A function that accepts a route configuration for the selected path
  */
-export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPath>(_path: TPath) {
+export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPath & string>(
+	_path: TPath,
+) {
 	return function routeRoot<
 		const TConfig extends RouteRootConfigForCtx<RegisteredRouteCtxByPath[TPath]>
 			& NoExtraRouteKeys<TConfig>
