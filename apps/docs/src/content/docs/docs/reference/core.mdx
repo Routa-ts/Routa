@@ -110,28 +110,39 @@ export const getStatus = createRoute({
 ## `ResponseBuilders`
 
 ```ts
-import type { OutcomeResult, RouteResponses, SchemaOutput } from "@routa-ts/core";
-import type { z } from "zod";
+import { createRoute } from "@routa-ts/core";
+import { z } from "zod";
 
-type ResponseBuilders<TResponses extends RouteResponses> = {
-	readonly [K in keyof TResponses & string]: TResponses[K] extends {
-		readonly schema: infer TSchema extends z.ZodTypeAny;
-	}
-		? (data: SchemaOutput<TSchema>, ...headers: HeaderArgs<TResponses[K]>) => OutcomeResult<K, TResponses[K]>
-		: (...headers: HeaderArgs<TResponses[K]>) => OutcomeResult<K, TResponses[K]>;
-};
+export const getItem = createRoute({
+	responses: {
+		ok: {
+			status: 200,
+			schema: z.object({ id: z.string() }),
+			headers: z.object({ etag: z.string(), "x-cached": z.boolean().optional() }),
+		},
+		notModified: { status: 304, headers: z.object({ etag: z.string() }) },
+	},
+	run: ({ response }) => {
+		const etag = '"v1"';
+		// A body outcome takes its data, then its headers.
+		return response.ok({ id: "1" }, { etag });
+		// A bodyless outcome takes only its headers: response.notModified({ etag })
+	},
+});
 ```
 
-`HeaderArgs` is a trailing `headers` argument when the outcome declares headers, required
-when any declared header is required, and no argument otherwise.
+A body outcome's builder takes the data, then a `headers` argument when the outcome declares
+headers. A bodyless outcome's builder takes only `headers`. The argument is required when any
+declared header is required, optional when all are, and absent when the outcome declares none.
 
 Handlers receive `response: ResponseBuilders<TResponses>`. Each method uses the name
 and schema of one outcome in the route's own `responses` declaration. There are no
 built-in outcome names, and middleware rejects do not add builder methods.
 
-| Parameter | Type                                  | Purpose                  |
-| --------- | ------------------------------------- | ------------------------ |
-| `data`    | Selected outcome schema's output type | Body data for the result |
+| Parameter | Type                                   | Purpose                                         |
+| --------- | -------------------------------------- | ----------------------------------------------- |
+| `data`    | Selected outcome schema's output type  | Body data for the result                        |
+| `headers` | Selected outcome `headers` output type | Response headers, when the outcome declares any |
 
 An outcome without a `schema` has a builder with no data parameter, such as
 `response.noContent()`. A builder returns `{ type, data, headers }`, or `{ type, headers }`
