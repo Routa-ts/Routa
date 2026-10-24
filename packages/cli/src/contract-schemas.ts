@@ -109,6 +109,8 @@ type SchemaSource = {
 type Context = {
 	source: SchemaSource;
 	io: SchemaIo;
+	/** Set inside a root `params`, `query`, `headers`, or `cookies` schema. */
+	parameter?: boolean;
 };
 
 type ComponentIdentity = {
@@ -131,6 +133,8 @@ type SchemaNode = {
 	optional: boolean;
 	opaque?: boolean;
 	component?: ComponentIdentity;
+	/** The component node a wrapper refers to, registered only when placed. */
+	via?: SchemaNode;
 };
 
 const componentKeyPattern = /^[a-zA-Z0-9.\-_]+$/;
@@ -258,6 +262,38 @@ const valueMutatingMethods = new Set([
 	"toLowerCase",
 	"toUpperCase",
 	"trim",
+]);
+
+/**
+ * Zod check factories, passed to `.check()`, that validate without changing
+ * the value.
+ */
+const validationChecks = new Set([
+	"endsWith",
+	"gt",
+	"gte",
+	"includes",
+	"length",
+	"lowercase",
+	"lt",
+	"lte",
+	"maxLength",
+	"maxSize",
+	"mime",
+	"minLength",
+	"minSize",
+	"multipleOf",
+	"negative",
+	"nonnegative",
+	"nonpositive",
+	"positive",
+	"property",
+	"refine",
+	"regex",
+	"size",
+	"startsWith",
+	"superRefine",
+	"uppercase",
 ]);
 
 /**
@@ -453,7 +489,7 @@ class SchemaProjector {
 				continue;
 			}
 
-			const node = this.node(expression, { source, io: "input" });
+			const node = this.node(expression, { source, io: "input", parameter: name !== "body" });
 			result[name] =
 				name === "body"
 					? this.materialize(node)
@@ -475,18 +511,41 @@ class SchemaProjector {
 		contract: ts.ObjectLiteralExpression,
 		source: SchemaSource,
 	): Map<number, JsonSchema> {
-		const responses = objectLiteral(propertyValue(contract, "responses"));
+		const value = propertyValue(contract, "responses");
+		const responses = objectLiteral(value);
+		const context: Context = { source, io: "output" };
 		const result = new Map<number, JsonSchema>();
+
+		if (value && !responses) {
+			this.unsupported(value, context, "route responses need an inline object of outcomes");
+		}
 
 		for (const response of responses?.properties ?? []) {
 			const outcome = ts.isPropertyAssignment(response)
 				? objectLiteral(response.initializer)
 				: undefined;
 			const status = outcome && numericLiteral(propertyValue(outcome, "status"));
-			const schema = outcome && propertyValue(outcome, "schema");
 
-			if (status && schema) {
-				result.set(status, this.materialize(this.node(schema, { source, io: "output" })));
+			if (
+				!outcome
+				|| status === undefined
+				|| outcome.properties.some(
+					(property) =>
+						!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property),
+				)
+			) {
+				this.unsupported(
+					response,
+					context,
+					"route outcomes need static status and schema properties without spreads",
+				);
+				continue;
+			}
+
+			const schema = propertyValue(outcome, "schema");
+
+			if (schema) {
+				result.set(status, this.materialize(this.node(schema, context)));
 			}
 		}
 
@@ -505,7 +564,7 @@ class SchemaProjector {
 		expression: ts.Expression,
 		source: SchemaSource,
 	): JsonSchema {
-		const schema = this.content(node);
+		const schema = this.structure(node);
 
 		if (schema.type !== "object" || typeof schema.properties !== "object") {
 			this.report(source, expression, {
@@ -672,7 +731,7 @@ class SchemaProjector {
 			return emptyNode();
 		}
 
-		const key = `${declaration.source.file}#${name}#${context.io}`;
+		const key = `${declaration.source.file}#${name}#${context.io}${context.parameter ? "#parameter" : ""}`;
 		const cached = this.declarationNodes.get(key);
 
 		if (cached) {
@@ -707,6 +766,10 @@ class SchemaProjector {
 		const [first, second] = call.arguments;
 
 		if (Object.hasOwn(stringFormats, name)) {
+			if (name === "url" || name === "httpUrl") {
+				this.checkUrlOptions(call, first, context);
+			}
+
 			return stringNode(stringFormats[name]);
 		}
 
@@ -743,13 +806,10 @@ class SchemaProjector {
 			}
 			case "array":
 				return first ? this.array(this.node(first, context)) : this.missing(call, context);
-			case "record": {
-				const value = call.arguments[call.arguments.length - 1];
-				return plainNode({
-					type: "object",
-					additionalProperties: value ? this.materialize(this.node(value, context)) : {},
-				});
-			}
+			case "record":
+				return first && second
+					? this.record(this.node(first, context), this.node(second, context), call, context)
+					: this.missing(call, context);
 			case "union":
 				return this.union(call, first, context);
 			case "discriminatedUnion":
@@ -763,9 +823,14 @@ class SchemaProjector {
 			case "nullish":
 				return first ? this.wrapper(name, this.node(first, context)) : this.missing(call, context);
 			case "stringbool":
-				// Like z.coerce.number() as `number`, this documents the parameter
-				// convention, where `type: boolean` means the strings "true" and "false".
-				return this.mutation(call, context, "z.stringbool()", plainNode({ type: "boolean" }));
+				// Parameters follow the convention where `type: boolean` means the
+				// strings "true" and "false". A JSON body receives the string itself.
+				return this.mutation(
+					call,
+					context,
+					"z.stringbool()",
+					plainNode({ type: context.io === "input" && !context.parameter ? "string" : "boolean" }),
+				);
 			case "coerce.string":
 			case "coerce.number":
 			case "coerce.boolean":
@@ -781,7 +846,7 @@ class SchemaProjector {
 				return this.opaqueInput(call, context, "z.transform()");
 			case "pipe":
 				return first && second
-					? this.pipe(this.node(first, context), second, call, context)
+					? this.pipe(this.node(first, context), second, context)
 					: this.missing(call, context);
 			case "codec":
 				if (context.io === "output") {
@@ -831,14 +896,7 @@ class SchemaProjector {
 
 		if (name === "check" && context.io === "output") {
 			for (const argument of call.arguments) {
-				const check = unwrapExpression(argument);
-				const factory = ts.isCallExpression(check)
-					? zodFactory(unwrapExpression(check.expression), context.source)
-					: undefined;
-
-				if (factory && valueMutatingMethods.has(factory)) {
-					this.reportMutation(check, context, `z.${factory}()`);
-				}
+				this.classifyCheck(argument, context, new Set());
 			}
 		}
 
@@ -852,6 +910,10 @@ class SchemaProjector {
 		}
 
 		if (Object.hasOwn(stringFormatMethods, name)) {
+			if (name === "url") {
+				this.checkUrlOptions(call, first, context);
+			}
+
 			const node = this.clone(receiver(), {});
 			return { ...node, schema: { ...node.schema, format: stringFormatMethods[name] } };
 		}
@@ -875,7 +937,7 @@ class SchemaProjector {
 		}
 
 		if (name === "pipe") {
-			return first ? this.pipe(receiver(), first, call, context) : this.missing(call, context);
+			return first ? this.pipe(receiver(), first, context) : this.missing(call, context);
 		}
 
 		if (name === "and") {
@@ -1082,23 +1144,113 @@ class SchemaProjector {
 		};
 	}
 
-	private pipe(
-		from: SchemaNode,
-		toExpression: ts.Expression,
+	/**
+	 * Projects `from.pipe(to)`. Input reads the incoming side, so a readable
+	 * `from` decides it alone. Output documents `to`; the pipe itself never
+	 * changes a value, so any mutation is reported by the side that makes it.
+	 */
+	private pipe(from: SchemaNode, toExpression: ts.Expression, context: Context): SchemaNode {
+		return context.io === "input" && !from.opaque ? from : this.node(toExpression, context);
+	}
+
+	/**
+	 * Projects `z.record(key, value)`. Key constraints become `propertyNames`,
+	 * and an exhaustive key set such as `z.enum()` makes every key required.
+	 */
+	private record(
+		key: SchemaNode,
+		value: SchemaNode,
 		call: ts.CallExpression,
 		context: Context,
 	): SchemaNode {
-		const to = this.node(toExpression, context);
+		const keySchema = this.structure(key);
 
-		if (context.io === "input") {
-			return from.opaque ? to : from;
+		if (Object.keys(keySchema).length === 0) {
+			// The key was already reported as unreadable.
+			return plainNode({ type: "object", additionalProperties: this.materialize(value) });
 		}
 
-		if (stableJson(this.content(from)) !== stableJson(this.content(to))) {
-			this.reportMutation(call, context, ".pipe() into a different schema");
+		const keyOptions = Array.isArray(keySchema.anyOf)
+			? (keySchema.anyOf as JsonSchema[])
+			: [keySchema];
+
+		if (keyOptions.some((option) => option.type !== "string")) {
+			return this.unsupported(call, context, "z.record() keys must be string schemas");
 		}
 
-		return to;
+		const propertyNames = this.materialize(key);
+		const names = keyOptions.flatMap((option) =>
+			Array.isArray(option.enum) ? option.enum : "const" in option ? [option.const] : [undefined],
+		);
+
+		return plainNode({
+			type: "object",
+			...(stableJson(propertyNames) === stableJson({ type: "string" }) ? {} : { propertyNames }),
+			...(names.every((name) => typeof name === "string") ? { required: names } : {}),
+			additionalProperties: this.materialize(value),
+		});
+	}
+
+	/**
+	 * Reports a `.check()` argument that rewrites the value, following local
+	 * declarations, or one Routa cannot classify.
+	 */
+	private classifyCheck(expression: ts.Expression, context: Context, seen: Set<Declaration>): void {
+		const check = unwrapExpression(expression);
+
+		if (ts.isArrowFunction(check) || ts.isFunctionExpression(check)) {
+			return;
+		}
+
+		const declaration = ts.isIdentifier(check) ? lookup(context.source, check.text) : undefined;
+
+		if (declaration && !seen.has(declaration)) {
+			seen.add(declaration);
+			this.classifyCheck(declaration.initializer, { ...context, source: declaration.source }, seen);
+			return;
+		}
+
+		const factory = ts.isCallExpression(check)
+			? zodFactory(unwrapExpression(check.expression), context.source)
+			: undefined;
+
+		if (factory && valueMutatingMethods.has(factory)) {
+			this.reportMutation(check, context, `z.${factory}()`);
+		} else if (!factory || !validationChecks.has(factory)) {
+			this.unsupported(
+				check,
+				context,
+				"Routa cannot tell whether this check changes values",
+				"Pass .check() a Zod check such as z.minLength(1) or an inline function, declared in the same file.",
+			);
+		}
+	}
+
+	/**
+	 * Reports URL options that normalize response values, or options Routa
+	 * cannot read.
+	 */
+	private checkUrlOptions(
+		call: ts.CallExpression,
+		options: ts.Expression | undefined,
+		context: Context,
+	): void {
+		if (context.io !== "output") {
+			return;
+		}
+
+		const normalize = urlNormalize(options, context.source, new Set());
+
+		if (normalize === true) {
+			this.reportMutation(call, context, "URL normalization");
+		} else if (normalize === undefined) {
+			this.unsupported(
+				call,
+				context,
+				"Routa cannot tell whether these URL options normalize the value",
+				"Write URL options as an object literal with a literal normalize value.",
+			);
+		}
 	}
 
 	/**
@@ -1264,6 +1416,7 @@ class SchemaProjector {
 			meta: { ...receiver.meta, ...meta },
 			optional: receiver.optional,
 			...(receiver.opaque ? { opaque: true } : {}),
+			...(receiver.via ? { via: receiver.via } : {}),
 		};
 	}
 
@@ -1273,7 +1426,12 @@ class SchemaProjector {
 	 */
 	private passthrough(inner: SchemaNode): SchemaNode {
 		return inner.component
-			? { schema: this.materialize(inner), meta: {}, optional: inner.optional }
+			? {
+					schema: { $ref: `#/components/schemas/${inner.component.key}` },
+					meta: {},
+					optional: inner.optional,
+					via: inner,
+				}
 			: { ...inner };
 	}
 
@@ -1282,10 +1440,22 @@ class SchemaProjector {
 	}
 
 	/**
+	 * The structural schema a node stands for, looking through wrappers of
+	 * components instead of returning their `$ref`.
+	 */
+	private structure(node: SchemaNode): JsonSchema {
+		return node.via ? this.structure(node.via) : this.content(node);
+	}
+
+	/**
 	 * Places a node in a document: a component reference when it owns a key,
 	 * otherwise the inline schema.
 	 */
 	private materialize(node: SchemaNode): JsonSchema {
+		if (node.via) {
+			this.materialize(node.via);
+		}
+
 		if (!node.component) {
 			return this.content(node);
 		}
@@ -1338,11 +1508,16 @@ class SchemaProjector {
 		});
 	}
 
-	private unsupported(node: ts.Node, context: Context, detail: string): SchemaNode {
+	private unsupported(
+		node: ts.Node,
+		context: Context,
+		detail: string,
+		suggestion = unsupportedSuggestion,
+	): SchemaNode {
 		this.report(context.source, node, {
 			code: "ROUTA_SCHEMA_UNSUPPORTED",
 			message: `Unsupported schema for OpenAPI (${detail})`,
-			suggestion: unsupportedSuggestion,
+			suggestion,
 		});
 		return emptyNode();
 	}
@@ -1477,13 +1652,56 @@ function zodFactory(callee: ts.Expression, source: SchemaSource): string | undef
 	return undefined;
 }
 
+/**
+ * Reads whether URL factory options enable `normalize`, following local
+ * declarations, or returns `undefined` when the options are not literal.
+ */
+function urlNormalize(
+	expression: ts.Expression | undefined,
+	source: SchemaSource,
+	seen: Set<Declaration>,
+): boolean | undefined {
+	const options = expression && unwrapExpression(expression);
+
+	if (!options || ts.isStringLiteralLike(options)) {
+		return false;
+	}
+
+	const declaration = ts.isIdentifier(options) ? lookup(source, options.text) : undefined;
+
+	if (declaration && !seen.has(declaration)) {
+		seen.add(declaration);
+		return urlNormalize(declaration.initializer, declaration.source, seen);
+	}
+
+	if (!ts.isObjectLiteralExpression(options)) {
+		return undefined;
+	}
+
+	let normalize: boolean | undefined = false;
+
+	for (const property of options.properties) {
+		if (!ts.isPropertyAssignment(property) || propertyName(property.name) === undefined) {
+			return undefined;
+		}
+
+		if (propertyName(property.name) === "normalize") {
+			const value = jsonLiteral(property.initializer);
+			normalize = typeof value === "boolean" ? value : undefined;
+		}
+	}
+
+	return normalize;
+}
+
 function stringLiteral(expression: ts.Expression): string | undefined {
 	const unwrapped = unwrapExpression(expression);
 	return ts.isStringLiteralLike(unwrapped) ? unwrapped.text : undefined;
 }
 
 function numericLiteral(expression: ts.Expression | undefined): number | undefined {
-	return expression && ts.isNumericLiteral(expression) ? Number(expression.text) : undefined;
+	const unwrapped = expression && unwrapExpression(expression);
+	return unwrapped && ts.isNumericLiteral(unwrapped) ? Number(unwrapped.text) : undefined;
 }
 
 /**
@@ -1544,14 +1762,16 @@ const foldableKeys = new Set(["type", "properties", "required", "additionalPrope
 /**
  * Combines plain object members of an intersection into the one object they
  * describe together, or returns `undefined` when any member carries another
- * keyword (a `$ref`, a union, or metadata).
+ * keyword (a `$ref`, a union, metadata, or typed additional properties).
  */
 function foldObjects(members: JsonSchema[]): JsonSchema | undefined {
 	if (
 		members.length < 2
 		|| !members.every(
 			(member) =>
-				member.type === "object" && Object.keys(member).every((key) => foldableKeys.has(key)),
+				member.type === "object"
+				&& Object.keys(member).every((key) => foldableKeys.has(key))
+				&& (member.additionalProperties === undefined || member.additionalProperties === false),
 		)
 	) {
 		return undefined;
