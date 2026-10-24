@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
@@ -19,11 +19,13 @@ export const Aged = z.object({ age: z.number() });
 export const Person = z.intersection(Named, Aged);
 export const Owner = Named.and(z.object({ pets: z.array(Pet) }));
 export const SearchResult = z.union([Person, z.string(), z.null()]);
+export const Either = z.object({ value: z.string().optional().or(z.number()) });
 export const Report = z.object({
 	pet: Pet,
 	person: Person,
 	owner: Owner,
 	result: SearchResult,
+	either: Either,
 	inline: z.object({ a: z.string() }).and(z.object({ b: z.number().optional() })),
 	described: z.intersection(z.object({ a: z.string() }).describe("Left side"), z.object({ b: z.number() })),
 });
@@ -143,6 +145,8 @@ export const Report = z.object({
 	code: z.string().toUpperCase(),
 	text: z.string().normalize(),
 	rounded: z.number().overwrite((value) => Math.round(value)),
+	checked: z.string().check(z.minLength(1), z.overwrite((value) => value.trim())),
+	trimmed: z.string().check(z.trim()),
 	status: z.enum(["on", "off"]).catch("off"),
 	when: z.codec(z.iso.datetime(), z.date(), {
 		decode: (value) => new Date(value),
@@ -183,6 +187,16 @@ export const guard = createMiddleware({
 				"ROUTA_RESPONSE_SCHEMA_MUTATION",
 				"src/routes/items/schemas.ts",
 				"Response schema changes values with .overwrite(): z.number().overwrite((value) => Math.round(value))",
+			],
+			[
+				"ROUTA_RESPONSE_SCHEMA_MUTATION",
+				"src/routes/items/schemas.ts",
+				"Response schema changes values with z.overwrite(): z.overwrite((value) => value.trim())",
+			],
+			[
+				"ROUTA_RESPONSE_SCHEMA_MUTATION",
+				"src/routes/items/schemas.ts",
+				"Response schema changes values with z.trim(): z.trim()",
 			],
 			[
 				"ROUTA_RESPONSE_SCHEMA_MUTATION",
@@ -487,6 +501,70 @@ export const Misuse = z.object({
 		expect(diagnostics.every((item) => item.suggestion)).toBe(true);
 		expect(document.paths).toEqual({});
 		expect(diagnosticsOf(document)).toHaveLength(diagnostics.length);
+	});
+
+	it("reads shorthand contract properties and reports input and types it cannot document", () => {
+		const cwd = project({
+			"src/routes/notes/route.ts": routeFile("/notes", {
+				input: "query",
+				responses: "ok: { status: 200, schema }",
+			}).replace(
+				"export default",
+				`const query = z.object({ q: z.string() });
+const schema = z.object({ id: z.string() });
+
+export default`,
+			),
+			"src/routes/spread/route.ts": routeFile("/spread", {
+				input: "...shared",
+				responses: "ok: { status: 200, schema: z.object({ at: z.date() }) }",
+			})
+				.replace('import { z } from "zod";', 'import { globalRegistry, z } from "zod";')
+				.replace(
+					"export default",
+					`const shared = { query: z.object({ q: z.string() }) };
+globalRegistry.add(z.string(), { description: "hidden" });
+
+export default`,
+				),
+		});
+
+		const { diagnostics } = validateProject(cwd, { write: false });
+
+		expect(diagnostics.map((item) => [item.code, item.file, item.message])).toEqual([
+			[
+				"ROUTA_SCHEMA_REGISTRY",
+				"src/routes/spread/route.ts",
+				"Zod globalRegistry metadata is not part of the route contract: globalRegistry",
+			],
+			[
+				"ROUTA_SCHEMA_UNSUPPORTED",
+				"src/routes/spread/route.ts",
+				"Unsupported schema for OpenAPI (route input needs static params, query, headers, cookies, or body properties): ...shared",
+			],
+			[
+				"ROUTA_SCHEMA_UNSUPPORTED",
+				"src/routes/spread/route.ts",
+				"Unsupported schema for OpenAPI (z.date() values are not JSON; use z.iso.datetime()): z.date()",
+			],
+		]);
+
+		const notes = (
+			generateOpenApi(
+				project({
+					"src/routes/notes/route.ts": readFileSync(join(cwd, "src/routes/notes/route.ts"), "utf8"),
+				}),
+			).paths as Record<string, Record<string, Json>>
+		)["/notes"].get;
+
+		expect(notes.parameters).toEqual([
+			{ name: "q", in: "query", required: true, schema: { type: "string" } },
+		]);
+		expect((notes.responses as Record<string, Json>)["200"].content).toEqual({
+			"application/json": {
+				schema: { type: "object", required: ["id"], properties: { id: { type: "string" } } },
+			},
+		});
 	});
 
 	it("names components from ids and export names and rejects identity collisions", () => {

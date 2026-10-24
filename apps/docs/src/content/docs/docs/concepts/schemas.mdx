@@ -57,7 +57,8 @@ Response schemas describe wire-ready JSON, so they validate values and never cha
 `.transform()`, `.pipe()` into a different schema, `z.preprocess()`, `.default()`,
 `.catch()`, `z.coerce.*`, codecs such as `z.stringbool()`, or value-rewriting checks such
 as `.trim()`, `.toLowerCase()`, `.toUpperCase()`, `.normalize()`, `.slugify()`, and
-`.overwrite()`. Return the final value from the handler instead.
+`.overwrite()`, including their `.check(z.trim())` forms. Return the final value from the
+handler instead.
 
 If production response validation is disabled, Routa does not apply unknown-key stripping
 to response data. Middleware `provides` schemas remain active in both modes because their

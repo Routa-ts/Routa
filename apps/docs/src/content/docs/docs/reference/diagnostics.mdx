@@ -143,11 +143,13 @@ These codes name the schemas it cannot read faithfully. See
 ### `ROUTA_SCHEMA_UNSUPPORTED`
 
 A schema uses a construct Routa cannot describe in OpenAPI, such as `z.tuple()`,
-`.extend()`, a schema built by calling your own function, or a value that is not a Zod
-schema.
+`.extend()`, `z.date()`, a schema built by calling your own function, or a value that is
+not a Zod schema. Route `input` also needs static `params`, `query`, `headers`, `cookies`,
+or `body` properties, not a spread or a shared variable.
 
 **Fix:** write the schema with supported Zod constructs. Compose objects with
-`z.intersection()` or `.and()`.
+`z.intersection()` or `.and()`, and describe dates on the wire with `z.iso.datetime()` or
+`z.iso.date()`.
 
 ### `ROUTA_SCHEMA_UNRESOLVED`
 
@@ -160,7 +162,7 @@ file that declares the middleware. It does not follow imports.
 ### `ROUTA_RESPONSE_SCHEMA_MUTATION`
 
 A response schema changes the value it validates, for example with `.transform()`,
-`.default()`, `z.coerce.number()`, or `.trim()`.
+`.default()`, `z.coerce.number()`, `.trim()`, or `.check(z.trim())`.
 
 **Fix:** return the wire-ready value from the handler and keep the response schema
 validation-only.
@@ -203,8 +205,9 @@ Metadata is computed at runtime, for example `.describe(label)` or a spread in `
 
 ### `ROUTA_SCHEMA_REGISTRY`
 
-A schema file uses `z.globalRegistry`, `z.registry()`, or `.register()`. Registry metadata
-lives outside the route contract.
+A schema file uses `z.globalRegistry`, `z.registry()`, or `.register()`, including
+`globalRegistry` or `registry` imported by name from `zod`. Registry metadata lives outside
+the route contract.
 
 **Fix:** attach documentation with `.meta()` or `.describe()` on the schema the route uses.
 

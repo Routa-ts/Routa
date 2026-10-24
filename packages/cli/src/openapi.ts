@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { isBodylessStatus } from "@routa-ts/core/hono";
-import { type ProjectedOperation, projectContractSchemas } from "./contract-schemas.js";
+import type { ProjectedOperation } from "./contract-schemas.js";
 import { type MiddlewareMetadata, validateProject } from "./project.js";
 import * as ts from "./typescript.js";
 
@@ -132,7 +132,7 @@ function generateOpenApiInSession(cwd: string, parser: ts.SourceFileParser): Ope
 		} as OpenApiLike;
 	}
 
-	const projection = projectContractSchemas(cwd, validation.routes, parser);
+	const projection = validation.schemas;
 
 	for (const route of validation.routes) {
 		const operations = projection.operations.get(route.file) ?? {};
