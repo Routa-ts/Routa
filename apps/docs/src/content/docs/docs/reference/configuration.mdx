@@ -107,18 +107,21 @@ responseValidation?: "development" | "always"
 ```
 
 Controls when Routa parses handler responses and middleware reject responses through
-their declared Zod schemas. Defaults to `"development"`:
+their declared Zod schemas and compares the parsed value with the handler value. Defaults to
+`"development"`:
 
-| Value           | `routa dev`         | `routa start`              |
-| --------------- | ------------------- | -------------------------- |
-| `"development"` | Parse response data | Do not parse response data |
-| `"always"`      | Parse response data | Parse response data        |
+| Value           | `routa dev`                        | `routa start`                   |
+| --------------- | ---------------------------------- | ------------------------------- |
+| `"development"` | Parse and compare response data    | Do not parse or compare         |
+| `"always"`      | Parse and compare response data    | Parse and compare response data |
 
-Routa always checks the result envelope and response type, selects the declared status,
-and performs JSON serialization. Skipping schema parsing also skips unknown-key stripping
-on response data. Set `"always"` when production must reject response drift. Response
-schemas must not change values; `routa check` reports `ROUTA_RESPONSE_SCHEMA_MUTATION`
-when one does.
+Routa always checks the result envelope and response type, requires `data` for an outcome
+with a `schema` and rejects it for one without, selects the declared status, and performs
+JSON serialization. Parsing and comparing fail the response as invalid handler output when
+the data does not match its schema or when the schema would change it. Routa never sends the
+parsed value. Set `"always"` when production must reject response drift. Response schemas
+must not change values; TypeScript rejects the common cases and `routa check` reports
+`ROUTA_RESPONSE_SCHEMA_MUTATION` for the rest.
 
 ```ts title="src/routa.ts"
 import { createRouta } from "@routa-ts/core";
