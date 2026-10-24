@@ -19,8 +19,11 @@ routes -> OpenAPI -> baseline checks                           (every build)
 Generation reads validated route metadata and each route file's contract. For every
 method it produces an operation containing the parameters and request body from `input`,
 a response per entry in `responses`, plus every middleware `rejects` outcome in that
-method's chain. Middleware `openapi` metadata contributes `security` and `x-routa-authz`,
-and route `deprecation` metadata marks the operation deprecated.
+method's chain. An outcome's `description` becomes the response description; without one,
+Routa uses the outcome name, so `notFound` becomes "Not found". An outcome without a
+`schema` is bodyless and its response has no `content`. Middleware `openapi` metadata
+contributes `security` and `x-routa-authz`, and route `deprecation` metadata marks the
+operation deprecated.
 
 The result is compared against `.routa/openapi-baseline.json`, the contract your team has
 accepted. Nothing is written to that file unless you ask for it.

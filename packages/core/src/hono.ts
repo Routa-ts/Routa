@@ -1,9 +1,13 @@
 import { Hono } from "hono";
 import type { AnyRouteContract, HttpMethod, ResponseValidation } from "./index.js";
 import { createLogger, type RoutaLogger } from "./logger.js";
-import { createRequestExecutor, type RuntimeRouteContract } from "./request-execution.js";
+import {
+	createRequestExecutor,
+	isBodylessStatus,
+	type RuntimeRouteContract,
+} from "./request-execution.js";
 
-export { isBodylessStatus } from "./request-execution.js";
+export { isBodylessStatus };
 
 type RuntimeMode = "dev" | "start";
 
@@ -86,6 +90,7 @@ export function createHonoApp(
 			throw new Error(`${route.method.toUpperCase()} ${route.path} cannot declare a request body.`);
 		}
 
+		assertOutcomeDeclarations(contract, route.path, route.method);
 		assertUniqueMiddlewareRejects(contract, route.path, method);
 
 		const methods = methodsByPath.get(route.path) ?? new Set<string>();
@@ -165,6 +170,64 @@ function shouldValidateResponses(options: CreateHonoAppOptions): boolean {
 	const policy = options.responseValidation ?? "development";
 	const runtimeMode = options.runtimeMode ?? "dev";
 	return policy === "always" || runtimeMode === "dev";
+}
+
+/**
+ * Rejects outcome declarations that HTTP or the route method forbids, before the app serves traffic.
+ *
+ * TypeScript and `routa check` report the same rules earlier. This keeps hand-built contracts honest.
+ */
+function assertOutcomeDeclarations(
+	contract: RuntimeRouteContract,
+	path: string,
+	method: HttpMethod,
+): void {
+	const label = `${method.toUpperCase()} ${path}`;
+
+	for (const [name, outcome] of Object.entries(contract.responses)) {
+		const problem = outcomeProblem(outcome, method);
+
+		if (problem) {
+			throw new Error(`Outcome "${name}" on ${label} ${problem}`);
+		}
+	}
+
+	for (const item of contract.middleware ?? []) {
+		for (const [name, outcome] of Object.entries(item.rejects ?? {}) as Array<
+			[string, { status: number; schema?: unknown }]
+		>) {
+			const problem = outcomeProblem(outcome, undefined);
+
+			if (problem) {
+				throw new Error(`Middleware reject "${name}" on ${label} ${problem}`);
+			}
+		}
+	}
+}
+
+function outcomeProblem(
+	outcome: { status: number; schema?: unknown },
+	method: HttpMethod | undefined,
+): string | undefined {
+	const { status } = outcome;
+
+	if (status < 200) {
+		return `declares status ${status}. Informational (1xx) statuses cannot be terminal outcomes; use a status from 200 to 599.`;
+	}
+
+	if (outcome.schema && isBodylessStatus(status)) {
+		return `declares a schema for status ${status}, which has no body. Remove \`schema\`.`;
+	}
+
+	if (outcome.schema && method === "head") {
+		return "declares a schema, but HEAD responses have no body. Remove `schema`.";
+	}
+
+	if (status === 304 && method && method !== "get" && method !== "head") {
+		return `declares status 304, which is valid only for GET and HEAD routes.`;
+	}
+
+	return undefined;
 }
 
 /**

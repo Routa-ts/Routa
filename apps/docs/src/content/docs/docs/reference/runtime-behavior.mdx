@@ -107,18 +107,19 @@ policy in your application.
 
 ## Response Serialization
 
-Handlers and middleware rejects return `{ type, data }`. Routa always looks up the type
-and status from the matching response definition. With the default
-`responseValidation: "development"`, it parses `data` through that response schema in
-`routa dev` and skips the parse in `routa start`. Set `responseValidation: "always"` to
-parse in both modes. The CLI passes the mode explicitly; Routa does not infer it from
-`NODE_ENV`.
+Handlers and middleware rejects return `{ type, data }`, or just `{ type }` for an outcome
+without a `schema`. Routa always looks up the type and status from the matching response
+definition. It requires `data` for an outcome with a `schema` and rejects `data` on one
+without, so an outcome without a schema sends an empty body whatever its status. With the
+default `responseValidation: "development"`, Routa parses `data` through the response schema
+in `routa dev`, compares the parsed value with the value the handler returned, and skips
+both in `routa start`. Set `responseValidation: "always"` to do both in both modes. The CLI
+passes the mode explicitly; Routa does not infer it from `NODE_ENV`.
 
-When schema parsing is disabled, Zod transforms, defaults, and unknown-key stripping do
-not run. JSON serialization still runs. Statuses `204`, `205`, and `304` are emitted with
-no body, and data that cannot be serialized as JSON produces a handler-output problem
-rather than a partial response. See [Configuration](/docs/reference/configuration/) for
-the policy table.
+Routa sends the value the handler returned, never the parsed value. Data that does not match
+the schema, or that the schema would change, produces a handler-output problem. Data that
+cannot be serialized as JSON also produces a handler-output problem rather than a partial
+response. See [Configuration](/docs/reference/configuration/) for the policy table.
 
 Return the declared result object from handlers and middleware. A raw `Response` is not a
 response escape hatch: returning one is invalid handler output, while throwing one is

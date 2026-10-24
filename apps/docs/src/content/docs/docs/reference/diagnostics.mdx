@@ -73,6 +73,26 @@ A method declares no response with a 2xx status.
 
 **Fix:** add one. `204` counts, which is the usual answer for `DELETE`.
 
+### `ROUTA_RESPONSE_INFORMATIONAL_STATUS`
+
+An outcome uses a `1xx` status. Informational statuses are not final responses, so they
+cannot be terminal route outcomes.
+
+**Fix:** use a final status from `200` to `599`.
+
+### `ROUTA_RESPONSE_BODYLESS_SCHEMA`
+
+An outcome declares a `schema` but its status is `204`, `205`, or `304`, or it belongs to a
+`HEAD` route. None of those responses has a body.
+
+**Fix:** remove the `schema`, and return only `{ type }` from the handler.
+
+### `ROUTA_RESPONSE_NOT_MODIFIED_METHOD`
+
+An outcome uses status `304` on a method other than `GET` or `HEAD`.
+
+**Fix:** use a different status, or move the outcome to a `GET` or `HEAD` route.
+
 ### `ROUTA_RESULT_TYPE`
 
 A handler or middleware returns a `type` that is not declared in `responses` or in any

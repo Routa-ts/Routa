@@ -9,7 +9,6 @@ import { createRoute, createRouteRoot } from "@routa-ts/core";
 import type { z } from "zod";
 import {
 	DeleteUserParams,
-	DeleteUserResponse204,
 	GetUserParams,
 	GetUserQuery,
 	GetUserResponse,
@@ -44,15 +43,11 @@ export default route({
 		responses: {
 			success: {
 				status: 204,
-				schema: DeleteUserResponse204,
 			},
 		},
 		run: () => {
 			// TODO: call application-owned business logic.
-			return {
-				type: "success",
-				data: null as unknown as z.output<typeof DeleteUserResponse204>,
-			};
+			return { type: "success" };
 		},
 	}),
 });
@@ -150,7 +145,5 @@ export const GetUserQuery = z.object({ verbose: z.stringbool().optional() });
 export const GetUserResponse = z.object({ id: z.string() });
 
 export const DeleteUserParams = z.object({ id: z.string() });
-
-export const DeleteUserResponse204 = z.unknown();
 "
 `;

@@ -85,18 +85,18 @@ describe("route contracts", () => {
 			// @ts-expect-error OPTIONS is generated from the declared route methods.
 			options: createRoute({
 				responses: {
-					success: { status: 204, schema: z.null() },
+					success: { status: 204 },
 				},
-				run: () => ({ type: "success", data: null }),
+				run: () => ({ type: "success" }),
 			}),
 		});
 
 		const indirectOptions = {
 			options: createRoute({
 				responses: {
-					success: { status: 204, schema: z.null() },
+					success: { status: 204 },
 				},
-				run: () => ({ type: "success", data: null }),
+				run: () => ({ type: "success" }),
 			}),
 		};
 		// @ts-expect-error Extra method keys are rejected even through an intermediate value.
