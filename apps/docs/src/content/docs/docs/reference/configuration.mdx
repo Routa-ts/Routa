@@ -100,7 +100,9 @@ Whether to emit deprecation headers on routes that declare `deprecation`. Defaul
 
 Routes without `deprecation` are unaffected regardless of this setting. While this is on,
 Routa owns those headers on deprecated routes, and an outcome that declares `deprecation`,
-`sunset`, or (when a `replacement` is set) `link` in `headers` fails.
+`sunset`, or (when a `replacement` is set) `link` in `headers` fails. `routa check` does not run
+your code, so it treats any value other than an omitted key or a literal `false` as possibly on
+and applies the same ownership rules. Declare a literal `false` to opt a route graph out.
 
 ## `responseValidation`
 

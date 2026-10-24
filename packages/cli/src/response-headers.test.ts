@@ -391,6 +391,93 @@ describe("response header declaration checks", () => {
 			expect(codes(cwd)).toEqual([]);
 		});
 
+		it("treats a lifecycleHeaders setting other than a literal false as possibly enabled", () => {
+			const replacement = '{ replacement: "https://example.com/v2/items" }';
+			const configs: Array<[string, string, string[]]> = [
+				[
+					"computed",
+					'createRouta({ lifecycleHeaders: process.env.LIFECYCLE === "1" })',
+					["ROUTA_RESPONSE_HEADER_LIFECYCLE"],
+				],
+				["shorthand", "createRouta({ lifecycleHeaders })", ["ROUTA_RESPONSE_HEADER_LIFECYCLE"]],
+				[
+					"literal true",
+					"createRouta({ lifecycleHeaders: true })",
+					["ROUTA_RESPONSE_HEADER_LIFECYCLE"],
+				],
+				["literal false", "createRouta({ lifecycleHeaders: false })", []],
+				["omitted", "createRouta({})", []],
+			];
+
+			for (const [label, call, expected] of configs) {
+				const cwd = project({
+					"src/routa.ts": `import { createRouta } from "@routa-ts/core";\n\nconst lifecycleHeaders = Boolean(process.env.LIFECYCLE);\n\nexport default ${call};\n`,
+					"src/routes/items/route.ts": deprecated("deprecation: z.string()", replacement),
+				});
+
+				expect(
+					codes(cwd).map(([code]) => code),
+					label,
+				).toEqual(expected);
+			}
+		});
+
+		it("reads a deprecation declared as a local constant before computing ownership", () => {
+			const declared = (name: string) =>
+				`const ${name} = { replacement: "https://example.com/v2/items" };\n`;
+			const forms = [
+				["shorthand", "deprecation", "deprecation"],
+				["identifier", "legacy", "deprecation: legacy"],
+			];
+
+			for (const [label, name, property] of forms) {
+				const cwd = project({
+					"src/routa.ts": enabled,
+					"src/routes/items/route.ts": route(
+						"/items",
+						"ok: { status: 200, headers: z.object({ link: z.string() }) }",
+						{ deprecationProperty: property, imports: declared(name) },
+					),
+				});
+
+				expect(codes(cwd), label).toEqual([
+					["ROUTA_RESPONSE_HEADER_LIFECYCLE", expect.stringContaining('"link"')],
+				]);
+			}
+		});
+
+		it("leaves link to the application when a local deprecation constant names no replacement", () => {
+			const cwd = project({
+				"src/routa.ts": enabled,
+				"src/routes/items/route.ts": route(
+					"/items",
+					"ok: { status: 200, headers: z.object({ link: z.string() }) }",
+					{ deprecation: "legacy", imports: "const legacy = {};\n" },
+				),
+			});
+
+			expect(codes(cwd)).toEqual([]);
+		});
+
+		it("reports a deprecation it cannot read when a link header depends on it", () => {
+			const cwd = project({
+				"src/routa.ts": enabled,
+				"src/routes/items/route.ts": route(
+					"/items",
+					"ok: { status: 200, headers: z.object({ link: z.string() }) }",
+					{ deprecation: "legacy", imports: 'import { legacy } from "../../legacy";' },
+				),
+				"src/legacy.ts": 'export const legacy = { replacement: "https://example.com/v2/items" };\n',
+			});
+
+			expect(codes(cwd)).toEqual([
+				[
+					"ROUTA_SCHEMA_UNSUPPORTED",
+					expect.stringContaining("deprecation needs a static object with literal properties"),
+				],
+			]);
+		});
+
 		it("allows the headers when lifecycle headers are off or the route is not deprecated", () => {
 			const off = project({
 				"src/routes/items/route.ts": deprecated(
@@ -434,9 +521,12 @@ function project(files: Record<string, string>): string {
 function route(
 	path: string,
 	responses: string,
-	options: { imports?: string; deprecation?: string } = {},
+	options: { imports?: string; deprecation?: string; deprecationProperty?: string } = {},
 ): string {
-	const deprecation = options.deprecation ? `\t\tdeprecation: ${options.deprecation},\n` : "";
+	const property =
+		options.deprecationProperty
+		?? (options.deprecation ? `deprecation: ${options.deprecation}` : undefined);
+	const deprecation = property ? `\t\t${property},\n` : "";
 	return `import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 ${options.imports ?? ""}

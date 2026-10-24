@@ -1130,10 +1130,11 @@ function parseRouteContract(
 }
 
 /**
- * Reads whether `src/routa.ts` turns lifecycle headers on with a literal `lifecycleHeaders: true`.
+ * Reads whether `src/routa.ts` may turn lifecycle headers on.
  *
- * Generation never executes application modules, so a computed value counts as off here. Runtime
- * registration still rejects a conflicting declaration when the configured value is on.
+ * Lifecycle headers are a tuning-backed feature: a literal `false` or an omitted key keeps them
+ * off, and any other value counts as possibly enabled. Generation never executes application
+ * modules, so ownership diagnostics apply to every configuration the source can produce.
  */
 function lifecycleHeadersEnabled(cwd: string, parser: ts.SourceFileParser): boolean {
 	const file = join(cwd, "src/routa.ts");
@@ -1147,7 +1148,7 @@ function lifecycleHeadersEnabled(cwd: string, parser: ts.SourceFileParser): bool
 		if (ts.isCallExpression(node) && callName(node.expression) === "createRouta") {
 			const config = objectLiteral(node.arguments[0]);
 			const value = config && propertyValue(config, "lifecycleHeaders");
-			enabled ||= Boolean(value && unwrapExpression(value).kind === ts.SyntaxKind.TrueKeyword);
+			enabled ||= Boolean(value && unwrapExpression(value).kind !== ts.SyntaxKind.FalseKeyword);
 		}
 
 		ts.forEachChild(node, visit);

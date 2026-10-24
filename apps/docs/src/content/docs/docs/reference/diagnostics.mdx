@@ -143,10 +143,15 @@ response cookies as cookies, never as a `set-cookie` header.
 ### `ROUTA_RESPONSE_HEADER_LIFECYCLE`
 
 An outcome's `headers` declares `deprecation`, `sunset`, or `link` on a route whose
-lifecycle headers Routa writes, which requires `lifecycleHeaders: true` in `createRouta()`.
-`link` is owned only when the deprecation names a `replacement`.
+lifecycle headers Routa may write. `routa check` reads `lifecycleHeaders` without running
+your code: an omitted key or a literal `false` is off, and any other value, such as
+`process.env.LIFECYCLE === "1"`, counts as possibly on. `link` is owned only when the route's
+`deprecation` names a `replacement`. The deprecation can be an inline object or a local
+constant. When it is neither, and the route declares `link`, `routa check` reports
+`ROUTA_SCHEMA_UNSUPPORTED` because it cannot tell who owns that header.
 
-**Fix:** remove the header, or turn `lifecycleHeaders` off.
+**Fix:** remove the header, or set `lifecycleHeaders: false`. If the deprecation is not
+readable, write it as an inline object or a local constant.
 
 ### `ROUTA_RESPONSE_HEADER_VALUE`
 

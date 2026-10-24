@@ -544,7 +544,7 @@ class SchemaProjector {
 		contract: ts.ObjectLiteralExpression,
 		source: SchemaSource,
 	): Map<number, ProjectedResponse> {
-		const lifecycleOwned = this.lifecycleOwnedHeaders(contract);
+		const lifecycleOwned = this.lifecycleOwnedHeaders(contract, source);
 		const value = propertyValue(contract, "responses");
 		const responses = objectLiteral(value);
 		const context: Context = { source, io: "output" };
@@ -604,17 +604,55 @@ class SchemaProjector {
 	 * The header names the response lifecycle owns on a route: none unless lifecycle headers are on
 	 * and the route declares a `deprecation`; then `deprecation` and `sunset`, plus `link` when
 	 * the deprecation names a replacement.
+	 *
+	 * The deprecation may be an inline object or a local constant. When it is neither, whether the
+	 * lifecycle owns `link` cannot be known, so `unreadable` carries the expression to report.
 	 */
-	private lifecycleOwnedHeaders(contract: ts.ObjectLiteralExpression): ReadonlySet<string> {
+	private lifecycleOwnedHeaders(
+		contract: ts.ObjectLiteralExpression,
+		source: SchemaSource,
+	): LifecycleOwnership {
 		const deprecation = propertyValue(contract, "deprecation");
 
 		if (!this.options.lifecycleHeaders || !deprecation) {
-			return new Set();
+			return { owned: new Set() };
 		}
 
-		const replacement =
-			objectLiteral(deprecation) && propertyValue(objectLiteral(deprecation)!, "replacement");
-		return new Set(["deprecation", "sunset", ...(replacement ? ["link"] : [])]);
+		const object = this.localObject(deprecation, source);
+
+		if (!object || object.properties.some((property) => ts.isSpreadAssignment(property))) {
+			return { owned: new Set(["deprecation", "sunset"]), unreadable: deprecation };
+		}
+
+		return {
+			owned: new Set([
+				"deprecation",
+				"sunset",
+				...(propertyValue(object, "replacement") ? ["link"] : []),
+			]),
+		};
+	}
+
+	/** Resolves an expression to an object literal, following local constants in the same file. */
+	private localObject(
+		expression: ts.Expression,
+		source: SchemaSource,
+	): ts.ObjectLiteralExpression | undefined {
+		const seen = new Set<string>();
+		let current = unwrapExpression(expression);
+
+		while (ts.isIdentifier(current) && !seen.has(current.text)) {
+			seen.add(current.text);
+			const declaration = source.declarations.get(current.text);
+
+			if (!declaration) {
+				return undefined;
+			}
+
+			current = unwrapExpression(declaration.initializer);
+		}
+
+		return objectLiteral(current);
 	}
 
 	/**
@@ -625,7 +663,7 @@ class SchemaProjector {
 	private responseHeaders(
 		expression: ts.Expression,
 		context: Context,
-		lifecycleOwned: ReadonlySet<string>,
+		lifecycle: LifecycleOwnership,
 	): Record<string, ProjectedHeader> | undefined {
 		const schema = this.structure(this.node(expression, { ...context, parameter: true }));
 		const properties = schema.properties as Record<string, JsonSchema> | undefined;
@@ -681,7 +719,7 @@ class SchemaProjector {
 					`Response header "${name}" is reserved: Routa owns ${lower}`,
 					`Remove ${lower} from headers. Routa sets it from the response body and transport.`,
 				);
-			} else if (lifecycleOwned.has(lower)) {
+			} else if (lifecycle.owned.has(lower)) {
 				fail(
 					"ROUTA_RESPONSE_HEADER_LIFECYCLE",
 					`Response header "${name}" is owned by the route's lifecycle headers`,
@@ -693,6 +731,16 @@ class SchemaProjector {
 					`Header "${name}" must be declared in lowercase ("${lower}")`,
 					`Rename it to "${lower}". Header names are lowercase in Routa contracts.`,
 				);
+			}
+
+			if (lower === "link" && lifecycle.unreadable) {
+				this.report(context.source, lifecycle.unreadable, {
+					code: "ROUTA_SCHEMA_UNSUPPORTED",
+					message:
+						"Route deprecation needs a static object with literal properties, so Routa cannot tell whether lifecycle headers own the link header",
+					suggestion:
+						"Write deprecation as an inline object or a local constant, or stop declaring a link header on this route.",
+				});
 			}
 
 			if (!this.isScalarHeaderValue(value)) {
@@ -1789,6 +1837,9 @@ class SchemaProjector {
 }
 
 const zodRegistryNames = new Set(["globalRegistry", "registry"]);
+
+/** The header names the lifecycle owns on a route, and a deprecation expression that could not be read. */
+type LifecycleOwnership = { owned: ReadonlySet<string>; unreadable?: ts.Expression };
 
 /** Header names Routa owns on every response. */
 const reservedHeaderNames = new Set([
