@@ -512,13 +512,38 @@ class SchemaProjector {
 
 		for (const item of middleware) {
 			const declaration = middlewareContract(item);
-			const value = declaration && propertyValue(declaration.contract, "rejects");
 
-			if (!declaration || !value) {
+			if (!declaration) {
 				continue;
 			}
 
 			const source = this.source(declaration.file);
+			const { contract } = declaration;
+			// A spread after `rejects` (or with no `rejects` at all) can hide or replace them.
+			const spread = contract.properties
+				.slice(
+					contract.properties.findIndex(
+						(property) =>
+							(ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property))
+							&& propertyName(property.name) === "rejects",
+					) + 1,
+				)
+				.find(ts.isSpreadAssignment);
+
+			if (spread) {
+				this.unsupported(
+					spread,
+					{ source, io: "output" },
+					"middleware contracts need a static rejects property; a spread can hide or replace rejects",
+				);
+				continue;
+			}
+
+			const value = propertyValue(contract, "rejects");
+
+			if (!value) {
+				continue;
+			}
 
 			for (const reject of this.outcomes(value, source, lifecycle, item.name)) {
 				if (site.method === "head" && reject.schema) {
@@ -905,25 +930,30 @@ class SchemaProjector {
 				this.unsupported(description, context, "outcome descriptions need a string literal");
 			}
 
+			const name = ts.isPropertyAssignment(response) ? propertyName(response.name) : undefined;
+
+			if (name === undefined) {
+				this.unsupported(response, context, "outcome names need an identifier or string literal");
+				continue;
+			}
+
 			const schema = propertyValue(outcome, "schema");
 			const headers = propertyValue(outcome, "headers");
-			const name = ts.isPropertyAssignment(response) ? propertyName(response.name) : undefined;
 			const projectedHeaders = headers
 				? this.responseHeaders(headers, context, lifecycleOwned)
 				: undefined;
 			const cookies = propertyValue(outcome, "cookies");
 			const projectedCookies = cookies ? this.responseCookies(cookies, context) : undefined;
 
-			const outcomeName = name ?? String(status);
 			result.push({
-				name: outcomeName,
+				name,
 				status,
 				producer,
 				label:
 					middleware === undefined
-						? `"${outcomeName}"`
-						: `"${outcomeName}" (a reject of middleware ${middleware})`,
-				description: text ?? humanizeOutcomeName(outcomeName),
+						? `"${name}"`
+						: `"${name}" (a reject of middleware ${middleware})`,
+				description: text ?? humanizeOutcomeName(name),
 				...(schema ? { schema: this.materialize(this.node(schema, context)) } : {}),
 				...(projectedHeaders ? { headers: projectedHeaders } : {}),
 				...(projectedCookies?.length ? { cookies: projectedCookies } : {}),

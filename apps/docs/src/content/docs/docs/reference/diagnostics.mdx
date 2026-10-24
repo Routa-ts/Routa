@@ -320,7 +320,9 @@ A schema uses a construct Routa cannot describe in OpenAPI, such as `z.tuple()`,
 `.extend()`, `z.date()`, a schema built by calling your own function, or a value that is
 not a Zod schema. Route `input` also needs static `params`, `query`, `headers`, `cookies`,
 or `body` properties, not a spread or a shared variable, and each outcome in `responses`
-needs a literal `status` and a `schema` written in place, not spread in.
+or a middleware's `rejects` needs an identifier or string-literal name, a literal `status`,
+and a `schema` written in place, not spread in. A `createMiddleware` config cannot spread
+in properties after its `rejects`, because the spread could hide or replace them.
 
 In response schemas, Routa also reports a `.check()` argument it cannot classify, such as
 a check built by your own function, and URL options whose `normalize` value it cannot read.

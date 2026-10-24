@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
@@ -404,6 +404,47 @@ export const guard = createMiddleware({ rejects: { ...rejects }, run: ({ next })
 				message: expect.stringContaining("middleware rejects need static status"),
 			}),
 		]);
+	});
+
+	it.each([
+		[
+			"a contract spread that can hide its rejects",
+			`const base = { rejects: { denied: { status: 403, schema: z.object({ message: z.string() }) } } } as const;
+
+export const guard = createMiddleware({ ...base, run: () => ({ type: "denied", data: { message: "No" } }) as never });`,
+			"middleware contracts need a static rejects property",
+		],
+		[
+			"a computed reject name",
+			`const name = "denied";
+
+export const guard = createMiddleware({
+	rejects: { [name]: { status: 403, schema: z.object({ message: z.string() }) } },
+	run: ({ next }) => next(),
+});`,
+			"outcome names need an identifier or string literal",
+		],
+	])("reports %s instead of dropping the reject", (_label, declaration, message) => {
+		const cwd = project({
+			"src/routes/projects/middleware.ts": `import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+
+${declaration}
+`,
+			"src/routes/projects/route.ts": okRoute,
+		});
+		const expected = expect.objectContaining({
+			code: "ROUTA_SCHEMA_UNSUPPORTED",
+			file: "src/routes/projects/middleware.ts",
+			message: expect.stringContaining(message),
+		});
+		const validation = validateProject(cwd);
+
+		expect(validation.diagnostics).toEqual([expected]);
+		// Route metadata is written only for a clean project, and never invents an outcome name.
+		expect(existsSync(join(cwd, ".routa/routes.gen.ts"))).toBe(false);
+		expect(JSON.stringify(validation.routes)).not.toContain('"403"');
+		expect(diagnosticsOf(generateOpenApi(cwd))).toEqual([expected]);
 	});
 
 	it("reports a reject header the route's lifecycle headers own", () => {
