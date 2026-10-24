@@ -196,8 +196,9 @@ with `Invalid routes format. Use --format json or --format markdown.`
 
 ## `routa openapi check`
 
-Generates OpenAPI from source and compares it against `.routa/openapi-baseline.json`. Any
-difference is a failure.
+Generates OpenAPI from source and compares it against `.routa/openapi-baseline.json`. A
+difference in operations, parameters, request bodies, responses, schemas, or `security` is
+a failure. Descriptions, `operationId`, `info`, and `servers` are not compared.
 
 ```sh
 routa openapi check

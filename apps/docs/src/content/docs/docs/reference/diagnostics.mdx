@@ -58,6 +58,16 @@ and a flat-style file describing the same path.
 
 **Fix:** rename or move one of them. The message names both files.
 
+### `ROUTA_DUPLICATE_OPERATION_ID`
+
+Two operations would generate the same OpenAPI `operationId`. Routa names each operation
+from its method plus the path in PascalCase, treating every run of punctuation as a word
+break, so `GET /users/:id` and `GET /users/id` both become `getUsersId`.
+
+**Fix:** change a path segment so the two routes differ by more than punctuation or
+parameter syntax, for example `/users/:id` and `/users/by-name`. Routa does not rename an
+`operationId` to make it unique.
+
 ### `ROUTA_OPTIONS_AUTOMATIC`
 
 A route file declares an `options` method.
@@ -240,12 +250,18 @@ the route contract.
 
 ### `ROUTA_SCHEMA_COMPONENT_COLLISION`
 
-Two different schema declarations would share one `components.schemas` key: two
-`.meta({ id })` calls with the same id, or two exports with the same name and different
-content.
+One `components.schemas` key would hold two different schemas. This happens in two cases:
 
-**Fix:** reuse one declaration, or give each schema a distinct `.meta({ id })`. Routa never
-renames components.
+- Two different declarations share a key: two `.meta({ id })` calls with the same id, or two
+  exports with the same name and different content.
+- One declaration projects differently in different places, for example input and output, or
+  a query parameter and a JSON body. A schema such as `z.stringbool()` has a different shape
+  in each, so it cannot be one component.
+
+**Fix:** for two declarations, reuse one declaration, or give each a distinct
+`.meta({ id })`. For one declaration with different projections, write separate declarations
+with distinct component identities, or change the schema so every use projects the same way.
+Routa never renames components or picks one projection.
 
 ### `ROUTA_SCHEMA_COMPONENT_ID_INVALID`
 

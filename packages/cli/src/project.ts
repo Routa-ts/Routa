@@ -23,6 +23,7 @@ import {
 	unwrapExpression,
 } from "./ast.js";
 import { type ContractSchemaProjection, projectContractSchemas } from "./contract-schemas.js";
+import { operationId, toOpenApiPath } from "./operation-id.js";
 import * as ts from "./typescript.js";
 import { runTypeScript } from "./typescript-runner.js";
 
@@ -150,6 +151,7 @@ function validateProjectInSession(
 		...discovery.diagnostics,
 		...runResultShapeDiagnostics(cwd, parser),
 		...duplicateRouteDiagnostics(routes),
+		...duplicateOperationIdDiagnostics(routes),
 		...deprecationReplacementDiagnostics(routes),
 		...missingSuccessResponseDiagnostics(routes),
 		...duplicateSchemaDiagnostics(cwd, parser),
@@ -2765,6 +2767,41 @@ function duplicateRouteDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 		}
 
 		seen.set(route.path, route);
+	}
+
+	return diagnostics;
+}
+
+/**
+ * Reports routes whose generated OpenAPI operationIds collide.
+ *
+ * The id comes from the method and path, and paths such as `/users/:id` and
+ * `/users/id` spell the same words, so they can still produce one id.
+ */
+function duplicateOperationIdDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
+	const seen = new Map<string, string>();
+	const diagnostics: Diagnostic[] = [];
+
+	for (const route of routes) {
+		for (const method of Object.keys(route.responses)) {
+			const id = operationId(method, toOpenApiPath(route.path));
+			const previous = seen.get(id);
+
+			if (!previous) {
+				seen.set(id, `${method.toUpperCase()} ${route.path}`);
+				continue;
+			}
+
+			diagnostics.push({
+				code: "ROUTA_DUPLICATE_OPERATION_ID",
+				severity: "error",
+				message: `${method.toUpperCase()} ${route.path} and ${previous} would both generate the OpenAPI operationId ${id}.`,
+				file: route.file,
+				routePath: route.path,
+				suggestion:
+					"Rename a path segment so the two routes differ by more than punctuation or parameter syntax. Routa generates operationIds from the method and path.",
+			});
+		}
 	}
 
 	return diagnostics;
