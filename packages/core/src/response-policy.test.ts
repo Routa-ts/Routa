@@ -130,6 +130,25 @@ describe("schema-less outcomes", () => {
 		}
 	});
 
+	it("treats explicit undefined data as no data in every mode", async () => {
+		for (const mode of modes) {
+			const response = await appFor(
+				{
+					method: "get",
+					path: "/item",
+					contract: createRoute({
+						responses: { gone: { status: 410 } },
+						run: () => ({ type: "gone", data: undefined }),
+					}),
+				},
+				mode,
+			).request("/item");
+
+			expect(response.status, mode.name).toBe(410);
+			await expect(response.text(), mode.name).resolves.toBe("");
+		}
+	});
+
 	it("fails when the handler returns data, even null, in every mode", async () => {
 		for (const mode of modes) {
 			for (const data of [{ id: "1" }, null, "text"]) {
@@ -215,6 +234,25 @@ describe("response validation policy", () => {
 			).request("/profile");
 
 			expect(response.status, mode.name).toBe(mode.validates ? 500 : 200);
+		}
+	});
+
+	it("fails a refinement that mutates a reference shared with the handler data", async () => {
+		const schema = z.object({ details: z.unknown() }).refine((value) => {
+			(value.details as { id: string }).id = "changed";
+			return true;
+		});
+
+		for (const mode of modes) {
+			const data = { details: { id: "original" } };
+			const response = await appFor(profileRoute(data, schema), mode).request("/profile");
+
+			expect(response.status, mode.name).toBe(mode.validates ? 500 : 200);
+			if (!mode.validates) {
+				await expect(response.json(), mode.name).resolves.toEqual({
+					details: { id: "original" },
+				});
+			}
 		}
 	});
 

@@ -484,7 +484,12 @@ function validateResult(
 
 	if (validateResponse) {
 		try {
-			assertUnchanged(parseSchema(response.schema, result.data), result.data);
+			// Zod can hand back references shared with the handler value, so a refinement may
+			// mutate both. Compare against a copy taken before parsing.
+			const snapshot = jsonSnapshot(result.data);
+
+			assertUnchanged(parseSchema(response.schema, result.data), snapshot);
+			assertUnchanged(result.data, snapshot);
 		} catch (error) {
 			if (error instanceof ZodError) {
 				throw new InvalidHandlerOutputError(
@@ -506,6 +511,25 @@ function declaredOutcome(contract: RuntimeRouteContract, type: string): RuntimeO
 	}
 
 	return middlewareResponses(contract)[type];
+}
+
+/** Copies a value through JSON, the representation that would go on the wire. */
+function jsonSnapshot(value: unknown): unknown {
+	let text: string | undefined;
+
+	try {
+		text = JSON.stringify(value);
+	} catch (error) {
+		throw new InvalidHandlerOutputError(
+			`Failed to serialize response as JSON: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+
+	if (text === undefined) {
+		throw new InvalidHandlerOutputError("Response data cannot be serialized as JSON.");
+	}
+
+	return JSON.parse(text);
 }
 
 /**
