@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ProjectedOperation, ProjectedResponse } from "./contract-schemas.js";
+import { operationId, toOpenApiPath } from "./operation-id.js";
 import { type MiddlewareMetadata, validateProject } from "./project.js";
 import * as ts from "./typescript.js";
 
@@ -113,15 +114,20 @@ export function generateOpenApi(cwd = process.cwd()): OpenApiLike {
 	return ts.withSourceFileParsing(cwd, (parser) => generateOpenApiInSession(cwd, parser));
 }
 
+/**
+ * The document `info` Routa generates. Source carries no title or version
+ * yet, so every project gets the same deterministic value.
+ */
+const defaultInfo = { title: "Routa API", version: "0.0.0" };
+
 function generateOpenApiInSession(cwd: string, parser: ts.SourceFileParser): OpenApiLike {
 	const validation = validateProject(cwd, { write: false }, parser);
-	const baseline = readBaseline(cwd);
 	const paths: NonNullable<OpenApiLike["paths"]> = {};
 
 	if (validation.diagnostics.length > 0) {
 		return {
 			openapi: "3.1.0",
-			info: baseline?.info ?? { title: "Routa API", version: "0.0.0" },
+			info: defaultInfo,
 			paths,
 			"x-routa-diagnostics": validation.diagnostics.map((diagnostic) => ({
 				code: diagnostic.code,
@@ -135,12 +141,11 @@ function generateOpenApiInSession(cwd: string, parser: ts.SourceFileParser): Ope
 
 	for (const route of validation.routes) {
 		const operations = projection.operations.get(route.file) ?? {};
-		const openApiPath = route.path.replaceAll(/:([^/]+)/g, "{$1}");
+		const openApiPath = toOpenApiPath(route.path);
 		paths[openApiPath] = Object.fromEntries(
 			Object.entries(route.responses).map(([method, statuses]) => {
 				const operation = operations[method];
-				const baselineOperation = baseline?.paths?.[openApiPath]?.[method];
-				const input = operationInput(route.path, operation?.input, baselineOperation);
+				const input = operationInput(route.path, operation?.input);
 				const middleware = route.methodMiddleware[method] ?? route.middleware;
 				const responseSchemas = new Map<number, ProjectedResponse>([
 					...(operation?.rejects ?? new Map()),
@@ -150,11 +155,11 @@ function generateOpenApiInSession(cwd: string, parser: ts.SourceFileParser): Ope
 				return [
 					method,
 					{
-						...operationMetadataForBaseline(baselineOperation),
+						operationId: operationId(method, openApiPath),
 						...middlewareOpenApiMetadata(middleware),
 						...deprecationMetadata(operation?.deprecation),
 						...input,
-						responses: operationResponses(statuses, responseSchemas, baselineOperation),
+						responses: operationResponses(statuses, responseSchemas),
 					},
 				];
 			}),
@@ -165,7 +170,7 @@ function generateOpenApiInSession(cwd: string, parser: ts.SourceFileParser): Ope
 
 	return {
 		openapi: "3.1.0",
-		info: baseline?.info ?? { title: "Routa API", version: "0.0.0" },
+		info: defaultInfo,
 		paths,
 		...(Object.keys(schemas).length > 0 ? { components: { schemas } } : {}),
 		...(projection.warnings.length > 0
@@ -245,36 +250,17 @@ function deprecationMetadata(
 }
 
 /**
- * Looks up baseline operation metadata that generated route code does not yet model.
- *
- * @param operation - The baseline OpenAPI operation to read from.
- * @returns Operation metadata that should survive regeneration.
- */
-function operationMetadataForBaseline(
-	operation: NonNullable<OpenApiLike["paths"]>[string][string] | undefined,
-): Record<string, unknown> {
-	return {
-		...(operation?.operationId ? { operationId: operation.operationId } : {}),
-		...("security" in (operation ?? {})
-			? { security: (operation as { security?: unknown }).security }
-			: {}),
-	};
-}
-
-/**
- * Builds OpenAPI responses for a route operation while preserving baseline-only responses.
+ * Builds OpenAPI responses for a route operation from its source statuses.
  *
  * @param statuses - The response statuses discovered from route code.
- * @param schemas - The response schemas discovered from route code.
- * @param baselineOperation - The matching baseline operation, when one exists.
+ * @param projected - The projected outcomes discovered from route code.
  * @returns OpenAPI response entries for the operation.
  */
 function operationResponses(
 	statuses: number[],
 	projected: Map<number, ProjectedResponse> | undefined,
-	baselineOperation: NonNullable<OpenApiLike["paths"]>[string][string] | undefined,
 ): Record<string, unknown> {
-	const responses: Record<string, unknown> = Object.fromEntries(
+	return Object.fromEntries(
 		statuses.map((status) => {
 			const response = projected?.get(status);
 			return [
@@ -288,14 +274,6 @@ function operationResponses(
 			];
 		}),
 	);
-
-	for (const [status, response] of Object.entries(baselineOperation?.responses ?? {})) {
-		if (!(status in responses)) {
-			responses[status] = response;
-		}
-	}
-
-	return responses;
 }
 
 /**
@@ -321,11 +299,7 @@ function invalidGraphDiagnostics(document: OpenApiLike): string[] {
  * @param input - The parsed contract input for the route.
  * @returns An object containing OpenAPI `parameters` and, when present, a JSON `requestBody`.
  */
-function operationInput(
-	path: string,
-	input: ProjectedOperation["input"] | undefined,
-	baselineOperation?: NonNullable<OpenApiLike["paths"]>[string][string],
-) {
+function operationInput(path: string, input: ProjectedOperation["input"] | undefined) {
 	const parameters = [
 		...pathParams(path).map((name) => ({
 			name,
@@ -343,7 +317,7 @@ function operationInput(
 		...(input?.body
 			? {
 					requestBody: {
-						...requestBodyMetadata(input.body, baselineOperation?.requestBody),
+						required: true,
 						content: {
 							"application/json": {
 								schema: input.body,
@@ -353,24 +327,6 @@ function operationInput(
 				}
 			: {}),
 	};
-}
-
-/**
- * Builds request body metadata from route code, falling back to the baseline when needed.
- *
- * @param body - The parsed route body contract.
- * @param requestBody - The baseline request body to read from.
- * @returns Request body metadata that should survive regeneration.
- */
-function requestBodyMetadata(
-	body: unknown,
-	requestBody: Record<string, unknown> | undefined,
-): Record<string, unknown> {
-	if (body) {
-		return { required: true };
-	}
-
-	return "required" in (requestBody ?? {}) ? { required: requestBody?.required } : {};
 }
 
 /**
@@ -434,7 +390,7 @@ function pathParams(path: string): string[] {
 /**
  * Compares two OpenAPI documents and reports drift between them.
  *
- * @returns Diagnostic strings for removed operations, removed response statuses, schema changes, and added response statuses.
+ * @returns Diagnostic strings for removed operations, removed response statuses, schema changes, security changes, and added response statuses.
  */
 function driftDiagnostics(baseline: OpenApiLike, current: OpenApiLike): string[] {
 	const diagnostics: string[] = [];
@@ -462,6 +418,10 @@ function driftDiagnostics(baseline: OpenApiLike, current: OpenApiLike): string[]
 			if (stableJson(baselineComparable) !== stableJson(currentComparable)) {
 				diagnostics.push(`OPENAPI_DRIFT: ${method.toUpperCase()} ${path} schema changed`);
 			}
+
+			if (comparableSecurity(operation.security) !== comparableSecurity(currentOperation.security)) {
+				diagnostics.push(`OPENAPI_DRIFT: ${method.toUpperCase()} ${path} security changed`);
+			}
 		}
 	}
 
@@ -486,6 +446,28 @@ function driftDiagnostics(baseline: OpenApiLike, current: OpenApiLike): string[]
 	}
 
 	return diagnostics;
+}
+
+/**
+ * Serializes an operation's security requirements for comparison. Absent and
+ * empty security compare equal, and requirement and scope order do not matter.
+ */
+function comparableSecurity(security: unknown): string {
+	if (!Array.isArray(security)) {
+		return "[]";
+	}
+
+	return JSON.stringify(
+		security
+			.map((requirement) =>
+				JSON.stringify(
+					Object.entries(requirement ?? {})
+						.sort(([left], [right]) => left.localeCompare(right))
+						.map(([name, scopes]) => [name, Array.isArray(scopes) ? [...scopes].sort() : scopes]),
+				),
+			)
+			.sort(),
+	);
 }
 
 /**
