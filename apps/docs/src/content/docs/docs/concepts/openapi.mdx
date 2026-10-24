@@ -24,7 +24,10 @@ Routa uses the outcome name, so `notFound` becomes "Not found". An outcome witho
 `schema` is bodyless and its response has no `content`. An outcome's `headers` become
 Header Objects on its response, each with the header's schema, `required` for a required
 header, and the schema's `description`. Header schema metadata such as `examples` stays on
-the Header Object's schema. Middleware `openapi` metadata
+the Header Object's schema. An outcome's `cookies` become one optional `Set-Cookie` Header
+Object whose description lists each cookie's name and static attributes and says each is a
+separate repeated field. It never carries a value, an example, or a vendor extension. Cookies
+declared on middleware `rejects` are not documented yet. Middleware `openapi` metadata
 contributes `security` and `x-routa-authz`, and route `deprecation` metadata marks the
 operation deprecated.
 

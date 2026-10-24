@@ -112,9 +112,9 @@ middleware `rejects` map for that method. The message lists the valid names.
 
 ### `ROUTA_RESULT_SHAPE`
 
-A returned result object contains a field other than `type`, `data`, and `headers`.
+A returned result object contains a field other than `type`, `data`, `headers`, and `cookies`.
 
-**Fix:** remove the extra field. Results are limited to those three so every response can be
+**Fix:** remove the extra field. Results are limited to those four so every response can be
 described in OpenAPI. Move anything else into `data`, or declare it as a response header.
 
 ### `ROUTA_RESPONSE_HEADER_NAME`
@@ -163,6 +163,68 @@ literal or enum of them), such as an array or an object. Routa has no multi-valu
 support.
 
 **Fix:** declare a string, number, or boolean schema.
+
+### `ROUTA_RESPONSE_COOKIE_UNRESOLVED`
+
+An outcome's `cookies` is not an array literal of identifiers that resolve to a
+`createCookie({ ... })` declaration. Routa follows identifiers declared in the route file or
+its `schemas.ts`, and imports and re-exports through relative modules. It does not follow
+package imports, aliases of other variables, or spreads.
+
+**Fix:** list handles by name, and declare each one with `createCookie` in a module the route
+imports by relative path.
+
+### `ROUTA_RESPONSE_COOKIE_STATIC`
+
+A `createCookie` call writes its name or an attribute as something other than a literal, or
+spreads another object. Cookie names and attributes are contract facts that `routa check` and
+OpenAPI read without running your code.
+
+**Fix:** write each name and attribute as a literal inside `createCookie({ ... })`.
+
+### `ROUTA_RESPONSE_COOKIE_ATTRIBUTE`
+
+A `createCookie` call omits `httpOnly`, `secure`, `sameSite`, `path`, or `schema`, or gives an
+attribute a value it cannot have, such as a negative `maxAge`, a `path` without a leading `/`,
+or an `expires` that is not an ISO 8601 date-time.
+
+**Fix:** declare the required attributes and correct the value.
+
+### `ROUTA_RESPONSE_COOKIE_NAME`
+
+A cookie name is not an RFC 6265 token: it is empty or contains a space, `;`, `,`, `=`, or
+another separator.
+
+**Fix:** use letters, digits, and the characters ``! # $ % & ' * + - . ^ _ ` | ~``.
+
+### `ROUTA_RESPONSE_COOKIE_RULE`
+
+A cookie breaks a security rule: `sameSite: "none"` or `partitioned: true` without
+`secure: true`, a `__Secure-` name without `secure: true`, or a `__Host-` name without
+`secure: true`, with a `path` other than `/`, or with a `domain`.
+
+**Fix:** set `secure: true`, and for `__Host-` cookies use `path: "/"` and remove `domain`.
+
+### `ROUTA_RESPONSE_COOKIE_VALUE`
+
+A cookie's value schema is not a string, number, or boolean (or a literal or enum of them).
+A value schema that changes values reports `ROUTA_RESPONSE_SCHEMA_MUTATION` instead.
+
+**Fix:** declare a scalar schema that validates the value without changing it.
+
+### `ROUTA_RESPONSE_COOKIE_CONFLICT`
+
+An outcome's `cookies` lists the same handle twice, or two handles with one identity (name,
+domain, and path). One producer owns an identity in a response.
+
+**Fix:** list the cookie once, or give the handles different names, domains, or paths.
+
+### `ROUTA_RESPONSE_COOKIE_SCOPE`
+
+An outcome declares cookies with one name and different domains or paths. This is a warning:
+browsers keep them apart, but clients and readers often confuse them.
+
+**Fix:** rename a cookie unless the different scopes are intended.
 
 ### `ROUTA_DUPLICATE_SCHEMA_NAME`
 

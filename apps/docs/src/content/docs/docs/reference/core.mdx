@@ -61,13 +61,13 @@ Declares one HTTP method. The function returns its argument unchanged; its purpo
 capture literal types so `run` receives typed `input`, `ctx`, and `response` and is constrained to the
 declared outcomes.
 
-| Field         | Type                                                                       | Required |
-| ------------- | -------------------------------------------------------------------------- | -------- |
-| `input`       | `{ params?, query?, headers?, cookies?, body? }` of Zod schemas            | No       |
-| `responses`   | `Record<string, { status; description?; schema?; headers? }>`              | Yes      |
-| `middleware`  | `readonly MiddlewareContract[]`                                            | No       |
-| `deprecation` | `{ sunset?: string; replacement?: string }`                                | No       |
-| `run`         | `({ input, ctx, response }) => { type, data, headers }` or a promise of it | Yes      |
+| Field         | Type                                                                                | Required |
+| ------------- | ----------------------------------------------------------------------------------- | -------- |
+| `input`       | `{ params?, query?, headers?, cookies?, body? }` of Zod schemas                     | No       |
+| `responses`   | `Record<string, { status; description?; schema?; headers?; cookies? }>`             | Yes      |
+| `middleware`  | `readonly MiddlewareContract[]`                                                     | No       |
+| `deprecation` | `{ sunset?: string; replacement?: string }`                                         | No       |
+| `run`         | `({ input, ctx, response }) => { type, data, headers, cookies }` or a promise of it | Yes      |
 
 `deprecation.replacement` accepts a registered route path beginning with `/` or an
 absolute `http:`/`https:` URL. Local paths are checked against the generated route
@@ -85,9 +85,13 @@ is required, optional when all are, and forbidden when the outcome declares none
 with `lifecycleHeaders` on it owns `deprecation`, `sunset`, and the successor `link`. See
 [Schemas](/docs/concepts/schemas/#response-headers).
 
+An outcome's `cookies` lists the `createCookie` handles it may emit. The result's `cookies`
+field is an array of `set` and `clear` effects for those handles, and it is forbidden when the
+outcome declares none. See [`createCookie`](#createcookie).
+
 **Errors:** returning an undeclared `type` is a compile error and, at runtime, an
 `Invalid handler output` problem response. Result objects may contain only `type`, `data`,
-and `headers`. `data` is required for an outcome with a `schema` and forbidden for one without.
+`headers`, and `cookies`. `data` is required for an outcome with a `schema` and forbidden for one without.
 TypeScript also rejects a `schema` on a `204`, `205`, or `304` outcome and on any `HEAD`
 outcome, an informational `1xx` status, a `304` outside `GET` and `HEAD`, and response
 schemas that change values. A hand-built contract that breaks the status and method rules
@@ -253,14 +257,14 @@ function createMiddleware<TRequires, TProvides, TRejects, TInput>(
 ): MiddlewareContract<TRequires, TProvides, TRejects, TInput>
 ```
 
-| Field      | Type                                                | Purpose                                 |
-| ---------- | --------------------------------------------------- | --------------------------------------- |
-| `requires` | `readonly string[]`                                 | Context keys that must already exist    |
-| `provides` | `Record<string, ZodType>`                           | Context keys this middleware adds       |
-| `rejects`  | `Record<string, { status; description?; schema? }>` | Early responses it can return           |
-| `input`    | Same shape as a route `input`                       | Request data the middleware needs       |
-| `openapi`  | `{ security?, permissions? }`                       | Metadata emitted into generated OpenAPI |
-| `run`      | `({ input, ctx, next }) => …`                       | The implementation                      |
+| Field      | Type                                                                    | Purpose                                 |
+| ---------- | ----------------------------------------------------------------------- | --------------------------------------- |
+| `requires` | `readonly string[]`                                                     | Context keys that must already exist    |
+| `provides` | `Record<string, ZodType>`                                               | Context keys this middleware adds       |
+| `rejects`  | `Record<string, { status; description?; schema?; headers?; cookies? }>` | Early responses it can return           |
+| `input`    | Same shape as a route `input`                                           | Request data the middleware needs       |
+| `openapi`  | `{ security?, permissions? }`                                           | Metadata emitted into generated OpenAPI |
+| `run`      | `({ input, ctx, next }) => …`                                           | The implementation                      |
 
 `run` either returns a reject outcome or returns `next(providedCtx)`. Routa parses every
 declared `provides` value before merging any of them into `ctx`, and downstream code
@@ -280,6 +284,57 @@ export const withRequestId = createMiddleware({
 	provides: { requestId: z.string().uuid() },
 	run: ({ next }) => next({ requestId: randomUUID() }),
 });
+```
+
+## `createCookie`
+
+```ts
+function createCookie<const TConfig extends CookieConfig>(
+	config: TConfig,
+): CookieHandle<TConfig>
+```
+
+| Field         | Type                           | Required | Purpose                                              |
+| ------------- | ------------------------------ | -------- | ---------------------------------------------------- |
+| `name`        | `string`                       | Yes      | RFC 6265 token                                       |
+| `schema`      | Zod string, number, or boolean | Yes      | Validates the value; must not change it              |
+| `httpOnly`    | `boolean`                      | Yes      | Adds `HttpOnly`                                      |
+| `secure`      | `boolean`                      | Yes      | Adds `Secure`                                        |
+| `sameSite`    | `"strict" \| "lax" \| "none"`  | Yes      | Sets `SameSite`; `"none"` requires `secure: true`    |
+| `path`        | `string`                       | Yes      | Starts with `/`                                      |
+| `domain`      | `string`                       | No       | Host name, with or without a leading dot             |
+| `maxAge`      | `number`                       | No       | Non-negative whole seconds                           |
+| `expires`     | `string`                       | No       | ISO 8601 date-time, such as `"2030-01-01T00:00:00Z"` |
+| `partitioned` | `boolean`                      | No       | Adds `Partitioned`; requires `secure: true`          |
+
+The handle exposes `set(value)` and `clear()`. Both are pure: they return a `CookieEffect`
+bound to the handle, and Routa turns the effects an outcome returns into repeated
+`Set-Cookie` fields. List the handle in an outcome's `cookies` for the outcome to return its
+effects. `routa check` and OpenAPI read the name and attributes from source, so write them
+as literals.
+
+**Errors:** a name, attribute, or value schema that breaks a rule fails TypeScript where the
+literal types allow it, `routa check` (`ROUTA_RESPONSE_COOKIE_*`), and `createCookie` itself,
+which throws. Returning an effect for a handle the outcome does not list, the same identity
+twice, or a value that cannot be encoded safely produces an `Invalid handler output`
+response. See [Schemas](/docs/concepts/schemas/#response-cookies) for the rules, encoding, and
+clearing.
+
+```ts
+import { createCookie } from "@routa-ts/core";
+import { z } from "zod";
+
+export const theme = createCookie({
+	name: "theme",
+	schema: z.enum(["light", "dark"]),
+	httpOnly: false,
+	secure: true,
+	sameSite: "lax",
+	path: "/",
+});
+
+theme.set("dark"); // a set effect
+theme.clear(); // a clear effect
 ```
 
 ## `createHonoApp`
@@ -453,7 +508,8 @@ type UsersRouteConfig = RouteRootConfigForCtx<{
 `AnyMiddlewareContract`, `MiddlewareRun`,
 `MiddlewareRunArgs`, `MiddlewareNext`, `MiddlewareProvidesSpec`, `MiddlewareProvidesKeys`,
 `MiddlewareProvidedCtx`, `MiddlewareProvides`, `MiddlewareRejectsSpec`,
-`MiddlewareRejectResult`, `MiddlewareOpenApi`, `InferMiddlewareCtx`, and `Register`.
+`MiddlewareRejectResult`, `MiddlewareOpenApi`, `InferMiddlewareCtx`, `CookieConfig`,
+`CookieHandle`, `CookieEffect`, `CookieSameSite`, `AnyCookie`, and `Register`.
 
 From `@routa-ts/core/hono`: `HonoRoute`, `CreateHonoAppOptions`. From
 `@routa-ts/core/logger`: `RoutaLogger`, `RoutaLogLevel`, `RoutaLogLevelWithSilent`,

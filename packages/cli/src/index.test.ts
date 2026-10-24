@@ -2488,6 +2488,86 @@ export default createRouteRoot("/status")({
 		expect(uppercase.stderr).toContain("ROUTA_RESPONSE_HEADER_NAME");
 	});
 
+	it("reports consumer type errors with actionable messages for response cookies", async () => {
+		const cookies = (secure: string) => `import { createCookie } from "@routa-ts/core";
+import { z } from "zod";
+
+export const session = createCookie({
+\tname: "session",
+\tschema: z.string(),
+\thttpOnly: true,
+\tsecure: ${secure},
+\tsameSite: "none",
+\tpath: "/",
+});
+
+export const theme = createCookie({
+\tname: "theme",
+\tschema: z.enum(["light", "dark"]),
+\thttpOnly: false,
+\tsecure: true,
+\tsameSite: "lax",
+\tpath: "/",
+});
+`;
+		const compile = async (name: string, secure: string, responses: string, handler: string) => {
+			const cwd = mkdtempSync(join(tmpdir(), `routa-consumer-${name}-`));
+			createTypeScriptProject(cwd);
+			mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
+			writeFileSync(join(cwd, "src/cookies.ts"), cookies(secure));
+			writeFileSync(
+				join(cwd, "src/routes/status/route.ts"),
+				`import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+import { session, theme } from "../../cookies.js";
+
+export default createRouteRoot("/status")({
+\tget: createRoute({
+\t\tresponses: { ${responses} },
+\t\trun: ${handler},
+\t}),
+});
+`,
+			);
+			return run(["check"], { cwd });
+		};
+
+		const valid = await compile(
+			"cookies-valid",
+			"true",
+			"ok: { status: 200, cookies: [session] }",
+			'() => ({ type: "ok", cookies: [session.set("a")] })',
+		);
+		const wrongHandle = await compile(
+			"cookies-wrong-handle",
+			"true",
+			"ok: { status: 200, cookies: [session] }",
+			'() => ({ type: "ok", cookies: [theme.set("dark")] })',
+		);
+		const undeclared = await compile(
+			"cookies-undeclared",
+			"true",
+			"ok: { status: 200 }",
+			'() => ({ type: "ok", cookies: [session.set("a")] })',
+		);
+		const insecure = await compile(
+			"cookies-insecure",
+			"false",
+			"ok: { status: 200, cookies: [session] }",
+			'() => ({ type: "ok" })',
+		);
+
+		expect(valid.code).toBe(0);
+		expect(wrongHandle.code).not.toBe(0);
+		expect(wrongHandle.stderr).toContain("TypeScript check failed.");
+		expect(undeclared.stdout).toContain(
+			"Outcome ok declares no cookies, so it cannot return cookies.",
+		);
+		// `routa check` reports the declaration rule before TypeScript runs.
+		expect(insecure.code).toBe(1);
+		expect(insecure.stderr).toContain("ROUTA_RESPONSE_COOKIE_RULE");
+	});
+
 	it("reports extra fields in route run results", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-result-shape-"));
 		createTypeScriptProject(cwd);

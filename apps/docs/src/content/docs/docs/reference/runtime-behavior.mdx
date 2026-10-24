@@ -29,10 +29,11 @@ For each matched route, in order:
    framework-owned values such as `logger` applied last so they cannot be replaced.
 6. **Response validation.** The returned result shape and `type` are checked against the
    route's `responses` and every middleware `rejects` map. Its `data` is parsed according
-   to the configured response-validation policy.
+   to the configured response-validation policy. Declared headers and cookie effects are
+   checked the same way.
 7. **Serialization.** The response is written as `application/json; charset=utf-8`, with
-   the outcome's declared headers and, when enabled, lifecycle headers. A bodyless outcome
-   gets no content headers.
+   the outcome's declared headers, its cookies as repeated `Set-Cookie` fields, and, when
+   enabled, lifecycle headers. A bodyless outcome gets no content headers.
 
 ## Status Codes Routa Produces
 
