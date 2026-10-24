@@ -52,13 +52,18 @@ declared responses. By default, it parses `data` against the matching response s
 `routa dev`, so drift produces a generic `500` problem response before malformed data
 reaches a client. Production parsing is opt-in with `responseValidation: "always"`.
 
-Response schemas describe wire-ready JSON, so they validate values and never change them.
-`routa check` reports `ROUTA_RESPONSE_SCHEMA_MUTATION` for response schemas that use
-`.transform()`, `.pipe()` into a different schema, `z.preprocess()`, `.default()`,
-`.catch()`, `z.coerce.*`, codecs such as `z.stringbool()`, or value-rewriting checks such
-as `.trim()`, `.toLowerCase()`, `.toUpperCase()`, `.normalize()`, `.slugify()`, and
-`.overwrite()`, including their `.check(z.trim())` forms. Return the final value from the
-handler instead.
+Write response schemas to describe wire-ready JSON: they should validate a value, not
+change it. `routa check` reports `ROUTA_RESPONSE_SCHEMA_MUTATION` for response schemas that
+use `.transform()`, `z.preprocess()`, `.default()`, `.catch()`, `z.coerce.*`, codecs such
+as `z.stringbool()`, URL normalization with `z.url({ normalize: true })`, or value-rewriting
+checks such as `.trim()`, `.toLowerCase()`, `.toUpperCase()`, `.normalize()`, `.slugify()`,
+and `.overwrite()`. The same applies inside `.pipe()` targets, record keys, and
+`.check()` arguments, including checks declared in the same file such as
+`const tidy = z.trim()`. A `.check()` argument or URL options that Routa cannot read fail
+with `ROUTA_SCHEMA_UNSUPPORTED`. Return the final value from the handler instead.
+
+These are static checks. When Routa validates response data at runtime, it still sends the
+parsed value.
 
 If production response validation is disabled, Routa does not apply unknown-key stripping
 to response data. Middleware `provides` schemas remain active in both modes because their
@@ -75,17 +80,20 @@ else fails `routa check` with `ROUTA_SCHEMA_UNRESOLVED`.
 
 Composition follows Zod's meaning, not a fixed keyword:
 
-| Zod                                   | OpenAPI 3.1                                        |
-| ------------------------------------- | -------------------------------------------------- |
-| `z.union([...])`, `.or()`             | `anyOf`                                            |
-| `z.discriminatedUnion("kind", [...])` | `oneOf` with `discriminator.propertyName: "kind"`  |
-| `z.intersection(a, b)`, `.and()`      | `allOf`, or one object when both sides are objects |
-| `.nullable()`                         | `anyOf` with `{ type: "null" }`                    |
-| `.optional()`, `.nullish()`           | The property leaves `required`                     |
+| Zod                                   | OpenAPI 3.1                                               |
+| ------------------------------------- | --------------------------------------------------------- |
+| `z.union([...])`, `.or()`             | `anyOf`                                                   |
+| `z.discriminatedUnion("kind", [...])` | `oneOf` with `discriminator.propertyName: "kind"`         |
+| `z.intersection(a, b)`, `.and()`      | `allOf`, or one object when both sides are objects        |
+| `z.record(key, value)`                | `additionalProperties`, with key rules in `propertyNames` |
+| `.nullable()`                         | `anyOf` with `{ type: "null" }`                           |
+| `.optional()`, `.nullish()`           | The property leaves `required`                            |
 
 Input schemas describe what a client sends. A property with `.default()` or `.catch()` is
 optional, `z.coerce.number()` is a number, and `.transform()` or `.pipe()` after a readable
-schema documents that readable schema. `z.preprocess()` and a leading `z.transform()` run a
+schema documents that readable schema. `z.stringbool()` is a `boolean` parameter, following
+the OpenAPI convention for `"true"` and `"false"` strings, and a `string` property in a JSON
+body. `z.preprocess()` and a leading `z.transform()` run a
 function before any schema Routa can read, so `routa check` prints a
 `ROUTA_SCHEMA_OPAQUE_INPUT` warning and OpenAPI documents the schema that follows. The
 route still runs.
