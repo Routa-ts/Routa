@@ -108,8 +108,8 @@ policy in your application.
 
 ## Response Serialization
 
-Handlers and middleware rejects return `{ type, data, headers }`, or just `{ type }` for an
-outcome without a `schema` or headers. Routa always looks up the type and status from the matching response
+Handlers and middleware rejects return `{ type, data }`, or just `{ type }` for an outcome
+without a `schema`. A route outcome that declares `headers` also returns them. Routa always looks up the type and status from the matching response
 definition. It requires `data` for an outcome with a `schema` and rejects `data` on one
 without, so an outcome without a schema sends an empty body whatever its status. With the
 default `responseValidation: "development"`, Routa parses `data` through the response schema

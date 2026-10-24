@@ -335,6 +335,21 @@ describe("response header declaration checks", () => {
 		]);
 	});
 
+	it("reports a headers declaration Routa cannot read instead of dropping it", () => {
+		const cwd = project({
+			"src/routes/items/route.ts": route(
+				"/items",
+				"ok: { status: 200, headers: z.object({ etag: z.string() }).extend({ x: z.string() }) }",
+			),
+		});
+		const unresolved = project({
+			"src/routes/items/route.ts": route("/items", "ok: { status: 200, headers: Imported }"),
+		});
+
+		expect(codes(cwd).map(([code]) => code)).toEqual(["ROUTA_SCHEMA_UNSUPPORTED"]);
+		expect(codes(unresolved).map(([code]) => code)).toEqual(["ROUTA_SCHEMA_UNRESOLVED"]);
+	});
+
 	it("rejects a headers declaration that is not an object schema", () => {
 		const cwd = project({
 			"src/routes/items/route.ts": route("/items", "ok: { status: 200, headers: z.string() }"),
