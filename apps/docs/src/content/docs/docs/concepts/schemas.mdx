@@ -49,7 +49,7 @@ Routa parses each declared input source with `schema.parse()` before the handler
 
 On the way out, Routa always checks the result shape, looks up its `type` in the declared
 responses, and checks that `data` is present for an outcome with a `schema` and absent for
-one without. By default, it parses `data` against the matching response schema in
+one without. Declared response headers get the same treatment as `data`. By default, it parses `data` against the matching response schema in
 `routa dev` and compares the parsed value with the value your handler returned. Invalid data,
 or any change the schema would make, produces a generic `500` problem response before it
 reaches a client. Production parsing and comparison are opt-in with
@@ -110,6 +110,56 @@ body. `z.preprocess()` and a leading `z.transform()` run a
 function before any schema Routa can read, so `routa check` prints a
 `ROUTA_SCHEMA_OPAQUE_INPUT` warning and OpenAPI documents the schema that follows. The
 route still runs.
+
+## Response Headers
+
+An outcome can declare the headers it sends. `headers` is a Zod object keyed by lowercase
+header names, and its values are strings, numbers, or booleans (or literals and enums of
+them). A required header becomes a required property of the handler result's `headers`, an
+optional one becomes optional, and an outcome that declares none forbids `headers`.
+
+```ts title="src/routes/users/route.ts"
+import { createRoute } from "@routa-ts/core";
+import { z } from "zod";
+
+createRoute({
+	responses: {
+		created: {
+			status: 201,
+			schema: z.object({ id: z.string() }),
+			headers: z.object({
+				location: z.string().describe("Where the new user lives"),
+				"x-request-cost": z.number().optional(),
+			}),
+		},
+		accepted: {
+			status: 202,
+			headers: z.object({ "retry-after": z.number() }),
+		},
+	},
+	run: ({ response }) => response.created({ id: "1" }, { location: "/users/1" }),
+});
+```
+
+A body outcome's builder takes its data and then its headers, and a bodyless outcome's
+builder takes only its headers. A handler can also return `{ type, data, headers }`
+directly. Routa serializes a string as is, a finite number with `String()`, and a boolean as
+`true` or `false`, so one value always produces one header string.
+
+Header identity is case-insensitive and has one owner. Routa owns `content-type`,
+`content-length`, `transfer-encoding`, `connection`, and `set-cookie`, and it never gives a
+bodyless outcome a content header. When `lifecycleHeaders` is on, Routa also owns
+`deprecation`, `sunset`, and the successor `link` on routes that declare `deprecation`.
+A declaration that claims one of those names fails, and so does a result that writes an
+undeclared header, writes the same header in two cases, or omits a required one. Nothing
+merges or overwrites. Header schemas follow the response-schema rules above: they describe
+wire-ready values and must not change them.
+
+Routa checks declared names, required headers, and safe field values (no line breaks, no
+control characters, no surrounding whitespace) in every mode. It parses header values with
+their Zod schemas and compares the result with the value you returned under the same
+`responseValidation` policy as the body. Routa has no multi-value header support, and
+`Set-Cookie` is not a header you can declare.
 
 ## Documentation Metadata
 

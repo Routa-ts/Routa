@@ -64,10 +64,10 @@ declared outcomes.
 | Field         | Type                                                                       | Required |
 | ------------- | -------------------------------------------------------------------------- | -------- |
 | `input`       | `{ params?, query?, headers?, cookies?, body? }` of Zod schemas            | No       |
-| `responses`   | `Record<string, { status; description?; schema? }>`                        | Yes      |
+| `responses`   | `Record<string, { status; description?; schema?; headers? }>`              | Yes      |
 | `middleware`  | `readonly MiddlewareContract[]`                                            | No       |
 | `deprecation` | `{ sunset?: string; replacement?: string }`                                | No       |
-| `run`         | `({ input, ctx, response }) => { type, data }` or a promise of that result | Yes      |
+| `run`         | `({ input, ctx, response }) => { type, data, headers }` or a promise of it | Yes      |
 
 `deprecation.replacement` accepts a registered route path beginning with `/` or an
 absolute `http:`/`https:` URL. Local paths are checked against the generated route
@@ -78,9 +78,16 @@ intentionally bodyless: it returns only `type` and sends an empty body. `descrip
 optional text for the OpenAPI response; without it, Routa uses the outcome name, so
 `notFound` becomes "Not found".
 
+An outcome's `headers` is a Zod object keyed by lowercase header names, with string,
+number, or boolean values. The result's `headers` field is required when any declared header
+is required, optional when all are, and forbidden when the outcome declares none. Routa owns
+`content-type`, `content-length`, `transfer-encoding`, `connection`, and `set-cookie`, and
+with `lifecycleHeaders` on it owns `deprecation`, `sunset`, and the successor `link`. See
+[Schemas](/docs/concepts/schemas/#response-headers).
+
 **Errors:** returning an undeclared `type` is a compile error and, at runtime, an
-`Invalid handler output` problem response. Result objects may contain only `type` and
-`data`. `data` is required for an outcome with a `schema` and forbidden for one without.
+`Invalid handler output` problem response. Result objects may contain only `type`, `data`,
+and `headers`. `data` is required for an outcome with a `schema` and forbidden for one without.
 TypeScript also rejects a `schema` on a `204`, `205`, or `304` outcome and on any `HEAD`
 outcome, an informational `1xx` status, a `304` outside `GET` and `HEAD`, and response
 schemas that change values. A hand-built contract that breaks the status and method rules
@@ -103,17 +110,20 @@ export const getStatus = createRoute({
 ## `ResponseBuilders`
 
 ```ts
-import type { RouteResponses, SchemaOutput } from "@routa-ts/core";
+import type { OutcomeResult, RouteResponses, SchemaOutput } from "@routa-ts/core";
 import type { z } from "zod";
 
 type ResponseBuilders<TResponses extends RouteResponses> = {
 	readonly [K in keyof TResponses & string]: TResponses[K] extends {
 		readonly schema: infer TSchema extends z.ZodTypeAny;
 	}
-		? (data: SchemaOutput<TSchema>) => { readonly type: K; readonly data: SchemaOutput<TSchema> }
-		: () => { readonly type: K };
+		? (data: SchemaOutput<TSchema>, ...headers: HeaderArgs<TResponses[K]>) => OutcomeResult<K, TResponses[K]>
+		: (...headers: HeaderArgs<TResponses[K]>) => OutcomeResult<K, TResponses[K]>;
 };
 ```
+
+`HeaderArgs` is a trailing `headers` argument when the outcome declares headers, required
+when any declared header is required, and no argument otherwise.
 
 Handlers receive `response: ResponseBuilders<TResponses>`. Each method uses the name
 and schema of one outcome in the route's own `responses` declaration. There are no
@@ -123,9 +133,9 @@ built-in outcome names, and middleware rejects do not add builder methods.
 | --------- | ------------------------------------- | ------------------------ |
 | `data`    | Selected outcome schema's output type | Body data for the result |
 
-An outcome without a `schema` has a builder with no parameter, such as
-`response.noContent()`. A builder returns `{ type, data }`, or `{ type }` for an outcome
-without a schema, without sending a response. Return that result from
+An outcome without a `schema` has a builder with no data parameter, such as
+`response.noContent()`. A builder returns `{ type, data, headers }`, or `{ type, headers }`
+for an outcome without a schema (`headers` appears only when you pass it), without sending a response. Return that result from
 `run` to select the outcome. Routa applies the declared status, configured response
 validation, and JSON serialization. Existing object returns remain supported.
 

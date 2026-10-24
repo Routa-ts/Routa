@@ -112,10 +112,49 @@ middleware `rejects` map for that method. The message lists the valid names.
 
 ### `ROUTA_RESULT_SHAPE`
 
-A returned result object contains a field other than `type` and `data`.
+A returned result object contains a field other than `type`, `data`, and `headers`.
 
-**Fix:** remove the extra field. Results are limited to those two so every response can be
-described in OpenAPI. Move anything else into `data`.
+**Fix:** remove the extra field. Results are limited to those three so every response can be
+described in OpenAPI. Move anything else into `data`, or declare it as a response header.
+
+### `ROUTA_RESPONSE_HEADER_NAME`
+
+An outcome's `headers` declares a name that is not a valid HTTP header name, or one that is
+not lowercase, such as `ETag`.
+
+**Fix:** declare the name in lowercase (`etag`), using only letters, digits, and the
+characters allowed in a header name.
+
+### `ROUTA_RESPONSE_HEADER_COLLISION`
+
+An outcome's `headers` declares two names that differ only in case, such as `etag` and
+`ETag`. Header identity is case-insensitive and has one owner.
+
+**Fix:** declare the header once, in lowercase.
+
+### `ROUTA_RESPONSE_HEADER_RESERVED`
+
+An outcome's `headers` declares a header Routa owns: `content-type`, `content-length`,
+`transfer-encoding`, `connection`, or `set-cookie`.
+
+**Fix:** remove it. Routa sets content headers from the body and the transport. Declare
+response cookies as cookies, never as a `set-cookie` header.
+
+### `ROUTA_RESPONSE_HEADER_LIFECYCLE`
+
+An outcome's `headers` declares `deprecation`, `sunset`, or `link` on a route whose
+lifecycle headers Routa writes, which requires `lifecycleHeaders: true` in `createRouta()`.
+`link` is owned only when the deprecation names a `replacement`.
+
+**Fix:** remove the header, or turn `lifecycleHeaders` off.
+
+### `ROUTA_RESPONSE_HEADER_VALUE`
+
+An outcome's `headers` declares a value that is not a string, number, or boolean (or a
+literal or enum of them), such as an array or an object. Routa has no multi-value header
+support.
+
+**Fix:** declare a string, number, or boolean schema.
 
 ### `ROUTA_DUPLICATE_SCHEMA_NAME`
 
