@@ -364,7 +364,9 @@ type MiddlewareRejectNames<TMiddleware> = TMiddleware extends readonly (infer TI
  */
 type OutcomeNameChecks<TResponses, TMiddleware> = {
 	readonly [K in keyof TResponses & MiddlewareRejectNames<TMiddleware> & string]: {
-		readonly [M in `Outcome "${K}" is also a reject of this route's middleware. Give each outcome its own name.`]: never;
+		readonly [
+			M in `Outcome "${K}" is also a reject of this route's middleware. Give each outcome its own name.`
+		]: never;
 	};
 };
 

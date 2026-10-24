@@ -276,12 +276,32 @@ describe("response validation policy across route outcomes and middleware reject
 			result: { data: { message: " No ", code: "denied" } },
 			zodOnly: true,
 		},
-		{ name: "a header the schema would change", result: { ...valid, headers: { "x-reason": "LOUD" } }, zodOnly: true },
-		{ name: "a cookie the schema would change", result: { ...valid, cookies: [flag.set(" x ")] }, zodOnly: true },
-		{ name: "an undeclared header", result: { ...valid, headers: { "x-other": "1" } }, zodOnly: false },
-		{ name: "an unsafe header value", result: { ...valid, headers: { "x-reason": "a\nb" } }, zodOnly: false },
+		{
+			name: "a header the schema would change",
+			result: { ...valid, headers: { "x-reason": "LOUD" } },
+			zodOnly: true,
+		},
+		{
+			name: "a cookie the schema would change",
+			result: { ...valid, cookies: [flag.set(" x ")] },
+			zodOnly: true,
+		},
+		{
+			name: "an undeclared header",
+			result: { ...valid, headers: { "x-other": "1" } },
+			zodOnly: false,
+		},
+		{
+			name: "an unsafe header value",
+			result: { ...valid, headers: { "x-reason": "a\nb" } },
+			zodOnly: false,
+		},
 		{ name: "a missing body", result: {}, zodOnly: false },
-		{ name: "an undeclared cookie", result: { ...valid, cookies: [session.set("s")] }, zodOnly: false },
+		{
+			name: "an undeclared cookie",
+			result: { ...valid, cookies: [session.set("s")] },
+			zodOnly: false,
+		},
 	];
 	const producers = {
 		"route outcome": (result: Record<string, unknown>): HonoRoute => ({
@@ -323,9 +343,10 @@ describe("response validation policy across route outcomes and middleware reject
 						expect(response.headers.get("x-reason"), name).toBe(
 							(result.headers as Record<string, string> | undefined)?.["x-reason"] ?? null,
 						);
-						expect(response.headers.getSetCookie().map((field) => field.split(";")[0]), name).toEqual(
-							result.cookies ? ["flag=%20x%20"] : [],
-						);
+						expect(
+							response.headers.getSetCookie().map((field) => field.split(";")[0]),
+							name,
+						).toEqual(result.cookies ? ["flag=%20x%20"] : []);
 					}
 				}
 			});
