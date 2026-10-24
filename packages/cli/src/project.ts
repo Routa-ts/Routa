@@ -1467,7 +1467,7 @@ function runReturnObjectDiagnostics(
 		for (const property of objectProperties(object)) {
 			const name = propertyName(property.name);
 
-			if (!name || name === "type" || name === "data") {
+			if (!name || name === "type" || name === "data" || name === "headers") {
 				continue;
 			}
 
@@ -1475,7 +1475,7 @@ function runReturnObjectDiagnostics(
 			diagnostics.push({
 				code: "ROUTA_RESULT_SHAPE",
 				severity: "error",
-				message: `Run result includes unsupported field "${name}". Route and middleware results may only include "type" and "data".`,
+				message: `Run result includes unsupported field "${name}". Route and middleware results may only include "type", "data", and "headers".`,
 				file: `${file}:${position.line + 1}:${position.character + 1}`,
 				suggestion: `Remove "${name}" from the returned result object.`,
 			});

@@ -131,6 +131,46 @@ export const ItemHeaders = z.object({ etag: Etag, "retry-after": z.number().opti
 	});
 });
 
+describe("response header results in routa check", () => {
+	it("accepts a returned headers field next to type and data", () => {
+		const cwd = project({
+			"src/routes/items/route.ts": `import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/items")({
+\tget: createRoute({
+\t\tresponses: {
+\t\t\tok: { status: 200, schema: z.object({ id: z.string() }), headers: z.object({ etag: z.string() }) },
+\t\t},
+\t\trun: () => ({ type: "ok", data: { id: "1" }, headers: { etag: "a" } }),
+\t}),
+});
+`,
+		});
+
+		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
+	});
+
+	it("still rejects other extra fields", () => {
+		const cwd = project({
+			"src/routes/items/route.ts": `import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/items")({
+\tget: createRoute({
+\t\tresponses: { ok: { status: 200, schema: z.object({ id: z.string() }) } },
+\t\trun: () => ({ type: "ok", data: { id: "1" }, cookies: {} }),
+\t}),
+});
+`,
+		});
+
+		const [diagnostic] = validateProject(cwd, { write: false }).diagnostics;
+		expect(diagnostic.code).toBe("ROUTA_RESULT_SHAPE");
+		expect(diagnostic.message).toContain('"type", "data", and "headers"');
+	});
+});
+
 describe("response header declaration checks", () => {
 	const codes = (cwd: string) =>
 		validateProject(cwd, { write: false }).diagnostics.map((item) => [item.code, item.message]);

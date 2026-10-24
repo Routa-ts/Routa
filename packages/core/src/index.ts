@@ -61,7 +61,7 @@ type ForbiddenData<TName extends string> = {
 };
 
 /** The type of `headers` on an outcome that declares none; see {@link ForbiddenData}. */
-type ForbiddenHeaders<TName extends string> = {
+type HeadersNotDeclared<TName extends string> = {
 	readonly [K in `Outcome ${TName} declares no headers, so it cannot return headers.`]: never;
 };
 
@@ -72,7 +72,7 @@ type OutcomeHeaders<TName extends string, TOutcome> = TOutcome extends {
 	? {} extends SchemaOutput<THeaders>
 		? { readonly headers?: SchemaOutput<THeaders> }
 		: { readonly headers: SchemaOutput<THeaders> }
-	: { readonly headers?: ForbiddenHeaders<TName> };
+	: { readonly headers?: HeadersNotDeclared<TName> };
 
 /**
  * The handler result for one outcome: body outcomes require `data`, schema-less outcomes forbid it.
