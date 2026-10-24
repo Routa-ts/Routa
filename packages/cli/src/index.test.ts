@@ -2378,6 +2378,61 @@ export default createRouteRoot("/status")({
 		expect(result.stderr).toContain("undeclaredVariant");
 	});
 
+	it("reports consumer type errors with actionable messages for outcome shapes", async () => {
+		const compile = async (name: string, config: string) => {
+			const cwd = mkdtempSync(join(tmpdir(), `routa-consumer-${name}-`));
+			createTypeScriptProject(cwd);
+			mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
+			writeFileSync(
+				join(cwd, "src/routes/status/route.ts"),
+				`import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/status")({
+${config}
+});
+`,
+			);
+			return run(["check"], { cwd });
+		};
+
+		const data = await compile(
+			"data-on-schema-less",
+			`\tget: createRoute({
+\t\tresponses: {
+\t\t\tok: { status: 200, schema: z.object({ ok: z.boolean() }) },
+\t\t\tgone: { status: 410 },
+\t\t},
+\t\trun: () => ({ type: "gone", data: { ok: false } }),
+\t}),`,
+		);
+		const dynamic = await compile(
+			"dynamic-type",
+			`\tget: createRoute({
+\t\tresponses: { ok: { status: 200, schema: z.object({ ok: z.boolean() }) } },
+\t\trun: () => {
+\t\t\tconst type: string = "ok";
+\t\t\treturn { type, data: { ok: true } };
+\t\t},
+\t}),`,
+		);
+		const missing = await compile(
+			"missing-data",
+			`\tget: createRoute({
+\t\tresponses: { ok: { status: 200, schema: z.object({ ok: z.boolean() }) } },
+\t\trun: ({ response }) => response.ok(),
+\t}),`,
+		);
+
+		for (const result of [data, dynamic, missing]) {
+			expect(result.code).not.toBe(0);
+			expect(result.stderr).toContain("TypeScript check failed.");
+		}
+		expect(data.stdout).toContain("Outcome gone declares no schema, so it cannot return data.");
+		expect(dynamic.stdout).toContain("Type 'string' is not assignable to type '\"ok\"'.");
+		expect(missing.stdout).toContain("Expected 1 arguments, but got 0.");
+	});
+
 	it("reports extra fields in route run results", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-result-shape-"));
 		createTypeScriptProject(cwd);

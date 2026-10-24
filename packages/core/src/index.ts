@@ -55,7 +55,7 @@ export type OutcomeResult<TName extends string, TOutcome> = TOutcome extends {
 	? { readonly type: TName; readonly data: SchemaOutput<TSchema> }
 	: {
 			readonly type: TName;
-			readonly data?: `Outcome "${TName}" declares no schema, so it cannot return data.`;
+			readonly data?: `Outcome ${TName} declares no schema, so it cannot return data.`;
 		};
 
 type AnyTrue<T> = true extends T ? true : false;
