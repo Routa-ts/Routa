@@ -177,10 +177,47 @@ function describeIdentity(cookie: Pick<CookieConfig, "name" | "domain" | "path">
 	return `"${cookie.name}" (${cookie.domain ? `Domain=${cookie.domain}; ` : ""}Path=${cookie.path})`;
 }
 
+/** One entry of an outcome's `cookies` declaration, read as a handle and its requiredness. */
+type DeclaredCookie = { cookie: AnyCookie; required: boolean };
+
+/**
+ * Reads a declaration entry: a bare handle (optional) or `{ handle, required: true }`. Returns
+ * `undefined` for a wrapper of any other shape, and `null` when the handle was not made by
+ * `createCookie`.
+ */
+function readDeclaredCookie(entry: unknown): DeclaredCookie | null | undefined {
+	if (isCookieHandle(entry)) {
+		return { cookie: entry, required: false };
+	}
+
+	if (typeof entry !== "object" || entry === null || !Object.hasOwn(entry, "handle")) {
+		return null;
+	}
+
+	const { handle, required, ...rest } = entry as Record<string, unknown>;
+
+	if (required !== true || Object.keys(rest).length > 0) {
+		return undefined;
+	}
+
+	return isCookieHandle(handle) ? { cookie: handle, required: true } : null;
+}
+
+/** The handles an already-validated declaration lists, with their requiredness. */
+function declaredCookies(cookies: unknown): DeclaredCookie[] {
+	return Array.isArray(cookies)
+		? cookies.flatMap((entry) => {
+				const declared = readDeclaredCookie(entry);
+				return declared ? [declared] : [];
+			})
+		: [];
+}
+
 /**
  * Describes why an outcome's `cookies` declaration is invalid, or returns `undefined`.
  *
- * Every entry must be a handle from `createCookie`, and no two may share an identity.
+ * Every entry must be a handle from `createCookie`, bare or as `{ handle, required: true }`, and no
+ * two may share an identity.
  */
 export function cookieDeclarationProblem(cookies: unknown): string | undefined {
 	if (!Array.isArray(cookies)) {
@@ -189,15 +226,21 @@ export function cookieDeclarationProblem(cookies: unknown): string | undefined {
 
 	const seen = new Set<string>();
 
-	for (const cookie of cookies) {
-		if (!isCookieHandle(cookie)) {
+	for (const entry of cookies) {
+		const declared = readDeclaredCookie(entry);
+
+		if (declared === undefined) {
+			return "declares a cookie entry that is neither a createCookie() handle nor { handle, required: true }.";
+		}
+
+		if (declared === null) {
 			return "declares a cookie that was not created with createCookie().";
 		}
 
-		const identity = cookieIdentity(cookie);
+		const identity = cookieIdentity(declared.cookie);
 
 		if (seen.has(identity)) {
-			return `declares cookie ${describeIdentity(cookie)} more than once. A cookie identity has one owner.`;
+			return `declares cookie ${describeIdentity(declared.cookie)} more than once. A cookie identity has one owner.`;
 		}
 
 		seen.add(identity);
@@ -211,11 +254,9 @@ export function cookieDeclarationProblem(cookies: unknown): string | undefined {
  * them apart, but a reader or client is easy to confuse.
  */
 export function cookieScopeWarnings(cookies: unknown): string[] {
-	if (!Array.isArray(cookies)) return [];
-
 	const byName = new Map<string, string[]>();
 
-	for (const cookie of cookies.filter(isCookieHandle)) {
+	for (const { cookie } of declaredCookies(cookies)) {
 		byName.set(cookie.name, [...(byName.get(cookie.name) ?? []), describeIdentity(cookie)]);
 	}
 
@@ -233,8 +274,8 @@ export type ResolvedCookieEffect = CookieEffect<AnyCookie>;
 /**
  * Resolves the cookie effects a handler result writes for one outcome.
  *
- * Runs in every response validation mode: only declared handles, each at most once, no raw
- * strings. Values are not read here.
+ * Runs in every response validation mode: only declared handles, each at most once, an effect for
+ * every required handle, no raw strings. Values are not read here.
  *
  * @throws {InvalidHandlerOutputError} When the result breaks the outcome's cookie declaration
  */
@@ -243,11 +284,11 @@ export function resolveCookieEffects(
 	outcome: { cookies?: unknown },
 	written: unknown,
 ): ResolvedCookieEffect[] {
-	if (written === undefined) {
+	const declared = Array.isArray(outcome.cookies) ? declaredCookies(outcome.cookies) : undefined;
+
+	if (written === undefined && !declared?.some((item) => item.required)) {
 		return [];
 	}
-
-	const declared = Array.isArray(outcome.cookies) ? (outcome.cookies as unknown[]) : undefined;
 
 	if (!declared) {
 		throw new InvalidHandlerOutputError(
@@ -255,7 +296,7 @@ export function resolveCookieEffects(
 		);
 	}
 
-	if (!Array.isArray(written)) {
+	if (written !== undefined && !Array.isArray(written)) {
 		throw new InvalidHandlerOutputError(
 			`Response type "${type}" returned cookies that are not an array of cookie effects.`,
 		);
@@ -264,7 +305,7 @@ export function resolveCookieEffects(
 	const seen = new Set<string>();
 	const effects: ResolvedCookieEffect[] = [];
 
-	for (const effect of written as unknown[]) {
+	for (const effect of (written ?? []) as unknown[]) {
 		const candidate = effect as Partial<ResolvedCookieEffect> | null;
 
 		if (
@@ -280,7 +321,7 @@ export function resolveCookieEffects(
 
 		const cookie = candidate.cookie;
 
-		if (!declared.includes(cookie)) {
+		if (!declared.some((item) => item.cookie === cookie)) {
 			throw new InvalidHandlerOutputError(
 				`Response type "${type}" emits an effect for cookie ${describeIdentity(cookie)}, which it does not declare.`,
 			);
@@ -296,6 +337,14 @@ export function resolveCookieEffects(
 
 		seen.add(identity);
 		effects.push(candidate as ResolvedCookieEffect);
+	}
+
+	for (const { cookie, required } of declared) {
+		if (required && !seen.has(cookieIdentity(cookie))) {
+			throw new InvalidHandlerOutputError(
+				`Response type "${type}" requires cookie ${describeIdentity(cookie)}, but returned no effect for it. Set or clear it.`,
+			);
+		}
 	}
 
 	return effects;

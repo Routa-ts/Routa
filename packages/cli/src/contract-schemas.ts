@@ -44,8 +44,11 @@ export type ProjectedResponse = {
 	description: string;
 	schema?: JsonSchema;
 	headers?: Record<string, ProjectedHeader>;
-	cookies?: ProjectedCookie[];
+	cookies?: ProjectedResponseCookie[];
 };
+
+/** A cookie as one outcome declares it: required when listed as `{ handle, required: true }`. */
+export type ProjectedResponseCookie = ProjectedCookie & { required: boolean };
 
 /**
  * One declared response cookie: the static facts of its `createCookie` handle. No value is ever
@@ -792,7 +795,7 @@ class SchemaProjector {
 	private responseCookies(
 		expression: ts.Expression,
 		context: Context,
-	): ProjectedCookie[] | undefined {
+	): ProjectedResponseCookie[] | undefined {
 		const list = unwrapExpression(expression);
 
 		if (!ts.isArrayLiteralExpression(list)) {
@@ -804,38 +807,35 @@ class SchemaProjector {
 			return undefined;
 		}
 
-		const cookies: ProjectedCookie[] = [];
+		const cookies: ProjectedResponseCookie[] = [];
 		const identities = new Map<string, ProjectedCookie>();
 
 		for (const element of list.elements) {
-			const handle = ts.isIdentifier(unwrapExpression(element))
-				? this.cookieHandle((unwrapExpression(element) as ts.Identifier).text, context.source)
-				: undefined;
+			const entry = this.cookieEntry(element, context.source);
 
-			if (handle === undefined) {
-				this.unresolvedCookie(element, context.source, "cookies must be createCookie handles");
+			if (entry === undefined) {
 				continue;
 			}
 
 			// A declaration Routa found but could not accept was reported where it is declared.
-			if (handle === null) {
+			if (entry.handle === null) {
 				continue;
 			}
 
-			const identity = cookieIdentity(handle);
+			const identity = cookieIdentity(entry.handle);
 
 			if (identities.has(identity)) {
 				this.report(context.source, list, {
 					code: "ROUTA_RESPONSE_COOKIE_CONFLICT",
-					message: `Outcome declares cookie ${describeCookie(handle)} more than once`,
+					message: `Outcome declares cookie ${describeCookie(entry.handle)} more than once`,
 					suggestion:
 						"A cookie identity (name, domain, and path) has one owner. Declare it once per outcome.",
 				});
 				continue;
 			}
 
-			identities.set(identity, handle);
-			cookies.push(handle);
+			identities.set(identity, entry.handle);
+			cookies.push({ ...entry.handle, required: entry.required });
 		}
 
 		const byName = new Map<string, ProjectedCookie[]>();
@@ -857,6 +857,84 @@ class SchemaProjector {
 		}
 
 		return cookies;
+	}
+
+	/**
+	 * Reads one `cookies` entry: a handle identifier (optional) or `{ handle, required: true }`.
+	 * Reports an entry Routa cannot read and returns `undefined`; `handle: null` means the
+	 * declaration was found and reported as invalid.
+	 */
+	private cookieEntry(
+		element: ts.Expression,
+		source: SchemaSource,
+	): { handle: ProjectedCookie | null; required: boolean } | undefined {
+		const entry = unwrapExpression(element);
+
+		if (ts.isIdentifier(entry)) {
+			const handle = this.cookieHandle(entry.text, source);
+
+			if (handle === undefined) {
+				this.unresolvedCookie(element, source, "cookies must be createCookie handles");
+				return undefined;
+			}
+
+			return { handle, required: false };
+		}
+
+		if (!ts.isObjectLiteralExpression(entry)) {
+			this.unresolvedCookie(element, source, "cookies must be createCookie handles");
+			return undefined;
+		}
+
+		const unreadable = entry.properties.find(isUnreadableProperty);
+
+		if (unreadable) {
+			this.report(source, unreadable, {
+				code: "ROUTA_RESPONSE_COOKIE_STATIC",
+				message: "A required cookie entry must be a literal { handle, required: true }",
+				suggestion: cookieEntryReminder,
+			});
+			return undefined;
+		}
+
+		const required = propertyValue(entry, "required");
+		const handleNode = propertyValue(entry, "handle");
+		const handleName =
+			handleNode && ts.isIdentifier(unwrapExpression(handleNode))
+				? (unwrapExpression(handleNode) as ts.Identifier).text
+				: undefined;
+
+		if (required && !isLiteralToken(required)) {
+			this.report(source, required, {
+				code: "ROUTA_RESPONSE_COOKIE_STATIC",
+				message: "A required cookie entry must write required as the literal true",
+				suggestion: cookieEntryReminder,
+			});
+			return undefined;
+		}
+
+		if (
+			entry.properties.length !== 2
+			|| !handleName
+			|| !required
+			|| unwrapExpression(required).kind !== ts.SyntaxKind.TrueKeyword
+		) {
+			this.unresolvedCookie(
+				element,
+				source,
+				"a cookie entry must be a createCookie handle or { handle, required: true }",
+			);
+			return undefined;
+		}
+
+		const handle = this.cookieHandle(handleName, source);
+
+		if (handle === undefined) {
+			this.unresolvedCookie(element, source, "cookies must be createCookie handles");
+			return undefined;
+		}
+
+		return { handle, required: true };
 	}
 
 	private unresolvedCookie(node: ts.Node, source: SchemaSource, what: string): void {
@@ -2236,6 +2314,9 @@ function isIsoDateTime(value: string): boolean {
 		&& offsetMinute < 60
 	);
 }
+
+const cookieEntryReminder =
+	"Write cookies: [{ handle: session, required: true }] for a cookie the outcome must always set or clear, and list a bare handle for an optional one.";
 
 const cookieRuleReminder =
 	'SameSite=None and Partitioned need secure: true. A __Secure- name needs secure: true. A __Host- name needs secure: true, path: "/", and no domain.';

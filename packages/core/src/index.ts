@@ -68,19 +68,29 @@ export type AnyCookie = Readonly<CookieConfig> & {
 };
 
 /**
+ * A cookie an outcome must always set or clear. List a bare handle in `cookies` to make it
+ * optional, and `{ handle, required: true }` to require an effect for it. Write the entry as a
+ * literal, because `routa check` reads it from source.
+ */
+export type RequiredCookie<THandle extends AnyCookie = AnyCookie> = {
+	readonly handle: THandle;
+	readonly required: true;
+};
+
+/**
  * A named outcome: its HTTP status, an optional description, an optional JSON body schema,
  * optional response headers, and optional cookie handles.
  *
  * An outcome without `schema` is intentionally bodyless. `headers` is a Zod object keyed by
  * lowercase header names whose values are strings, numbers, or booleans. `cookies` lists the
- * handles the outcome may set or clear.
+ * handles the outcome may set or clear, each bare (optional) or as a {@link RequiredCookie}.
  */
 export type RouteOutcome = {
 	status: number;
 	description?: string;
 	schema?: z.ZodTypeAny;
 	headers?: z.ZodObject<any, any>;
-	cookies?: readonly AnyCookie[];
+	cookies?: readonly (AnyCookie | RequiredCookie)[];
 };
 
 export type RouteResponses = Record<string, RouteOutcome>;
@@ -115,11 +125,45 @@ type CookiesNotDeclared<TName extends string> = {
 	readonly [K in `Outcome ${TName} declares no cookies, so it cannot return cookies.`]: never;
 };
 
-/** The `cookies` result field: optional effects for the declared handles, forbidden when none are declared. */
-type OutcomeCookies<TName extends string, TOutcome> = TOutcome extends {
-	readonly cookies: infer THandles extends readonly unknown[];
+/** The handle behind a `cookies` entry, whether it is bare or required. */
+type DeclaredCookieHandle<TEntry> = TEntry extends { readonly handle: infer THandle }
+	? THandle
+	: TEntry;
+
+/** The handles a `cookies` declaration marks required. */
+type RequiredCookieHandle<TEntry> = TEntry extends {
+	readonly handle: infer THandle;
+	readonly required: true;
 }
-	? { readonly cookies?: readonly CookieEffect<THandles[number]>[] }
+	? THandle
+	: never;
+
+/** One effect type per handle, so a union of handles needs an effect for each of them. */
+type EffectOf<THandle> = THandle extends unknown ? CookieEffect<THandle> : never;
+
+/**
+ * Requires the effects array to hold an effect for every required handle. `includes` is a
+ * function-typed property, so its parameter is checked contravariantly: the array's element type
+ * must accept an effect for each required handle. An empty array or a missing handle fails.
+ */
+type IncludesEffects<TRequired> = {
+	readonly includes: (effect: EffectOf<TRequired>, fromIndex?: number) => boolean;
+};
+
+/**
+ * The `cookies` result field: effects for the declared handles. It is required, with an effect for
+ * each required handle, when any declared handle is required; optional otherwise; and forbidden when
+ * none are declared.
+ */
+type OutcomeCookies<TName extends string, TOutcome> = TOutcome extends {
+	readonly cookies: infer TEntries extends readonly unknown[];
+}
+	? [RequiredCookieHandle<TEntries[number]>] extends [never]
+		? { readonly cookies?: readonly EffectOf<DeclaredCookieHandle<TEntries[number]>>[] }
+		: {
+				readonly cookies: readonly EffectOf<DeclaredCookieHandle<TEntries[number]>>[]
+					& IncludesEffects<RequiredCookieHandle<TEntries[number]>>;
+			}
 	: { readonly cookies?: CookiesNotDeclared<TName> };
 
 /** The `headers` result field: required when any declared header is required, forbidden when none are declared. */
@@ -136,8 +180,8 @@ type OutcomeHeaders<TName extends string, TOutcome> = TOutcome extends {
  * An explicit `data: undefined` is accepted and means no data, because TypeScript cannot tell it
  * from an omitted property unless `exactOptionalPropertyTypes` is on. `headers` follows the same
  * rule: required or optional from the declared headers, and forbidden when none are declared.
- * `cookies` lists effects for the declared handles; every declared cookie may be left out, and the
- * field is forbidden when none are declared.
+ * `cookies` lists effects for the declared handles. A bare handle may be left out, a required one
+ * (`{ handle, required: true }`) needs an effect, and the field is forbidden when none are declared.
  */
 export type OutcomeResult<TName extends string, TOutcome> = (TOutcome extends {
 	readonly schema: infer TSchema extends z.ZodTypeAny;
@@ -318,12 +362,26 @@ type BuilderHeaderArgs<TOutcome> = TOutcome extends {
 		: [headers: SchemaOutput<THeaders>]
 	: [];
 
+/** The outcome names that declare a required cookie, which builders cannot supply. */
+type OutcomesWithRequiredCookies<TResponses extends RouteResponses> = {
+	[K in keyof TResponses & string]: TResponses[K] extends {
+		readonly cookies: infer TEntries extends readonly unknown[];
+	}
+		? [RequiredCookieHandle<TEntries[number]>] extends [never]
+			? never
+			: K
+		: never;
+}[keyof TResponses & string];
+
 /**
  * Pure result builders keyed by the route's declared outcome names. A body outcome takes its data,
- * then its headers when it declares any; a bodyless outcome takes only its headers.
+ * then its headers when it declares any; a bodyless outcome takes only its headers. An outcome with
+ * a required cookie has no builder: return the result object so the cookie effect can be set.
  */
 export type ResponseBuilders<TResponses extends RouteResponses> = {
-	readonly [K in keyof TResponses & string]: TResponses[K] extends {
+	readonly [
+		K in Exclude<keyof TResponses & string, OutcomesWithRequiredCookies<TResponses>>
+	]: TResponses[K] extends {
 		readonly schema: infer TSchema extends z.ZodTypeAny;
 	}
 		? (

@@ -65,6 +65,50 @@ describe("response cookie OpenAPI", () => {
 		expect(JSON.stringify(document)).not.toMatch(/x-routa/);
 	});
 
+	it("marks Set-Cookie required and names required cookies without values", () => {
+		const cwd = project({
+			"src/cookies.ts": cookieFile(session, theme),
+			"src/routes/items/route.ts": route(
+				"/items",
+				"ok: { status: 200, cookies: [{ handle: session, required: true }, theme] }",
+				{ imports: 'import { session, theme } from "../../cookies";' },
+			),
+		});
+
+		const document = generateOpenApi(cwd);
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(responseOf(document, "/items", "get", 200).headers).toEqual({
+			"Set-Cookie": {
+				description:
+					'Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: "session" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); "theme" (SameSite=Strict, Domain=example.com, Path=/app, Expires=2030-01-01T00:00:00Z). It always sets or clears: "session".',
+				required: true,
+				schema: { type: "string" },
+			},
+		});
+		expect(JSON.stringify(document)).not.toMatch(/x-routa/);
+	});
+
+	it("keeps Set-Cookie optional when every declared cookie is a bare handle", () => {
+		const cwd = project({
+			"src/cookies.ts": cookieFile(session, theme),
+			"src/routes/items/route.ts": route(
+				"/items",
+				"ok: { status: 200, cookies: [session, theme] }",
+				{
+					imports: 'import { session, theme } from "../../cookies";',
+				},
+			),
+		});
+
+		const header = (responseOf(generateOpenApi(cwd), "/items", "get", 200).headers as Json)[
+			"Set-Cookie"
+		] as Json;
+
+		expect(header).not.toHaveProperty("required");
+		expect(String(header.description)).not.toContain("always sets");
+	});
+
 	it("documents cookies on bodyless outcomes next to declared headers", () => {
 		const cwd = project({
 			"src/cookies.ts": cookieFile(session),
@@ -132,6 +176,111 @@ describe("response cookie OpenAPI", () => {
 		const check = await run(["openapi", "check"], { cwd });
 		expect(check.code).toBe(1);
 		expect(check.stderr).toContain("OPENAPI_DRIFT: GET /items schema changed");
+	});
+});
+
+describe("required response cookie declarations", () => {
+	const codes = (cwd: string) =>
+		validateProject(cwd, { write: false }).diagnostics.map((item) => [item.code, item.message]);
+	const withCookies = (
+		cookies: string,
+		imports = 'import { session, theme } from "../../cookies";',
+	) =>
+		project({
+			"src/cookies.ts": cookieFile(session, theme),
+			"src/routes/items/route.ts": route("/items", `ok: { status: 200, cookies: ${cookies} }`, {
+				imports,
+			}),
+		});
+
+	it("resolves required handles through imports, aliases, and barrels", () => {
+		const cwd = project({
+			"src/cookies/session.ts": cookieFile(session),
+			"src/cookies/index.ts": 'export { session as auth } from "./session";\n',
+			"src/routes/items/route.ts": route(
+				"/items",
+				"ok: { status: 200, cookies: [{ handle: auth, required: true }] }",
+				{ imports: 'import { auth } from "../../cookies";' },
+			),
+		});
+
+		expect(codes(cwd)).toEqual([]);
+		expect(setCookieOf(cwd)).toContain('It always sets or clears: "session".');
+	});
+
+	it("lists only the required cookies as always set or cleared", () => {
+		const cwd = withCookies("[theme, { handle: session, required: true }]");
+
+		expect(codes(cwd)).toEqual([]);
+		expect(setCookieOf(cwd)).toMatch(/ It always sets or clears: "session"\.$/);
+	});
+
+	it("rejects entries Routa cannot read as required or optional", () => {
+		for (const cookies of [
+			"[{ handle: session, required: false }]",
+			"[{ handle: session }]",
+			"[{ handle: session, required }]",
+			"[{ handle: session, required: true, extra: 1 }]",
+			"[{ ...entry }]",
+			"[{ handle: unknownHandle, required: true }]",
+			"[{ handle: [session], required: true }]",
+		]) {
+			const cwd = withCookies(cookies);
+
+			expect(
+				codes(cwd).map(([code]) => code),
+				cookies,
+			).toEqual([expect.stringMatching(/^ROUTA_RESPONSE_COOKIE_(STATIC|UNRESOLVED)$/)]);
+		}
+	});
+
+	it("fails an identity listed both required and bare", () => {
+		const cwd = withCookies("[{ handle: session, required: true }, session]");
+
+		expect(codes(cwd)).toEqual([
+			["ROUTA_RESPONSE_COOKIE_CONFLICT", expect.stringContaining('"session"')],
+		]);
+	});
+
+	it("warns about scopes of required cookies like bare ones", () => {
+		const cwd = project({
+			"src/cookies.ts": cookieFile(session, adminSession),
+			"src/routes/items/route.ts": route(
+				"/items",
+				"ok: { status: 200, cookies: [{ handle: session, required: true }, admin] }",
+				{ imports: 'import { session, admin } from "../../cookies";' },
+			),
+		});
+		const result = validateProject(cwd, { write: false });
+
+		expect(result.diagnostics).toEqual([]);
+		expect(result.warnings.map((item) => item.code)).toEqual(["ROUTA_RESPONSE_COOKIE_SCOPE"]);
+	});
+
+	it("detects drift when a cookie becomes required or optional", async () => {
+		for (const [before, after] of [
+			["[session]", "[{ handle: session, required: true }]"],
+			["[{ handle: session, required: true }]", "[session]"],
+		] as const) {
+			const files = (cookies: string) => ({
+				"src/cookies.ts": cookieFile(session),
+				"src/routes/items/route.ts": route("/items", `ok: { status: 200, cookies: ${cookies} }`, {
+					imports: 'import { session } from "../../cookies";',
+				}),
+			});
+			const cwd = project(files(before));
+			writeFileSync(
+				join(cwd, ".routa/openapi-baseline.json"),
+				JSON.stringify(generateOpenApi(cwd), null, "\t"),
+			);
+			writeFileSync(
+				join(cwd, "src/routes/items/route.ts"),
+				files(after)["src/routes/items/route.ts"],
+			);
+
+			const check = await run(["openapi", "check"], { cwd });
+			expect(check.code, `${before} -> ${after}`).toBe(1);
+		}
 	});
 });
 

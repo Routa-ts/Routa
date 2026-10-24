@@ -1,6 +1,10 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ProjectedCookie, ProjectedOperation, ProjectedResponse } from "./contract-schemas.js";
+import type {
+	ProjectedOperation,
+	ProjectedResponse,
+	ProjectedResponseCookie,
+} from "./contract-schemas.js";
 import { operationId, toOpenApiPath } from "./operation-id.js";
 import { type MiddlewareMetadata, validateProject } from "./project.js";
 import * as ts from "./typescript.js";
@@ -310,9 +314,9 @@ function headerObjects(
  *
  * The description lists each cookie's name and static attributes and says every cookie is its
  * own repeated field. It never carries a value, an example, or a vendor extension. The header is
- * optional because an outcome may leave any declared cookie out.
+ * required only when the outcome declares a required cookie, which it must always set or clear.
  */
-function setCookieHeader(cookies: readonly ProjectedCookie[]): Record<string, unknown> {
+function setCookieHeader(cookies: readonly ProjectedResponseCookie[]): Record<string, unknown> {
 	const described = cookies.map((cookie) => {
 		const attributes = [
 			...(cookie.httpOnly ? ["HttpOnly"] : []),
@@ -327,9 +331,12 @@ function setCookieHeader(cookies: readonly ProjectedCookie[]): Record<string, un
 		return `"${cookie.name}" (${attributes.join(", ")})`;
 	});
 
+	const required = cookies.filter((cookie) => cookie.required).map((cookie) => `"${cookie.name}"`);
+
 	return {
 		"Set-Cookie": {
-			description: `Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: ${described.join("; ")}.`,
+			description: `Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: ${described.join("; ")}.${required.length ? ` It always sets or clears: ${required.join("; ")}.` : ""}`,
+			...(required.length ? { required: true } : {}),
 			schema: { type: "string" },
 		},
 	};

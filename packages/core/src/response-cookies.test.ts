@@ -102,6 +102,100 @@ describe("response cookies (types)", () => {
 	});
 });
 
+describe("required response cookies (types)", () => {
+	const required = { handle: session, required: true } as const;
+
+	it("requires an effect for each required handle", () => {
+		createRoute({
+			responses: { ok: { status: 200, cookies: [required, theme] } },
+			run: () => ({ type: "ok", cookies: [session.set("abc")] }),
+		});
+		createRoute({
+			responses: { ok: { status: 200, cookies: [required, theme] } },
+			run: () => ({ type: "ok", cookies: [theme.set("dark"), session.clear()] }),
+		});
+		createRoute({
+			responses: {
+				ok: {
+					status: 200,
+					cookies: [
+						{ handle: session, required: true },
+						{ handle: theme, required: true },
+					],
+				},
+			},
+			run: () => ({ type: "ok", cookies: [theme.clear(), session.set("abc")] }),
+		});
+	});
+
+	it("rejects a result that leaves a required handle out", () => {
+		createRoute({
+			responses: { ok: { status: 200, cookies: [required, theme] } },
+			// @ts-expect-error The required session cookie needs an effect.
+			run: () => ({ type: "ok" }),
+		});
+		createRoute({
+			responses: { ok: { status: 200, cookies: [required, theme] } },
+			// @ts-expect-error An empty list does not satisfy a required cookie.
+			run: () => ({ type: "ok", cookies: [] }),
+		});
+		createRoute({
+			responses: { ok: { status: 200, cookies: [required, theme] } },
+			// @ts-expect-error Only the optional theme cookie has an effect.
+			run: () => ({ type: "ok", cookies: [theme.set("dark")] }),
+		});
+		createRoute({
+			responses: {
+				ok: {
+					status: 200,
+					cookies: [
+						{ handle: session, required: true },
+						{ handle: theme, required: true },
+					],
+				},
+			},
+			// @ts-expect-error The required theme cookie has no effect.
+			run: () => ({ type: "ok", cookies: [session.set("abc")] }),
+		});
+	});
+
+	it("keeps bare handles optional and still forbids undeclared handles", () => {
+		createRoute({
+			responses: { ok: { status: 200, cookies: [session, theme] } },
+			run: () => ({ type: "ok" }),
+		});
+		createRoute({
+			responses: { ok: { status: 200, cookies: [required] } },
+			// @ts-expect-error `theme` is not declared on this outcome.
+			run: () => ({ type: "ok", cookies: [session.set("a"), theme.set("dark")] }),
+		});
+	});
+
+	it("offers no builder for an outcome with a required cookie", () => {
+		createRoute({
+			responses: {
+				ok: { status: 200, cookies: [required] },
+				plain: { status: 202 },
+			},
+			run: ({ response }) => {
+				// @ts-expect-error Return the result object so the required cookie can be set.
+				response.ok();
+				return response.plain();
+			},
+		});
+	});
+
+	it("accepts only the literal true", () => {
+		createRoute({
+			responses: {
+				// @ts-expect-error A cookie is required with `required: true`; leave it out to make it optional.
+				ok: { status: 200, cookies: [{ handle: session, required: false }] },
+			},
+			run: () => ({ type: "ok" }),
+		});
+	});
+});
+
 describe("response cookies at runtime", () => {
 	it("sends set and clear effects as repeated Set-Cookie fields in every mode", async () => {
 		for (const mode of modes) {
@@ -583,6 +677,112 @@ describe("response cookie ownership", () => {
 				}),
 			}),
 		).toThrow(/Set-Cookie/);
+	});
+});
+
+describe("required response cookies at runtime", () => {
+	const required = { handle: session, required: true } as const;
+	const routeFor = (effects: unknown, cookies: unknown[] = [required, theme]) =>
+		({
+			method: "get",
+			path: "/a",
+			contract: createRoute({
+				responses: { ok: { status: 200, cookies: cookies as never } },
+				run: () =>
+					(effects === undefined ? { type: "ok" } : { type: "ok", cookies: effects }) as never,
+			}),
+		}) satisfies HonoRoute;
+
+	it("fails a missing required effect in every mode and sends nothing", async () => {
+		for (const mode of modes) {
+			for (const [label, effects] of [
+				["no cookies field", undefined],
+				["an empty list", []],
+				["only an optional cookie", [theme.set("dark")]],
+			] as const) {
+				const response = await appFor(routeFor(effects), mode).request("/a");
+
+				expect(response.status, `${mode.name}: ${label}`).toBe(500);
+				expect(response.headers.getSetCookie(), `${mode.name}: ${label}`).toEqual([]);
+			}
+		}
+	});
+
+	it("names the missing cookie without a value in the logged failure", async () => {
+		const events: RoutaLogEvent[] = [];
+		await appFor(routeFor([]), modes[0]!, events).request("/a");
+
+		const failure = events.find((event) => event.event === "http.error");
+		expect(failure?.data?.error).toBe(
+			'Response type "ok" requires cookie "session" (Path=/), but returned no effect for it. Set or clear it.',
+		);
+	});
+
+	it("accepts a set or a clear as the required effect, in every mode", async () => {
+		for (const mode of modes) {
+			for (const effect of [session.set("abc"), session.clear()]) {
+				const response = await appFor(routeFor([effect]), mode).request("/a");
+
+				expect(response.status, mode.name).toBe(200);
+				expect(response.headers.getSetCookie(), mode.name).toHaveLength(1);
+			}
+		}
+	});
+
+	it("keeps bare handles optional", async () => {
+		const response = await appFor(routeFor(undefined, [session, theme])).request("/a");
+
+		expect(response.status).toBe(200);
+		expect(response.headers.getSetCookie()).toEqual([]);
+	});
+
+	it("enforces required cookies on terminal middleware rejects", async () => {
+		const guard = (run: () => unknown) =>
+			createMiddleware({
+				rejects: { expired: { status: 401, cookies: [required] } },
+				run: run as never,
+			});
+
+		for (const [effects, status] of [
+			[[session.clear()], 401],
+			[[], 500],
+			[undefined, 500],
+		] as const) {
+			const response = await appFor({
+				method: "get",
+				path: "/a",
+				contract: createRoute({
+					middleware: [
+						guard(() => ({ type: "expired", ...(effects ? { cookies: effects } : {}) })),
+					],
+					responses: { ok: { status: 200 } },
+					run: () => ({ type: "ok" }),
+				}),
+			}).request("/a");
+
+			expect(response.status, JSON.stringify(effects)).toBe(status);
+		}
+	});
+
+	it("accepts only handles or { handle, required: true } at registration", () => {
+		const declare = (cookies: unknown) => () =>
+			createHonoApp([
+				{
+					method: "get",
+					path: "/a",
+					contract: createRoute({
+						responses: { ok: { status: 200, cookies: cookies as never } },
+						run: () => ({ type: "ok" }),
+					}),
+				},
+			]);
+
+		expect(declare([required, theme])).not.toThrow();
+		expect(declare([{ handle: session, required: false }])).toThrow(/required: true/);
+		expect(declare([{ handle: session }])).toThrow(/required: true/);
+		expect(declare([{ handle: session, required: true, extra: 1 }])).toThrow(/required: true/);
+		expect(declare([{ handle: { ...session }, required: true }])).toThrow(/createCookie/);
+		expect(declare([required, session])).toThrow(/more than once/);
 	});
 });
 
