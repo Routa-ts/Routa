@@ -73,7 +73,7 @@ export default createRouteRoot("/projects")({
 			created: { status: 201, schema: z.object({ kind: z.literal("created"), id: z.string() }) },
 			queued: { status: 201, schema: z.object({ kind: z.literal("queued"), ticket: z.number() }) },
 		},
-		run: () => ({ type: "created", data: { kind: "created", id: "p_1" } }),
+		run: ({ response }) => response.created({ kind: "created", id: "p_1" }),
 	}),
 });
 ```
