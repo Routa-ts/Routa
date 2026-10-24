@@ -98,6 +98,98 @@ export const Queued = z.object({ kind: z.literal("queued") }).meta({ id: "Queued
 				{ $ref: "#/components/schemas/Created" },
 				{ $ref: "#/components/schemas/QueuedProject" },
 			],
+			// Component names differ from the payload values, so the mapping says which is which.
+			discriminator: {
+				propertyName: "kind",
+				mapping: {
+					created: "#/components/schemas/Created",
+					queued: "#/components/schemas/QueuedProject",
+				},
+			},
+		});
+	});
+
+	it("omits the mapping when component names already match the payload values", () => {
+		const document = generateOpenApi(
+			project({
+				"src/routes/projects/schemas.ts": `import { z } from "zod";
+
+export const Created = z.object({ kind: z.literal("created") }).meta({ id: "created" });
+export const queued = z.object({ kind: z.literal("queued") });
+`,
+				"src/routes/projects/route.ts": route(
+					`created: { status: 201, schema: Created }, queued: { status: 201, schema: queued }`,
+					'import { Created, queued } from "./schemas";',
+				),
+			}),
+		);
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(schemaOf(document, 201).discriminator).toEqual({ propertyName: "kind" });
+	});
+
+	it.each([
+		["boolean", "z.literal(true)", "z.literal(false)", "false", "true"],
+		["number", "z.literal(2)", "z.literal(1)", "1", "2"],
+	])("composes %s literal discriminators", (_kind, first, second, low, high) => {
+		const inline = generateOpenApi(
+			project({
+				"src/routes/projects/route.ts": route(
+					`a: { status: 200, schema: z.object({ ok: ${first} }) }, b: { status: 200, schema: z.object({ ok: ${second} }) }`,
+				),
+			}),
+		);
+		const referenced = generateOpenApi(
+			project({
+				"src/routes/projects/schemas.ts": `import { z } from "zod";
+
+export const First = z.object({ ok: ${first} });
+export const Second = z.object({ ok: ${second} }).meta({ id: "SecondResult" });
+`,
+				"src/routes/projects/route.ts": route(
+					`a: { status: 200, schema: First }, b: { status: 200, schema: Second }`,
+					'import { First, Second } from "./schemas";',
+				),
+			}),
+		);
+
+		expect(diagnosticsOf(inline)).toEqual([]);
+		expect(schemaOf(inline, 200).discriminator).toEqual({ propertyName: "ok" });
+		expect(diagnosticsOf(referenced)).toEqual([]);
+		// Mapping keys are the payload values as strings.
+		expect(schemaOf(referenced, 200).discriminator).toEqual({
+			propertyName: "ok",
+			mapping: {
+				[high]: "#/components/schemas/First",
+				[low]: "#/components/schemas/SecondResult",
+			},
+		});
+	});
+
+	it("finds required literals through described and component-backed intersections", () => {
+		const document = generateOpenApi(
+			project({
+				"src/routes/projects/schemas.ts": `import { z } from "zod";
+
+export const Identified = z.object({ id: z.string() });
+export const KindC = z.object({ kind: z.literal("c") }).describe("C");
+`,
+				"src/routes/projects/route.ts": route(
+					`a: { status: 200, schema: z.object({ kind: z.literal("a") }).describe("A").and(z.object({ id: z.string() })) },
+		b: { status: 200, schema: z.object({ kind: z.literal("b") }).and(Identified) },
+		c: { status: 200, schema: KindC.and(Identified) }`,
+					'import { Identified, KindC } from "./schemas";',
+				),
+			}),
+		);
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(schemaOf(document, 200)).toMatchObject({
+			oneOf: [
+				{ allOf: expect.any(Array) },
+				{ allOf: expect.any(Array) },
+				{ allOf: expect.any(Array) },
+			],
 			discriminator: { propertyName: "kind" },
 		});
 	});
@@ -125,9 +217,14 @@ export const Queued = z.object({ kind: z.literal("queued") }).meta({ id: "Queued
 		c: { status: 200, schema: z.object({ id: z.string() }) }`,
 		],
 		[
-			"only boolean literals",
-			`a: { status: 200, schema: z.object({ ok: z.literal(true) }) },
-		b: { status: 200, schema: z.object({ ok: z.literal(false) }) }`,
+			"literals that read the same as text",
+			`a: { status: 200, schema: z.object({ kind: z.literal(1) }) },
+		b: { status: 200, schema: z.object({ kind: z.literal("1") }) }`,
+		],
+		[
+			"an intersection whose members require conflicting literals",
+			`a: { status: 200, schema: z.object({ kind: z.literal("a") }).describe("A").and(z.object({ kind: z.literal("b") })) },
+		b: { status: 200, schema: z.object({ kind: z.literal("c") }) }`,
 		],
 		[
 			"a union alternative",
@@ -516,6 +613,40 @@ ${declaration}
 				message: expect.stringContaining('"invalid", "tooLarge" (a reject of middleware guard)'),
 			}),
 		]);
+	});
+
+	it("maps discriminator values to referenced route and reject alternatives", () => {
+		const document = generateOpenApi(
+			project({
+				"src/routes/projects/schemas.ts": `import { z } from "zod";
+
+export const Invalid = z.object({ kind: z.literal("invalid") }).meta({ id: "InvalidInput" });
+`,
+				"src/routes/projects/middleware.ts": guard(
+					"tooLarge: { status: 400, schema: TooLarge }",
+					'export const TooLarge = z.object({ kind: z.literal("tooLarge"), limit: z.number() });',
+				),
+				"src/routes/projects/route.ts": route(
+					"ok: { status: 200 }, invalid: { status: 400, schema: Invalid }",
+					'import { Invalid } from "./schemas";',
+				),
+			}),
+		);
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(schemaOf(document, 400)).toEqual({
+			oneOf: [
+				{ $ref: "#/components/schemas/InvalidInput" },
+				{ $ref: "#/components/schemas/TooLarge" },
+			],
+			discriminator: {
+				propertyName: "kind",
+				mapping: {
+					invalid: "#/components/schemas/InvalidInput",
+					tooLarge: "#/components/schemas/TooLarge",
+				},
+			},
+		});
 	});
 
 	it("reports an outcome name the route and a middleware both declare", () => {

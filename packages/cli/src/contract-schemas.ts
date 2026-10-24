@@ -440,6 +440,25 @@ function stringNode(format: string): SchemaNode {
 	return plainNode(format ? { type: "string", format } : { type: "string" });
 }
 
+const componentPrefix = "#/components/schemas/";
+
+/**
+ * The single string, number, or boolean value a schema allows (a `const` or one-value `enum`), as
+ * text, or `undefined` when it allows other values.
+ */
+function literalText(schema: JsonSchema): string | undefined {
+	const value =
+		"const" in schema
+			? schema.const
+			: Array.isArray(schema.enum) && schema.enum.length === 1
+				? schema.enum[0]
+				: undefined;
+
+	return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+		? String(value)
+		: undefined;
+}
+
 const unsupportedSuggestion =
 	"Use a supported Zod construct: primitives, z.literal, z.enum, z.object, z.array, z.record, z.union, z.discriminatedUnion, z.intersection or .and(), .optional(), .nullable(), checks such as .min(), and .meta() or .describe().";
 
@@ -645,13 +664,10 @@ class SchemaProjector {
 			const bodyless = alternatives.filter((outcome) => !outcome.schema);
 			ambiguous(`outcomes ${names} mix a body (${list(bodies)}) with no body (${list(bodyless)})`);
 		} else {
-			const propertyName = this.discriminator(bodies.map((outcome) => outcome.schema!));
+			const discriminator = this.discriminator(bodies.map((outcome) => outcome.schema!));
 
-			if (propertyName) {
-				schema = {
-					oneOf: bodies.map((outcome) => outcome.schema!),
-					discriminator: { propertyName },
-				};
+			if (discriminator) {
+				schema = { oneOf: bodies.map((outcome) => outcome.schema!), discriminator };
 			} else {
 				ambiguous(
 					`body outcomes ${names} share no required property whose literal values all differ, so clients cannot tell them apart`,
@@ -674,52 +690,85 @@ class SchemaProjector {
 
 	/**
 	 * The discriminator for same-status body alternatives: a property every alternative requires
-	 * with a single literal value, each value different. When several qualify, the
+	 * with a single literal value (string, number, or boolean), each value different as text,
+	 * because discriminator values compare as strings. When several qualify, the
 	 * lexicographically first name wins.
+	 *
+	 * A referenced alternative is matched implicitly by its component name. When any referenced
+	 * alternative's value differs from its component name, `mapping` names every referenced
+	 * alternative's component explicitly.
 	 */
-	private discriminator(schemas: readonly JsonSchema[]): string | undefined {
+	private discriminator(
+		schemas: readonly JsonSchema[],
+	): { propertyName: string; mapping?: Record<string, string> } | undefined {
 		const literals = schemas.map((schema) => this.requiredLiterals(schema));
 		const [first, ...rest] = literals;
-		const candidates = Array.from(first?.keys() ?? [])
+		const propertyName = Array.from(first?.keys() ?? [])
 			.filter((name) => {
 				const values = literals.map((properties) => properties.get(name));
 				return (
 					values.every((value) => value !== undefined) && new Set(values).size === values.length
 				);
 			})
-			.sort(compareText);
+			.sort(compareText)[0];
 
-		return rest.length > 0 ? candidates[0] : undefined;
+		if (rest.length === 0 || propertyName === undefined) {
+			return undefined;
+		}
+
+		const referenced = schemas.flatMap((schema, index) =>
+			typeof schema.$ref === "string" && schema.$ref.startsWith(componentPrefix)
+				? [[literals[index]!.get(propertyName)!, schema.$ref] as const]
+				: [],
+		);
+		const implicit = referenced.every(([value, ref]) => ref === `${componentPrefix}${value}`);
+
+		return implicit ? { propertyName } : { propertyName, mapping: Object.fromEntries(referenced) };
 	}
 
 	/**
-	 * Required properties of an object schema that hold one string literal, as stable JSON. Only
-	 * strings qualify, because an OpenAPI discriminator value is a string.
+	 * Required properties that hold one string, number, or boolean literal, keyed by name with the
+	 * literal as text. Reads through component references and `allOf` members, so a described or
+	 * component-backed intersection keeps its literals. A property that members constrain to
+	 * different literals has none.
 	 */
 	private requiredLiterals(schema: JsonSchema): Map<string, string> {
-		const object = this.resolved(schema);
-		const properties = (object.properties ?? {}) as Record<string, JsonSchema>;
-		const literals = new Map<string, string>();
+		const required = new Set<string>();
+		const values = new Map<string, string | null>();
+		const collect = (node: JsonSchema): void => {
+			const object = this.resolved(node);
 
-		if (object.type !== "object" || !Array.isArray(object.required)) {
-			return literals;
-		}
-
-		for (const name of object.required as string[]) {
-			const property = properties[name] && this.resolved(properties[name]);
-			const value =
-				property && "const" in property
-					? property.const
-					: Array.isArray(property?.enum) && property.enum.length === 1
-						? property.enum[0]
-						: undefined;
-
-			if (typeof value === "string") {
-				literals.set(name, JSON.stringify(value));
+			for (const member of Array.isArray(object.allOf) ? (object.allOf as JsonSchema[]) : []) {
+				collect(member);
 			}
-		}
 
-		return literals;
+			if (object.type !== "object") {
+				return;
+			}
+
+			for (const name of Array.isArray(object.required) ? (object.required as string[]) : []) {
+				required.add(name);
+			}
+
+			for (const [name, property] of Object.entries(
+				(object.properties ?? {}) as Record<string, JsonSchema>,
+			)) {
+				const value = literalText(this.resolved(property));
+				const earlier = values.get(name);
+
+				if (value !== undefined) {
+					values.set(name, earlier === undefined || earlier === value ? value : null);
+				}
+			}
+		};
+
+		collect(schema);
+		return new Map(
+			Array.from(required).flatMap((name) => {
+				const value = values.get(name);
+				return typeof value === "string" ? [[name, value] as const] : [];
+			}),
+		);
 	}
 
 	/**
@@ -1530,10 +1579,7 @@ class SchemaProjector {
 	 * its target, the nearest winning, and a cycle stops at the reference that repeats.
 	 */
 	private resolved(schema: JsonSchema, seen: ReadonlySet<string> = new Set()): JsonSchema {
-		const key =
-			typeof schema.$ref === "string"
-				? schema.$ref.replace("#/components/schemas/", "")
-				: undefined;
+		const key = typeof schema.$ref === "string" ? schema.$ref.replace(componentPrefix, "") : undefined;
 		const target = key === undefined || seen.has(key) ? undefined : this.components.get(key);
 
 		if (!key || !target) {

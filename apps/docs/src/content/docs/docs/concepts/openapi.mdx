@@ -38,12 +38,17 @@ OpenAPI has one response per status, so outcomes that share a status are compose
 The outcomes considered are the method's own `responses` and the `rejects` of every middleware
 in its chain. Composition never depends on the order they are written in:
 
-- Body outcomes compose when every one of them has a required property with a single string
-  literal value (`z.literal("...")` or a one-value `z.enum([...])`) and those values all
-  differ. Only strings qualify, because an OpenAPI discriminator value is a string. The
-  response schema becomes a `oneOf` of the outcome schemas, ordered by outcome name, with that
-  property as `discriminator.propertyName`. When several properties qualify, the
-  alphabetically first name is the discriminator.
+- Body outcomes compose when every one of them has a required property with a single
+  string, number, or boolean literal value (`z.literal(...)` or a one-value `z.enum([...])`)
+  and those values all differ. Values are compared as text, the way OpenAPI discriminator
+  values are, so `1` and `"1"` do not differ. Routa reads the property through component
+  references and intersections (`z.intersection()` or `.and()`). The response schema becomes a
+  `oneOf` of the outcome schemas, ordered by outcome name, with that property as
+  `discriminator.propertyName`. When several properties qualify, the alphabetically first
+  name is the discriminator.
+- When an outcome schema is a referenced component whose name differs from its discriminator
+  value, such as `Created` for `kind: "created"`, the discriminator gets a `mapping` from each
+  value, as text, to its component. Components are never renamed to match values.
 - Without such a property, `routa check` fails with `ROUTA_RESPONSE_STATUS_AMBIGUOUS`. Add a
   literal discriminator or give each outcome its own status. Routa never falls back to
   `anyOf`.
