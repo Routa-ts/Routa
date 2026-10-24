@@ -17,8 +17,9 @@ ROUTA_MIDDLEWARE_ORDER: src/routes/admin/middleware.ts: withAdmin requires ctx.a
 Suggestion: Move middleware that provides auth before withAdmin.
 ```
 
-Any diagnostic fails the command with exit code `1`, and no metadata is written. A
-warning is printed with a `Warning:` prefix and does not fail the command:
+Only error diagnostics fail the command. Any error exits with code `1`, and no metadata
+is written. A warning is printed with a `Warning:` prefix and does not fail the command
+or block the metadata write:
 
 ```txt
 Warning: ROUTA_SCHEMA_OPAQUE_INPUT: src/routes/imports/schemas.ts: z.preprocess() accepts input Routa cannot describe, so OpenAPI documents the schema after preprocessing: z.preprocess(...)
