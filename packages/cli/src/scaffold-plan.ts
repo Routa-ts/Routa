@@ -1192,7 +1192,11 @@ function schemaForRequestBody(operation: OpenApiOperation): string | undefined {
  *
  * @returns The response status, generated Zod schema, original schema source, and placeholder value for each success response.
  */
-function schemasForResponses(operation: OpenApiOperation, document: OpenApiDocument) {
+function schemasForResponses(
+	operation: OpenApiOperation,
+	method: HttpMethod,
+	document: OpenApiDocument,
+) {
 	const successEntries = Object.entries(operation.responses ?? {}).filter(([status]) =>
 		status.startsWith("2"),
 	);
@@ -1202,15 +1206,18 @@ function schemasForResponses(operation: OpenApiOperation, document: OpenApiDocum
 			: Object.entries(operation.responses ?? {}).slice(0, 1);
 
 	return entries.map(([rawStatus, response]) => {
-		const status = Number(rawStatus);
-		const schema = firstJsonContent(response.content)?.schema;
-		const zodSchema = schema ? zodForSchema(schema) : "z.unknown()";
+		const status = Number.isFinite(Number(rawStatus)) ? Number(rawStatus) : 200;
+		// A response without JSON content, and any response HTTP forbids a body for, is a schema-less outcome.
+		const schema =
+			method === "head" || status === 204 || status === 205 || status === 304
+				? undefined
+				: firstJsonContent(response.content)?.schema;
 
 		return {
-			status: Number.isFinite(status) ? status : 200,
-			schema: zodSchema,
+			status,
+			schema: schema ? zodForSchema(schema) : undefined,
 			schemaSource: schema,
-			placeholder: placeholderForSchema(schema, document),
+			placeholder: schema ? placeholderForSchema(schema, document) : undefined,
 		};
 	});
 }
@@ -1722,6 +1729,7 @@ export function createScaffoldPlan(raw: string, extension: string, source: strin
 
 		const schemaExports = new Map<string, string>();
 		const routeImports = new Set<string>();
+		let usesZodOutputType = false;
 		const methodBlocks: string[] = [];
 		const operationIds: string[] = [];
 		const responsesByMethod: Record<string, number[]> = {};
@@ -1742,8 +1750,9 @@ export function createScaffoldPlan(raw: string, extension: string, source: strin
 			const headersSchema = schemaForParameters(operationWithParameters, "header");
 			const cookiesSchema = schemaForParameters(operationWithParameters, "cookie");
 			const bodySchema = schemaForRequestBody(operationWithParameters);
-			const responses = schemasForResponses(operationWithParameters, document);
+			const responses = schemasForResponses(operationWithParameters, method, document);
 			const primaryResponse = responses[0];
+			usesZodOutputType ||= primaryResponse.placeholder !== undefined;
 			responsesByMethod[method] = responses.map((response) => response.status);
 			inputsByMethod[method] = {
 				params: Boolean(paramsSchema),
@@ -1789,6 +1798,10 @@ export function createScaffoldPlan(raw: string, extension: string, source: strin
 			}
 
 			for (const response of responses) {
+				if (response.schema === undefined) {
+					continue;
+				}
+
 				addReferencedComponents(schemaExports, response.schemaSource, document);
 				schemaExports.set(
 					responseSchemaName(names.response, response.status, responses),
@@ -1807,6 +1820,12 @@ export function createScaffoldPlan(raw: string, extension: string, source: strin
 \t\t\t${responses
 				.map((response, index) => {
 					const key = index === 0 ? "success" : `success${response.status}`;
+					if (response.schema === undefined) {
+						return `${key}: {
+\t\t\t\tstatus: ${response.status},
+\t\t\t}`;
+					}
+
 					const schemaName = responseSchemaName(names.response, response.status, responses);
 					return `${key}: {
 \t\t\t\tstatus: ${response.status},
@@ -1817,19 +1836,28 @@ export function createScaffoldPlan(raw: string, extension: string, source: strin
 \t\t},
 \t\trun: () => {
 \t\t\t// TODO: call application-owned business logic.
-\t\t\treturn {
+\t\t\treturn ${
+				primaryResponse.placeholder === undefined
+					? `{ type: "success" }`
+					: `{
 \t\t\t\ttype: "success",
 \t\t\t\tdata: ${primaryResponse.placeholder} as unknown as z.output<typeof ${responseSchemaName(names.response, primaryResponse.status, responses)}>,
-\t\t\t};
+\t\t\t}`
+			};
 \t\t},
 \t})`);
 		}
 
-		const imports = formatNamedImport(Array.from(routeImports).sort());
+		const routeImportLines = [
+			'import { createRoute, createRouteRoot } from "@routa-ts/core";',
+			// Only placeholders for body outcomes reference z.output, so schema-less routes need no zod import.
+			...(usesZodOutputType
+				? ['import type { z } from "zod";']
+				: []),
+			...(routeImports.size > 0 ? [formatNamedImport(Array.from(routeImports).sort())] : []),
+		];
 		const routePath = openApiPath.replaceAll(/\{([^}]+)\}/g, ":$1");
-		const routeSource = `${generatedHeader(source)}import { createRoute, createRouteRoot } from "@routa-ts/core";
-import type { z } from "zod";
-${imports}
+		const routeSource = `${generatedHeader(source)}${routeImportLines.join("\n")}
 
 const route = createRouteRoot(${JSON.stringify(routePath)});
 

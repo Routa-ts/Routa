@@ -50,5 +50,3 @@ export const ReplaceCatalogItemBody = CatalogItemInput;
 export const ReplaceCatalogItemResponse = CatalogItem;
 
 export const InspectCatalogItemParams = z.object({ itemId: z.uuid() });
-
-export const InspectCatalogItemResponse204 = z.unknown();

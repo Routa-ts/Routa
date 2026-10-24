@@ -9,7 +9,6 @@ import {
 	GetCatalogItemQuery,
 	GetCatalogItemResponse,
 	InspectCatalogItemParams,
-	InspectCatalogItemResponse204,
 	ReplaceCatalogItemBody,
 	ReplaceCatalogItemParams,
 	ReplaceCatalogItemResponse,
@@ -63,15 +62,11 @@ export default route({
 		responses: {
 			success: {
 				status: 204,
-				schema: InspectCatalogItemResponse204,
 			},
 		},
 		run: () => {
 			// TODO: call application-owned business logic.
-			return {
-				type: "success",
-				data: null as unknown as z.output<typeof InspectCatalogItemResponse204>,
-			};
+			return { type: "success" };
 		},
 	}),
 });
