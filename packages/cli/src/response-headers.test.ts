@@ -106,6 +106,37 @@ export const ItemHeaders = z.object({ etag: Etag, "retry-after": z.number().opti
 		});
 	});
 
+	it("describes a header from the referencing schema before the shared component", () => {
+		const cwd = project({
+			"src/routes/items/schemas.ts": `import { z } from "zod";
+
+export const Etag = z.string().meta({ id: "HeaderEtag", description: "Generic" });
+export const ItemHeaders = z.object({
+	etag: Etag.optional().describe("Specific"),
+	"x-trace": Etag.optional().meta({ description: "From meta" }),
+	"x-plain": Etag,
+	"x-other": Etag.optional(),
+});
+`,
+			"src/routes/items/route.ts": route("/items", "ok: { status: 200, headers: ItemHeaders }", {
+				imports: 'import { ItemHeaders } from "./schemas";',
+			}),
+		});
+
+		const document = generateOpenApi(cwd);
+		const headers = responseOf(document, "/items", "get", 200).headers as Record<string, Json>;
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(headers.etag.description).toBe("Specific");
+		expect(headers["x-trace"].description).toBe("From meta");
+		expect(headers["x-plain"].description).toBe("Generic");
+		expect(headers["x-other"].description).toBe("Generic");
+		expect((document.components?.schemas as Json).HeaderEtag).toEqual({
+			type: "string",
+			description: "Generic",
+		});
+	});
+
 	it("drifts against a baseline when a header changes", async () => {
 		const cwd = project({
 			"src/routes/items/route.ts": route(

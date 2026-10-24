@@ -751,7 +751,7 @@ class SchemaProjector {
 				);
 			}
 
-			const description = this.resolved(value).description;
+			const description = value.description ?? this.resolved(value).description;
 			headers[name] = {
 				required: required.has(name),
 				...(typeof description === "string" ? { description } : {}),
