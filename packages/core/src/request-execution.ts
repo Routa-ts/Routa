@@ -22,7 +22,9 @@ type RuntimeResult = {
 type ProducedResult = {
 	result: RuntimeResult;
 	outcomes: Readonly<Record<string, RuntimeOutcome>>;
-	/** Names the producer in messages, such as `middleware[0] reject "expired"`. */
+	/** Names the producer in messages, such as `the route handler` or `middleware[0]`. */
+	producer: string;
+	/** Names one of its outcomes in messages, such as `middleware[0] reject "expired"`. */
 	label: (type: string) => string;
 };
 
@@ -142,6 +144,7 @@ async function runWithMiddleware(
 				return {
 					result,
 					outcomes: contract.responses,
+					producer: "the route handler",
 					label: (type) => `outcome "${type}"`,
 				};
 			}
@@ -195,6 +198,7 @@ async function runWithMiddleware(
 			return {
 				result,
 				outcomes: item.rejects ?? {},
+				producer: `middleware[${index}]`,
 				label: (type) => `middleware[${index}] reject "${type}"`,
 			};
 		}
@@ -513,7 +517,9 @@ function validateResult(produced: ProducedResult, validateResponse: boolean): Va
 		: undefined;
 
 	if (!response) {
-		throw new InvalidHandlerOutputError(`Handler returned unknown response type "${result.type}".`);
+		throw new InvalidHandlerOutputError(
+			`${produced.producer} returned unknown response type "${result.type}"; it can only return its own outcomes.`,
+		);
 	}
 
 	const headers = validatedHeaders(result, response, validateResponse);

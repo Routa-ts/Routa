@@ -125,6 +125,11 @@ export const Queued = z.object({ kind: z.literal("queued") }).meta({ id: "Queued
 		c: { status: 200, schema: z.object({ id: z.string() }) }`,
 		],
 		[
+			"only boolean literals",
+			`a: { status: 200, schema: z.object({ ok: z.literal(true) }) },
+		b: { status: 200, schema: z.object({ ok: z.literal(false) }) }`,
+		],
+		[
 			"a union alternative",
 			`a: { status: 200, schema: z.object({ kind: z.literal("a") }) },
 		b: { status: 200, schema: z.union([z.object({ kind: z.literal("b") }), z.string()]) }`,
@@ -467,7 +472,7 @@ export const guard = createMiddleware({ rejects: { ...rejects }, run: ({ next })
 		).toEqual([
 			expect.objectContaining({
 				code: "ROUTA_RESPONSE_STATUS_AMBIGUOUS",
-				message: expect.stringMatching(/"invalid", "tooLarge"/),
+				message: expect.stringContaining('"invalid", "tooLarge" (a reject of middleware guard)'),
 			}),
 		]);
 	});

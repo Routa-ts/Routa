@@ -38,8 +38,9 @@ OpenAPI has one response per status, so outcomes that share a status are compose
 The outcomes considered are the method's own `responses` and the `rejects` of every middleware
 in its chain. Composition never depends on the order they are written in:
 
-- Body outcomes compose when every one of them has a required property with a single literal
-  value (`z.literal(...)` or a one-value `z.enum(...)`) and those values all differ. The
+- Body outcomes compose when every one of them has a required property with a single string
+  literal value (`z.literal("...")` or a one-value `z.enum([...])`) and those values all
+  differ. Only strings qualify, because an OpenAPI discriminator value is a string. The
   response schema becomes a `oneOf` of the outcome schemas, ordered by outcome name, with that
   property as `discriminator.propertyName`. When several properties qualify, the
   alphabetically first name is the discriminator.
@@ -57,11 +58,19 @@ in its chain. Composition never depends on the order they are written in:
 - The response description lists each outcome's description in outcome-name order, one
   Markdown list item per outcome: ``- `created`: The project was created.``
 
-```ts
-responses: {
-	created: { status: 201, schema: z.object({ kind: z.literal("created"), id: z.string() }) },
-	queued: { status: 201, schema: z.object({ kind: z.literal("queued"), ticket: z.number() }) },
-},
+```ts title="src/routes/projects/route.ts"
+import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/projects")({
+	post: createRoute({
+		responses: {
+			created: { status: 201, schema: z.object({ kind: z.literal("created"), id: z.string() }) },
+			queued: { status: 201, schema: z.object({ kind: z.literal("queued"), ticket: z.number() }) },
+		},
+		run: () => ({ type: "created", data: { kind: "created", id: "p_1" } }),
+	}),
+});
 ```
 
 The `201` response above documents `oneOf: [created, queued]` with

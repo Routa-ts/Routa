@@ -247,11 +247,7 @@ describe("response validation policy across route outcomes and middleware reject
 
 	const modes: Mode[] = [
 		{ name: "development", options: { runtimeMode: "dev" }, parses: true },
-		{
-			name: "production by default",
-			options: { runtimeMode: "start", responseValidation: "development" },
-			parses: false,
-		},
+		{ name: "production by default", options: { runtimeMode: "start" }, parses: false },
 		{
 			name: "production with always",
 			options: { runtimeMode: "start", responseValidation: "always" },

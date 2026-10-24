@@ -64,6 +64,8 @@ type ProjectedOutcome = ProjectedResponse & {
 	status: number;
 	/** Who declares it, for messages: `the route` or `middleware <name>`. */
 	producer: string;
+	/** Names the outcome in messages, with its middleware when it is a reject. */
+	label: string;
 };
 
 /** The operation a set of outcomes belongs to, for diagnostics. */
@@ -486,12 +488,7 @@ class SchemaProjector {
 			const lifecycle = this.lifecycleOwnedHeaders(contract, route);
 			contracts[method] = {
 				input: this.inputSchemas(contract, route),
-				outcomes: this.outcomes(
-					propertyValue(contract, "responses"),
-					route,
-					lifecycle,
-					"the route",
-				),
+				outcomes: this.outcomes(propertyValue(contract, "responses"), route, lifecycle),
 				lifecycle,
 				deprecation: readDeprecation(contract),
 			};
@@ -523,7 +520,7 @@ class SchemaProjector {
 
 			const source = this.source(declaration.file);
 
-			for (const reject of this.outcomes(value, source, lifecycle, `middleware ${item.name}`)) {
+			for (const reject of this.outcomes(value, source, lifecycle, item.name)) {
 				if (site.method === "head" && reject.schema) {
 					this.operationProblem(site, {
 						code: "ROUTA_RESPONSE_BODYLESS_SCHEMA",
@@ -593,11 +590,19 @@ class SchemaProjector {
 		site: OperationSite,
 	): ProjectedResponse {
 		if (alternatives.length === 1) {
-			const { name: _name, status: _status, producer: _producer, ...response } = alternatives[0]!;
+			const {
+				name: _name,
+				status: _status,
+				producer: _producer,
+				label: _label,
+				...response
+			} = alternatives[0]!;
 			return response;
 		}
 
-		const names = alternatives.map((outcome) => `"${outcome.name}"`).join(", ");
+		const list = (outcomes: readonly ProjectedOutcome[]) =>
+			outcomes.map((outcome) => outcome.label).join(", ");
+		const names = list(alternatives);
 		const at = `${site.method.toUpperCase()} ${site.routePath} status ${status}`;
 		const ambiguous = (message: string) =>
 			this.operationProblem(site, {
@@ -610,14 +615,10 @@ class SchemaProjector {
 		let schema: JsonSchema | undefined;
 
 		if (bodies.length === 0) {
-			ambiguous(
-				`outcomes ${names} have no body, so clients cannot tell them apart; they are indistinguishable`,
-			);
+			ambiguous(`outcomes ${names} have no body, so they are indistinguishable to clients`);
 		} else if (bodies.length < alternatives.length) {
 			const bodyless = alternatives.filter((outcome) => !outcome.schema);
-			ambiguous(
-				`outcomes ${names} mix a body (${bodies.map((outcome) => `"${outcome.name}"`).join(", ")}) with no body (${bodyless.map((outcome) => `"${outcome.name}"`).join(", ")})`,
-			);
+			ambiguous(`outcomes ${names} mix a body (${list(bodies)}) with no body (${list(bodyless)})`);
 		} else {
 			const propertyName = this.discriminator(bodies.map((outcome) => outcome.schema!));
 
@@ -666,7 +667,10 @@ class SchemaProjector {
 		return rest.length > 0 ? candidates[0] : undefined;
 	}
 
-	/** Required properties of an object schema that hold one literal value, as stable JSON. */
+	/**
+	 * Required properties of an object schema that hold one string literal, as stable JSON. Only
+	 * strings qualify, because an OpenAPI discriminator value is a string.
+	 */
 	private requiredLiterals(schema: JsonSchema): Map<string, string> {
 		const object = this.resolved(schema);
 		const properties = (object.properties ?? {}) as Record<string, JsonSchema>;
@@ -685,7 +689,7 @@ class SchemaProjector {
 						? property.enum[0]
 						: undefined;
 
-			if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+			if (typeof value === "string") {
 				literals.set(name, JSON.stringify(value));
 			}
 		}
@@ -717,7 +721,7 @@ class SchemaProjector {
 				if (stableJson(earlier.headers![name]!.schema) !== stableJson(header.schema)) {
 					this.operationProblem(site, {
 						code: "ROUTA_RESPONSE_HEADER_INCOMPATIBLE",
-						message: `Header "${name}" has different schemas in outcomes "${earlier.name}" and "${outcome.name}", which share status ${outcome.status}`,
+						message: `Header "${name}" has different schemas in outcomes ${earlier.label} and ${outcome.label}, which share status ${outcome.status}`,
 						suggestion:
 							"Outcomes under one status document one Header Object per name. Declare the header with the same schema and metadata in both, or use distinct statuses.",
 					});
@@ -754,7 +758,7 @@ class SchemaProjector {
 				} else if (earlier.cookie.declaration !== cookie.declaration) {
 					this.operationProblem(site, {
 						code: "ROUTA_RESPONSE_COOKIE_CONFLICT",
-						message: `Cookie ${describeCookie(cookie)} comes from different createCookie declarations in outcomes "${earlier.owner.name}" and "${outcome.name}", which share status ${outcome.status}`,
+						message: `Cookie ${describeCookie(cookie)} comes from different createCookie declarations in outcomes ${earlier.owner.label} and ${outcome.label}, which share status ${outcome.status}`,
 						suggestion:
 							"A cookie identity (name, domain, and path) has one declaration. Share one createCookie handle between the outcomes, or use distinct statuses.",
 					});
@@ -846,18 +850,20 @@ class SchemaProjector {
 	}
 
 	/**
-	 * Reads a record of named outcomes: a route's `responses` or a middleware's `rejects`. Both
-	 * follow the same declaration rules, so a reject gets every check a route outcome gets.
+	 * Reads a record of named outcomes: a route's `responses`, or a middleware's `rejects` when
+	 * `middleware` names it. Both follow the same declaration rules, so a reject gets every check
+	 * a route outcome gets.
 	 */
 	private outcomes(
 		value: ts.Expression | undefined,
 		source: SchemaSource,
 		lifecycleOwned: LifecycleOwnership,
-		producer: string,
+		middleware?: string,
 	): ProjectedOutcome[] {
 		const responses = objectLiteral(value);
 		const context: Context = { source, io: "output" };
-		const kind = producer === "the route" ? "route" : "middleware";
+		const kind = middleware === undefined ? "route" : "middleware";
+		const producer = middleware === undefined ? "the route" : `middleware ${middleware}`;
 		const result: ProjectedOutcome[] = [];
 
 		if (value && !responses) {
@@ -908,11 +914,16 @@ class SchemaProjector {
 			const cookies = propertyValue(outcome, "cookies");
 			const projectedCookies = cookies ? this.responseCookies(cookies, context) : undefined;
 
+			const outcomeName = name ?? String(status);
 			result.push({
-				name: name ?? String(status),
+				name: outcomeName,
 				status,
 				producer,
-				description: text ?? humanizeOutcomeName(name ?? String(status)),
+				label:
+					middleware === undefined
+						? `"${outcomeName}"`
+						: `"${outcomeName}" (a reject of middleware ${middleware})`,
+				description: text ?? humanizeOutcomeName(outcomeName),
 				...(schema ? { schema: this.materialize(this.node(schema, context)) } : {}),
 				...(projectedHeaders ? { headers: projectedHeaders } : {}),
 				...(projectedCookies?.length ? { cookies: projectedCookies } : {}),

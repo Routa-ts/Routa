@@ -124,8 +124,8 @@ already declares.
 ### `ROUTA_RESPONSE_STATUS_AMBIGUOUS`
 
 Outcomes that can end the same operation share a status, and clients could not tell them
-apart. Body outcomes need a required property with a single literal value that differs in
-every outcome. A body outcome and a bodyless outcome cannot share a status, and neither can
+apart. Body outcomes need a required property with a single string literal value that
+differs in every outcome. A body outcome and a bodyless outcome cannot share a status, and neither can
 two bodyless outcomes. Route outcomes and middleware rejects count alike.
 
 **Fix:** add a literal discriminator such as `kind: z.literal("created")` to each body
