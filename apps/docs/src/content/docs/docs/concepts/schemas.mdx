@@ -47,10 +47,13 @@ Routa parses each declared input source with `schema.parse()` before the handler
 `input.body` is the schema's **output** type, not its input type. A schema with a
 `transform` or a default gives the handler the transformed value.
 
-On the way out, Routa always checks the result shape and looks up its `type` in the
-declared responses. By default, it parses `data` against the matching response schema in
-`routa dev`, so drift produces a generic `500` problem response before malformed data
-reaches a client. Production parsing is opt-in with `responseValidation: "always"`.
+On the way out, Routa always checks the result shape, looks up its `type` in the declared
+responses, and checks that `data` is present for an outcome with a `schema` and absent for
+one without. By default, it parses `data` against the matching response schema in
+`routa dev` and compares the parsed value with the value your handler returned. Invalid data,
+or any change the schema would make, produces a generic `500` problem response before it
+reaches a client. Production parsing and comparison are opt-in with
+`responseValidation: "always"`.
 
 Write response schemas to describe wire-ready JSON: they should validate a value, not
 change it. `routa check` reports `ROUTA_RESPONSE_SCHEMA_MUTATION` for response schemas that
@@ -62,11 +65,16 @@ and `.overwrite()`. The same applies inside `.pipe()` targets, record keys, and
 `const tidy = z.trim()`. A `.check()` argument or URL options that Routa cannot read fail
 with `ROUTA_SCHEMA_UNSUPPORTED`. Return the final value from the handler instead.
 
-These are static checks. When Routa validates response data at runtime, it still sends the
-parsed value.
+TypeScript rejects schemas whose input and output types differ, and known transformer
+wrappers such as `.transform()`, `.default()`, and `z.coerce.*`, when you declare the
+outcome. Same-type rewrites such as `.trim()` are visible only to `routa check`, and
+`z.url()` trims surrounding whitespace without any marker in source. Runtime validation
+catches those: when Routa validates response data, it never sends the parsed value. A
+value the schema would change, including an unknown key it would strip, fails as invalid
+handler output.
 
-If production response validation is disabled, Routa does not apply unknown-key stripping
-to response data. Middleware `provides` schemas remain active in both modes because their
+Routa does not parse response data when validation is disabled, so the handler value is
+sent as returned. Middleware `provides` schemas remain active in both modes because their
 parsed values become downstream context. See
 [Configuration](/docs/reference/configuration/) for the full policy.
 

@@ -69,9 +69,10 @@ export default route({
 `headers`, `cookies`, and `body` through those Zod schemas before the handler runs, so
 `input.body` is already validated and typed.
 
-`responses` is a map of named outcomes to a status and a schema. The handler returns one
-of those names with its data. Returning an undeclared name is a type error, and returning
-data that does not match the schema is caught at runtime before it reaches the client.
+`responses` is a map of named outcomes to a status and, for outcomes with a body, a schema.
+The handler returns one of those names with its data. Returning an undeclared name is a type
+error, and returning data that does not match the schema is caught at runtime before it
+reaches the client.
 
 Everything else is derived. The CLI reads these files to generate route metadata, produce
 OpenAPI, and check that the contract has not drifted from its committed baseline.
