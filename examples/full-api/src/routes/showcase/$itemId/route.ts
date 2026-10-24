@@ -1,5 +1,4 @@
 import { createRoute, createRouteRoot } from "@routa-ts/core";
-import { z } from "zod";
 import {
 	ReplaceShowcaseItemBody,
 	ShowcaseItem,
@@ -81,11 +80,8 @@ export default route({
 			params: ShowcaseItemParams,
 		},
 		responses: {
-			success: {
-				status: 204,
-				schema: z.null(),
-			},
+			success: { status: 204 },
 		},
-		run: () => ({ type: "success", data: null }),
+		run: () => ({ type: "success" }),
 	}),
 });

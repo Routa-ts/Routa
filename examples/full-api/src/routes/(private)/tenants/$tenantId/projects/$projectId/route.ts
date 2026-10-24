@@ -1,5 +1,4 @@
 import { createRoute, createRouteRoot } from "@routa-ts/core";
-import { z } from "zod";
 import { withProjectPermissions, withProjectScope } from "../../../../../../middleware/projects.js";
 import {
 	DeleteProjectParams,
@@ -66,16 +65,8 @@ export default route({
 			params: DeleteProjectParams,
 		},
 		responses: {
-			success: {
-				status: 204,
-				schema: z.null(),
-			},
+			success: { status: 204 },
 		},
-		run: () => {
-			return {
-				type: "success",
-				data: null,
-			};
-		},
+		run: () => ({ type: "success" }),
 	}),
 });
