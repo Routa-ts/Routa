@@ -430,8 +430,9 @@ export type MiddlewareProvidedCtx<TProvides extends MiddlewareProvidesSpec> = {
 	[K in keyof TProvides]: SchemaOutput<TProvides[K]>;
 };
 
+/** Its only member names the fix, so TypeScript's error for a changed value says what to do. */
 declare class SelectedOutcome {
-	private readonly selectedOutcome: never;
+	private readonly "Return the value next() resolved to, unchanged.": never;
 }
 
 /**

@@ -2638,6 +2638,39 @@ export default createRouteRoot("/status")({
 		expect(insecure.stderr).toContain("ROUTA_RESPONSE_COOKIE_RULE");
 	});
 
+	it("tells a consumer to return next()'s result unchanged", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-consumer-continuation-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/status/route.ts"),
+			`import { createMiddleware, createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+const tagged = createMiddleware({
+\trun: async ({ next }) => {
+\t\tconst result = await next();
+\t\treturn { ...result, headers: { "x-tag": "1" } };
+\t},
+});
+
+export default createRouteRoot("/status")({
+\tget: createRoute({
+\t\tmiddleware: [tagged],
+\t\tresponses: { ok: { status: 200, schema: z.object({ ok: z.boolean() }) } },
+\t\trun: ({ response }) => response.ok({ ok: true }),
+\t}),
+});
+`,
+		);
+
+		const result = await run(["check"], { cwd });
+
+		expect(result.code).not.toBe(0);
+		expect(result.stderr).toContain("TypeScript check failed.");
+		expect(result.stdout).toContain("Return the value next() resolved to, unchanged.");
+	});
+
 	it("reports extra fields in route run results", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-result-shape-"));
 		createTypeScriptProject(cwd);
