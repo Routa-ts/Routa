@@ -822,6 +822,35 @@ export const Account = z
 		);
 	});
 
+	it("keeps metadata through object strictness modifiers", () => {
+		const cwd = project({
+			"src/routes/people/route.ts": routeFile("/people", {
+				responses: `ok: { status: 200, schema: z.object({
+			strict: z.object({ name: z.string() }).describe("A strict person").strict(),
+			loose: z.object({ name: z.string() }).meta({ title: "Loose person" }).loose(),
+		}) }`,
+			}),
+		});
+		const document = generateOpenApi(cwd);
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect((responseSchema(document, "/people", "get", 200) as Json).properties).toEqual({
+			strict: {
+				type: "object",
+				required: ["name"],
+				properties: { name: { type: "string" } },
+				additionalProperties: false,
+				description: "A strict person",
+			},
+			loose: {
+				type: "object",
+				required: ["name"],
+				properties: { name: { type: "string" } },
+				title: "Loose person",
+			},
+		});
+	});
+
 	it("documents Zod string formats and sized numbers", () => {
 		const cwd = project({
 			"src/routes/hosts/route.ts": routeFile("/hosts", {

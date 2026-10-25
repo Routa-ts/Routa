@@ -2101,7 +2101,7 @@ class SchemaProjector {
 				delete schema.additionalProperties;
 			}
 
-			return { schema, meta: {}, optional: false };
+			return { schema, meta: node.meta, optional: node.optional };
 		}
 
 		if (name === "register") {
