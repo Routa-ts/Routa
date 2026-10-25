@@ -306,34 +306,34 @@ async function smokeTestStart(cwd) {
 
 /** Checks the response contract route: header, repeated `Set-Cookie` fields, and an empty body. */
 async function checkResponseContract(port, signal, output) {
-	const created = await fetch(`http://127.0.0.1:${port}/session`, { method: "POST", signal });
-	const createdBody = await created.text();
-	const createdCookies = created.headers.getSetCookie();
-	const deleted = await fetch(`http://127.0.0.1:${port}/session`, { method: "DELETE", signal });
-	const deletedBody = await deleted.text();
-	const deletedCookies = deleted.headers.getSetCookie();
+	const observe = async (method) => {
+		const response = await fetch(`http://127.0.0.1:${port}/session`, { method, signal });
+		return {
+			status: response.status,
+			location: response.headers.get("location"),
+			body: await response.text(),
+			cookies: response.headers.getSetCookie(),
+		};
+	};
+	const actual = { created: await observe("POST"), deleted: await observe("DELETE") };
 	const expected = {
-		created: [
-			201,
-			"/session",
-			'{"id":"s_1"}',
-			[
+		created: {
+			status: 201,
+			location: "/session",
+			body: '{"id":"s_1"}',
+			cookies: [
 				"session=a%20b; Path=/; HttpOnly; Secure; SameSite=Lax",
 				"theme=dark; Path=/; Secure; SameSite=Lax",
 			],
-		],
-		deleted: [
-			204,
-			null,
-			"",
-			[
+		},
+		deleted: {
+			status: 204,
+			location: null,
+			body: "",
+			cookies: [
 				"session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; HttpOnly; Secure; SameSite=Lax",
 			],
-		],
-	};
-	const actual = {
-		created: [created.status, created.headers.get("location"), createdBody, createdCookies],
-		deleted: [deleted.status, deleted.headers.get("location"), deletedBody, deletedCookies],
+		},
 	};
 
 	if (JSON.stringify(actual) !== JSON.stringify(expected)) {
