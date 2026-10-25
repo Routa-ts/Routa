@@ -1561,7 +1561,7 @@ function exportedMiddlewareDeclarations(
 				source.file,
 				targetAst,
 				parser,
-				seen,
+				new Set(seen),
 			);
 			const declaration = targetDeclarations.find((item) => item.exportedName === source.name);
 

@@ -89,6 +89,11 @@ Composition follows Zod's meaning, not a fixed keyword:
 | `.nullable()`                         | `anyOf` with `{ type: "null" }`                           |
 | `.optional()`, `.nullish()`           | The property leaves `required`                            |
 
+Like Zod, an intersection rejects unknown keys only when every member is strict. A strict
+member that stays in `allOf` is documented open, so the combined object stays possible.
+Intersected object schemas in `params`, `query`, `headers`, or `cookies` split into
+parameters, even when the members are exported or described.
+
 Input schemas describe what a client sends. A property with `.default()` or `.catch()` is
 optional, `z.coerce.number()` is a number, and `.transform()` or `.pipe()` after a readable
 schema documents that readable schema. `z.stringbool()` is a `boolean` parameter, following

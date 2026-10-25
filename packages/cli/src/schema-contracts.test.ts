@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
 import { run } from "./index.js";
 import { generateOpenApi } from "./openapi.js";
@@ -382,6 +382,90 @@ export const guard = createMiddleware({
 		expect(semantic(responseSchema(document, "/labels", "get", 200), components)).toEqual(
 			nativeSchema(runtimeSchemas(schemas).Labels),
 		);
+	});
+
+	it("keeps explicit strictness possible when intersection members are referenced or described", () => {
+		const schemas = `export const Strict = z.strictObject({ a: z.string() });
+export const Open = z.object({ b: z.string() });
+export const Closed = z.strictObject({ b: z.string() });
+export const Mixed = Strict.and(Open);
+export const Sealed = Strict.and(Closed);
+export const Described = z.strictObject({ a: z.string() }).describe("Left side").and(z.object({ b: z.string() }));
+export const Report = z.object({ mixed: Mixed, sealed: Sealed, described: Described });
+`;
+		const cwd = project({
+			"src/routes/report/schemas.ts": schemasFile(schemas),
+			"src/routes/report/route.ts": routeFile("/report", {
+				responses: "ok: { status: 200, schema: Report }",
+			}),
+		});
+
+		const document = generateOpenApi(cwd);
+		const components = document.components?.schemas ?? {};
+		const a = { type: "object", required: ["a"], properties: { a: { type: "string" } } };
+		const b = { type: "object", required: ["b"], properties: { b: { type: "string" } } };
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(components.Mixed).toEqual({ allOf: [a, { $ref: "#/components/schemas/Open" }] });
+		expect(components.Sealed).toEqual({
+			type: "object",
+			required: ["a", "b"],
+			properties: { a: { type: "string" }, b: { type: "string" } },
+			additionalProperties: false,
+		});
+		// Zod's converter keeps the closed member here, documenting an object
+		// that cannot exist, while Zod itself accepts { a, b }.
+		expect(components.Described).toEqual({ allOf: [{ ...a, description: "Left side" }, b] });
+		expect(runtimeSchemas(schemas).Described.safeParse({ a: "a", b: "b" }).success).toBe(true);
+		expect(semantic(components.Mixed, components)).toEqual(
+			nativeSchema(runtimeSchemas(schemas).Mixed),
+		);
+		expect(semantic(components.Sealed, components)).toEqual(
+			nativeSchema(runtimeSchemas(schemas).Sealed),
+		);
+	});
+
+	it("splits referenced and described object intersections into parameters", () => {
+		const schemas = `export const Search = z.object({ q: z.string() });
+export const Pagination = z.object({ page: z.coerce.number().optional() });
+export const ItemParams = z.object({ id: z.string() });
+export const Version = z.object({ version: z.string() });
+`;
+		const cwd = project({
+			"src/routes/search/schemas.ts": schemasFile(schemas),
+			"src/routes/search/route.ts": routeFile("/search", {
+				input: "query: Search.and(Pagination)",
+				responses: "ok: { status: 200, schema: z.object({ ok: z.boolean() }) }",
+			}),
+			"src/routes/find/route.ts": routeFile("/find", {
+				input:
+					'query: z.object({ q: z.string() }).describe("Search").and(z.object({ page: z.coerce.number().optional() }).describe("Paging"))',
+				responses: "ok: { status: 200, schema: z.object({ ok: z.boolean() }) }",
+			}),
+			"src/routes/items/$id/schemas.ts": schemasFile(schemas),
+			"src/routes/items/$id/route.ts": routeFile("/items/:id", {
+				input:
+					'params: ItemParams.and(z.object({}).describe("Item")), query: z.intersection(Version, Pagination)',
+				responses: "ok: { status: 200, schema: z.object({ ok: z.boolean() }) }",
+			}),
+		});
+
+		const document = generateOpenApi(cwd);
+		const paths = document.paths as Record<string, Record<string, Json>>;
+		const parameters = [
+			{ name: "q", in: "query", required: true, schema: { type: "string" } },
+			{ name: "page", in: "query", required: false, schema: { type: "number" } },
+		];
+
+		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
+		expect(paths["/search"].get.parameters).toEqual(parameters);
+		expect(paths["/find"].get.parameters).toEqual(parameters);
+		expect(paths["/items/{id}"].get.parameters).toEqual([
+			{ name: "id", in: "path", required: true, schema: { type: "string" } },
+			{ name: "version", in: "query", required: true, schema: { type: "string" } },
+			{ name: "page", in: "query", required: false, schema: { type: "number" } },
+		]);
+		expect(document.components?.schemas ?? {}).toEqual({});
 	});
 
 	it("does not report response pipes into schemas that only add documentation or validation", () => {
@@ -865,6 +949,36 @@ export default`,
 		});
 	});
 
+	it("orders components the same way in every locale", () => {
+		const cwd = project({
+			"src/routes/report/schemas.ts": schemasFile(`export const Za = z.object({ z: z.string() });
+export const Aa = z.object({ a: z.string() });
+export const Report = z.object({ za: Za, aa: Aa });
+`),
+			"src/routes/report/route.ts": routeFile("/report", {
+				responses: "ok: { status: 200, schema: Report }",
+			}),
+		});
+		const keysIn = (locale: string) => {
+			const collator = new Intl.Collator(locale);
+			const localeCompare = vi
+				.spyOn(String.prototype, "localeCompare")
+				.mockImplementation(function (this: string, other: string) {
+					return collator.compare(this, other);
+				});
+
+			try {
+				return Object.keys(generateOpenApi(cwd).components?.schemas ?? {});
+			} finally {
+				localeCompare.mockRestore();
+			}
+		};
+
+		expect(new Intl.Collator("da-DK").compare("Aa", "Za")).toBeGreaterThan(0);
+		expect(keysIn("en-US")).toEqual(["Aa", "Report", "Za"]);
+		expect(keysIn("da-DK")).toEqual(["Aa", "Report", "Za"]);
+	});
+
 	it("names components from ids and export names and rejects identity collisions", () => {
 		const shared = `export const User = z.object({ id: z.string() });
 export const GetUserResponse = User;
@@ -983,6 +1097,28 @@ export const guard = createMiddleware({
 				responseSchema(localDocument, "/admin", "get", 403),
 			);
 		}
+
+		const siblings = project({
+			"src/routes/admin/route.ts": routeFile("/admin", {
+				imports: 'import { guard, audit } from "../../middleware/index.js";',
+				responses: "ok: { status: 200, schema: z.object({ ok: z.boolean() }) }",
+			}).replace("\tget: createRoute({", "\tmiddleware: [guard, audit],\n\tget: createRoute({"),
+			"src/middleware/index.ts":
+				'export { guard } from "./barrel.js";\nexport { audit } from "./barrel.js";\n',
+			"src/middleware/barrel.ts": 'export { guard, audit } from "./guard.js";\n',
+			"src/middleware/guard.ts": `${middleware("Problem")}
+export const audit = createMiddleware({
+	rejects: { unaudited: { status: 409, schema: Problem } },
+	run: ({ next }) => next({}),
+});
+`,
+		});
+		const siblingsDocument = generateOpenApi(siblings);
+
+		expect(validateProject(siblings, { write: false }).diagnostics).toEqual([]);
+		expect(responseSchema(siblingsDocument, "/admin", "get", 409)).toEqual(
+			responseSchema(localDocument, "/admin", "get", 403),
+		);
 
 		const imported = project({
 			...routes,
@@ -1140,10 +1276,10 @@ function responseSchema(document: unknown, path: string, method: string, status:
  * native Zod conversion compare by meaning.
  *
  * - `$ref`s are inlined from `components`.
- * - `additionalProperties: false` is dropped, because Zod closes output objects
- *   by default and Routa documents response objects as open.
  * - Bare-type `type` arrays become `anyOf`.
- * - `allOf` members that are plain objects fold into one object.
+ * - `allOf` members that are open plain objects fold into one object, closed
+ *   when the `allOf` has `unevaluatedProperties: false`. A closed member stays
+ *   in `allOf`, because it rejects the other members' properties.
  * - OpenAPI `discriminator` is dropped, because JSON Schema has no equivalent.
  * - `propertyNames: { type: "string" }` is dropped, because JSON keys are
  *   always strings.
@@ -1168,7 +1304,6 @@ function semantic(schema: unknown, components: Record<string, unknown> = {}): un
 
 	for (const [key, item] of Object.entries(rest)) {
 		if (key === "$schema" || key === "$defs" || key === "discriminator") continue;
-		if (key === "additionalProperties" && item === false) continue;
 		if (key === "propertyNames" && JSON.stringify(item) === '{"type":"string"}') continue;
 		value[key] = semantic(item, components);
 	}
@@ -1193,9 +1328,20 @@ function semantic(schema: unknown, components: Record<string, unknown> = {}): un
 
 /**
  * Converts a runtime schema with Zod's native converter, then normalizes it.
+ *
+ * Zod closes every output object by default, while Routa documents objects
+ * as open unless they are explicitly strict, so only that default is removed.
  */
 function nativeSchema(schema: z.ZodType, io: "input" | "output" = "output"): unknown {
-	const json = z.toJSONSchema(schema, { io }) as Json;
+	const json = z.toJSONSchema(schema, {
+		io,
+		override: ({ zodSchema, jsonSchema }) => {
+			const def = zodSchema._zod.def;
+			if (def.type === "object" && !def.catchall && jsonSchema.additionalProperties === false) {
+				delete jsonSchema.additionalProperties;
+			}
+		},
+	}) as Json;
 	return semantic(withoutDefaults(json), (json.$defs as Json | undefined) ?? {});
 }
 
@@ -1229,7 +1375,7 @@ function withoutDefaults(schema: unknown): unknown {
 }
 
 function foldPlainObjects(value: Json): Json {
-	const { allOf, ...others } = value;
+	const { allOf, unevaluatedProperties, ...others } = value;
 	const members = allOf as Json[];
 	const foldable = members.every(
 		(member) =>
@@ -1247,5 +1393,11 @@ function foldPlainObjects(value: Json): Json {
 		for (const key of (member.required as string[] | undefined) ?? []) required.add(key);
 	}
 
-	return { ...others, type: "object", properties, required: [...required].sort() };
+	return {
+		...others,
+		type: "object",
+		properties,
+		required: [...required].sort(),
+		...(unevaluatedProperties === false ? { additionalProperties: false } : {}),
+	};
 }

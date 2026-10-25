@@ -453,7 +453,7 @@ class SchemaProjector {
 	componentSchemas(): Record<string, JsonSchema> {
 		return Object.fromEntries(
 			Array.from(this.components.entries())
-				.sort(([left], [right]) => left.localeCompare(right))
+				.sort(([left], [right]) => compareText(left, right))
 				.map(([key, component]) => [key, component.content]),
 		);
 	}
@@ -813,7 +813,7 @@ class SchemaProjector {
 				return this.discriminatedUnion(call, context);
 			case "intersection":
 				return first && second
-					? this.intersection([this.node(first, context), this.node(second, context)])
+					? this.intersection([this.node(first, context), this.node(second, context)], context)
 					: this.missing(call, context);
 			case "optional":
 			case "nullable":
@@ -939,7 +939,7 @@ class SchemaProjector {
 
 		if (name === "and") {
 			return first
-				? this.intersection([receiver(), this.node(first, context)])
+				? this.intersection([receiver(), this.node(first, context)], context)
 				: this.missing(call, context);
 		}
 
@@ -1110,16 +1110,35 @@ class SchemaProjector {
 	/**
 	 * Projects an intersection as `allOf`, folding plain object members into
 	 * one object the way Zod's native converter does.
+	 *
+	 * Zod rejects unknown keys of an intersection only when every member is
+	 * closed, so a closed member kept in `allOf` is inlined open, and the whole
+	 * closes only when every member does. A root parameter container folds
+	 * through references and documentation, which parameters have no place for.
 	 */
-	private intersection(nodes: SchemaNode[]): SchemaNode {
-		const members = nodes.flatMap((node) => {
-			const schema = this.materialize(node);
-			return Array.isArray(schema.allOf) && Object.keys(schema).length === 1
-				? (schema.allOf as JsonSchema[])
-				: [schema];
-		});
+	private intersection(nodes: SchemaNode[], context: Context): SchemaNode {
+		const shapes = nodes.map((node) => this.shape(node));
+		const closed = shapes.every(isClosed);
+		const parameters = context.parameter && foldObjects(shapes.flatMap(flattenAllOf));
 
-		return plainNode(foldObjects(members) ?? { allOf: members });
+		if (parameters) {
+			return plainNode(parameters);
+		}
+
+		const members = nodes.flatMap((node, index) =>
+			flattenAllOf(
+				isClosed(shapes[index])
+					? { ...opened(shapes[index]), ...this.documentation(node) }
+					: this.materialize(node),
+			),
+		);
+		const folded = foldObjects(members);
+
+		return plainNode(
+			folded
+				? { ...folded, ...(closed ? { additionalProperties: false } : {}) }
+				: { allOf: members, ...(closed ? { unevaluatedProperties: false } : {}) },
+		);
 	}
 
 	private wrapper(
@@ -1434,6 +1453,22 @@ class SchemaProjector {
 
 	private content(node: SchemaNode): JsonSchema {
 		return { ...node.schema, ...node.meta };
+	}
+
+	/**
+	 * The structural keywords a node stands for, looking through component
+	 * references and leaving out documentation.
+	 */
+	private shape(node: SchemaNode): JsonSchema {
+		return node.via ? this.shape(node.via) : node.schema;
+	}
+
+	/**
+	 * The documentation a node carries, including what it inherits through
+	 * component references.
+	 */
+	private documentation(node: SchemaNode): JsonSchema {
+		return node.via ? { ...this.documentation(node.via), ...node.meta } : node.meta;
 	}
 
 	/**
@@ -1755,6 +1790,38 @@ function jsonLiteral(expression: ts.Expression): unknown {
 const foldableKeys = new Set(["type", "properties", "required", "additionalProperties"]);
 
 /**
+ * Whether a schema rejects keys it does not declare: a strict object, or a
+ * composition closed with `unevaluatedProperties: false`.
+ */
+function isClosed(schema: JsonSchema): boolean {
+	return (
+		(schema.type === "object" && schema.additionalProperties === false)
+		|| schema.unevaluatedProperties === false
+	);
+}
+
+/**
+ * The same schema with its closedness removed, for placement in `allOf`.
+ */
+function opened(schema: JsonSchema): JsonSchema {
+	return Object.fromEntries(
+		Object.entries(schema).filter(
+			([key, value]) =>
+				!(key === "additionalProperties" || key === "unevaluatedProperties") || value !== false,
+		),
+	);
+}
+
+/**
+ * The members of a bare `allOf`, so nested intersections flatten.
+ */
+function flattenAllOf(schema: JsonSchema): JsonSchema[] {
+	return Array.isArray(schema.allOf) && Object.keys(schema).length === 1
+		? (schema.allOf as JsonSchema[])
+		: [schema];
+}
+
+/**
  * Combines plain object members of an intersection into the one object they
  * describe together, or returns `undefined` when any member carries another
  * keyword (a `$ref`, a union, metadata, or typed additional properties).
@@ -1817,9 +1884,7 @@ function foldObjects(members: JsonSchema[]): JsonSchema | undefined {
 function stableJson(value: unknown): string {
 	return JSON.stringify(value, (_key, item: unknown) =>
 		typeof item === "object" && item !== null && !Array.isArray(item)
-			? Object.fromEntries(
-					Object.entries(item).sort(([left], [right]) => left.localeCompare(right)),
-				)
+			? Object.fromEntries(Object.entries(item).sort(([left], [right]) => compareText(left, right)))
 			: item,
 	);
 }
@@ -1834,4 +1899,9 @@ function readDeprecation(contract: ts.ObjectLiteralExpression): ProjectedOperati
 	const sunset = string("sunset");
 	const replacement = string("replacement");
 	return sunset || replacement ? { sunset, replacement } : undefined;
+}
+
+/** Orders names by UTF-16 code units, the same everywhere, unlike locale-aware comparison. */
+function compareText(left: string, right: string): number {
+	return left < right ? -1 : left > right ? 1 : 0;
 }
