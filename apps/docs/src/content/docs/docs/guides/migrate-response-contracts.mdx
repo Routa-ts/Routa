@@ -74,16 +74,31 @@ OpenAPI check passed. No drift detected.
 `204`, `205`, and `304` outcomes, and every outcome of a `HEAD` route, cannot declare a
 `schema` or return `data`. Routa used to require both and then discard the data.
 
-```ts title="Before"
+```ts title="Before (excerpt, now fails)"
 deleted: { status: 204, schema: z.null() },
 // ...
 return { type: "deleted", data: null };
 ```
 
-```ts title="After"
-deleted: { status: 204 },
-// ...
-return { type: "deleted" };
+```ts title="After: src/routes/users/$userId/route.ts"
+import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+const route = createRouteRoot("/users/:userId");
+
+export default route({
+	delete: createRoute({
+		input: {
+			params: z.object({ userId: z.string() }),
+		},
+		responses: {
+			deleted: { status: 204 },
+		},
+		run: () => {
+			return { type: "deleted" };
+		},
+	}),
+});
 ```
 
 The same applies to a middleware reject that can end a `HEAD` route: remove its `schema`.
@@ -99,7 +114,7 @@ cannot be an outcome (`ROUTA_RESPONSE_INFORMATIONAL_STATUS`).
 A response schema describes the JSON your handler already produced. Move transforms,
 defaults, catches, coercion, and value-rewriting checks such as `.trim()` into the handler.
 
-```ts title="Before"
+```ts title="Before (excerpt, now fails)"
 export const User = z.object({
 	name: z.string().trim(),
 	plan: z.string().default("free"),
@@ -108,13 +123,33 @@ export const User = z.object({
 return { type: "success", data: user };
 ```
 
-```ts title="After"
+```ts title="After: src/routes/me/schemas.ts"
+import { z } from "zod";
+
 export const User = z.object({
 	name: z.string(),
 	plan: z.string(),
 });
-// ...
-return { type: "success", data: { name: user.name.trim(), plan: user.plan ?? "free" } };
+```
+
+```ts title="After: src/routes/me/route.ts"
+import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { User } from "./schemas.js";
+
+const route = createRouteRoot("/me");
+
+const stored: { name: string; plan?: string } = { name: "  Ada Lovelace " };
+
+export default route({
+	get: createRoute({
+		responses: {
+			success: { status: 200, schema: User },
+		},
+		run: () => {
+			return { type: "success", data: { name: stored.name.trim(), plan: stored.plan ?? "free" } };
+		},
+	}),
+});
 ```
 
 `routa check` reports `ROUTA_RESPONSE_SCHEMA_MUTATION` and names the construct. For
@@ -131,68 +166,153 @@ and sends the handler's value. Any difference is a `500 Invalid handler output`.
 development. Now it fails there. Production skips validation by default and sends the value
 as returned, so drop the fields in the handler instead of relying on the schema.
 
-```ts title="Before"
+```ts title="Before (excerpt, now fails in routa dev)"
 const row = await db.users.find(id); // includes passwordHash
 return { type: "success", data: row };
 ```
 
-```ts title="After"
-const row = await db.users.find(id);
-return { type: "success", data: { id: row.id, name: row.name } };
+```ts title="After: src/routes/users/$userId/route.ts"
+import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+const route = createRouteRoot("/users/:userId");
+
+const rows = new Map([["usr_1", { id: "usr_1", name: "Ada", passwordHash: "$2b$10$..." }]]);
+
+export default route({
+	get: createRoute({
+		input: {
+			params: z.object({ userId: z.string() }),
+		},
+		responses: {
+			success: { status: 200, schema: z.object({ id: z.string(), name: z.string() }) },
+			notFound: { status: 404, schema: z.object({ message: z.string() }) },
+		},
+		run: ({ input }) => {
+			const row = rows.get(input.params.userId);
+
+			if (!row) {
+				return { type: "notFound", data: { message: "User not found." } };
+			}
+
+			return { type: "success", data: { id: row.id, name: row.name } };
+		},
+	}),
+});
 ```
 
 ### Dates Are ISO Strings
 
 `z.date()` has no JSON form. Declare the string the client receives and return it.
 
-```ts title="Before"
+```ts title="Before (excerpt, now fails)"
 createdAt: z.date(),
 // ...
 data: { createdAt: row.createdAt },
 ```
 
-```ts title="After"
-createdAt: z.iso.datetime(),
-// ...
-data: { createdAt: row.createdAt.toISOString() },
+```ts title="After: src/routes/status/route.ts"
+import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+const route = createRouteRoot("/status");
+
+const startedAt = new Date();
+
+export default route({
+	get: createRoute({
+		responses: {
+			success: { status: 200, schema: z.object({ startedAt: z.iso.datetime() }) },
+		},
+		run: () => {
+			return { type: "success", data: { startedAt: startedAt.toISOString() } };
+		},
+	}),
+});
 ```
 
 `routa check` reports `ROUTA_SCHEMA_UNSUPPORTED` with the suggestion to use
 `z.iso.datetime()`.
 
-### Schemas Live Where Routa Can Read Them
+### Schemas Come From Source Routa Can Read
 
-Routa reads schemas from source without running it. A route's schemas must be declared in
-its sibling `schemas.ts` or in the route file, and a middleware's in the file that declares
-it. An imported schema reports `ROUTA_SCHEMA_UNRESOLVED`, and a route `input` built from a
-spread or a shared variable reports `ROUTA_SCHEMA_UNSUPPORTED`.
+Routa reads schemas from source without running it, so it no longer fills in a schema from
+the baseline. A schema can be declared in the route file, its sibling `schemas.ts`, or the
+file that declares a middleware, or exported with `export const` from a module those files
+import by name through a relative path. Routa follows aliases and
+`export { ... } from` or `export * from` re-exports to the declaration. It does not resolve
+package imports or tsconfig path aliases, which report `ROUTA_SCHEMA_UNRESOLVED`, or a
+schema returned by your own function, which reports `ROUTA_SCHEMA_UNSUPPORTED`. A route
+`input` built from a spread or a shared variable also reports `ROUTA_SCHEMA_UNSUPPORTED`.
 
-```ts title="Before: src/routes/users/route.ts"
-import { User } from "../../shared/schemas.js";
+```ts title="Before (excerpt, now fails)"
+import { User } from "@/schemas/user.js";
 ```
 
-```ts title="After: src/routes/users/schemas.ts"
+```ts title="After: src/schemas/user.ts"
 import { z } from "zod";
 
 export const User = z.object({ id: z.string(), name: z.string() });
 ```
 
-Two routes may each declare an identical `User`, and OpenAPI shares one `User` component.
-If the declarations differ, Routa reports `ROUTA_SCHEMA_COMPONENT_COLLISION` instead of
-picking one. Cookie handles are different: import them from any module.
+```ts title="After: src/routes/users/route.ts"
+import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+import { User } from "../../schemas/user.js";
+
+const route = createRouteRoot("/users");
+
+export default route({
+	get: createRoute({
+		responses: {
+			success: { status: 200, schema: z.object({ users: z.array(User) }) },
+		},
+		run: () => {
+			return { type: "success", data: { users: [{ id: "usr_1", name: "Ada" }] } };
+		},
+	}),
+});
+```
+
+Every route that imports `User` shares one `User` component in OpenAPI. Two routes may also
+each declare an identical `User`, and they share the component too. If two declarations
+named `User` differ, Routa reports `ROUTA_SCHEMA_COMPONENT_COLLISION` instead of picking
+one.
 
 ### Handler Results Name a Declared Outcome
 
 A result's `type` must be one of the route's outcome names. A `type` read from a `string`
 variable no longer type-checks, even when its data matches an outcome.
 
-```ts title="Before"
+```ts title="Before (excerpt, now fails)"
 const type: string = found ? "success" : "notFound";
 return { type, data };
 ```
 
-```ts title="After"
-return found ? response.success(data) : response.notFound({ message: "Not found" });
+```ts title="After: src/routes/users/$userId/route.ts"
+import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+const route = createRouteRoot("/users/:userId");
+
+const users = new Map([["usr_1", { id: "usr_1", name: "Ada" }]]);
+
+export default route({
+	get: createRoute({
+		input: {
+			params: z.object({ userId: z.string() }),
+		},
+		responses: {
+			success: { status: 200, schema: z.object({ id: z.string(), name: z.string() }) },
+			notFound: { status: 404, schema: z.object({ message: z.string() }) },
+		},
+		run: ({ input, response }) => {
+			const user = users.get(input.params.userId);
+
+			return user ? response.success(user) : response.notFound({ message: "User not found." });
+		},
+	}),
+});
 ```
 
 TypeScript reports that type `string` is not assignable to the outcome names.
@@ -205,14 +325,33 @@ different literal value. Otherwise, give each outcome its own status. Middleware
 part too: a route `403` outcome next to a middleware's `403` reject needs the same
 discriminator in both.
 
-```ts title="Before"
+```ts title="Before (excerpt, now fails)"
 created: { status: 201, schema: z.object({ id: z.string() }) },
 queued: { status: 201, schema: z.object({ ticket: z.string() }) },
 ```
 
-```ts title="After"
-created: { status: 201, schema: z.object({ kind: z.literal("created"), id: z.string() }) },
-queued: { status: 201, schema: z.object({ kind: z.literal("queued"), ticket: z.string() }) },
+```ts title="After: src/routes/jobs/route.ts"
+import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+const route = createRouteRoot("/jobs");
+
+export default route({
+	post: createRoute({
+		input: {
+			body: z.object({ background: z.boolean() }),
+		},
+		responses: {
+			created: { status: 201, schema: z.object({ kind: z.literal("created"), id: z.string() }) },
+			queued: { status: 201, schema: z.object({ kind: z.literal("queued"), ticket: z.string() }) },
+		},
+		run: ({ input, response }) => {
+			return input.body.background
+				? response.queued({ kind: "queued", ticket: "tkt_1" })
+				: response.created({ kind: "created", id: "job_1" });
+		},
+	}),
+});
 ```
 
 `routa check` reports `ROUTA_RESPONSE_STATUS_AMBIGUOUS`, which also covers a body and a
@@ -225,17 +364,52 @@ A route outcome cannot reuse the name of a reject from any middleware in its cha
 rejects cannot share a name. Remove the route outcome: the reject is already part of the
 operation and its OpenAPI document.
 
-```ts title="Before: a route under an auth middleware that rejects with unauthorized"
+```ts title="Before (excerpt of a route under requireAuth, now fails)"
 responses: {
 	success: { status: 200, schema: Report },
 	unauthorized: { status: 401, schema: z.object({ message: z.string() }) },
 },
 ```
 
-```ts title="After"
-responses: {
-	success: { status: 200, schema: Report },
-},
+```ts title="After: src/middleware/auth.ts"
+import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+
+export const requireAuth = createMiddleware({
+	input: {
+		headers: z.object({ authorization: z.string().optional() }),
+	},
+	rejects: {
+		unauthorized: { status: 401, schema: z.object({ message: z.string() }) },
+	},
+	run: ({ input, next }) => {
+		if (!input.headers.authorization) {
+			return { type: "unauthorized", data: { message: "Authentication required" } };
+		}
+
+		return next();
+	},
+});
+```
+
+```ts title="After: src/routes/reports/route.ts"
+import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+import { requireAuth } from "../../middleware/auth.js";
+
+const route = createRouteRoot("/reports");
+
+export default route({
+	get: createRoute({
+		middleware: [requireAuth],
+		responses: {
+			success: { status: 200, schema: z.object({ total: z.number() }) },
+		},
+		run: () => {
+			return { type: "success", data: { total: 42 } };
+		},
+	}),
+});
 ```
 
 `routa check` reports `ROUTA_OUTCOME_NAME_COLLISION`, and the app fails at startup with
@@ -250,18 +424,27 @@ continuing middleware must return it as is. It cannot read the outcome, copy it,
 it. Make response decisions in the handler, or in a reject the middleware returns before
 calling `next()`.
 
-```ts title="Before"
-run: async ({ ctx, next }) => {
+```ts title="Before (excerpt, now fails)"
+run: async ({ next }) => {
 	const result = await next();
-	ctx.logger.info("audit.done", "Request finished.", { outcome: result.type });
+	console.info(`audit: ${result.type}`);
 	return result;
 },
 ```
 
-```ts title="After"
-run: async ({ next }) => {
-	return next();
-},
+```ts title="After: src/middleware/audit.ts"
+import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+
+export const audit = createMiddleware({
+	input: {
+		headers: z.object({ "x-actor": z.string().optional() }),
+	},
+	run: ({ input, next }) => {
+		console.info(`audit: ${input.headers["x-actor"] ?? "anonymous"}`);
+		return next();
+	},
+});
 ```
 
 Routa already logs every request's method, path, status, and duration as `http.request`.
@@ -282,7 +465,7 @@ first `openapi check` after upgrading reports these differences:
   `components.schemas` entries named after their exports; a `$ref` and an equal inline
   schema are not drift.
 
-`openapi check` does not compare `operationId`, `info`, `servers`, or descriptions, so these
+`openapi check` ignores `operationId`, `info`, `servers`, and prose descriptions, so these
 changes appear only in the baseline diff that `--update-baseline` writes:
 
 - Every `operationId` is the method plus the PascalCase path, so `getUser` on
@@ -292,8 +475,9 @@ changes appear only in the baseline diff that `--update-baseline` writes:
 - A response description is the outcome's `description` or its humanized name, such as
   "Not found", instead of "Generated by Routa".
 
-Two routes whose paths generate the same `operationId` report
-`ROUTA_DUPLICATE_OPERATION_ID`.
+The generated `Set-Cookie` header description is the exception: it lists cookie names and
+attributes, which are contract facts, so `openapi check` compares it. Two routes whose paths
+generate the same `operationId` report `ROUTA_DUPLICATE_OPERATION_ID`.
 
 ### Other Diagnostics
 
