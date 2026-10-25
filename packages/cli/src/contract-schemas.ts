@@ -11,7 +11,7 @@ import {
 } from "./ast.js";
 import {
 	type Diagnostic,
-	middlewareDeclarationFile,
+	middlewareDeclaration,
 	type MiddlewareMetadata,
 	type RouteMetadata,
 } from "./project.js";
@@ -412,18 +412,22 @@ class SchemaProjector {
 	/**
 	 * Projects terminal middleware reject schemas, keyed by status.
 	 *
-	 * Identifiers resolve against the middleware's own source file.
+	 * Identifiers resolve against the middleware's own source file. Every route
+	 * that imports a middleware shares one projection per declared reject, so a
+	 * reject schema keeps one component identity.
 	 */
 	middlewareRejects(middleware: readonly MiddlewareMetadata[]): Map<number, JsonSchema> {
 		const schemas = new Map<number, JsonSchema>();
 
 		for (const item of middleware) {
+			const declaration = middlewareDeclaration(this.cwd, item.file, item.name, this.parser);
+
 			for (const reject of item.rejects) {
-				const key = `${item.file}#${item.name}#${reject.type}`;
+				const key = `${declaration.file}#${declaration.name}#${reject.type}`;
 				let schema = this.rejectCache.get(key);
 
 				if (!schema) {
-					const source = this.middlewareSource(item);
+					const source = this.source(declaration.file);
 					const virtualFile = join(".routa", "middleware-rejects", `${key}.ts`);
 					const ast = this.parser.createSourceFile(virtualFile, `const schema = ${reject.schema};`);
 					const initializer = localInitializer(ast, "schema");
@@ -438,13 +442,6 @@ class SchemaProjector {
 		}
 
 		return schemas;
-	}
-
-	/**
-	 * Finds the file that declares a middleware, following imports and re-exports.
-	 */
-	private middlewareSource(item: MiddlewareMetadata): SchemaSource {
-		return this.source(middlewareDeclarationFile(this.cwd, item.file, item.name, this.parser));
 	}
 
 	/**

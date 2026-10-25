@@ -1663,24 +1663,25 @@ function importedMiddlewareDeclaration(
 }
 
 /**
- * Finds the file that declares a middleware a module uses. Route files record
- * middleware they import under their own path, so follow the import and any
- * re-exports to the declaring file.
+ * Finds the declaration of a middleware a module uses. Route files record
+ * middleware they import under their own path and local name, so follow the
+ * import and any re-exports to the declaring file and its declared name.
  *
  * @param cwd - The project root directory
  * @param file - The module that declares or imports the middleware
  * @param name - The middleware's local name in `file`
- * @returns The declaring file, or `file` when the middleware is not imported or unresolved
+ * @returns The declaring file and declared name, or `file` and `name` when the middleware is not imported or unresolved
  */
-export function middlewareDeclarationFile(
+export function middlewareDeclaration(
 	cwd: string,
 	file: string,
 	name: string,
 	parser: ts.SourceFileParser,
-): string {
+): { file: string; name: string } {
 	const sourceFile = parseTypeScriptFile(join(cwd, file), parser);
 	const source = namedImportMap(cwd, file, sourceFile).get(name);
-	return (source && importedMiddlewareDeclaration(cwd, source, parser)?.file) ?? file;
+	const declaration = source && importedMiddlewareDeclaration(cwd, source, parser);
+	return declaration ? { file: declaration.file, name: declaration.name } : { file, name };
 }
 
 /**

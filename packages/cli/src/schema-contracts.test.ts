@@ -1130,6 +1130,60 @@ export const audit = createMiddleware({
 		]);
 	});
 
+	it("gives a named inline reject schema one component across the routes that import its middleware", () => {
+		const forbidden = 'z.object({ message: z.string() }).meta({ id: "Forbidden" })';
+		const guarded = (path: string, names: string) =>
+			routeFile(path, {
+				imports: `import { ${names} } from "../../middleware/guard.js";`,
+				responses: "ok: { status: 200, schema: z.object({ ok: z.boolean() }) }",
+			}).replace("\tget: createRoute({", `\tmiddleware: [${names}],\n\tget: createRoute({`);
+		const middleware = (
+			names: readonly string[],
+		) => `import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+${names
+	.map(
+		(name) => `
+export const ${name} = createMiddleware({
+	rejects: { denied: { status: 403, schema: ${forbidden} } },
+	run: ({ next }) => next({}),
+});
+`,
+	)
+	.join("")}`;
+		const shared = project({
+			"src/routes/admin/route.ts": guarded("/admin", "guard"),
+			"src/routes/audit/route.ts": guarded("/audit", "guard"),
+			"src/middleware/guard.ts": middleware(["guard"]),
+		});
+		const document = generateOpenApi(shared);
+
+		expect(validateProject(shared, { write: false }).diagnostics).toEqual([]);
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(document.components?.schemas).toEqual({
+			Forbidden: {
+				type: "object",
+				required: ["message"],
+				properties: { message: { type: "string" } },
+			},
+		});
+		for (const path of ["/admin", "/audit"]) {
+			expect(responseSchema(document, path, "get", 403)).toEqual({
+				$ref: "#/components/schemas/Forbidden",
+			});
+		}
+
+		const separate = project({
+			"src/routes/admin/route.ts": guarded("/admin", "guard"),
+			"src/routes/audit/route.ts": guarded("/audit", "audit"),
+			"src/middleware/guard.ts": middleware(["guard", "audit"]),
+		});
+
+		expect(validateProject(separate, { write: false }).diagnostics).toEqual([
+			expect.objectContaining({ code: "ROUTA_SCHEMA_COMPONENT_COLLISION" }),
+		]);
+	});
+
 	it("projects Routa's Sort and Fields query helpers as their incoming strings", () => {
 		const cwd = project({
 			"src/routes/projects/schemas.ts": `import { Fields, Sort } from "@routa-ts/core/query/helpers";
