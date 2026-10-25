@@ -762,11 +762,24 @@ class SchemaProjector {
 		return headers;
 	}
 
-	/** Follows a `$ref` into the components registered so far. */
-	private resolved(schema: JsonSchema): JsonSchema {
-		const ref = typeof schema.$ref === "string" ? schema.$ref : undefined;
-		const key = ref?.replace("#/components/schemas/", "");
-		return (key && this.components.get(key)?.content) || schema;
+	/**
+	 * Follows `$ref`s through the components registered so far, so an exported wrapper of an
+	 * exported schema reads as what it stands for. Each reference's sibling metadata applies over
+	 * its target, the nearest winning, and a cycle stops at the reference that repeats.
+	 */
+	private resolved(schema: JsonSchema, seen: ReadonlySet<string> = new Set()): JsonSchema {
+		const key =
+			typeof schema.$ref === "string"
+				? schema.$ref.replace("#/components/schemas/", "")
+				: undefined;
+		const target = key === undefined || seen.has(key) ? undefined : this.components.get(key);
+
+		if (!key || !target) {
+			return schema;
+		}
+
+		const { $ref: _ref, ...siblings } = schema;
+		return { ...this.resolved(target.content, new Set(seen).add(key)), ...siblings };
 	}
 
 	/** Whether a projected schema accepts only strings, numbers, and booleans. */

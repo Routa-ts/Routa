@@ -137,6 +137,34 @@ export const ItemHeaders = z.object({
 		});
 	});
 
+	it("classifies and describes headers through chains of exported wrappers", () => {
+		const cwd = project({
+			"src/routes/items/schemas.ts": `import { z } from "zod";
+
+export const Etag = z.string().describe("Entity tag");
+export const OptionalEtag = Etag.optional();
+export const Revision = z.number().int();
+export const FrozenRevision = Revision.readonly();
+export const ItemHeaders = z.object({ etag: OptionalEtag, "x-revision": FrozenRevision });
+`,
+			"src/routes/items/route.ts": route("/items", "ok: { status: 200, headers: ItemHeaders }", {
+				imports: 'import { ItemHeaders } from "./schemas";',
+			}),
+		});
+
+		const document = generateOpenApi(cwd);
+
+		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
+		expect(responseOf(document, "/items", "get", 200).headers).toEqual({
+			etag: { description: "Entity tag", schema: { $ref: "#/components/schemas/OptionalEtag" } },
+			"x-revision": { required: true, schema: { $ref: "#/components/schemas/FrozenRevision" } },
+		});
+		expect(document.components?.schemas).toMatchObject({
+			OptionalEtag: { $ref: "#/components/schemas/Etag" },
+			FrozenRevision: { $ref: "#/components/schemas/Revision" },
+		});
+	});
+
 	it("drifts against a baseline when a header changes", async () => {
 		const cwd = project({
 			"src/routes/items/route.ts": route(
