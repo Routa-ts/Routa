@@ -687,6 +687,16 @@ describe("response cookie declaration checks", () => {
 		]);
 	});
 
+	it("accepts exported wrappers of exported scalar value schemas", () => {
+		const cwd = withHandle(
+			`export const Value = z.string();
+export const FrozenValue = Value.readonly();
+${handle(complete.replace("z.string()", "FrozenValue"))}`,
+		);
+
+		expect(codes(cwd)).toEqual([]);
+	});
+
 	it("rejects value schemas that change values", () => {
 		const cwd = withHandle(handle(complete.replace("z.string()", "z.string().trim()")));
 
