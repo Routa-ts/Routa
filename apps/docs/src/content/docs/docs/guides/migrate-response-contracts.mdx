@@ -1,0 +1,336 @@
+---
+title: Migrate Response Contracts
+description: Update a project to the complete response contract and fix each break Routa reports.
+---
+
+import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
+import PackageManagers from "@components/PackageManagers.astro";
+
+Routa's response contract now covers bodyless outcomes, response headers, cookies, outcomes
+that share a status, and middleware rejects, and OpenAPI comes from source alone. Ordinary
+body outcomes keep their source. Source that no longer fits reports a TypeScript error or a
+`routa check` diagnostic. This guide shows the fix for each one, plus the two changes no
+command reports: stricter response validation at runtime and renamed operation IDs.
+
+## Before You Start
+
+- A committed working tree, so the migration is the only diff.
+- A passing `routa openapi check` on the version you are leaving. Drift you already had is
+  then easy to tell apart from drift the upgrade introduces.
+
+## Steps
+
+<Steps>
+1. Upgrade Routa and Zod. Routa requires Zod `^4.6.7`, and new projects declare that range.
+
+    <PackageManagers type="add" args="@routa-ts/core@latest @routa-ts/cli@latest zod@^4.6.7" />
+
+2. Run the check. Routa validates the route graph first and runs TypeScript once that
+   passes, so expect more than one round.
+
+    <PackageManagers type="exec" args="check" />
+
+3. Fix each reported code or compiler error with the matching section under
+   [What Changed](#what-changed), then run the check again until it passes.
+
+4. Run your tests, or exercise your routes under `routa dev`. Development response
+   validation now fails a value the response schema would change, including an extra key
+   it would strip, instead of sending the changed value.
+
+5. Compare the generated OpenAPI document with your baseline.
+
+   <PackageManagers type="exec" args="openapi check" />
+
+6. Review each reported difference against [OpenAPI Comes From Source](#openapi-comes-from-source),
+   then accept the new contract and commit the baseline.
+
+    <PackageManagers type="exec" args="openapi breaking --update-baseline" />
+
+</Steps>
+
+## Verify
+
+Both commands pass:
+
+```txt
+Routa validation passed for 5 route file(s).
+Running TypeScript check: tsc -p tsconfig.json --noEmit
+TypeScript check passed.
+Routa check passed.
+```
+
+```txt
+OpenAPI check passed. No drift detected.
+```
+
+## What Changed
+
+### Bodyless Outcomes Have No Schema
+
+`204`, `205`, and `304` outcomes, and every outcome of a `HEAD` route, cannot declare a
+`schema` or return `data`. Routa used to require both and then discard the data.
+
+```ts title="Before"
+deleted: { status: 204, schema: z.null() },
+// ...
+return { type: "deleted", data: null };
+```
+
+```ts title="After"
+deleted: { status: 204 },
+// ...
+return { type: "deleted" };
+```
+
+`routa check` reports `ROUTA_RESPONSE_BODYLESS_SCHEMA`, and TypeScript reports
+`Status 204 responses have no body, so the outcome cannot declare a schema.` Returning
+`data` from an outcome without a schema reports
+`Outcome deleted declares no schema, so it cannot return data.` A `304` outcome is valid
+only on `GET` and `HEAD` routes (`ROUTA_RESPONSE_NOT_MODIFIED_METHOD`), and a `1xx` status
+cannot be an outcome (`ROUTA_RESPONSE_INFORMATIONAL_STATUS`).
+
+### Response Schemas Validate Without Changing Values
+
+A response schema describes the JSON your handler already produced. Move transforms,
+defaults, catches, coercion, and value-rewriting checks such as `.trim()` into the handler.
+
+```ts title="Before"
+export const User = z.object({
+	name: z.string().trim(),
+	plan: z.string().default("free"),
+});
+// ...
+return { type: "success", data: user };
+```
+
+```ts title="After"
+export const User = z.object({
+	name: z.string(),
+	plan: z.string(),
+});
+// ...
+return { type: "success", data: { name: user.name.trim(), plan: user.plan ?? "free" } };
+```
+
+`routa check` reports `ROUTA_RESPONSE_SCHEMA_MUTATION` and names the construct. For
+transforms, defaults, catches, and coercion, TypeScript also reports
+`Response schemas describe wire-ready JSON and must not change values.` Input schemas are
+unaffected: they may still transform, coerce, and default.
+
+### Response Data Matches Its Schema Exactly
+
+When Routa validates response data, in `routa dev` by default and everywhere with
+`responseValidation: "always"`, it compares the parsed value with what the handler returned
+and sends the handler's value. Any difference is a `500 Invalid handler output`. A plain
+`z.object()` strips unknown keys, so an object with extra keys used to be trimmed in
+development. Now it fails there. Production skips validation by default and sends the value
+as returned, so drop the fields in the handler instead of relying on the schema.
+
+```ts title="Before"
+const row = await db.users.find(id); // includes passwordHash
+return { type: "success", data: row };
+```
+
+```ts title="After"
+const row = await db.users.find(id);
+return { type: "success", data: { id: row.id, name: row.name } };
+```
+
+### Dates Are ISO Strings
+
+`z.date()` has no JSON form. Declare the string the client receives and return it.
+
+```ts title="Before"
+createdAt: z.date(),
+// ...
+data: { createdAt: row.createdAt },
+```
+
+```ts title="After"
+createdAt: z.iso.datetime(),
+// ...
+data: { createdAt: row.createdAt.toISOString() },
+```
+
+`routa check` reports `ROUTA_SCHEMA_UNSUPPORTED` with the suggestion to use
+`z.iso.datetime()`.
+
+### Schemas Live Where Routa Can Read Them
+
+Routa reads schemas from source without running it. A route's schemas must be declared in
+its sibling `schemas.ts` or in the route file, and a middleware's in the file that declares
+it. An imported schema reports `ROUTA_SCHEMA_UNRESOLVED`, and a route `input` built from a
+spread or a shared variable reports `ROUTA_SCHEMA_UNSUPPORTED`.
+
+```ts title="Before: src/routes/users/route.ts"
+import { User } from "../../shared/schemas.js";
+```
+
+```ts title="After: src/routes/users/schemas.ts"
+import { z } from "zod";
+
+export const User = z.object({ id: z.string(), name: z.string() });
+```
+
+Two routes may each declare an identical `User`, and OpenAPI shares one `User` component.
+If the declarations differ, Routa reports `ROUTA_SCHEMA_COMPONENT_COLLISION` instead of
+picking one. Cookie handles are different: import them from any module.
+
+### Handler Results Name a Declared Outcome
+
+A result's `type` must be one of the route's outcome names. A `type` read from a `string`
+variable no longer type-checks, even when its data matches an outcome.
+
+```ts title="Before"
+const type: string = found ? "success" : "notFound";
+return { type, data };
+```
+
+```ts title="After"
+return found ? response.success(data) : response.notFound({ message: "Not found" });
+```
+
+TypeScript reports `Type 'string' is not assignable to type '"success"'`.
+
+### Outcomes That Share a Status Need a Discriminator
+
+OpenAPI used to keep whichever schema was written last for a status. Now outcomes that share
+a status compose into one response, and each body outcome needs a required property with a
+different literal value. Otherwise, give each outcome its own status.
+
+```ts title="Before"
+created: { status: 201, schema: z.object({ id: z.string() }) },
+queued: { status: 201, schema: z.object({ ticket: z.string() }) },
+```
+
+```ts title="After"
+created: { status: 201, schema: z.object({ kind: z.literal("created"), id: z.string() }) },
+queued: { status: 201, schema: z.object({ kind: z.literal("queued"), ticket: z.string() }) },
+```
+
+`routa check` reports `ROUTA_RESPONSE_STATUS_AMBIGUOUS`, which also covers a body and a
+bodyless outcome under one status and two bodyless outcomes under one status. See
+[Outcomes That Share a Status](/docs/concepts/openapi/#outcomes-that-share-a-status).
+
+### Outcome Names Are Unique Across the Chain
+
+A route outcome cannot reuse the name of a reject from any middleware in its chain, and two
+rejects cannot share a name. Remove the route outcome: the reject is already part of the
+operation and its OpenAPI document.
+
+```ts title="Before: a route under an auth middleware that rejects with unauthorized"
+responses: {
+	success: { status: 200, schema: Report },
+	unauthorized: { status: 401, schema: z.object({ message: z.string() }) },
+},
+```
+
+```ts title="After"
+responses: {
+	success: { status: 200, schema: Report },
+},
+```
+
+`routa check` reports `ROUTA_OUTCOME_NAME_COLLISION`, and the app fails at startup with
+`Outcome "unauthorized" on GET /reports is declared by … and by …. Give each outcome its own name.` For a reject of the
+route's own `middleware`, TypeScript also reports
+`Outcome "unauthorized" is also a reject of this route's middleware.`
+
+### Middleware Returns next() Unchanged
+
+`next()` resolves to an opaque value: the outcome the rest of the chain selected. A
+continuing middleware must return it as is. It cannot read the outcome, copy it, or add to
+it. Make response decisions in the handler, or in a reject the middleware returns before
+calling `next()`.
+
+```ts title="Before"
+run: async ({ ctx, next }) => {
+	const result = await next();
+	ctx.logger.info("audit.done", "Request finished.", { outcome: result.type });
+	return result;
+},
+```
+
+```ts title="After"
+run: async ({ next }) => {
+	return next();
+},
+```
+
+Routa already logs every request's method, path, status, and duration as `http.request`.
+TypeScript reports `Return the value next() resolved to, unchanged.` for a changed value,
+and Routa answers `500 Invalid handler output` for anything else returned after `next()`.
+`MiddlewareNext` and `MiddlewareRunArgs` lost their unused reject type parameter, so drop
+the last argument from explicit references such as `MiddlewareNext<Provides, Rejects>`.
+
+### OpenAPI Comes From Source
+
+The generated document no longer copies anything from `.routa/openapi-baseline.json`, so
+your first `openapi check` after upgrading reports differences you need to accept once:
+
+- Every `operationId` is the method plus the PascalCase path, so `getUser` on
+  `GET /users/{userId}` becomes `getUsersUserId`. `openapi check` does not compare
+  `operationId`, so no command reports this rename. Tell client generators and other
+  consumers that key on operation IDs.
+- `info` is always `Routa API` at version `0.0.0`, and `servers` is no longer emitted.
+- Statuses and `security` that existed only in the baseline disappear.
+- Exported schemas a route uses become `components.schemas` entries named after their
+  exports, metadata from `.describe()` and `.meta()` appears, and query helpers such as
+  `Sort()` are documented as the strings clients send.
+- Schema-less outcomes have no `content`, and a response description is the outcome's
+  `description` or its humanized name, such as "Not found".
+
+Two routes whose paths generate the same `operationId` report
+`ROUTA_DUPLICATE_OPERATION_ID`.
+
+### Other Diagnostics
+
+`routa check` now fails on schemas it used to skip or document as `{}`. Each code has its
+cause and fix in [Diagnostics](/docs/reference/diagnostics/).
+
+| Code                                  | Fix                                                                          |
+| ------------------------------------- | ---------------------------------------------------------------------------- |
+| `ROUTA_SCHEMA_UNSUPPORTED`            | Rewrite the schema with a construct Routa reads, such as `z.object`          |
+| `ROUTA_SCHEMA_META_STRUCTURAL`        | Remove keys such as `type` or `default` from `.meta()`                       |
+| `ROUTA_SCHEMA_META_PLACEMENT`         | Move route keys such as `operationId` out of `.meta()`                       |
+| `ROUTA_SCHEMA_META_COMPUTED`          | Write metadata values as literals                                            |
+| `ROUTA_SCHEMA_REGISTRY`               | Replace `z.globalRegistry` and `.register()` with `.meta()`                  |
+| `ROUTA_SCHEMA_OPAQUE_INPUT` (warning) | Parse with a declarative schema before `.transform()`, or accept the warning |
+
+A `createMiddleware` config built with a spread that could hide its `rejects` also reports
+`ROUTA_SCHEMA_UNSUPPORTED`. Write `rejects` in the `createMiddleware` call.
+
+## Troubleshooting
+
+| Problem                                                                    | Fix                                                                                                        |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `500 Invalid handler output` in `routa dev` from a route that used to work | The response data has extra keys or a value the schema would change. Return exactly the declared shape.    |
+| The package manager warns about the `zod` peer                             | Install `zod@^4.6.7`.                                                                                      |
+| `openapi check` reports drift on routes you did not touch                  | Expected once: the document now comes from source. Review it and run `openapi breaking --update-baseline`. |
+| A generated client lost its method names                                   | Operation IDs were renamed once from the method and path. Regenerate the client and update call sites.     |
+
+<Aside type="caution" title="No compatibility mode">
+	Routa has no flag that restores the previous behavior, keeps baseline values in the
+	generated document, or sends a parsed response value. Each break above has one fix in
+	source.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Schemas"
+		href="/docs/concepts/schemas/"
+		description="Response headers, cookies, and metadata in full."
+	/>
+	<LinkCard
+		title="OpenAPI"
+		href="/docs/concepts/openapi/"
+		description="How outcomes become responses."
+	/>
+	<LinkCard
+		title="Diagnostics"
+		href="/docs/reference/diagnostics/"
+		description="Every code routa check can report."
+	/>
+</CardGrid>
