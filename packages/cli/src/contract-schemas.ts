@@ -5,12 +5,14 @@ import {
 	objectLiteral,
 	propertyName,
 	propertyValue,
+	resolveImportFile,
 	routeConfigObject,
 	unwrapExpression,
 } from "./ast.js";
 import {
 	cookieDeclaration,
 	type Diagnostic,
+	importedSchemaDeclaration,
 	middlewareContract,
 	type MiddlewareMetadata,
 	type RouteMetadata,
@@ -184,7 +186,10 @@ type Declaration = {
 type SchemaSource = {
 	file: string;
 	declarations: Map<string, Declaration>;
-	imports: Set<string>;
+	/** Other imported names, mapped to the module specifier they come from. */
+	imports: Map<string, string>;
+	/** Follows an imported name to its declaration in the module that declares it. */
+	resolveImport: (name: string) => Declaration | undefined;
 	zodNamespaces: Set<string>;
 	zodRegistries: Set<string>;
 	routaHelpers: Map<string, "Sort" | "Fields">;
@@ -481,6 +486,7 @@ class SchemaProjector {
 	readonly diagnostics: Diagnostic[] = [];
 	private readonly sources = new Map<string, SchemaSource>();
 	private readonly declarationNodes = new Map<string, SchemaNode>();
+	private readonly importedDeclarations = new Map<string, Declaration | undefined>();
 	private readonly inProgress = new Set<string>();
 	private readonly components = new Map<string, ComponentIdentity & { content: JsonSchema }>();
 	private readonly scannedRegistries = new Set<string>();
@@ -1720,17 +1726,32 @@ class SchemaProjector {
 		const source: SchemaSource = {
 			file,
 			declarations: new Map(),
-			imports: new Set(),
+			imports: new Map(),
+			resolveImport: (name) => this.importedDeclaration(file, name),
 			zodNamespaces: new Set(),
 			zodRegistries: new Set(),
 			routaHelpers: new Map(),
 			fallback,
 		};
+		// Names exported later with `export { name }`.
+		const exportedNames = new Set<string>();
 
 		for (const statement of ast.statements) {
 			if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
 				const specifier = statement.moduleSpecifier.text;
 				readImport(statement, specifier, source);
+				continue;
+			}
+
+			if (
+				ts.isExportDeclaration(statement)
+				&& !statement.moduleSpecifier
+				&& statement.exportClause
+				&& ts.isNamedExports(statement.exportClause)
+			) {
+				for (const element of statement.exportClause.elements) {
+					exportedNames.add(element.propertyName?.text ?? element.name.text);
+				}
 				continue;
 			}
 
@@ -1754,6 +1775,14 @@ class SchemaProjector {
 			}
 		}
 
+		for (const name of exportedNames) {
+			const declaration = source.declarations.get(name);
+
+			if (declaration) {
+				declaration.exported = true;
+			}
+		}
+
 		if (source.zodNamespaces.size === 0) {
 			source.zodNamespaces.add("z");
 		}
@@ -1761,6 +1790,24 @@ class SchemaProjector {
 		this.sources.set(key, source);
 		this.reportRegistryUse(ast, source);
 		return source;
+	}
+
+	/**
+	 * Follows a named import to the declaration behind it. The declaration keeps its own file's
+	 * source, so the identifiers it uses resolve where it was written.
+	 */
+	private importedDeclaration(file: string, name: string): Declaration | undefined {
+		const key = `${file}#${name}`;
+
+		if (!this.importedDeclarations.has(key)) {
+			const found = importedSchemaDeclaration(this.cwd, file, name, this.parser);
+			this.importedDeclarations.set(
+				key,
+				found && this.source(found.file).declarations.get(found.name),
+			);
+		}
+
+		return this.importedDeclarations.get(key);
 	}
 
 	private parse(file: string): ts.SourceFile {
@@ -1850,18 +1897,11 @@ class SchemaProjector {
 		const declaration = lookup(context.source, name);
 
 		if (!declaration) {
-			this.report(context.source, identifier, {
-				code: "ROUTA_SCHEMA_UNRESOLVED",
-				message: context.source.imports.has(name)
-					? `Schema ${name} is imported, and Routa reads schemas only from the route's schemas.ts or the declaring file`
-					: `Schema ${name} could not be resolved`,
-				suggestion:
-					"Declare the schema in the route's schemas.ts, or in the same file as the middleware or route that uses it.",
-			});
+			this.report(context.source, identifier, this.unresolvedSchema(name, context.source));
 			return emptyNode();
 		}
 
-		const key = `${declaration.source.file}#${name}#${context.io}${context.parameter ? "#parameter" : ""}`;
+		const key = `${declaration.source.file}#${declaration.name}#${context.io}${context.parameter ? "#parameter" : ""}`;
 		const cached = this.declarationNodes.get(key);
 
 		if (cached) {
@@ -1869,7 +1909,7 @@ class SchemaProjector {
 		}
 
 		if (this.inProgress.has(key)) {
-			return this.unsupported(identifier, context, `schema ${name} refers to itself`);
+			return this.unsupported(identifier, context, `schema ${declaration.name} refers to itself`);
 		}
 
 		this.inProgress.add(key);
@@ -1880,9 +1920,9 @@ class SchemaProjector {
 			node = {
 				...node,
 				component: {
-					key: name,
+					key: declaration.name,
 					explicit: false,
-					identity: `${declaration.source.file}#${name}`,
+					identity: `${declaration.source.file}#${declaration.name}`,
 					file: declaration.source.file,
 					placement: placementOf(context),
 				},
@@ -1891,6 +1931,50 @@ class SchemaProjector {
 
 		this.declarationNodes.set(key, node);
 		return node;
+	}
+
+	/**
+	 * Explains why a schema identifier has no declaration Routa can read.
+	 */
+	private unresolvedSchema(
+		name: string,
+		source: SchemaSource,
+	): { code: string; message: string; suggestion: string } {
+		const specifier = source.imports.get(name);
+		const code = "ROUTA_SCHEMA_UNRESOLVED";
+
+		if (specifier === undefined) {
+			return {
+				code,
+				message: `Schema ${name} could not be resolved`,
+				suggestion:
+					"Declare the schema in this file or the route's schemas.ts, or import it by name from a relative module.",
+			};
+		}
+
+		if (!specifier.startsWith(".")) {
+			return {
+				code,
+				message: `Schema ${name} is imported from "${specifier}", and Routa follows only relative imports`,
+				suggestion:
+					"Import the schema through a relative path. Routa does not resolve packages or tsconfig paths.",
+			};
+		}
+
+		if (!resolveImportFile(this.cwd, source.file, specifier)) {
+			return {
+				code,
+				message: `Schema ${name} is imported from "${specifier}", which Routa could not find`,
+				suggestion: "Point the import at a TypeScript module in the project.",
+			};
+		}
+
+		return {
+			code,
+			message: `Schema ${name} is imported from "${specifier}", but Routa found no exported const declaration for it`,
+			suggestion:
+				"Export the schema from that module with export const, directly or through export { ... } from or export * from.",
+		};
 	}
 
 	private factory(name: string, call: ts.CallExpression, context: Context): SchemaNode {
@@ -2885,8 +2969,22 @@ function emptyNode(): SchemaNode {
 	return plainNode({});
 }
 
+/**
+ * Finds the declaration behind a schema identifier: one the file declares, then one it imports
+ * by name, then one in the route's schemas file.
+ */
 function lookup(source: SchemaSource, name: string): Declaration | undefined {
-	return source.declarations.get(name) ?? (source.fallback && lookup(source.fallback, name));
+	const local = source.declarations.get(name);
+
+	if (local) {
+		return local;
+	}
+
+	if (source.imports.has(name)) {
+		return source.resolveImport(name);
+	}
+
+	return source.fallback && lookup(source.fallback, name);
 }
 
 function pushUnique(diagnostics: Diagnostic[], diagnostic: Diagnostic): void {
@@ -2921,13 +3019,21 @@ function readImport(
 	const isRouta = specifier === "@routa-ts/core" || specifier === "@routa-ts/core/query/helpers";
 
 	if (clause.name) {
-		(isZod ? source.zodNamespaces : source.imports).add(clause.name.text);
+		if (isZod) {
+			source.zodNamespaces.add(clause.name.text);
+		} else {
+			source.imports.set(clause.name.text, specifier);
+		}
 	}
 
 	const bindings = clause.namedBindings;
 
 	if (bindings && ts.isNamespaceImport(bindings)) {
-		(isZod ? source.zodNamespaces : source.imports).add(bindings.name.text);
+		if (isZod) {
+			source.zodNamespaces.add(bindings.name.text);
+		} else {
+			source.imports.set(bindings.name.text, specifier);
+		}
 	}
 
 	if (bindings && ts.isNamedImports(bindings)) {
@@ -2941,7 +3047,7 @@ function readImport(
 			} else if (isRouta && (imported === "Sort" || imported === "Fields")) {
 				source.routaHelpers.set(element.name.text, imported);
 			} else {
-				source.imports.add(element.name.text);
+				source.imports.set(element.name.text, specifier);
 			}
 		}
 	}

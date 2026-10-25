@@ -949,7 +949,7 @@ export const Misuse = z.object({
 			],
 			[
 				"ROUTA_SCHEMA_UNRESOLVED",
-				"Schema Shared is imported, and Routa reads schemas only from the route's schemas.ts or the declaring file: Shared",
+				'Schema Shared is imported from "../shared.js", which Routa could not find: Shared',
 			],
 			[
 				"ROUTA_SCHEMA_UNSUPPORTED",
@@ -1261,6 +1261,237 @@ export const ${name} = createMiddleware({
 		expect(validateProject(separate, { write: false }).diagnostics).toEqual([
 			expect.objectContaining({ code: "ROUTA_SCHEMA_COMPONENT_COLLISION" }),
 		]);
+	});
+
+	it("resolves a schema imported from another route's schemas file", () => {
+		const cwd = project({
+			"src/routes/users/schemas.ts": schemasFile(
+				"export const User = z.object({ id: z.string() });\n",
+			),
+			"src/routes/users/route.ts": routeFile("/users", {
+				responses: "ok: { status: 200, schema: z.array(User) }",
+			}),
+			"src/routes/status/route.ts": routeFile("/status", {
+				imports: 'import { User } from "../users/schemas.js";',
+				responses: "ok: { status: 200, schema: User }",
+			}),
+		});
+		const document = generateOpenApi(cwd);
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(document.components?.schemas).toEqual({
+			User: { type: "object", required: ["id"], properties: { id: { type: "string" } } },
+		});
+		expect(responseSchema(document, "/status", "get", 200)).toEqual({
+			$ref: "#/components/schemas/User",
+		});
+		expect(responseSchema(document, "/users", "get", 200)).toEqual({
+			type: "array",
+			items: { $ref: "#/components/schemas/User" },
+		});
+	});
+
+	it("follows aliases, re-exports, and nested imports to the declaring file", () => {
+		const cwd = project({
+			"src/schemas/address.ts": schemasFile(
+				"const Address = z.object({ city: z.string() });\n\nexport { Address };\n",
+			),
+			"src/schemas/user.ts": `import { z as zod } from "zod";
+import { Address as Location } from "./address.js";
+
+const Tags = zod.array(zod.string());
+
+export const User = zod.object({ id: zod.string(), home: Location, tags: Tags });
+export const Unused = zod.object({ unused: zod.string() });
+`,
+			"src/schemas/index.ts":
+				'export { User as Member } from "./user.js";\nexport * from "./address.js";\n',
+			"src/schemas/barrel.ts": 'export * from "./index.js";\n',
+			"src/routes/alias/route.ts": routeFile("/alias", {
+				imports: 'import { User as Account } from "../../schemas/user.js";',
+				responses: "ok: { status: 200, schema: Account }",
+			}),
+			"src/routes/named/route.ts": routeFile("/named", {
+				imports: 'import { Member } from "../../schemas/index.js";',
+				responses: "ok: { status: 200, schema: Member }",
+			}),
+			"src/routes/wildcard/route.ts": routeFile("/wildcard", {
+				imports: 'import { Address, Member as Person } from "../../schemas/barrel.js";',
+				responses: "ok: { status: 200, schema: z.object({ person: Person, address: Address }) }",
+			}),
+		});
+		const document = generateOpenApi(cwd);
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(document.components?.schemas).toEqual({
+			Address: { type: "object", required: ["city"], properties: { city: { type: "string" } } },
+			User: {
+				type: "object",
+				required: ["id", "home", "tags"],
+				properties: {
+					id: { type: "string" },
+					home: { $ref: "#/components/schemas/Address" },
+					tags: { type: "array", items: { type: "string" } },
+				},
+			},
+		});
+		for (const path of ["/alias", "/named"]) {
+			expect(responseSchema(document, path, "get", 200)).toEqual({
+				$ref: "#/components/schemas/User",
+			});
+		}
+		expect(responseSchema(document, "/wildcard", "get", 200)).toEqual({
+			type: "object",
+			required: ["person", "address"],
+			properties: {
+				person: { $ref: "#/components/schemas/User" },
+				address: { $ref: "#/components/schemas/Address" },
+			},
+		});
+	});
+
+	it("resolves imported input, header, and middleware reject schemas", () => {
+		const cwd = project({
+			"src/schemas/shared.ts": schemasFile(`export const Search = z.object({ q: z.string() });
+export const NewItem = z.object({ name: z.string() });
+export const ItemHeaders = z.object({ etag: z.string() });
+export const Problem = z.object({ message: z.string() });
+`),
+			"src/middleware/guard.ts": `import { createMiddleware } from "@routa-ts/core";
+import { Problem } from "../schemas/shared.js";
+
+export const guard = createMiddleware({
+	rejects: { denied: { status: 403, schema: Problem } },
+	run: ({ next }) => next({}),
+});
+`,
+			"src/routes/items/route.ts": routeFile("/items", {
+				method: "post",
+				imports: `import { guard } from "../../middleware/guard.js";
+import { ItemHeaders, NewItem, Search } from "../../schemas/shared.js";`,
+				input: "query: Search, body: NewItem",
+				responses: "ok: { status: 200, schema: NewItem, headers: ItemHeaders }",
+			}).replace("\tpost: createRoute({", "\tmiddleware: [guard],\n\tpost: createRoute({"),
+		});
+		const document = generateOpenApi(cwd);
+		const operation = (document.paths as Record<string, Record<string, Json>>)["/items"].post;
+		const responses = operation.responses as Record<string, Json>;
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(operation.parameters).toEqual([
+			{ name: "q", in: "query", required: true, schema: { type: "string" } },
+		]);
+		expect(operation.requestBody).toMatchObject({
+			content: { "application/json": { schema: { $ref: "#/components/schemas/NewItem" } } },
+		});
+		expect(responses["200"].headers).toEqual({
+			etag: { required: true, schema: { type: "string" } },
+		});
+		expect(responseSchema(document, "/items", "post", 403)).toEqual({
+			$ref: "#/components/schemas/Problem",
+		});
+	});
+
+	it("keeps cycles, collisions, and imports it cannot follow diagnosable", () => {
+		const importCycle = {
+			"src/schemas/a.ts": schemasFile(`import { B } from "./b.js";
+
+export const Base = z.object({ id: z.string() });
+export const A = z.object({ b: B });
+`),
+			"src/schemas/b.ts": schemasFile(
+				'import { Base } from "./a.js";\n\nexport const B = z.object({ base: Base });\n',
+			),
+			"src/routes/cycle/route.ts": routeFile("/cycle", {
+				imports: 'import { A } from "../../schemas/a.js";',
+				responses: "ok: { status: 200, schema: A }",
+			}),
+		};
+		const cwd = project({
+			...importCycle,
+			"src/schemas/loop-1.ts": 'export { Ghost } from "./loop-2.js";\n',
+			"src/schemas/loop-2.ts": 'export { Ghost } from "./loop-1.js";\n',
+			"src/schemas/self-a.ts": schemasFile(
+				'import { SelfB } from "./self-b.js";\n\nexport const SelfA = z.object({ b: SelfB });\n',
+			),
+			"src/schemas/self-b.ts": schemasFile(
+				'import { SelfA } from "./self-a.js";\n\nexport const SelfB = z.object({ a: SelfA });\n',
+			),
+			"src/schemas/factory.ts": schemasFile(
+				'import { makeSchema } from "./make.js";\n\nexport const Made = makeSchema();\n',
+			),
+			"src/schemas/thing-1.ts": schemasFile("export const Thing = z.object({ id: z.string() });\n"),
+			"src/schemas/thing-2.ts": schemasFile("export const Thing = z.object({ id: z.number() });\n"),
+			"src/routes/broken/route.ts": routeFile("/broken", {
+				imports: `import { Ghost } from "../../schemas/loop-1.js";
+import { Missing } from "../../schemas/missing.js";
+import { SelfA } from "../../schemas/self-a.js";
+import { Made } from "../../schemas/factory.js";
+import { Packaged } from "@acme/schemas";
+import { Pathed } from "@/schemas/user.js";`,
+				responses: `ok: { status: 200, schema: z.object({
+			ghost: Ghost,
+			missing: Missing,
+			self: SelfA,
+			made: Made,
+			packaged: Packaged,
+			pathed: Pathed,
+		}) }`,
+			}),
+			"src/routes/thing-1/route.ts": routeFile("/thing-1", {
+				imports: 'import { Thing } from "../../schemas/thing-1.js";',
+				responses: "ok: { status: 200, schema: Thing }",
+			}),
+			"src/routes/thing-2/route.ts": routeFile("/thing-2", {
+				imports: 'import { Thing } from "../../schemas/thing-2.js";',
+				responses: "ok: { status: 200, schema: Thing }",
+			}),
+		});
+		const { diagnostics } = validateProject(cwd, { write: false });
+
+		expect(diagnostics.map((item) => [item.code, item.file, item.message])).toEqual([
+			[
+				"ROUTA_SCHEMA_UNRESOLVED",
+				"src/routes/broken/route.ts",
+				'Schema Ghost is imported from "../../schemas/loop-1.js", but Routa found no exported const declaration for it: Ghost',
+			],
+			[
+				"ROUTA_SCHEMA_UNRESOLVED",
+				"src/routes/broken/route.ts",
+				'Schema Missing is imported from "../../schemas/missing.js", which Routa could not find: Missing',
+			],
+			[
+				"ROUTA_SCHEMA_UNSUPPORTED",
+				"src/schemas/self-b.ts",
+				"Unsupported schema for OpenAPI (schema SelfA refers to itself): SelfA",
+			],
+			[
+				"ROUTA_SCHEMA_UNSUPPORTED",
+				"src/schemas/factory.ts",
+				"Unsupported schema for OpenAPI (calls to makeSchema() cannot be analyzed statically): makeSchema()",
+			],
+			[
+				"ROUTA_SCHEMA_UNRESOLVED",
+				"src/routes/broken/route.ts",
+				'Schema Packaged is imported from "@acme/schemas", and Routa follows only relative imports: Packaged',
+			],
+			[
+				"ROUTA_SCHEMA_UNRESOLVED",
+				"src/routes/broken/route.ts",
+				'Schema Pathed is imported from "@/schemas/user.js", and Routa follows only relative imports: Pathed',
+			],
+			[
+				"ROUTA_SCHEMA_COMPONENT_COLLISION",
+				"src/schemas/thing-2.ts",
+				"Different schemas named Thing in src/schemas/thing-1.ts and src/schemas/thing-2.ts would share one OpenAPI component.",
+			],
+		]);
+		expect(diagnostics.every((item) => item.suggestion)).toBe(true);
+
+		const cycle = generateOpenApi(project(importCycle));
+
+		expect(diagnosticsOf(cycle)).toEqual([]);
+		expect(Object.keys(cycle.components?.schemas ?? {})).toEqual(["A", "B", "Base"]);
 	});
 
 	it("resolves two middleware re-exported through one barrel", () => {

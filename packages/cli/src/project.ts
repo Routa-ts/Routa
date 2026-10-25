@@ -1658,22 +1658,26 @@ function parseMiddlewareFile(
 ): MiddlewareMetadata[] {
 	const sourceFile = parseTypeScriptFile(join(cwd, file), parser);
 
-	return exportedMiddlewareDeclarations(cwd, file, sourceFile, parser).map((block) =>
+	return exportedDeclarations(cwd, file, sourceFile, parser, createMiddlewareObject).map((block) =>
 		middlewareMetadata(file, block.exportedName, block.contract, block.file),
 	);
 }
 
-/** Reads the object a declaration's initializer passes to its factory, or `undefined`. */
-type DeclarationReader = (expression: ts.Expression) => ts.ObjectLiteralExpression | undefined;
+/**
+ * Reads what a declaration's initializer declares, such as the object it passes to its factory,
+ * or `undefined` when the declaration is not the kind being looked for.
+ */
+type DeclarationReader<T> = (expression: ts.Expression) => T | undefined;
 
-type MiddlewareDeclaration = {
-	/** The file that declares the middleware. */
+type ModuleDeclaration<T = ts.ObjectLiteralExpression> = {
+	/** The file that declares the value. */
 	file: string;
 	/** The declared variable name in `file`. */
 	name: string;
 	/** The name the inspected module exports it under. */
 	exportedName: string;
-	contract: ts.ObjectLiteralExpression;
+	/** What the reader read from the declaration. */
+	contract: T;
 };
 
 /**
@@ -1688,31 +1692,31 @@ type MiddlewareDeclaration = {
  * @param sourceFile - The parsed TypeScript source file for `file`
  * @returns Declarations found in the module graph, explicit exports before wildcard ones
  */
-function exportedMiddlewareDeclarations(
+function exportedDeclarations<T>(
 	cwd: string,
 	file: string,
 	sourceFile: ts.SourceFile,
 	parser: ts.SourceFileParser,
+	read: DeclarationReader<T>,
 	seen = new Set<string>(),
-	read: DeclarationReader = createMiddlewareObject,
-): MiddlewareDeclaration[] {
+): ModuleDeclaration<T>[] {
 	if (seen.has(file)) {
 		return [];
 	}
 
 	seen.add(file);
 
-	const declarations: MiddlewareDeclaration[] = [];
-	const wildcard: MiddlewareDeclaration[] = [];
+	const declarations: ModuleDeclaration<T>[] = [];
+	const wildcard: ModuleDeclaration<T>[] = [];
 	const imports = namedImportMap(cwd, file, sourceFile);
 	const walk = (target: string) =>
-		exportedMiddlewareDeclarations(
+		exportedDeclarations(
 			cwd,
 			target,
 			parseTypeScriptFile(join(cwd, target), parser),
 			parser,
-			new Set(seen),
 			read,
+			new Set(seen),
 		);
 
 	for (const statement of sourceFile.statements) {
@@ -1757,7 +1761,7 @@ function exportedMiddlewareDeclarations(
 			const importedName = specifier.propertyName?.text ?? specifier.name.text;
 
 			if (!statement.moduleSpecifier) {
-				const local = middlewareDeclarations(sourceFile, false, read).find(
+				const local = variableDeclarations(sourceFile, false, read).find(
 					(item) => item.name === importedName,
 				);
 
@@ -1839,19 +1843,21 @@ function namedImportMap(
 }
 
 /**
- * Resolves an imported middleware binding to the declaration that defines it,
- * following re-export chains and aliases.
+ * Resolves an imported binding to the declaration that defines it, following re-export chains
+ * and aliases.
  *
- * @param source - The imported module and the name it exports the middleware under
- * @returns The declaring file, declared name, and contract, or `undefined` when unresolved
+ * @param source - The imported module and the name it exports the value under
+ * @param read - Reads the declarations that count, such as `createMiddleware` calls
+ * @returns The declaring file, declared name, and what `read` read, or `undefined` when unresolved
  */
-function importedMiddlewareDeclaration(
+function exportedDeclaration<T>(
 	cwd: string,
 	source: { file: string; name: string },
 	parser: ts.SourceFileParser,
-): MiddlewareDeclaration | undefined {
+	read: DeclarationReader<T>,
+): ModuleDeclaration<T> | undefined {
 	const targetAst = parseTypeScriptFile(join(cwd, source.file), parser);
-	return exportedMiddlewareDeclarations(cwd, source.file, targetAst, parser).find(
+	return exportedDeclarations(cwd, source.file, targetAst, parser, read).find(
 		(item) => item.exportedName === source.name,
 	);
 }
@@ -1894,9 +1900,9 @@ export function cookieDeclaration(
 	file: string,
 	name: string,
 	parser: ts.SourceFileParser,
-): MiddlewareDeclaration | undefined {
+): ModuleDeclaration | undefined {
 	const sourceFile = parseTypeScriptFile(join(cwd, file), parser);
-	const local = middlewareDeclarations(sourceFile, false, createCookieObject).find(
+	const local = variableDeclarations(sourceFile, false, createCookieObject).find(
 		(item) => item.name === name,
 	);
 
@@ -1905,20 +1911,26 @@ export function cookieDeclaration(
 	}
 
 	const source = namedImportMap(cwd, file, sourceFile).get(name);
+	return source && exportedDeclaration(cwd, source, parser, createCookieObject);
+}
 
-	if (!source) {
-		return undefined;
-	}
-
-	const targetAst = parseTypeScriptFile(join(cwd, source.file), parser);
-	return exportedMiddlewareDeclarations(
-		cwd,
-		source.file,
-		targetAst,
-		parser,
-		new Set(),
-		createCookieObject,
-	).find((item) => item.exportedName === source.name);
+/**
+ * Follows a module's named import to the `const` declaration behind it, through relative modules
+ * and re-export chains, the way cookie handles and middleware resolve. Schemas the module
+ * declares itself are not looked up here.
+ *
+ * @param file - The module that imports the schema, relative to `cwd`
+ * @param name - The schema's local name in `file`
+ * @returns The declaring file and declared name, or `undefined` when the import cannot be followed
+ */
+export function importedSchemaDeclaration(
+	cwd: string,
+	file: string,
+	name: string,
+	parser: ts.SourceFileParser,
+): { file: string; name: string } | undefined {
+	const source = namedImportMap(cwd, file, parseTypeScriptFile(join(cwd, file), parser)).get(name);
+	return source && exportedDeclaration(cwd, source, parser, (expression) => expression);
 }
 
 /**
@@ -1957,7 +1969,7 @@ function parseRouteFileMiddleware(
 		return { route: [], methods: {}, unresolved: [] };
 	}
 
-	const middleware = middlewareDeclarations(sourceFile, false);
+	const middleware = variableDeclarations(sourceFile, false, createMiddlewareObject);
 	const middlewareByName = new Map(middleware.map((item) => [item.name, item.contract]));
 	const imports = namedImportMap(cwd, routeFile, sourceFile);
 	const route: MiddlewareMetadata[] = [];
@@ -1977,7 +1989,7 @@ function parseRouteFileMiddleware(
 		}
 
 		const source = imports.get(unwrapped.text);
-		const declaration = source && importedMiddlewareDeclaration(cwd, source, parser);
+		const declaration = source && exportedDeclaration(cwd, source, parser, createMiddlewareObject);
 
 		if (!declaration) {
 			return;
@@ -2625,18 +2637,18 @@ function parseTypeScriptFile(file: string, parser: ts.SourceFileParser): ts.Sour
 }
 
 /**
- * Collects middleware declarations from a source file.
+ * Collects a source file's declarations that `read` accepts, such as `createMiddleware` calls.
  *
  * @param sourceFile - The TypeScript source file to inspect.
  * @param exportedOnly - Whether to include only exported variable declarations.
- * @returns The discovered middleware names and their `createMiddleware(...)` contract objects.
+ * @returns The declared names and what `read` read from each.
  */
-function middlewareDeclarations(
+function variableDeclarations<T>(
 	sourceFile: ts.SourceFile,
 	exportedOnly: boolean,
-	read: DeclarationReader = createMiddlewareObject,
-): Array<{ name: string; contract: ts.ObjectLiteralExpression }> {
-	const declarations: Array<{ name: string; contract: ts.ObjectLiteralExpression }> = [];
+	read: DeclarationReader<T>,
+): Array<{ name: string; contract: T }> {
+	const declarations: Array<{ name: string; contract: T }> = [];
 
 	for (const statement of sourceFile.statements) {
 		if (!ts.isVariableStatement(statement)) {
