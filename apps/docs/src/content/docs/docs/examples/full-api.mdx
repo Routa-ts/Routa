@@ -13,10 +13,12 @@ adapter.
 ```sh
 vp install --frozen-lockfile
 vp run prepare:local-cli
+export ROUTA_DEMO_SESSION_SECRET=dev-secret
 vp run --filter full-api dev
 ```
 
-The development server listens on `http://127.0.0.1:3000`.
+The development server listens on `http://127.0.0.1:3000`. It reads the demo session secret
+once at startup, so export it before you start the server.
 
 ## What Is Inside
 
@@ -85,7 +87,8 @@ declarative while the implementations live in application-owned modules.
 
 `POST /auth/session` exchanges a demo token for two cookies: the `HttpOnly` session token and
 a `signed_in` hint that browser code can read. Each one arrives as its own `Set-Cookie`
-field:
+field. With the server running, mint a token and send it from a second terminal that uses
+the same secret:
 
 ```sh
 cd examples/full-api
