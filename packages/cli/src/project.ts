@@ -1644,6 +1644,9 @@ function projectStructureDiagnostics(cwd: string): Diagnostic[] {
 /**
  * Parses exported middleware declarations from a middleware file.
  *
+ * Each entry names the middleware file and the name it exports, which the runtime can import
+ * even when the declaration is private to another module or exported under an alias.
+ *
  * @param cwd - Project root used to resolve `file`.
  * @param file - Path to the middleware file relative to `cwd`.
  * @returns Metadata for each exported middleware declaration found in the file.
@@ -1656,7 +1659,7 @@ function parseMiddlewareFile(
 	const sourceFile = parseTypeScriptFile(join(cwd, file), parser);
 
 	return exportedMiddlewareDeclarations(cwd, file, sourceFile, parser).map((block) =>
-		middlewareMetadata(block.file, block.name, block.contract),
+		middlewareMetadata(file, block.exportedName, block.contract),
 	);
 }
 
@@ -1845,13 +1848,14 @@ function importedMiddlewareDeclaration(
 
 /**
  * Finds the declaration of a middleware a module uses. Route files record
- * middleware they import under their own path and local name, so follow the
- * import and any re-exports to the declaring file and its declared name.
+ * middleware they import under their own path and local name, and middleware
+ * files record what they export, so follow the import or the exports and any
+ * re-exports to the declaring file and its declared name.
  *
  * @param cwd - The project root directory
- * @param file - The module that declares or imports the middleware
- * @param name - The middleware's local name in `file`
- * @returns The declaring file and declared name, or `file` and `name` when the middleware is not imported or unresolved
+ * @param file - The module that declares, imports, or re-exports the middleware
+ * @param name - The middleware's local name in a route file, or its exported name in a middleware file
+ * @returns The declaring file and declared name, or `file` and `name` when the middleware is unresolved
  */
 export function middlewareDeclaration(
 	cwd: string,
@@ -1861,7 +1865,11 @@ export function middlewareDeclaration(
 ): { file: string; name: string } {
 	const sourceFile = parseTypeScriptFile(join(cwd, file), parser);
 	const source = namedImportMap(cwd, file, sourceFile).get(name);
-	const declaration = source && importedMiddlewareDeclaration(cwd, source, parser);
+	const declaration = source
+		? importedMiddlewareDeclaration(cwd, source, parser)
+		: exportedMiddlewareDeclarations(cwd, file, sourceFile, parser).find(
+				(item) => item.exportedName === name,
+			);
 	return declaration ? { file: declaration.file, name: declaration.name } : { file, name };
 }
 

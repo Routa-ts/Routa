@@ -27,7 +27,7 @@ export const routaRoutes = [
 		},
 		"middleware": [
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withRequest",
 				"requires": [],
 				"provides": [
@@ -41,7 +41,7 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withSession",
 				"requires": [
 					"requestId"
@@ -57,7 +57,7 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/middleware/auth.ts",
+				"file": "src/routes/(private)/middleware.ts",
 				"name": "requireAuth",
 				"requires": [
 					"session"
@@ -83,7 +83,7 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/middleware/admin.ts",
+				"file": "src/routes/(private)/admin/middleware.ts",
 				"name": "withAdmin",
 				"requires": [
 					"auth"
@@ -110,7 +110,7 @@ export const routaRoutes = [
 		"methodMiddleware": {
 			"get": [
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withRequest",
 					"requires": [],
 					"provides": [
@@ -124,7 +124,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withSession",
 					"requires": [
 						"requestId"
@@ -140,7 +140,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/auth.ts",
+					"file": "src/routes/(private)/middleware.ts",
 					"name": "requireAuth",
 					"requires": [
 						"session"
@@ -166,7 +166,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/admin.ts",
+					"file": "src/routes/(private)/admin/middleware.ts",
 					"name": "withAdmin",
 					"requires": [
 						"auth"
@@ -229,7 +229,7 @@ export const routaRoutes = [
 		},
 		"middleware": [
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withRequest",
 				"requires": [],
 				"provides": [
@@ -243,7 +243,7 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withSession",
 				"requires": [
 					"requestId"
@@ -259,7 +259,7 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/middleware/auth.ts",
+				"file": "src/routes/(private)/middleware.ts",
 				"name": "requireAuth",
 				"requires": [
 					"session"
@@ -285,7 +285,7 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/middleware/admin.ts",
+				"file": "src/routes/(private)/admin/middleware.ts",
 				"name": "withAdmin",
 				"requires": [
 					"auth"
@@ -312,7 +312,7 @@ export const routaRoutes = [
 		"methodMiddleware": {
 			"get": [
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withRequest",
 					"requires": [],
 					"provides": [
@@ -326,7 +326,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withSession",
 					"requires": [
 						"requestId"
@@ -342,7 +342,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/auth.ts",
+					"file": "src/routes/(private)/middleware.ts",
 					"name": "requireAuth",
 					"requires": [
 						"session"
@@ -368,7 +368,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/admin.ts",
+					"file": "src/routes/(private)/admin/middleware.ts",
 					"name": "withAdmin",
 					"requires": [
 						"auth"
@@ -456,7 +456,7 @@ export const routaRoutes = [
 		},
 		"middleware": [
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withRequest",
 				"requires": [],
 				"provides": [
@@ -470,7 +470,7 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withSession",
 				"requires": [
 					"requestId"
@@ -486,7 +486,7 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/middleware/auth.ts",
+				"file": "src/routes/(private)/middleware.ts",
 				"name": "requireAuth",
 				"requires": [
 					"session"
@@ -512,7 +512,7 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/middleware/tenant.ts",
+				"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
 				"name": "withTenant",
 				"requires": [
 					"auth",
@@ -549,7 +549,7 @@ export const routaRoutes = [
 		"methodMiddleware": {
 			"get": [
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withRequest",
 					"requires": [],
 					"provides": [
@@ -563,7 +563,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withSession",
 					"requires": [
 						"requestId"
@@ -579,7 +579,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/auth.ts",
+					"file": "src/routes/(private)/middleware.ts",
 					"name": "requireAuth",
 					"requires": [
 						"session"
@@ -605,7 +605,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/tenant.ts",
+					"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
 					"name": "withTenant",
 					"requires": [
 						"auth",
@@ -641,7 +641,7 @@ export const routaRoutes = [
 			],
 			"patch": [
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withRequest",
 					"requires": [],
 					"provides": [
@@ -655,7 +655,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withSession",
 					"requires": [
 						"requestId"
@@ -671,7 +671,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/auth.ts",
+					"file": "src/routes/(private)/middleware.ts",
 					"name": "requireAuth",
 					"requires": [
 						"session"
@@ -697,7 +697,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/tenant.ts",
+					"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
 					"name": "withTenant",
 					"requires": [
 						"auth",
@@ -757,7 +757,7 @@ export const routaRoutes = [
 			],
 			"delete": [
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withRequest",
 					"requires": [],
 					"provides": [
@@ -771,7 +771,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withSession",
 					"requires": [
 						"requestId"
@@ -787,7 +787,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/auth.ts",
+					"file": "src/routes/(private)/middleware.ts",
 					"name": "requireAuth",
 					"requires": [
 						"session"
@@ -813,7 +813,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/tenant.ts",
+					"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
 					"name": "withTenant",
 					"requires": [
 						"auth",
@@ -926,7 +926,7 @@ export const routaRoutes = [
 		},
 		"middleware": [
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withRequest",
 				"requires": [],
 				"provides": [
@@ -940,7 +940,7 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withSession",
 				"requires": [
 					"requestId"
@@ -956,7 +956,7 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/middleware/auth.ts",
+				"file": "src/routes/(private)/middleware.ts",
 				"name": "requireAuth",
 				"requires": [
 					"session"
@@ -982,7 +982,7 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/middleware/tenant.ts",
+				"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
 				"name": "withTenant",
 				"requires": [
 					"auth",
@@ -1019,7 +1019,7 @@ export const routaRoutes = [
 		"methodMiddleware": {
 			"get": [
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withRequest",
 					"requires": [],
 					"provides": [
@@ -1033,7 +1033,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withSession",
 					"requires": [
 						"requestId"
@@ -1049,7 +1049,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/auth.ts",
+					"file": "src/routes/(private)/middleware.ts",
 					"name": "requireAuth",
 					"requires": [
 						"session"
@@ -1075,7 +1075,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/tenant.ts",
+					"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
 					"name": "withTenant",
 					"requires": [
 						"auth",
@@ -1127,7 +1127,7 @@ export const routaRoutes = [
 			],
 			"post": [
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withRequest",
 					"requires": [],
 					"provides": [
@@ -1141,7 +1141,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withSession",
 					"requires": [
 						"requestId"
@@ -1157,7 +1157,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/auth.ts",
+					"file": "src/routes/(private)/middleware.ts",
 					"name": "requireAuth",
 					"requires": [
 						"session"
@@ -1183,7 +1183,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/tenant.ts",
+					"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
 					"name": "withTenant",
 					"requires": [
 						"auth",
@@ -1282,7 +1282,7 @@ export const routaRoutes = [
 		},
 		"middleware": [
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withRequest",
 				"requires": [],
 				"provides": [
@@ -1296,7 +1296,7 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withSession",
 				"requires": [
 					"requestId"
@@ -1315,7 +1315,7 @@ export const routaRoutes = [
 		"methodMiddleware": {
 			"get": [
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withRequest",
 					"requires": [],
 					"provides": [
@@ -1329,7 +1329,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withSession",
 					"requires": [
 						"requestId"
@@ -1378,7 +1378,7 @@ export const routaRoutes = [
 		},
 		"middleware": [
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withRequest",
 				"requires": [],
 				"provides": [
@@ -1392,7 +1392,7 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withSession",
 				"requires": [
 					"requestId"
@@ -1411,7 +1411,7 @@ export const routaRoutes = [
 		"methodMiddleware": {
 			"get": [
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withRequest",
 					"requires": [],
 					"provides": [
@@ -1425,7 +1425,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withSession",
 					"requires": [
 						"requestId"
@@ -1478,7 +1478,7 @@ export const routaRoutes = [
 		},
 		"middleware": [
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withRequest",
 				"requires": [],
 				"provides": [
@@ -1492,7 +1492,7 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withSession",
 				"requires": [
 					"requestId"
@@ -1511,7 +1511,7 @@ export const routaRoutes = [
 		"methodMiddleware": {
 			"get": [
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withRequest",
 					"requires": [],
 					"provides": [
@@ -1525,7 +1525,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withSession",
 					"requires": [
 						"requestId"
@@ -1579,7 +1579,7 @@ export const routaRoutes = [
 		},
 		"middleware": [
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withRequest",
 				"requires": [],
 				"provides": [
@@ -1593,7 +1593,7 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withSession",
 				"requires": [
 					"requestId"
@@ -1612,7 +1612,7 @@ export const routaRoutes = [
 		"methodMiddleware": {
 			"get": [
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withRequest",
 					"requires": [],
 					"provides": [
@@ -1626,7 +1626,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withSession",
 					"requires": [
 						"requestId"
@@ -1675,7 +1675,7 @@ export const routaRoutes = [
 		},
 		"middleware": [
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withRequest",
 				"requires": [],
 				"provides": [
@@ -1689,7 +1689,7 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withSession",
 				"requires": [
 					"requestId"
@@ -1708,7 +1708,7 @@ export const routaRoutes = [
 		"methodMiddleware": {
 			"post": [
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withRequest",
 					"requires": [],
 					"provides": [
@@ -1722,7 +1722,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withSession",
 					"requires": [
 						"requestId"
@@ -1793,7 +1793,7 @@ export const routaRoutes = [
 		},
 		"middleware": [
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withRequest",
 				"requires": [],
 				"provides": [
@@ -1807,7 +1807,7 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withSession",
 				"requires": [
 					"requestId"
@@ -1826,7 +1826,7 @@ export const routaRoutes = [
 		"methodMiddleware": {
 			"get": [
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withRequest",
 					"requires": [],
 					"provides": [
@@ -1840,7 +1840,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withSession",
 					"requires": [
 						"requestId"
@@ -1858,7 +1858,7 @@ export const routaRoutes = [
 			],
 			"put": [
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withRequest",
 					"requires": [],
 					"provides": [
@@ -1872,7 +1872,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withSession",
 					"requires": [
 						"requestId"
@@ -1890,7 +1890,7 @@ export const routaRoutes = [
 			],
 			"head": [
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withRequest",
 					"requires": [],
 					"provides": [
@@ -1904,7 +1904,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withSession",
 					"requires": [
 						"requestId"
@@ -1953,7 +1953,7 @@ export const routaRoutes = [
 		},
 		"middleware": [
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withRequest",
 				"requires": [],
 				"provides": [
@@ -1967,7 +1967,7 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/middleware/context.ts",
+				"file": "src/routes/middleware.ts",
 				"name": "withSession",
 				"requires": [
 					"requestId"
@@ -1986,7 +1986,7 @@ export const routaRoutes = [
 		"methodMiddleware": {
 			"get": [
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withRequest",
 					"requires": [],
 					"provides": [
@@ -2000,7 +2000,7 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/middleware/context.ts",
+					"file": "src/routes/middleware.ts",
 					"name": "withSession",
 					"requires": [
 						"requestId"

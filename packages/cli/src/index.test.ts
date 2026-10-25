@@ -629,6 +629,76 @@ export default route({
 		expect(postRoute?.contract.middleware).toHaveLength(1);
 	});
 
+	it("loads filesystem middleware exported under an alias, locally or through a re-export", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-aliased-middleware-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/middleware"), { recursive: true });
+		mkdirSync(join(cwd, "src/routes/users"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/middleware/audit.ts"),
+			`import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+
+const Problem = z.object({ message: z.string() });
+
+const hidden = createMiddleware({
+\trejects: { unaudited: { status: 409, schema: Problem } },
+\trun: async ({ next }) => next({}),
+});
+
+export { hidden as audit };
+`,
+		);
+		writeFileSync(
+			join(cwd, "src/routes/middleware.ts"),
+			`import { createMiddleware } from "@routa-ts/core";
+
+const local = createMiddleware({ run: async ({ next }) => next({}) });
+
+export { local as extraGuard };
+export { audit as auditTrail } from "../middleware/audit.js";
+`,
+		);
+		writeFileSync(
+			join(cwd, "src/routes/users/route.ts"),
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/users")({
+\tget: createRoute({
+\t\tresponses: { success: { status: 200, schema: z.object({ ok: z.boolean() }) } },
+\t\trun: () => ({ type: "success", data: { ok: true } }),
+\t}),
+});
+`,
+		);
+
+		const result = await run(["check"], { cwd });
+
+		expect(result.stderr ?? "").toBe("");
+		expect(result.code).toBe(0);
+		const metadata = JSON.parse(
+			readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8").match(
+				/export const routaRoutes = ([\s\S]*?) as const;/,
+			)?.[1] ?? "[]",
+		);
+		expect(
+			metadata[0].middleware.map((item: { file: string; name: string }) => [item.file, item.name]),
+		).toEqual([
+			["src/routes/middleware.ts", "extraGuard"],
+			["src/routes/middleware.ts", "auditTrail"],
+		]);
+		expect(
+			(generateOpenApi(cwd).paths as Record<string, Record<string, { responses: object }>>)[
+				"/users"
+			].get.responses,
+		).toHaveProperty("409.content.application/json.schema.properties.message");
+
+		const routes = await loadRoutes(cwd);
+
+		expect(routes[0]?.contract.middleware).toHaveLength(2);
+	});
+
 	it("prints a JSON route reference from resolved route metadata", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-routes-json-"));
 		createTypeScriptProject(cwd);
@@ -969,7 +1039,7 @@ export default route({
 
 		expect(result.code).toBe(0);
 		const metadata = readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8");
-		expect(metadata).toContain("src/middleware/context.ts");
+		expect(metadata).toContain('"file": "src/routes/middleware.ts"');
 		expect(metadata).toContain('"db"');
 		expect(metadata).toContain('"user"');
 		expect(metadata).toContain("export type RoutaCtxByKey");

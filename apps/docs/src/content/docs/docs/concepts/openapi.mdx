@@ -53,8 +53,9 @@ OpenAPI check passed. No drift detected.
 
 `openapi check` fails when an operation, a response status, a parameter, a request body, a
 schema (including the content of a component), or an operation's `security` differs from
-the baseline. Descriptions, `operationId`, `info`, and `servers` are not compared. Removing
-a response status or an operation's authentication from source is drift, because the
+the baseline. Descriptions, `operationId`, `info`, and `servers` are not compared, except
+the generated `Set-Cookie` header description, which lists cookie names and attributes.
+Removing a response status or an operation's authentication from source is drift, because the
 current document no longer carries them over from the baseline. `openapi breaking` is
 narrower: it fails only for removed operations and for inputs that became required or
 newly require authentication, so it is the check to run in CI on every pull request.
