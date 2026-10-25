@@ -452,6 +452,11 @@ function requiresCookie(outcome: ProjectedResponse): boolean {
 	return outcome.cookies?.some((cookie) => cookie.required) ?? false;
 }
 
+/** The `allOf` members of a projected schema, if it has any. */
+function allOfMembers(schema: JsonSchema): JsonSchema[] {
+	return Array.isArray(schema.allOf) ? (schema.allOf as JsonSchema[]) : [];
+}
+
 /**
  * The single string, number, or boolean value a schema allows (a `const` or one-value `enum`), as
  * text, or `undefined` when it allows other values.
@@ -752,7 +757,7 @@ class SchemaProjector {
 		const collect = (node: JsonSchema): void => {
 			const object = this.resolved(node);
 
-			for (const member of Array.isArray(object.allOf) ? (object.allOf as JsonSchema[]) : []) {
+			for (const member of allOfMembers(object)) {
 				collect(member);
 			}
 
@@ -767,7 +772,7 @@ class SchemaProjector {
 			for (const [name, property] of Object.entries(
 				(object.properties ?? {}) as Record<string, JsonSchema>,
 			)) {
-				const value = literalText(this.resolved(property));
+				const value = this.literalOf(property);
 				const earlier = values.get(name);
 
 				if (value !== undefined) {
@@ -783,6 +788,22 @@ class SchemaProjector {
 				return typeof value === "string" ? [[name, value] as const] : [];
 			}),
 		);
+	}
+
+	/**
+	 * The one literal a property schema allows, as text, reading through component references and
+	 * `allOf` members: `null` when members require different literals, `undefined` when none
+	 * requires one.
+	 */
+	private literalOf(property: JsonSchema): string | null | undefined {
+		const schema = this.resolved(property);
+		const values = new Set(
+			[literalText(schema), ...allOfMembers(schema).map((member) => this.literalOf(member))].filter(
+				(value) => value !== undefined,
+			),
+		);
+
+		return values.size > 1 ? null : values.values().next().value;
 	}
 
 	/**

@@ -173,12 +173,15 @@ export const Second = z.object({ ok: ${second} }).meta({ id: "SecondResult" });
 
 export const Identified = z.object({ id: z.string() });
 export const KindC = z.object({ kind: z.literal("c") }).describe("C");
+export const KindD = z.object({ kind: z.literal("d") }).describe("D").and(Identified);
 `,
 				"src/routes/projects/route.ts": route(
 					`a: { status: 200, schema: z.object({ kind: z.literal("a") }).describe("A").and(z.object({ id: z.string() })) },
 		b: { status: 200, schema: z.object({ kind: z.literal("b") }).and(Identified) },
-		c: { status: 200, schema: KindC.and(Identified) }`,
-					'import { Identified, KindC } from "./schemas";',
+		c: { status: 200, schema: KindC.and(Identified) },
+		d: { status: 200, schema: KindD },
+		e: { status: 200, schema: z.object({ kind: z.literal("e") }).and(z.object({ kind: z.string(), id: z.string() })) }`,
+					'import { Identified, KindC, KindD } from "./schemas";',
 				),
 			}),
 		);
@@ -189,8 +192,14 @@ export const KindC = z.object({ kind: z.literal("c") }).describe("C");
 				{ allOf: expect.any(Array) },
 				{ allOf: expect.any(Array) },
 				{ allOf: expect.any(Array) },
+				{ $ref: "#/components/schemas/KindD" },
+				// Plain object members fold, so both constraints on `kind` meet in one property.
+				{ properties: { kind: { allOf: [{ const: "e" }, { type: "string" }] } } },
 			],
-			discriminator: { propertyName: "kind" },
+			discriminator: {
+				propertyName: "kind",
+				mapping: expect.objectContaining({ d: "#/components/schemas/KindD" }),
+			},
 		});
 	});
 
@@ -224,6 +233,11 @@ export const KindC = z.object({ kind: z.literal("c") }).describe("C");
 		[
 			"an intersection whose members require conflicting literals",
 			`a: { status: 200, schema: z.object({ kind: z.literal("a") }).describe("A").and(z.object({ kind: z.literal("b") })) },
+		b: { status: 200, schema: z.object({ kind: z.literal("c") }) }`,
+		],
+		[
+			"a folded intersection whose members require conflicting literals",
+			`a: { status: 200, schema: z.object({ kind: z.literal("a") }).and(z.object({ kind: z.literal("b") })) },
 		b: { status: 200, schema: z.object({ kind: z.literal("c") }) }`,
 		],
 		[
