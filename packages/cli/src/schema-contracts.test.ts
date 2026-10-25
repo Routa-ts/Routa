@@ -822,33 +822,36 @@ export const Account = z
 		);
 	});
 
-	it("keeps metadata through object strictness modifiers", () => {
+	it("keeps only metadata attached after an object strictness modifier, like z.toJSONSchema", () => {
+		const schemas = `export const People = z.object({
+	strictBefore: z.object({ name: z.string() }).describe("A strict person").strict(),
+	strictAfter: z.object({ name: z.string() }).strict().describe("A strict person"),
+	stripBefore: z.object({ name: z.string() }).meta({ title: "Stripped person" }).strip(),
+	stripAfter: z.object({ name: z.string() }).strip().meta({ title: "Stripped person" }),
+	looseBefore: z.object({ name: z.string() }).meta({ title: "Loose person" }).loose(),
+	looseAfter: z.object({ name: z.string() }).loose().meta({ title: "Loose person" }),
+	passthroughBefore: z.object({ name: z.string() }).describe("An open person").passthrough(),
+	passthroughAfter: z.object({ name: z.string() }).passthrough().describe("An open person"),
+});
+`;
 		const cwd = project({
+			"src/routes/people/schemas.ts": schemasFile(schemas),
 			"src/routes/people/route.ts": routeFile("/people", {
-				responses: `ok: { status: 200, schema: z.object({
-			strict: z.object({ name: z.string() }).describe("A strict person").strict(),
-			loose: z.object({ name: z.string() }).meta({ title: "Loose person" }).loose(),
-		}) }`,
+				responses: "ok: { status: 200, schema: People }",
 			}),
 		});
 		const document = generateOpenApi(cwd);
+		const components = document.components?.schemas ?? {};
+		const projected = semantic(responseSchema(document, "/people", "get", 200), components) as {
+			properties: Record<string, Json>;
+		};
 
 		expect(diagnosticsOf(document)).toEqual([]);
-		expect((responseSchema(document, "/people", "get", 200) as Json).properties).toEqual({
-			strict: {
-				type: "object",
-				required: ["name"],
-				properties: { name: { type: "string" } },
-				additionalProperties: false,
-				description: "A strict person",
-			},
-			loose: {
-				type: "object",
-				required: ["name"],
-				properties: { name: { type: "string" } },
-				title: "Loose person",
-			},
-		});
+		expect(projected).toEqual(nativeSchema(runtimeSchemas(schemas).People));
+		for (const [name, property] of Object.entries(projected.properties)) {
+			const documented = "description" in property || "title" in property;
+			expect([name, documented]).toEqual([name, name.endsWith("After")]);
+		}
 	});
 
 	it("documents Zod string formats and sized numbers", () => {
@@ -1441,6 +1444,8 @@ function responseSchema(document: unknown, path: string, method: string, status:
  * native Zod conversion compare by meaning.
  *
  * - `$ref`s are inlined from `components`.
+ * - An empty `additionalProperties: {}` is dropped, because it means the same
+ *   open object Routa documents without it.
  * - Bare-type `type` arrays become `anyOf`.
  * - `allOf` members that are open plain objects fold into one object, closed
  *   when the `allOf` has `unevaluatedProperties: false`. A closed member stays
@@ -1469,6 +1474,7 @@ function semantic(schema: unknown, components: Record<string, unknown> = {}): un
 
 	for (const [key, item] of Object.entries(rest)) {
 		if (key === "$schema" || key === "$defs" || key === "discriminator") continue;
+		if (key === "additionalProperties" && JSON.stringify(item) === "{}") continue;
 		if (key === "propertyNames" && JSON.stringify(item) === '{"type":"string"}') continue;
 		value[key] = semantic(item, components);
 	}

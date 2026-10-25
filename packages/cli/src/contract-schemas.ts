@@ -2101,7 +2101,9 @@ class SchemaProjector {
 				delete schema.additionalProperties;
 			}
 
-			return { schema, meta: node.meta, optional: node.optional };
+			// Zod builds a new object schema here, so metadata on the receiver stays behind, as in
+			// z.toJSONSchema. Documentation goes after the modifier.
+			return { schema, meta: {}, optional: false };
 		}
 
 		if (name === "register") {
