@@ -336,10 +336,14 @@ and write URL options as an object literal.
 ### `ROUTA_SCHEMA_UNRESOLVED`
 
 A schema identifier does not name a declaration Routa can read. Routa reads route schemas
-from the route file and its sibling `schemas.ts`, and middleware reject schemas from the
-file that declares the middleware. It does not follow imports.
+from the route file and its sibling `schemas.ts`, middleware reject schemas from the file
+that declares the middleware, and schemas those files import by name through a relative
+path, following aliases and re-exports. It does not resolve package imports, tsconfig path
+aliases, default imports, or modules it cannot find. A namespace member such as
+`schemas.User` reports `ROUTA_SCHEMA_UNSUPPORTED` instead.
 
-**Fix:** declare or export the schema in one of those files.
+**Fix:** declare the schema in one of those files, or export it with `export const` from a
+project module and import it by name through a relative path.
 
 ### `ROUTA_RESPONSE_SCHEMA_MUTATION`
 

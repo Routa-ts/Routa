@@ -1973,7 +1973,7 @@ class SchemaProjector {
 			code,
 			message: `Schema ${name} is imported from "${specifier}", but Routa found no exported const declaration for it`,
 			suggestion:
-				"Export the schema from that module with export const, directly or through export { ... } from or export * from.",
+				"Export the schema with export const, directly or through export { ... } from or export * from, and import it by name.",
 		};
 	}
 
