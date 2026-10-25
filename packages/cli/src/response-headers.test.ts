@@ -165,6 +165,31 @@ export const ItemHeaders = z.object({ etag: OptionalEtag, "x-revision": FrozenRe
 		});
 	});
 
+	it("classifies headers through wrapper chains imported from other modules", () => {
+		const cwd = project({
+			"src/shared/tags.ts": `import { z } from "zod";
+
+export const Etag = z.string().describe("Entity tag");
+`,
+			"src/shared/headers.ts": `import { Etag } from "./tags.js";
+
+export const OptionalEtag = Etag.optional();
+`,
+			"src/routes/items/route.ts": route(
+				"/items",
+				"ok: { status: 200, headers: z.object({ etag: OptionalEtag }) }",
+				{ imports: 'import { OptionalEtag } from "../../shared/headers.js";' },
+			),
+		});
+
+		const document = generateOpenApi(cwd);
+
+		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
+		expect(responseOf(document, "/items", "get", 200).headers).toEqual({
+			etag: { description: "Entity tag", schema: { $ref: "#/components/schemas/OptionalEtag" } },
+		});
+	});
+
 	it("drifts against a baseline when a header changes", async () => {
 		const cwd = project({
 			"src/routes/items/route.ts": route(
