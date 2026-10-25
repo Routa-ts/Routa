@@ -8,3 +8,9 @@ export const Session = z.object({
 });
 
 export const GetSessionResponse = Session;
+
+export const SignInBody = z.object({
+	token: z.string().describe("A demo token from `pnpm mint-session <userId>`"),
+});
+
+export const SignInRejected = z.object({ message: z.string() });

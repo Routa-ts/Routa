@@ -42,7 +42,10 @@ export const withSession = createMiddleware({
 
 const demoSessionSecret = process.env.ROUTA_DEMO_SESSION_SECRET;
 
-function verifySession(token: string | undefined): { authenticated: boolean; userId?: string } {
+export function verifySession(token: string | undefined): {
+	authenticated: boolean;
+	userId?: string;
+} {
 	if (!token?.startsWith("demo-user:") || !demoSessionSecret) {
 		return { authenticated: false };
 	}

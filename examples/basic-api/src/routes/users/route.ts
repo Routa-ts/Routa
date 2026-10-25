@@ -3,7 +3,7 @@
 // Source: openapi.yaml
 
 import { createRoute, createRouteRoot } from "@routa-ts/core";
-import type { z } from "zod";
+import { z } from "zod";
 import {
 	CreateUserBody,
 	CreateUserResponse,
@@ -40,19 +40,21 @@ export default route({
 			success: {
 				status: 201,
 				schema: CreateUserResponse,
+				headers: z.object({
+					location: z.string().describe("Path of the created user"),
+				}),
 			},
 		},
 		run: ({ input }) => {
 			// TODO: call application-owned business logic.
-			return {
-				type: "success",
-				data: {
-					id: "user_new",
-					email: input.body.email,
-					name: input.body.name,
-					active: true,
-				} as unknown as z.output<typeof CreateUserResponse>,
-			};
+			const user = {
+				id: "user_new",
+				email: input.body.email,
+				name: input.body.name,
+				active: true,
+			} as unknown as z.output<typeof CreateUserResponse>;
+
+			return { type: "success", data: user, headers: { location: `/users/${user.id}` } };
 		},
 	}),
 });
