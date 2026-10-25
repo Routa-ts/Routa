@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createHonoApp, type HonoRoute } from "./hono.js";
 import {
 	type AnyMiddlewareContract,
+	type CookieEffect,
 	createCookie,
 	createMiddleware,
 	createRoute,
@@ -182,25 +183,35 @@ describe("selection boundary", () => {
 		{ runtimeMode: "start" },
 		{ runtimeMode: "start", responseValidation: "always" },
 	];
+	const theme = createCookie({
+		name: "theme",
+		schema: z.string(),
+		httpOnly: false,
+		secure: true,
+		sameSite: "lax",
+		path: "/",
+	});
 	const outcome = {
 		schema: z.object({ message: z.string() }),
 		headers: z.object({ etag: z.string() }),
-		cookies: [session],
+		cookies: [theme, session],
 	};
 
 	/** Shared objects a producer returns and a middleware later changes in place. */
 	function shared() {
 		const data = { message: "selected" };
 		const headers = { etag: '"1"' };
-		const cookies = [session.set("selected")];
+		const cookies: Array<CookieEffect<typeof theme> | CookieEffect<typeof session>> = [
+			theme.set("dark"),
+		];
 
 		return {
 			result: { data, headers, cookies },
 			mutate: () => {
 				data.message = "late";
 				headers.etag = '"late"';
-				cookies[0] = session.set("late");
-				cookies.push(session.clear());
+				cookies[0] = theme.set("light");
+				cookies.push(session.set("late"));
 			},
 		};
 	}
@@ -269,7 +280,7 @@ describe("selection boundary", () => {
 				expect(
 					response.headers.getSetCookie().map((field) => field.split(";")[0]),
 					mode,
-				).toEqual(["session=selected"]);
+				).toEqual(["theme=dark"]);
 			}
 		});
 	}
