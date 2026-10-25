@@ -1,6 +1,6 @@
 import { createMiddleware } from "@routa-ts/core";
 import { z } from "zod";
-import { session as sessionCookie } from "../cookies.js";
+import { sessionCookie } from "../cookies.js";
 
 /**
  * App-owned auth guard for the full-api example.

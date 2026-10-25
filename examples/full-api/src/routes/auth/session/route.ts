@@ -1,6 +1,6 @@
 import { createRoute, createRouteRoot } from "@routa-ts/core";
-import { session, signedIn } from "../../../cookies.js";
-import { verifySession } from "../../../middleware/context.js";
+import { sessionCookie, signedInCookie } from "../../../cookies.js";
+import { verifySession } from "../../../session.js";
 import { GetSessionCookies, GetSessionResponse, SignInBody, SignInRejected } from "./schemas.js";
 
 const route = createRouteRoot("/auth/session");
@@ -33,8 +33,8 @@ export default route({
 				description: "The token is valid, and the session cookies are set.",
 				schema: GetSessionResponse,
 				cookies: [
-					{ handle: session, required: true },
-					{ handle: signedIn, required: true },
+					{ handle: sessionCookie, required: true },
+					{ handle: signedInCookie, required: true },
 				],
 			},
 			rejected: {
@@ -53,7 +53,7 @@ export default route({
 			return {
 				type: "signedIn",
 				data: verified,
-				cookies: [session.set(input.body.token), signedIn.set("yes")],
+				cookies: [sessionCookie.set(input.body.token), signedInCookie.set("yes")],
 			};
 		},
 	}),
@@ -63,11 +63,11 @@ export default route({
 				status: 204,
 				description: "The session cookies are cleared.",
 				cookies: [
-					{ handle: session, required: true },
-					{ handle: signedIn, required: true },
+					{ handle: sessionCookie, required: true },
+					{ handle: signedInCookie, required: true },
 				],
 			},
 		},
-		run: () => ({ type: "signedOut", cookies: [session.clear(), signedIn.clear()] }),
+		run: () => ({ type: "signedOut", cookies: [sessionCookie.clear(), signedInCookie.clear()] }),
 	}),
 });
