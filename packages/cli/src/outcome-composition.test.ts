@@ -109,6 +109,26 @@ export const Queued = z.object({ kind: z.literal("queued") }).meta({ id: "Queued
 		});
 	});
 
+	it("reads discriminator literals through chains of exported wrappers", () => {
+		const document = generateOpenApi(
+			project({
+				"src/routes/projects/schemas.ts": `import { z } from "zod";
+
+export const CreatedKind = z.literal("created");
+export const FrozenCreatedKind = CreatedKind.readonly();
+`,
+				"src/routes/projects/route.ts": route(
+					`created: { status: 201, schema: z.object({ kind: FrozenCreatedKind }) },
+		queued: { status: 201, schema: z.object({ kind: z.literal("queued") }) }`,
+					'import { FrozenCreatedKind } from "./schemas";',
+				),
+			}),
+		);
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(schemaOf(document, 201).discriminator).toEqual({ propertyName: "kind" });
+	});
+
 	it("omits the mapping when component names already match the payload values", () => {
 		const document = generateOpenApi(
 			project({
@@ -372,6 +392,28 @@ export const SameTag = z.string().describe("Tag");
 			diagnosticsOf(document('Tag.describe("Other")', "Tag", 'z.string().describe("Other")')),
 		).toEqual(incompatible);
 		expect(diagnosticsOf(document("Tag", 'z.literal("v1").describe("Tag")'))).toEqual(incompatible);
+		// References nested in unions and intersections compare by content too.
+		const union = (tag: string) => `z.union([${tag}, z.literal("none")])`;
+		const intersection = (tag: string) => `${tag}.and(z.string())`;
+		for (const nested of [union, intersection]) {
+			const inline = nested('z.string().describe("Tag")');
+
+			expect(diagnosticsOf(document(nested("Tag"), inline, inline))).toEqual([]);
+			expect(diagnosticsOf(document(nested("Tag"), nested("SameTag"), inline))).toEqual([]);
+			expect(
+				diagnosticsOf(document(nested("Tag"), nested('z.string().describe("Other")'), inline)),
+			).toEqual(incompatible);
+		}
+		expect(
+			responseOf(document(union("Tag"), union('z.string().describe("Tag")'), union("SameTag")), 200)
+				.headers,
+		).toMatchObject({
+			etag: {
+				schema: {
+					anyOf: [{ $ref: "#/components/schemas/Tag" }, { type: "string", const: "none" }],
+				},
+			},
+		});
 	});
 
 	it("lists a cookie once and marks it always set only when every alternative requires it", () => {

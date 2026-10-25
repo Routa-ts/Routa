@@ -830,8 +830,8 @@ class SchemaProjector {
 				}
 
 				if (
-					stableJson(this.resolved(earlier.headers![name]!.schema))
-					!== stableJson(this.resolved(header.schema))
+					stableJson(this.inlined(earlier.headers![name]!.schema))
+					!== stableJson(this.inlined(header.schema))
 				) {
 					this.operationProblem(site, {
 						code: "ROUTA_RESPONSE_HEADER_INCOMPATIBLE",
@@ -1620,7 +1620,8 @@ class SchemaProjector {
 	 * its target, the nearest winning, and a cycle stops at the reference that repeats.
 	 */
 	private resolved(schema: JsonSchema, seen: ReadonlySet<string> = new Set()): JsonSchema {
-		const key = typeof schema.$ref === "string" ? schema.$ref.replace(componentPrefix, "") : undefined;
+		const key =
+			typeof schema.$ref === "string" ? schema.$ref.replace(componentPrefix, "") : undefined;
 		const target = key === undefined || seen.has(key) ? undefined : this.components.get(key);
 
 		if (!key || !target) {
@@ -1629,6 +1630,32 @@ class SchemaProjector {
 
 		const { $ref: _ref, ...siblings } = schema;
 		return { ...this.resolved(target.content, new Set(seen).add(key)), ...siblings };
+	}
+
+	/**
+	 * A schema with every component reference, at any depth, replaced by what it stands for, so
+	 * equal content compares equal however it is spelled. References resolve like `resolved`.
+	 */
+	private inlined(value: unknown, seen: ReadonlySet<string> = new Set()): unknown {
+		if (Array.isArray(value)) {
+			return value.map((item) => this.inlined(item, seen));
+		}
+
+		if (typeof value !== "object" || value === null) {
+			return value;
+		}
+
+		const { $ref, ...siblings } = value as JsonSchema;
+		const key = typeof $ref === "string" ? $ref.replace(componentPrefix, "") : undefined;
+		const target = key === undefined || seen.has(key) ? undefined : this.components.get(key);
+
+		if (key && target) {
+			return this.inlined({ ...target.content, ...siblings }, new Set(seen).add(key));
+		}
+
+		return Object.fromEntries(
+			Object.entries(value).map(([name, item]) => [name, this.inlined(item, seen)]),
+		);
 	}
 
 	/** Whether a projected schema accepts only strings, numbers, and booleans. */
