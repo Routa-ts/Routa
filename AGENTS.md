@@ -69,7 +69,8 @@ These repository rules take precedence over installed skills' PR workflows and t
 - Use a plain, imperative title. In the body, explain the problem, the change, verification, and the documentation or changeset decision.
 - Use `.github/PULL_REQUEST_TEMPLATE.md` for the body. It follows the `pr` skill's Summary, Evidence, and Merge danger structure with Routa's verification, documentation, changeset, and migration details.
 - Keep Dex task IDs out of commits, PRs, release notes, and permanent documentation.
-- Show evidence that the change works as expected. Report relevant tests, checks, or observed behavior for non-visual changes. Show a preview or before-and-after comparison for visual documentation and design changes.
+- Make evidence something to look at. Run the base branch and the PR branch, and paste what each produces verbatim: the code a developer writes, HTTP responses, `routa check` and compiler output, generated OpenAPI or metadata, and tests that fail before and pass after. Show a preview or before-and-after comparison for visual documentation and design changes. The PR template lays out the format.
+- The body describes the final change. Findings from local reviews stay local: fix them before opening or updating the PR.
 - Treat every review comment as a claim. Check its correctness, importance, scope, and compatibility with accepted decisions before changing code.
 - Fix valid, important findings. Reply with the change, then resolve the thread.
 - Reply with a specific reason before resolving a finding that is wrong, already addressed, outside the PR scope, or in conflict with repository authority.
