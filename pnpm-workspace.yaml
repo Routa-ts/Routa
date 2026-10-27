@@ -10,3 +10,7 @@ allowBuilds:
 peerDependencyRules:
   allowedVersions:
     vite: "1.3.0" # The Vite Plus alias contains Vite 8.3.4.
+# Fallow mutation loads `vitest/node` from each package. Hoist the one copy that Vite Plus
+# runs, so mutation and `vp test` share it.
+publicHoistPattern:
+  - vitest

@@ -1,0 +1,23 @@
+{
+	"$schema": "./node_modules/fallow/schema.json",
+	// Routa loads `src/routa.ts` and every file under `src/routes` by convention, so no
+	// import reaches them.
+	"dynamicallyLoaded": ["examples/**/src/routa.ts", "examples/**/src/routes/**/*.ts"],
+	// Maintainers run these by hand; CONTRIBUTING.md documents them.
+	"entry": ["scripts/benchmark-tooling.mjs", "scripts/check-tooling-cache.mjs"],
+	// The generated `.routa` graphs only list file paths, so nothing in them needs analysis.
+	"ignorePatterns": ["examples/**/.routa/**"],
+	"ignoreDependencies": [
+		// Loaded by tools rather than imported: Astro's image service, Oxfmt's Astro
+		// formatter, and the CLIs that pack check runs.
+		"sharp",
+		"@astrojs/compiler-rs",
+		"@arethetypeswrong/cli",
+		"publint",
+	],
+	"rules": {
+		// Routa configures no architecture boundaries or rule packs yet.
+		"boundary-violation": "off",
+		"policy-violation": "off",
+	},
+}

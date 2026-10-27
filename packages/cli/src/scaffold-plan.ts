@@ -41,21 +41,21 @@ export type ScaffoldPlan = {
 };
 
 export type ScaffoldSnapshot = {
-	manifest?: Manifest;
+	manifest?: Manifest | undefined;
 	files: Map<string, string | undefined>;
 };
 
 export type ScaffoldPreviewChange = {
 	path: string;
 	status: "add" | "update" | "unchanged" | "conflict" | "remove";
-	detail?: string;
-	diff?: string[];
+	detail?: string | undefined;
+	diff?: string[] | undefined;
 };
 
 export type ScaffoldEvaluation = {
 	changes: ScaffoldPreviewChange[];
 	stalePaths: string[];
-	blocked?: string;
+	blocked?: string | undefined;
 };
 
 type ScaffoldPlanInput = {
@@ -329,7 +329,7 @@ type OpenApiOperation = {
 type OpenApiContent = Record<string, { schema?: OpenApiSchema }>;
 
 type OpenApiSchema = {
-	type?: string | string[];
+	type?: string | string[] | undefined;
 	format?: string;
 	enum?: unknown[];
 	const?: unknown;
@@ -413,7 +413,8 @@ function formatMissingPathsError(source: string, document: unknown): string {
 			? Object.keys(document)
 			: [];
 	const pathLikeKeys = keys.filter((key) => key.startsWith("/"));
-	const lines = [`${source} is missing the required top-level "paths" object.`];
+	const summary = `${source} is missing the required top-level "paths" object.`;
+	const lines: string[] = [];
 
 	if (pathLikeKeys.length > 0) {
 		lines.push(
@@ -443,7 +444,7 @@ function formatMissingPathsError(source: string, document: unknown): string {
 		);
 	}
 
-	return scaffoldError("ROUTA_OPENAPI_MISSING_PATHS", lines[0], lines.slice(1));
+	return scaffoldError("ROUTA_OPENAPI_MISSING_PATHS", summary, lines);
 }
 
 /**
@@ -1724,7 +1725,8 @@ export function createScaffoldPlan(raw: string, extension: string, source: strin
 			const cookiesSchema = schemaForParameters(operationWithParameters, "cookie");
 			const bodySchema = schemaForRequestBody(operationWithParameters);
 			const responses = schemasForResponses(operationWithParameters, method, document);
-			const primaryResponse = responses[0];
+			// Validation rejects operations without responses.
+			const primaryResponse = responses[0]!;
 			usesZodOutputType ||= primaryResponse.placeholder !== undefined;
 			responsesByMethod[method] = responses.map((response) => response.status);
 			inputsByMethod[method] = {

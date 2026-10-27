@@ -78,3 +78,33 @@ jobs:
     with:
       timeout-minutes: 20
       command: vp run pack:check
+
+  fallow-audit:
+    name: Fallow audit (report only)
+    uses: ./.github/workflows/node-vp-job.yml
+    with:
+      fetch-depth: 0
+      # Findings land in the job summary and never fail the job yet. Exit 1 is a failing
+      # verdict; anything higher means the audit itself could not run.
+      command: |
+        status=0
+        vp exec fallow audit --base "origin/$GITHUB_BASE_REF" --format github-summary --quiet >> "$GITHUB_STEP_SUMMARY" || status=$?
+        [ "$status" -le 1 ]
+
+  mutation:
+    name: Mutation report
+    uses: ./.github/workflows/node-vp-job.yml
+    with:
+      fetch-depth: 0
+      timeout-minutes: 30
+      # Mutates only code this pull request changed. Surviving mutants never fail the job.
+      command: |
+        vp run build:packages
+        vp exec node scripts/link-local-cli.mjs --root "$GITHUB_WORKSPACE"
+        for root in packages/core packages/cli; do
+          {
+            printf '### Mutation report: %s\n\n```text\n' "$root"
+            vp exec fallow mutation --root "$root" --base "origin/$GITHUB_BASE_REF" --time-budget 10m --quiet
+            printf '```\n\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+        done

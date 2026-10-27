@@ -66,9 +66,9 @@ type RuntimeMiddlewareContract = MiddlewareContract & {
 type RequestExecutorOptions = {
 	logger: RoutaLogger;
 	validateResponses: boolean;
-	lifecycleHeaders?: boolean;
-	requestLogger?: RoutaLogger;
-	createContext?: () => unknown | Promise<unknown>;
+	lifecycleHeaders?: boolean | undefined;
+	requestLogger?: RoutaLogger | undefined;
+	createContext?: (() => unknown | Promise<unknown>) | undefined;
 };
 
 type RequestExecutor = (request: Request, params: Record<string, string>) => Promise<Response>;
@@ -408,7 +408,7 @@ function decodeCookieValue(value: string): string {
 
 function parseMediaRanges(header: string): Array<{ type: string; subtype: string; q: number }> {
 	return header.split(",").flatMap((item) => {
-		const [mediaRange, ...parameters] = item.split(";").map((part) => part.trim());
+		const [mediaRange = "", ...parameters] = item.split(";").map((part) => part.trim());
 		const [type, subtype] = mediaRange.toLowerCase().split("/");
 
 		if (!type || !subtype) {

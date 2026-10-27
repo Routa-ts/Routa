@@ -36,7 +36,7 @@ export type ProjectedOperation = {
 	 * outcomes and the rejects of every middleware in its chain.
 	 */
 	responses: Map<number, ProjectedResponse>;
-	deprecation?: { sunset?: string; replacement?: string };
+	deprecation?: { sunset?: string | undefined; replacement?: string | undefined } | undefined;
 };
 
 /**
@@ -193,7 +193,7 @@ type SchemaSource = {
 	zodNamespaces: Set<string>;
 	zodRegistries: Set<string>;
 	routaHelpers: Map<string, "Sort" | "Fields">;
-	fallback?: SchemaSource;
+	fallback?: SchemaSource | undefined;
 };
 
 type Context = {
@@ -1980,12 +1980,14 @@ class SchemaProjector {
 	private factory(name: string, call: ts.CallExpression, context: Context): SchemaNode {
 		const [first, second] = call.arguments;
 
-		if (Object.hasOwn(stringFormats, name)) {
+		const format = Object.hasOwn(stringFormats, name) ? stringFormats[name] : undefined;
+
+		if (format !== undefined) {
 			if (name === "url" || name === "httpUrl") {
 				this.checkUrlOptions(call, first, context);
 			}
 
-			return stringNode(stringFormats[name]);
+			return stringNode(format);
 		}
 
 		if (Object.hasOwn(numberFactories, name)) {
@@ -2345,13 +2347,14 @@ class SchemaProjector {
 			return plainNode(parameters);
 		}
 
-		const members = nodes.flatMap((node, index) =>
-			flattenAllOf(
-				isClosed(shapes[index])
-					? { ...opened(shapes[index]), ...this.documentation(node) }
+		const members = nodes.flatMap((node, index) => {
+			const shape = shapes[index]!;
+			return flattenAllOf(
+				isClosed(shape)
+					? { ...opened(shape), ...this.documentation(node) }
 					: this.materialize(node),
-			),
-		);
+			);
+		});
 		const folded = foldObjects(members);
 
 		return plainNode(
@@ -2867,8 +2870,8 @@ function cookieRuleProblem(cookie: {
 	secure: boolean;
 	sameSite: string;
 	path: string;
-	domain?: string;
-	partitioned?: boolean;
+	domain?: string | undefined;
+	partitioned?: boolean | undefined;
 }): string | undefined {
 	if (cookie.sameSite === "none" && !cookie.secure) {
 		return "Cookie sets SameSite=None, which requires secure: true";
@@ -3126,7 +3129,7 @@ function urlNormalize(
  * Turns an outcome name into the sentence used when it declares no description:
  * `notFound` becomes "Not found".
  */
-export function humanizeOutcomeName(name: string): string {
+function humanizeOutcomeName(name: string): string {
 	const words = name
 		.replaceAll(/([a-z0-9])([A-Z])/g, "$1 $2")
 		.replaceAll(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
@@ -3315,6 +3318,6 @@ function readDeprecation(contract: ts.ObjectLiteralExpression): ProjectedOperati
 }
 
 /** Orders names by UTF-16 code units, the same everywhere, unlike locale-aware comparison. */
-function compareText(left: string, right: string): number {
+export function compareText(left: string, right: string): number {
 	return left < right ? -1 : left > right ? 1 : 0;
 }

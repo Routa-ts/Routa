@@ -2,6 +2,10 @@
 	"extends": "./tsconfig.json",
 	"compilerOptions": {
 		"noEmit": true,
+		// Tests compile like a generated project, which leaves these off. `tsconfig.json`
+		// still holds package source to them.
+		"exactOptionalPropertyTypes": false,
+		"noUncheckedIndexedAccess": false,
 		"types": ["node", "vite-plus/test/globals"]
 	},
 	"include": ["src/**/*.ts"],

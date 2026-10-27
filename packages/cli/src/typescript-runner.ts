@@ -8,8 +8,8 @@ const bundledTsc = join(dirname(require.resolve("typescript/package.json")), "bi
 
 export type TypeScriptResult = {
 	code: number;
-	stdout?: string;
-	stderr?: string;
+	stdout?: string | undefined;
+	stderr?: string | undefined;
 };
 
 /**

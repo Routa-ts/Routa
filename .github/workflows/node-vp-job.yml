@@ -12,6 +12,11 @@ on:
         required: false
         type: number
         default: 15
+      fetch-depth:
+        description: Commits to fetch; 0 fetches all history so a job can diff against the base branch.
+        required: false
+        type: number
+        default: 1
 
 permissions:
   contents: read
@@ -25,6 +30,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: ${{ inputs.fetch-depth }}
           persist-credentials: false
 
       - name: Setup Vite Plus
