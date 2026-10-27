@@ -1,32 +1,36 @@
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vite-plus/test";
+
+type SnapshotParams = { openFiles?: string[]; fileChanges?: { changed?: string[] } };
+type Snapshot = {
+	dispose: Mock<() => void>;
+	getDefaultProjectForFile: () => { program: { getSourceFile: () => object } };
+};
 
 const native = vi.hoisted(() => ({
 	apis: [] as Array<{
-		close: ReturnType<typeof vi.fn>;
-		updateSnapshot: ReturnType<typeof vi.fn>;
+		close: Mock<() => void>;
+		updateSnapshot: Mock<(params: SnapshotParams) => Snapshot>;
 	}>,
-	snapshots: [] as Array<{ dispose: ReturnType<typeof vi.fn> }>,
+	snapshots: [] as Snapshot[],
 }));
 
 vi.mock("typescript/unstable/sync", () => ({
 	API: class {
-		readonly close = vi.fn();
+		readonly close = vi.fn<() => void>();
 		readonly sourceFiles = new Map<string, object>();
-		readonly updateSnapshot = vi.fn(
-			(params: { openFiles?: string[]; fileChanges?: { changed?: string[] } }) => {
-				const file = params.openFiles?.[0] ?? params.fileChanges?.changed?.[0];
-				const sourceFile = this.sourceFiles.get(file ?? "") ?? {};
-				this.sourceFiles.set(file ?? "", sourceFile);
-				const snapshot = {
-					dispose: vi.fn(),
-					getDefaultProjectForFile: () => ({
-						program: { getSourceFile: () => sourceFile },
-					}),
-				};
-				native.snapshots.push(snapshot);
-				return snapshot;
-			},
-		);
+		readonly updateSnapshot = vi.fn<(params: SnapshotParams) => Snapshot>((params) => {
+			const file = params.openFiles?.[0] ?? params.fileChanges?.changed?.[0];
+			const sourceFile = this.sourceFiles.get(file ?? "") ?? {};
+			this.sourceFiles.set(file ?? "", sourceFile);
+			const snapshot: Snapshot = {
+				dispose: vi.fn<() => void>(),
+				getDefaultProjectForFile: () => ({
+					program: { getSourceFile: () => sourceFile },
+				}),
+			};
+			native.snapshots.push(snapshot);
+			return snapshot;
+		});
 
 		constructor() {
 			native.apis.push(this);
