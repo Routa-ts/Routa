@@ -93,7 +93,7 @@ describe("createLogger", () => {
 	});
 
 	it("implements the complete contract as no-ops when disabled", () => {
-		const sink = vi.fn();
+		const sink = vi.fn<(event: RoutaLogEvent) => void>();
 		const logger = createLogger({ enabled: false, sink });
 
 		for (const level of ["trace", "debug", "info", "warn", "error", "fatal", "silent"] as const) {

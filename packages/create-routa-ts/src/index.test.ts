@@ -7,7 +7,7 @@ import { createProject } from "./create-project.js";
 import { createCommandArgs, resolveRoutaVersion, runCreate } from "./index.js";
 
 const { spawnSyncMock } = vi.hoisted(() => ({
-	spawnSyncMock: vi.fn(),
+	spawnSyncMock: vi.fn<(...args: unknown[]) => { status: number | null; stderr?: string }>(),
 }));
 
 vi.mock("node:child_process", () => ({
