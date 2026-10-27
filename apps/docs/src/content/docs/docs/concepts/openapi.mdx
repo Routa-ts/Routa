@@ -64,20 +64,22 @@ TypeScript.
 Routa adds three vendor extensions so information that has no standard field is still
 visible in the document:
 
-| Extension                 | Meaning                                                                      |
-| ------------------------- | ---------------------------------------------------------------------------- |
-| `x-routa-authz`           | Permission strings declared by middleware `openapi.permissions`              |
-| `x-routa-diagnostics`     | Validation errors that prevented a complete document                         |
-| `x-routa-schema-warnings` | Zod constructs Routa could not represent, as `ROUTA_OPENAPI_UNSUPPORTED_ZOD` |
+| Extension                 | Meaning                                                         |
+| ------------------------- | --------------------------------------------------------------- |
+| `x-routa-authz`           | Permission strings declared by middleware `openapi.permissions` |
+| `x-routa-diagnostics`     | Validation errors that prevented a complete document            |
+| `x-routa-schema-warnings` | Input Routa could not describe, as `ROUTA_SCHEMA_OPAQUE_INPUT`  |
 
 A document containing `x-routa-diagnostics` means generation ran against a project that
 does not validate. Fix the diagnostics before trusting the output.
 
 ## Limits
 
-`info`, `servers`, and `components.schemas` are carried from the baseline rather than
-derived from source, so edit them in the baseline document. Content types other than JSON
-are not modeled in v0.
+`info` and `servers` are carried from the baseline rather than derived from source, so
+edit them in the baseline document. `components.schemas` comes from the exported and
+`.meta({ id })` schemas your routes use; see [Schemas](/docs/concepts/schemas/). The checks
+compare schemas by content, so a schema written inline in the baseline and as a `$ref` in
+the generated document is not drift. Content types other than JSON are not modeled in v0.
 
 <Aside type="caution" title="Baseline updates">
 	`routa openapi breaking --update-baseline` overwrites

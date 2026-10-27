@@ -52,10 +52,82 @@ declared responses. By default, it parses `data` against the matching response s
 `routa dev`, so drift produces a generic `500` problem response before malformed data
 reaches a client. Production parsing is opt-in with `responseValidation: "always"`.
 
-If production response validation is disabled, Routa does not apply response-side Zod
-transforms, defaults, or unknown-key stripping. Middleware `provides` schemas remain
-active in both modes because their parsed values become downstream context. See
+Write response schemas to describe wire-ready JSON: they should validate a value, not
+change it. `routa check` reports `ROUTA_RESPONSE_SCHEMA_MUTATION` for response schemas that
+use `.transform()`, `z.preprocess()`, `.default()`, `.catch()`, `z.coerce.*`, codecs such
+as `z.stringbool()`, URL normalization with `z.url({ normalize: true })`, or value-rewriting
+checks such as `.trim()`, `.toLowerCase()`, `.toUpperCase()`, `.normalize()`, `.slugify()`,
+and `.overwrite()`. The same applies inside `.pipe()` targets, record keys, and
+`.check()` arguments, including checks declared in the same file such as
+`const tidy = z.trim()`. A `.check()` argument or URL options that Routa cannot read fail
+with `ROUTA_SCHEMA_UNSUPPORTED`. Return the final value from the handler instead.
+
+These are static checks. When Routa validates response data at runtime, it still sends the
+parsed value.
+
+If production response validation is disabled, Routa does not apply unknown-key stripping
+to response data. Middleware `provides` schemas remain active in both modes because their
+parsed values become downstream context. See
 [Configuration](/docs/reference/configuration/) for the full policy.
+
+## How Schemas Become OpenAPI
+
+Routa reads schemas statically from source. It never imports or runs your modules to
+generate OpenAPI, so every schema a route uses must be written where Routa can read it:
+in the route's sibling `schemas.ts`, in the route file itself, or, for middleware
+`rejects`, in the file that declares the middleware. An identifier imported from anywhere
+else fails `routa check` with `ROUTA_SCHEMA_UNRESOLVED`.
+
+Composition follows Zod's meaning, not a fixed keyword:
+
+| Zod                                   | OpenAPI 3.1                                               |
+| ------------------------------------- | --------------------------------------------------------- |
+| `z.union([...])`, `.or()`             | `anyOf`                                                   |
+| `z.discriminatedUnion("kind", [...])` | `oneOf` with `discriminator.propertyName: "kind"`         |
+| `z.intersection(a, b)`, `.and()`      | `allOf`, or one object when both sides are objects        |
+| `z.record(key, value)`                | `additionalProperties`, with key rules in `propertyNames` |
+| `.nullable()`                         | `anyOf` with `{ type: "null" }`                           |
+| `.optional()`, `.nullish()`           | The property leaves `required`                            |
+
+Like Zod, an intersection rejects unknown keys only when every member is strict. A strict
+member that stays in `allOf` is documented open, so the combined object stays possible.
+Intersected object schemas in `params`, `query`, `headers`, or `cookies` split into
+parameters, even when the members are exported or described.
+
+Input schemas describe what a client sends. A property with `.default()` or `.catch()` is
+optional, `z.coerce.number()` is a number, and `.transform()` or `.pipe()` after a readable
+schema documents that readable schema. `z.stringbool()` is a `boolean` parameter, following
+the OpenAPI convention for `"true"` and `"false"` strings, and a `string` property in a JSON
+body. `z.preprocess()` and a leading `z.transform()` run a
+function before any schema Routa can read, so `routa check` prints a
+`ROUTA_SCHEMA_OPAQUE_INPUT` warning and OpenAPI documents the schema that follows. The
+route still runs.
+
+## Documentation Metadata
+
+Zod's `.describe()` and `.meta()` are the documentation interface. Routa copies literal
+`title`, `description`, `deprecated`, `example`, `examples`, `readOnly`, `writeOnly`,
+`externalDocs`, and `x-` extension keys onto the Schema Object wherever the schema
+appears: at the root of a body or response, on a nested property, or in a component.
+
+```ts title="src/routes/users/schemas.ts"
+import { z } from "zod";
+
+export const Address = z
+	.object({ city: z.string().describe("City name") })
+	.meta({ id: "PostalAddress", title: "Address", examples: [{ city: "Lima" }] });
+
+export const UserSchema = z.object({
+	id: z.string().meta({ description: "User id", readOnly: true }),
+	address: Address,
+});
+```
+
+Metadata must be a literal Routa can read without running code. Routa reports
+`ROUTA_SCHEMA_META_STRUCTURAL` for keys that would override the schema itself, such as
+`type` or `default`, `ROUTA_SCHEMA_META_PLACEMENT` for keys that belong to the route, such
+as `in` or `operationId`, `ROUTA_SCHEMA_META_COMPUTED` for values computed at runtime, and
+`ROUTA_SCHEMA_REGISTRY` for `z.globalRegistry` or `.register()`.
 
 ## Where Schemas Live
 
@@ -63,10 +135,17 @@ Route-local schemas in a sibling `schemas.ts` are the default, and scaffolding g
 them that way. When an OpenAPI document declares reusable `components.schemas`, scaffolding
 generates a shared module instead and references it from each route.
 
-Exported schema names must be unique across the project. Routa reports
-`ROUTA_DUPLICATE_SCHEMA_NAME` for collisions, because those names become OpenAPI component
-names. Prefer contract-purpose names like `CreateUserResponse` over generic ones like
-`Response`.
+Exported schema names must be unique within a `schemas.ts` file. Routa reports
+`ROUTA_DUPLICATE_SCHEMA_NAME` for repeats. Prefer contract-purpose names like
+`CreateUserResponse` over generic ones like `Response`.
+
+An exported schema that a route uses becomes an OpenAPI component named after its export.
+`.meta({ id: "PostalAddress" })` names the component explicitly, and an alias such as
+`export const GetUserResponse = User` reuses `User`'s component. Schemas declared inline
+without an `id` stay inline. Two route directories may each declare an identical `User`
+and share one component. If the two declarations differ, or two different declarations
+claim the same `id`, Routa reports `ROUTA_SCHEMA_COMPONENT_COLLISION` instead of renaming
+either one.
 
 ## Query Helpers
 
@@ -87,7 +166,8 @@ export const ListUsersQuery = z.object({
 `{ field, direction }`. A request for `?sort=-createdAt` gives the handler
 `{ field: "createdAt", direction: "desc" }`, and any field outside the allowed list is
 rejected. `Fields` splits a comma-separated list into a validated array, so
-`?fields=id,name` becomes `["id", "name"]`.
+`?fields=id,name` becomes `["id", "name"]`. OpenAPI documents both parameters as the
+strings clients send.
 
 ## Rules
 
@@ -95,17 +175,19 @@ rejected. `Fields` splits a comma-separated list into a validated array, so
   what your domain considers valid; keep business rules in services.
 - Keep response schemas narrow. Anything the schema permits is something a client may
   receive and OpenAPI will advertise.
-- Use `responseValidation: "always"` when you need production drift detection or depend on
-  response-side Zod transforms and defaults.
-- Reuse a schema across routes by importing it. Routa deduplicates by exported name, not
-  by structure.
+- Use `responseValidation: "always"` when you need production drift detection.
+- Keep response schemas validation-only. Shape the value in the handler.
 
 ## Limits
 
-Zod is the only supported schema library in v0. Constructs Routa cannot represent in
-OpenAPI are still enforced at runtime, but generation records a
-`ROUTA_OPENAPI_UNSUPPORTED_ZOD` warning under `x-routa-schema-warnings` in the generated
-document instead of guessing at a definition.
+Zod is the only supported schema library in v0, and Routa requires Zod `^4.6.7`. Routa
+reads primitives, string formats, `z.literal`, `z.enum` with inline values, `z.object`,
+`z.array`, `z.record`, unions, intersections, wrappers such as `.optional()` and
+`.nullable()`, checks such as `.min()` and `.refine()`, and metadata. Any other construct,
+such as `z.tuple()`, `.extend()`, or a schema built by your own function, fails
+`routa check` with `ROUTA_SCHEMA_UNSUPPORTED` instead of producing a guessed or empty
+OpenAPI schema. Checks such as `.min()` validate at runtime but are not yet documented as
+OpenAPI keywords.
 
 <Aside type="caution" title="v0 status">
 	Zod schemas are fully implemented. Adapters for other validation libraries are deferred.

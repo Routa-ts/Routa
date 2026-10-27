@@ -572,6 +572,7 @@ export const withGetCtx = createMiddleware({
 		writeFileSync(
 			join(cwd, "src/routes/users/route.ts"),
 			`import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
 import { withGetCtx, withRouteCtx } from "../../middleware/context.js";
 
 const route = createRouteRoot("/users");
@@ -583,7 +584,7 @@ export default route({
 \t\tresponses: {
 \t\t\tsuccess: {
 \t\t\t\tstatus: 200,
-\t\t\t\tschema: {} as any,
+\t\t\t\tschema: z.object({ label: z.string() }),
 \t\t\t},
 \t\t},
 \t\trun: () => ({ type: "success", data: { label: "get" } }),
@@ -592,7 +593,7 @@ export default route({
 \t\tresponses: {
 \t\t\tsuccess: {
 \t\t\t\tstatus: 201,
-\t\t\t\tschema: {} as any,
+\t\t\t\tschema: z.object({ label: z.string() }),
 \t\t\t},
 \t\t},
 \t\trun: () => ({ type: "success", data: { label: "post" } }),
@@ -2193,9 +2194,7 @@ paths:
 		expect(schemas).toContain("labels: z.record(z.string(), z.string())");
 		expect(schemas).toContain("contact: z.email()");
 		expect(schemas).toContain("entityId: z.uuid()");
-		expect(schemas).toContain(
-			'z.discriminatedUnion("kind", [z.object({\n\tkind: z.literal("email")',
-		);
+		expect(schemas).toContain('z.union([z.object({\n\tkind: z.literal("email")');
 		expect(schemas).toContain('kind: z.literal("webhook")');
 		expect(schemas).toContain("callback: z.url()");
 		expect(schemas).toContain("nickname: z.string().nullable().optional()");
@@ -2209,6 +2208,58 @@ paths:
 		const drift = await run(["openapi", "check"], { cwd });
 		expect(drift.code).toBe(0);
 		expect(drift.stdout).toContain("No drift detected");
+	});
+
+	it("round-trips discriminated oneOf unions through scaffold and drift check", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-one-of-"));
+		createTypeScriptProject(cwd);
+		writeFileSync(
+			join(cwd, "openapi.yaml"),
+			`openapi: 3.1.0
+info:
+  title: Pets
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      responses:
+        "200":
+          description: Pet
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/Cat"
+                  - $ref: "#/components/schemas/Dog"
+                discriminator:
+                  propertyName: kind
+components:
+  schemas:
+    Cat:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          const: cat
+    Dog:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          const: dog
+`,
+		);
+
+		const scaffold = await run(["scaffold", "openapi.yaml"], { cwd });
+		expect(scaffold.code).toBe(0);
+		expect(readFileSync(join(cwd, "src/routes/pets/schemas.ts"), "utf8")).toContain(
+			'z.discriminatedUnion("kind", [Cat, Dog])',
+		);
+
+		const drift = await run(["openapi", "check"], { cwd });
+		expect(drift.stderr ?? "").toBe("");
+		expect(drift.code).toBe(0);
 	});
 
 	it("keeps drift checks clean when users add zod refinement chains", async () => {
@@ -2632,7 +2683,7 @@ export const requireAuth = createMiddleware({
 		const oneOf = await run(["scaffold", "openapi.yaml"], { cwd });
 		expect(oneOf.code).toBe(1);
 		expect(oneOf.stderr).toContain("ROUTA_OPENAPI_UNSUPPORTED_SCHEMA");
-		expect(oneOf.stderr).toContain("oneOf and allOf are not supported");
+		expect(oneOf.stderr).toContain("oneOf needs a discriminator.propertyName");
 
 		writeOpenApiPaths(
 			cwd,
@@ -2700,7 +2751,7 @@ export const requireAuth = createMiddleware({
 		const typeArraySingle = await run(["scaffold", "openapi.yaml"], { cwd });
 		expect(typeArraySingle.code).toBe(1);
 		expect(typeArraySingle.stderr).toContain("ROUTA_OPENAPI_UNSUPPORTED_SCHEMA");
-		expect(typeArraySingle.stderr).toContain("oneOf and allOf are not supported");
+		expect(typeArraySingle.stderr).toContain("oneOf needs a discriminator.propertyName");
 
 		writeOpenApiPaths(
 			cwd,
@@ -2724,7 +2775,7 @@ export const requireAuth = createMiddleware({
 		const typeArrayNullable = await run(["scaffold", "openapi.yaml"], { cwd });
 		expect(typeArrayNullable.code).toBe(1);
 		expect(typeArrayNullable.stderr).toContain("ROUTA_OPENAPI_UNSUPPORTED_SCHEMA");
-		expect(typeArrayNullable.stderr).toContain("oneOf and allOf are not supported");
+		expect(typeArrayNullable.stderr).toContain("oneOf needs a discriminator.propertyName");
 
 		writeOpenApiPaths(
 			cwd,
@@ -3304,7 +3355,7 @@ export default createRouteRoot("/users")({
 			join(cwd, "src/routes/users/route.ts"),
 			`import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
-import { CreateUserBody, CreateUserResponse, ListUsersResponse } from "./schemas.js";
+import { CreateUserResponse, ListUsersResponse } from "./schemas.js";
 
 export default createRouteRoot("/users")({
 \tget: createRoute({
@@ -3317,18 +3368,15 @@ export default createRouteRoot("/users")({
 \t\trun: async () => ({ type: "success", data: [] as z.output<typeof ListUsersResponse> }),
 \t}),
 \tpost: createRoute({
-\t\tinput: {
-\t\t\tbody: CreateUserBody,
-\t\t},
 \t\tresponses: {
 \t\t\tsuccess: {
 \t\t\t\tstatus: 201,
 \t\t\t\tschema: CreateUserResponse,
 \t\t\t},
 \t\t},
-\t\trun: async ({ input }) => ({
+\t\trun: async () => ({
 \t\t\ttype: "success",
-\t\t\tdata: { id: "usr_1", name: input.body.name } as z.output<typeof CreateUserResponse>,
+\t\t\tdata: {} as z.output<typeof CreateUserResponse>,
 \t\t}),
 \t}),
 \tdelete: createRoute({
@@ -3739,7 +3787,7 @@ function createTypeScriptProject(cwd: string): void {
 				dependencies: {
 					"@routa-ts/cli": "workspace:*",
 					"@routa-ts/core": "workspace:*",
-					zod: "^4.4.3",
+					zod: "^4.6.7",
 				},
 				devDependencies: {
 					typescript: "7.0.2",
