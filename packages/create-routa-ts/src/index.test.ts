@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createProject } from "./create-project.js";
-import { createCommandArgs, resolveRoutaVersion, runCreate } from "./index.js";
+import {
+	createCommandArgs,
+	createUi,
+	resolveRoutaVersion,
+	runCreate,
+	shouldUseColor,
+} from "./index.js";
 
 const { spawnSyncMock } = vi.hoisted(() => ({
 	spawnSyncMock: vi.fn<(...args: unknown[]) => { status: number | null; stderr?: string }>(),
@@ -257,5 +263,52 @@ describe("create-routa-ts", () => {
 
 		expect(resolveRoutaVersion(join(cwd, "examples"), "basic-api")).toBe("workspace:*");
 		expect(resolveRoutaVersion(cwd, "outside-api")).toBe("latest");
+	});
+
+	describe("terminal color", () => {
+		const stdoutIsTTY = process.stdout.isTTY;
+
+		afterEach(() => {
+			Object.defineProperty(process.stdout, "isTTY", { value: stdoutIsTTY, configurable: true });
+		});
+
+		function useTerminal(
+			env: { FORCE_COLOR?: string; NO_COLOR?: string; CI?: string },
+			isTTY: boolean,
+		): void {
+			vi.stubEnv("FORCE_COLOR", env.FORCE_COLOR);
+			vi.stubEnv("NO_COLOR", env.NO_COLOR);
+			vi.stubEnv("CI", env.CI);
+			Object.defineProperty(process.stdout, "isTTY", { value: isTTY, configurable: true });
+		}
+
+		it("colors output only when stdout is a TTY", () => {
+			useTerminal({}, true);
+			expect(shouldUseColor()).toBe(true);
+
+			useTerminal({}, false);
+			expect(shouldUseColor()).toBe(false);
+		});
+
+		it("disables color for NO_COLOR and CI", () => {
+			useTerminal({ NO_COLOR: "1" }, true);
+			expect(shouldUseColor()).toBe(false);
+
+			useTerminal({ CI: "true" }, true);
+			expect(shouldUseColor()).toBe(false);
+		});
+
+		it("lets FORCE_COLOR override NO_COLOR, CI, and the TTY check", () => {
+			useTerminal({ FORCE_COLOR: "1", NO_COLOR: "1", CI: "true" }, false);
+			expect(shouldUseColor()).toBe(true);
+
+			useTerminal({ FORCE_COLOR: "0" }, true);
+			expect(shouldUseColor()).toBe(false);
+		});
+
+		it("wraps styled text in ANSI codes only when color is enabled", () => {
+			expect(createUi(true).error("failed")).toBe("\u001b[31mfailed\u001b[0m");
+			expect(createUi(false).error("failed")).toBe("failed");
+		});
 	});
 });

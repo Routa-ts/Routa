@@ -34,7 +34,7 @@ export default defineConfig({
 			reporter: ["text-summary"],
 			// One point under the measured branch coverage, because a few branches depend on how
 			// the tests are launched. Raise it when tests improve.
-			thresholds: { branches: 59 },
+			thresholds: { branches: 60 },
 		},
 	},
 	lint: frameworkConfig.lint,
