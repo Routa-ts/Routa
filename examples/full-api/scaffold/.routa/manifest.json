@@ -13,7 +13,7 @@
 				"inspectCatalogItem"
 			],
 			"kind": "route",
-			"sha256": "dda6fd8b93680a512b016b0d6a397e2f59804eb8e606433637e5537b1934725c"
+			"sha256": "ce6696765fa25c6a77d2dc5207f7ad627df6073afc297d6e6f786ce19e744541"
 		},
 		{
 			"path": "src/routes/catalog/items/$itemId/schemas.ts",
@@ -24,7 +24,7 @@
 				"inspectCatalogItem"
 			],
 			"kind": "schema",
-			"sha256": "a33611d9a583429bddbecd81515528b987053b45e7ef3f3e79e451fa2027770c"
+			"sha256": "4fb79200665d036ebfe8e572b76e32a161fa4777c436bf3e2695c08e82d8f5c0"
 		},
 		{
 			"path": ".routa/routes.gen.ts",

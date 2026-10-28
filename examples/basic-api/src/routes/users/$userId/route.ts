@@ -6,7 +6,6 @@ import { createRoute, createRouteRoot } from "@routa-ts/core";
 import type { z } from "zod";
 import {
 	DeleteUserParams,
-	DeleteUserResponse,
 	GetUserParams,
 	GetUserResponse,
 	UpdateUserBody,
@@ -71,15 +70,11 @@ export default route({
 		responses: {
 			success: {
 				status: 204,
-				schema: DeleteUserResponse,
 			},
 		},
 		run: () => {
 			// TODO: call application-owned business logic.
-			return {
-				type: "success",
-				data: null as unknown as z.output<typeof DeleteUserResponse>,
-			};
+			return { type: "success" };
 		},
 	}),
 });

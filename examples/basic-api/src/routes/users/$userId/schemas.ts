@@ -28,5 +28,3 @@ export const UpdateUserBody = UpdateUserInput;
 export const UpdateUserResponse = User;
 
 export const DeleteUserParams = z.object({ userId: z.string() });
-
-export const DeleteUserResponse = z.unknown();

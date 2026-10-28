@@ -24,13 +24,18 @@ export type RouteInput = {
 	body?: z.ZodTypeAny;
 };
 
-export type RouteResponses = Record<
-	string,
-	{
-		status: number;
-		schema: z.ZodTypeAny;
-	}
->;
+/**
+ * A named outcome: its HTTP status, an optional description, and an optional JSON body schema.
+ *
+ * An outcome without `schema` is intentionally bodyless.
+ */
+export type RouteOutcome = {
+	status: number;
+	description?: string;
+	schema?: z.ZodTypeAny;
+};
+
+export type RouteResponses = Record<string, RouteOutcome>;
 export type ExternalApiUrl = `http://${string}` | `https://${string}`;
 export type ResponseValidation = "development" | "always";
 export type RegisteredRoutePath = keyof RegisteredRouteCtxByPath & `/${string}`;
@@ -43,31 +48,127 @@ export type MiddlewareRejectsSpec = RouteResponses;
 
 type MaybePromise<T> = T | Promise<T>;
 
+/**
+ * The type of `data` on a schema-less outcome. It requires a property whose type is `never`, so no
+ * value can satisfy it, and the property name carries the compiler message: the message is a missing
+ * key, never a value that `data` could hold.
+ */
+type ForbiddenData<TName extends string> = {
+	readonly [K in `Outcome ${TName} declares no schema, so it cannot return data.`]: never;
+};
+
+/**
+ * The handler result for one outcome: body outcomes require `data`, schema-less outcomes forbid it.
+ * An explicit `data: undefined` is accepted and means no data, because TypeScript cannot tell it
+ * from an omitted property unless `exactOptionalPropertyTypes` is on.
+ */
+export type OutcomeResult<TName extends string, TOutcome> = TOutcome extends {
+	readonly schema: infer TSchema extends z.ZodTypeAny;
+}
+	? { readonly type: TName; readonly data: SchemaOutput<TSchema> }
+	: { readonly type: TName; readonly data?: ForbiddenData<TName> };
+
+/** `true` when any member of a union of booleans is `true`. */
+type AnyTrue<T> = true extends T ? true : false;
+
+/**
+ * Whether a response schema, or anything nested in it, rewrites a value by a wrapper TypeScript can see:
+ * transforms, codecs, defaults, and catches. Nesting beyond eight levels is not inspected.
+ */
+type ChangesValue<TSchema, TDepth extends unknown[] = []> = TDepth["length"] extends 8
+	? false
+	: TSchema extends
+				| z.ZodTransform
+				| z.ZodCodec<any, any>
+				| z.ZodDefault<any>
+				| z.ZodPrefault<any>
+				| z.ZodCatch<any>
+		? true
+		: TSchema extends z.ZodPipe<infer TIn, infer TOut>
+			? AnyTrue<ChangesValue<TIn, [...TDepth, 0]> | ChangesValue<TOut, [...TDepth, 0]>>
+			: TSchema extends z.ZodObject<infer TShape, any>
+				? AnyTrue<{ [K in keyof TShape]: ChangesValue<TShape[K], [...TDepth, 0]> }[keyof TShape]>
+				: TSchema extends z.ZodArray<infer TElement>
+					? ChangesValue<TElement, [...TDepth, 0]>
+					: TSchema extends z.ZodOptional<infer TInner>
+						? ChangesValue<TInner, [...TDepth, 0]>
+						: TSchema extends z.ZodNullable<infer TInner>
+							? ChangesValue<TInner, [...TDepth, 0]>
+							: TSchema extends z.ZodReadonly<infer TInner>
+								? ChangesValue<TInner, [...TDepth, 0]>
+								: TSchema extends z.ZodUnion<infer TOptions>
+									? AnyTrue<ChangesValue<TOptions[number], [...TDepth, 0]>>
+									: TSchema extends z.ZodIntersection<infer TLeft, infer TRight>
+										? AnyTrue<
+												ChangesValue<TLeft, [...TDepth, 0]> | ChangesValue<TRight, [...TDepth, 0]>
+											>
+										: TSchema extends z.ZodRecord<any, infer TValue>
+											? ChangesValue<TValue, [...TDepth, 0]>
+											: TSchema extends z.ZodTuple<infer TItems>
+												? AnyTrue<ChangesValue<TItems[number], [...TDepth, 0]>>
+												: false;
+
+/** Whether a schema parses to the same type it accepts. */
+type SameValueType<TSchema extends z.ZodTypeAny> = [z.input<TSchema>] extends [z.output<TSchema>]
+	? [z.output<TSchema>] extends [z.input<TSchema>]
+		? true
+		: false
+	: false;
+
+type SchemaProblem<TSchema> = TSchema extends z.ZodTypeAny
+	? SameValueType<TSchema> extends false
+		? ValueChangeMessage
+		: ChangesValue<TSchema> extends false
+			? unknown
+			: ValueChangeMessage
+	: unknown;
+
+type ValueChangeMessage = {
+	schema: "Response schemas describe wire-ready JSON and must not change values. Remove transforms, pipes, defaults, catches, and coercion, and return the final value from the handler.";
+};
+
+type StatusProblem<TStatus, TOutcome> = TStatus extends number
+	? `${TStatus}` extends `1${string}`
+		? {
+				status: "Informational (1xx) statuses cannot be terminal route outcomes. Use a final status from 200 to 599.";
+			}
+		: TStatus extends 204 | 205 | 304
+			? TOutcome extends { readonly schema: unknown }
+				? {
+						schema: `Status ${TStatus} responses have no body, so the outcome cannot declare a schema.`;
+					}
+				: unknown
+			: unknown
+	: unknown;
+
+type OutcomeChecks<TOutcome> = StatusProblem<
+	TOutcome extends { readonly status: infer TStatus } ? TStatus : never,
+	TOutcome
+>
+	& (TOutcome extends { readonly schema: infer TSchema } ? SchemaProblem<TSchema> : unknown);
+
+/** Compile-time checks for declared outcomes; valid outcomes add no constraint. */
+export type ResponseChecks<TResponses extends RouteResponses> = {
+	readonly [K in keyof TResponses]: OutcomeChecks<TResponses[K]>;
+};
+
 export type RoutaResult<TResponses extends RouteResponses> = {
-	[K in keyof TResponses & string]: {
-		readonly type: K;
-		readonly data: SchemaOutput<TResponses[K]["schema"]>;
-	};
+	[K in keyof TResponses & string]: OutcomeResult<K, TResponses[K]>;
 }[keyof TResponses & string];
 
 export type RouteRunResult<TResponses extends RouteResponses> = RoutaResult<TResponses>;
 
 /** Pure result builders keyed by the route's declared outcome names. */
 export type ResponseBuilders<TResponses extends RouteResponses> = {
-	readonly [K in keyof TResponses & string]: (data: SchemaOutput<TResponses[K]["schema"]>) => {
-		readonly type: K;
-		readonly data: SchemaOutput<TResponses[K]["schema"]>;
-	};
+	readonly [K in keyof TResponses & string]: TResponses[K] extends {
+		readonly schema: infer TSchema extends z.ZodTypeAny;
+	}
+		? (data: SchemaOutput<TSchema>) => {
+				readonly type: K;
+				readonly data: SchemaOutput<TSchema>;
+			}
+		: () => { readonly type: K };
 };
-
-type WidenedRouteRunResult<TResponses extends RouteResponses> = {
-	readonly type: string;
-	readonly data: SchemaOutput<TResponses[keyof TResponses & string]["schema"]>;
-};
-
-type RouteRunReturn<TResponses extends RouteResponses> =
-	| RouteRunResult<TResponses>
-	| WidenedRouteRunResult<TResponses>;
 
 export type MiddlewareRejectResult<TRejects extends MiddlewareRejectsSpec> =
 	keyof TRejects extends never ? never : RoutaResult<TRejects>;
@@ -200,7 +301,7 @@ export type RouteRun<
 	TCtx,
 > = (
 	args: RouteHandlerArgs<TInput, TCtx, NoInfer<TResponses>>,
-) => MaybePromise<RouteRunReturn<NoInfer<TResponses>>>;
+) => MaybePromise<RouteRunResult<NoInfer<TResponses>>>;
 
 export type RouteContract<
 	TInput extends RouteInput | undefined,
@@ -237,6 +338,29 @@ export type RouteRootConfigForCtx<TCtxByMethod extends Partial<Record<HttpMethod
 };
 
 type NoExtraRouteKeys<TConfig> = Record<Exclude<keyof TConfig, HttpMethod | "middleware">, never>;
+
+type MethodOutcomeProblem<TMethod, TOutcome> = TMethod extends "head"
+	? TOutcome extends { readonly schema: unknown }
+		? { schema: "HEAD responses have no body, so a HEAD outcome cannot declare a schema." }
+		: unknown
+	: TMethod extends "get"
+		? unknown
+		: TOutcome extends { readonly status: 304 }
+			? { status: "Status 304 is valid only for GET and HEAD routes." }
+			: unknown;
+
+/** Compile-time checks that depend on the HTTP method a route is registered under. */
+type MethodRules<TConfig> = {
+	readonly [K in keyof TConfig & HttpMethod]: TConfig[K] extends {
+		readonly responses: infer TResponses;
+	}
+		? {
+				readonly responses: {
+					readonly [N in keyof TResponses]: MethodOutcomeProblem<K, TResponses[N]>;
+				};
+			}
+		: unknown;
+};
 
 type CtxForMethod<TCtxByMethod, TMethod extends HttpMethod> = TMethod extends keyof TCtxByMethod
 	? TCtxByMethod[TMethod]
@@ -286,8 +410,10 @@ export function createRoute<
 	const TMiddleware extends readonly AnyMiddlewareContract[] = readonly AnyMiddlewareContract[],
 	TCtx = InferMiddlewareCtx<TMiddleware>,
 >(
-	contract: RouteContract<TInput, TResponses, TCtx, TMiddleware>,
-): RouteContract<TInput, TResponses, TCtx, TMiddleware> {
+	contract: RouteContract<TInput, TResponses, TCtx, TMiddleware> & {
+		readonly responses: ResponseChecks<NoInfer<TResponses>>;
+	},
+): RouteContract<TInput, NoInfer<TResponses>, TCtx, TMiddleware> {
 	return contract;
 }
 
@@ -307,7 +433,9 @@ export function createRouteRootFactory<
 >() {
 	return function createRouteRoot<const TPath extends keyof TCtxByPath & string>(_path: TPath) {
 		return function routeRoot<
-			const TConfig extends RouteRootConfigForCtx<TCtxByPath[TPath]> & NoExtraRouteKeys<TConfig>,
+			const TConfig extends RouteRootConfigForCtx<TCtxByPath[TPath]>
+				& NoExtraRouteKeys<TConfig>
+				& MethodRules<TConfig>,
 		>(config: TConfig): TConfig {
 			return config;
 		};
@@ -325,7 +453,8 @@ export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPa
 ) {
 	return function routeRoot<
 		const TConfig extends RouteRootConfigForCtx<RegisteredRouteCtxByPath[TPath]>
-			& NoExtraRouteKeys<TConfig>,
+			& NoExtraRouteKeys<TConfig>
+			& MethodRules<TConfig>,
 	>(config: TConfig): TConfig {
 		return config;
 	};
@@ -343,7 +472,9 @@ export function createMiddleware<
 	const TRejects extends MiddlewareRejectsSpec = Record<never, never>,
 	const TInput extends RouteInput | undefined = undefined,
 >(
-	contract: MiddlewareContract<TRequires, TProvides, TRejects, TInput>,
+	contract: MiddlewareContract<TRequires, TProvides, TRejects, TInput> & {
+		readonly rejects?: ResponseChecks<NoInfer<TRejects>>;
+	},
 ): MiddlewareContract<TRequires, TProvides, TRejects, TInput> {
 	return contract;
 }

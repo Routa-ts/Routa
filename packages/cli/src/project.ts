@@ -71,7 +71,8 @@ export type MiddlewareMetadata = {
 export type MiddlewareRejectMetadata = {
 	type: string;
 	status: number;
-	schema: string;
+	description?: string;
+	schema?: string;
 };
 
 export type RouteDeprecationMetadata = {
@@ -981,6 +982,10 @@ function discoverRoutes(cwd: string, parser: ts.SourceFileParser): RouteDiscover
 			});
 		}
 
+		for (const [method, metadata] of Object.entries(contract)) {
+			diagnostics.push(...outcomeRuleDiagnostics(method, metadata.outcomes, relativeFile, path));
+		}
+
 		return [
 			{
 				file: relativeFile,
@@ -1066,6 +1071,7 @@ function parseRouteContract(
 		{
 			responses: number[];
 			responseTypes: string[];
+			outcomes: ResponseOutcomeDeclaration[];
 			inputs: RouteMethodInputMetadata;
 			deprecation?: RouteDeprecationMetadata;
 		}
@@ -1076,6 +1082,7 @@ function parseRouteContract(
 		{
 			responses: number[];
 			responseTypes: string[];
+			outcomes: ResponseOutcomeDeclaration[];
 			inputs: RouteMethodInputMetadata;
 			deprecation?: RouteDeprecationMetadata;
 		}
@@ -1109,6 +1116,7 @@ function parseRouteContract(
 		contract[method] = {
 			responses: responseStatuses(routeContract),
 			responseTypes: responseTypeKeys(routeContract),
+			outcomes: responseOutcomes(routeContract),
 			inputs: routeInputs(routeContract),
 			deprecation: routeDeprecation(routeContract),
 		};
@@ -1159,6 +1167,107 @@ function responseTypeKeys(routeContract: ts.ObjectLiteralExpression): string[] {
 		const name = propertyName(property.name);
 		return name ? [name] : [];
 	});
+}
+
+/** A named route outcome as written in source. `status` is set only for a numeric literal. */
+type ResponseOutcomeDeclaration = {
+	name: string;
+	status?: number;
+	hasSchema: boolean;
+};
+
+function responseOutcomes(routeContract: ts.ObjectLiteralExpression): ResponseOutcomeDeclaration[] {
+	const responses = objectProperty(routeContract, "responses");
+	const responsesObject = responses ? objectLiteral(responses.initializer) : undefined;
+
+	if (!responsesObject) {
+		return [];
+	}
+
+	return objectProperties(responsesObject).flatMap((property) => {
+		const name = propertyName(property.name);
+		const outcome = objectLiteral(property.initializer);
+
+		if (!name || !outcome) {
+			return [];
+		}
+
+		const status = objectProperty(outcome, "status");
+		return [
+			{
+				name,
+				...(status ? { status: numericValue(status.initializer) } : {}),
+				hasSchema: Boolean(propertyValue(outcome, "schema")),
+			},
+		];
+	});
+}
+
+/**
+ * Reports outcome declarations that HTTP or the route method forbids: terminal 1xx
+ * statuses, body schemas on 204, 205, 304 and every HEAD outcome, and 304 outside GET and HEAD.
+ *
+ * TypeScript rejects the same declarations first. This covers what it cannot see, such as
+ * the method a contract is registered under or a contract built outside the route config.
+ */
+function outcomeRuleDiagnostics(
+	method: string,
+	outcomes: readonly ResponseOutcomeDeclaration[],
+	file: string,
+	routePath: string,
+): Diagnostic[] {
+	const diagnostics: Diagnostic[] = [];
+	const label = `${method.toUpperCase()} ${routePath}`;
+
+	for (const { name, status, hasSchema } of outcomes) {
+		if (status === undefined) {
+			continue;
+		}
+
+		if (status >= 100 && status < 200) {
+			diagnostics.push({
+				code: "ROUTA_RESPONSE_INFORMATIONAL_STATUS",
+				severity: "error",
+				message: `Outcome "${name}" on ${label} uses informational status ${status}, which cannot be a terminal route outcome.`,
+				file,
+				routePath,
+				suggestion: "Use a final status from 200 to 599.",
+			});
+		}
+
+		if (hasSchema && (status === 204 || status === 205 || status === 304)) {
+			diagnostics.push({
+				code: "ROUTA_RESPONSE_BODYLESS_SCHEMA",
+				severity: "error",
+				message: `Outcome "${name}" on ${label} declares a schema, but status ${status} has no body.`,
+				file,
+				routePath,
+				suggestion: "Remove the schema and return no data, or choose a status that carries a body.",
+			});
+		} else if (hasSchema && method === "head") {
+			diagnostics.push({
+				code: "ROUTA_RESPONSE_BODYLESS_SCHEMA",
+				severity: "error",
+				message: `Outcome "${name}" on ${label} declares a schema, but HEAD responses have no body.`,
+				file,
+				routePath,
+				suggestion: "Remove the schema and return no data from HEAD outcomes.",
+			});
+		}
+
+		if (status === 304 && method !== "get" && method !== "head") {
+			diagnostics.push({
+				code: "ROUTA_RESPONSE_NOT_MODIFIED_METHOD",
+				severity: "error",
+				message: `Outcome "${name}" on ${label} uses status 304, which is valid only for GET and HEAD.`,
+				file,
+				routePath,
+				suggestion: "Use a different status, or move the outcome to a GET or HEAD route.",
+			});
+		}
+	}
+
+	return diagnostics;
 }
 
 /**
@@ -1902,9 +2011,11 @@ function middlewareRejects(contract: ts.ObjectLiteralExpression): MiddlewareReje
 
 		const statusProperty = objectProperty(reject, "status");
 		const schemaProperty = objectProperty(reject, "schema");
+		const descriptionProperty = objectProperty(reject, "description");
+		const description = descriptionProperty && unwrapExpression(descriptionProperty.initializer);
 		const status = statusProperty ? numericValue(statusProperty.initializer) : undefined;
 
-		if (status === undefined || !schemaProperty) {
+		if (status === undefined) {
 			return [];
 		}
 
@@ -1912,7 +2023,10 @@ function middlewareRejects(contract: ts.ObjectLiteralExpression): MiddlewareReje
 			{
 				type,
 				status,
-				schema: schemaProperty.initializer.getText(),
+				...(description && ts.isStringLiteralLike(description)
+					? { description: description.text }
+					: {}),
+				...(schemaProperty ? { schema: schemaProperty.initializer.getText() } : {}),
 			},
 		];
 	});

@@ -29,9 +29,19 @@ type InputField = "params" | "query" | "headers" | "cookies" | "body";
  */
 export type ProjectedOperation = {
 	input: Partial<Record<InputField, JsonSchema>>;
-	responses: Map<number, JsonSchema>;
-	rejects: Map<number, JsonSchema>;
+	responses: Map<number, ProjectedResponse>;
+	rejects: Map<number, ProjectedResponse>;
 	deprecation?: { sunset?: string; replacement?: string };
+};
+
+/**
+ * What one named outcome contributes to an OpenAPI Response Object.
+ *
+ * An outcome without a `schema` is intentionally bodyless.
+ */
+export type ProjectedResponse = {
+	description: string;
+	schema?: JsonSchema;
 };
 
 /**
@@ -410,19 +420,26 @@ class SchemaProjector {
 	}
 
 	/**
-	 * Projects terminal middleware reject schemas, keyed by status.
+	 * Projects terminal middleware rejects, keyed by status.
 	 *
 	 * Identifiers resolve against the middleware's own source file. Every route
 	 * that imports a middleware shares one projection per declared reject, so a
 	 * reject schema keeps one component identity.
 	 */
-	middlewareRejects(middleware: readonly MiddlewareMetadata[]): Map<number, JsonSchema> {
-		const schemas = new Map<number, JsonSchema>();
+	middlewareRejects(middleware: readonly MiddlewareMetadata[]): Map<number, ProjectedResponse> {
+		const responses = new Map<number, ProjectedResponse>();
 
 		for (const item of middleware) {
 			const declaration = middlewareDeclaration(this.cwd, item.file, item.name, this.parser);
 
 			for (const reject of item.rejects) {
+				const description = reject.description ?? humanizeOutcomeName(reject.type);
+
+				if (reject.schema === undefined) {
+					responses.set(reject.status, { description });
+					continue;
+				}
+
 				const key = `${declaration.file}#${declaration.name}#${reject.type}`;
 				let schema = this.rejectCache.get(key);
 
@@ -437,11 +454,11 @@ class SchemaProjector {
 					this.rejectCache.set(key, schema);
 				}
 
-				schemas.set(reject.status, schema);
+				responses.set(reject.status, { description, schema });
 			}
 		}
 
-		return schemas;
+		return responses;
 	}
 
 	/**
@@ -505,11 +522,11 @@ class SchemaProjector {
 	private responseSchemas(
 		contract: ts.ObjectLiteralExpression,
 		source: SchemaSource,
-	): Map<number, JsonSchema> {
+	): Map<number, ProjectedResponse> {
 		const value = propertyValue(contract, "responses");
 		const responses = objectLiteral(value);
 		const context: Context = { source, io: "output" };
-		const result = new Map<number, JsonSchema>();
+		const result = new Map<number, ProjectedResponse>();
 
 		if (value && !responses) {
 			this.unsupported(value, context, "route responses need an inline object of outcomes");
@@ -537,11 +554,20 @@ class SchemaProjector {
 				continue;
 			}
 
-			const schema = propertyValue(outcome, "schema");
+			const description = propertyValue(outcome, "description");
+			const text = description && stringLiteral(description);
 
-			if (schema) {
-				result.set(status, this.materialize(this.node(schema, context)));
+			if (description && text === undefined) {
+				this.unsupported(description, context, "outcome descriptions need a string literal");
 			}
+
+			const schema = propertyValue(outcome, "schema");
+			const name = ts.isPropertyAssignment(response) ? propertyName(response.name) : undefined;
+
+			result.set(status, {
+				description: text ?? humanizeOutcomeName(name ?? String(status)),
+				...(schema ? { schema: this.materialize(this.node(schema, context)) } : {}),
+			});
 		}
 
 		return result;
@@ -1719,6 +1745,21 @@ function urlNormalize(
 	}
 
 	return normalize;
+}
+
+/**
+ * Turns an outcome name into the sentence used when it declares no description:
+ * `notFound` becomes "Not found".
+ */
+export function humanizeOutcomeName(name: string): string {
+	const words = name
+		.replaceAll(/([a-z0-9])([A-Z])/g, "$1 $2")
+		.replaceAll(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+		.split(/[\s_-]+/)
+		.filter((word) => word.length > 0)
+		.map((word) => word.toLowerCase());
+	const sentence = words.join(" ");
+	return sentence.charAt(0).toUpperCase() + sentence.slice(1);
 }
 
 function stringLiteral(expression: ts.Expression): string | undefined {

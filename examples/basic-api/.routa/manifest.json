@@ -60,7 +60,7 @@
 				"deleteUser"
 			],
 			"kind": "schema",
-			"sha256": "6d8b014e1728cd67d25a3256bd2104f41c397beec706a174f11779cbf5c052df"
+			"sha256": "6546c6f0ac59636c83e4ecfc4a06dcf12b5ccc895fd5fb7704245d3458b8867c"
 		},
 		{
 			"path": "src/routes/users/route.ts",
