@@ -106,8 +106,8 @@ set-cookie: signed_in=yes; Path=/; Max-Age=3600; Secure; SameSite=Lax
 ```
 
 `DELETE /auth/session` answers a bodyless `204` that clears both. A request to a private
-route with a session cookie that no longer verifies gets the auth middleware's `401` reject,
-which clears that cookie too.
+route without a session that verifies gets the auth middleware's `401` reject, which clears
+the `signed_in` hint and any session cookie the request sent.
 
 ## The Logger Showcase
 

@@ -41,7 +41,7 @@
 						"description": "Unauthorized",
 						"headers": {
 							"Set-Cookie": {
-								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
 								"schema": {
 									"type": "string"
 								}
@@ -123,7 +123,7 @@
 						"description": "Unauthorized",
 						"headers": {
 							"Set-Cookie": {
-								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
 								"schema": {
 									"type": "string"
 								}
@@ -207,7 +207,7 @@
 						"description": "Unauthorized",
 						"headers": {
 							"Set-Cookie": {
-								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
 								"schema": {
 									"type": "string"
 								}
@@ -284,7 +284,7 @@
 						"description": "Unauthorized",
 						"headers": {
 							"Set-Cookie": {
-								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
 								"schema": {
 									"type": "string"
 								}
@@ -362,7 +362,7 @@
 						"description": "Unauthorized",
 						"headers": {
 							"Set-Cookie": {
-								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
 								"schema": {
 									"type": "string"
 								}
@@ -474,7 +474,7 @@
 						"description": "Unauthorized",
 						"headers": {
 							"Set-Cookie": {
-								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
 								"schema": {
 									"type": "string"
 								}
@@ -543,7 +543,7 @@
 						"description": "Unauthorized",
 						"headers": {
 							"Set-Cookie": {
-								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
 								"schema": {
 									"type": "string"
 								}

@@ -176,13 +176,13 @@ curl -s -i -X POST -H 'Content-Type: application/json' \
   -d "{\"token\":\"$TOKEN\"}" http://127.0.0.1:3000/auth/session   # 200 + session, signed_in
 curl -s -i -X DELETE http://127.0.0.1:3000/auth/session           # bodyless 204 clearing both
 curl -s -i -H 'Cookie: session=expired' \
-  http://127.0.0.1:3000/tenants/acme/projects                     # typed 401 clearing session
+  http://127.0.0.1:3000/tenants/acme/projects                     # typed 401 clearing both
 ```
 
 Middleware scopes, permissions, helpers, and bodyless DELETE:
 
 ```sh
-curl -s -i http://127.0.0.1:3000/tenants/acme/projects             # typed 401
+curl -s -i http://127.0.0.1:3000/tenants/acme/projects             # typed 401 clearing signed_in
 curl -s -H "Cookie: session=$WRITER" \
   'http://127.0.0.1:3000/tenants/acme/projects?fields=id,%20name&sort=-name'
 curl -s -i -X POST -H "Cookie: session=$SESSION" \
