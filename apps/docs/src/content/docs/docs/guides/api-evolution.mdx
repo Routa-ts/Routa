@@ -104,12 +104,13 @@ link: </users>; rel="successor-version"
 
 ## Which Check to Use
 
-| Command                  | Fails on                                     | Use it                                    |
-| ------------------------ | -------------------------------------------- | ----------------------------------------- |
-| `routa openapi check`    | Any difference from the baseline             | Locally, to see that a change was noticed |
-| `routa openapi breaking` | Removed operations and newly required inputs | In CI, as a merge gate                    |
+| Command                  | Fails on                                          | Use it                                    |
+| ------------------------ | ------------------------------------------------- | ----------------------------------------- |
+| `routa openapi check`    | Drift in operations, responses, schemas, security | Locally, to see that a change was noticed |
+| `routa openapi breaking` | Removed operations and newly required inputs      | In CI, as a merge gate                    |
 
-`openapi check` is strict by design: adding an optional field trips it. That makes it a
+`openapi check` is strict by design: adding an optional field or removing a response
+status trips it. That makes it a
 good local signal and a poor merge gate, which is what `openapi breaking` is for.
 
 ## Security Changes Are Contract Changes
@@ -131,7 +132,8 @@ createMiddleware({
 
 Routa emits these as OpenAPI `security` and `x-routa-authz`. Because they are part of the
 document, an operation that was public becoming authenticated is reported by
-`routa openapi breaking` like any other breaking change.
+`routa openapi breaking` like any other breaking change. Removing the requirement is not
+breaking, but `routa openapi check` reports it as drift so the change gets reviewed.
 
 ## Troubleshooting
 

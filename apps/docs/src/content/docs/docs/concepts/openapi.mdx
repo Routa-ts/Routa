@@ -25,8 +25,14 @@ Routa uses the outcome name, so `notFound` becomes "Not found". An outcome witho
 contributes `security` and `x-routa-authz`, and route `deprecation` metadata marks the
 operation deprecated.
 
-The result is compared against `.routa/openapi-baseline.json`, the contract your team has
-accepted. Nothing is written to that file unless you ask for it.
+The document comes from source alone. Operations, parameters, request bodies, responses,
+components, `security`, and generated `operationId` values never come from
+`.routa/openapi-baseline.json`, the contract your team has accepted. The baseline is only
+what the document is compared against, and nothing is written to it unless you ask.
+
+Every operation gets an `operationId` made from its method and path, so `GET /users/{id}`
+is `getUsersId`. The document `info` is always `Routa API` at version `0.0.0`, and no
+`servers` are emitted.
 
 ## Checking the Contract
 
@@ -38,10 +44,13 @@ routa openapi check
 OpenAPI check passed. No drift detected.
 ```
 
-`openapi check` fails when the generated document differs from the baseline in any way,
-which catches an accidental contract change during review. `openapi breaking` is narrower:
-it fails only for removed operations and for inputs that became required, so it is the
-check to run in CI on every pull request.
+`openapi check` fails when an operation, a response status, a parameter, a request body, a
+schema (including the content of a component), or an operation's `security` differs from
+the baseline. Descriptions, `operationId`, `info`, and `servers` are not compared. Removing
+a response status or an operation's authentication from source is drift, because the
+current document no longer carries them over from the baseline. `openapi breaking` is
+narrower: it fails only for removed operations and for inputs that became required or
+newly require authentication, so it is the check to run in CI on every pull request.
 
 ## OpenAPI to Source
 
@@ -78,8 +87,9 @@ does not validate. Fix the diagnostics before trusting the output.
 
 ## Limits
 
-`info` and `servers` are carried from the baseline rather than derived from source, so
-edit them in the baseline document. `components.schemas` comes from the exported and
+Source has no place for a title, version, or `servers` yet, so `info` is a fixed default
+and `servers` is omitted. Editing them in the baseline changes nothing, because
+`--update-baseline` writes the generated document over it. `components.schemas` comes from the exported and
 `.meta({ id })` schemas your routes use; see [Schemas](/docs/concepts/schemas/). The checks
 compare schemas by content, so a schema written inline in the baseline and as a `$ref` in
 the generated document is not drift. Content types other than JSON are not modeled in v0.

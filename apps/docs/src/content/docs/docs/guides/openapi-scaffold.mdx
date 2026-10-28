@@ -96,8 +96,9 @@ is not approximated in TypeScript.
 <Aside type="caution" title="v0 status">
 	Scaffolding the supported JSON OpenAPI surface is implemented in v0; unsupported
 	OpenAPI features remain deferred. Scaffolding is a one-way import, not a live binding.
-	After the first run, route files own route contracts and the schemas they use. The
-	baseline owns `info` and `servers`.
+	After the first run, route files own route contracts and the schemas they use, and
+	generated OpenAPI comes from them. The imported document keeps no authority: `info`,
+	`servers`, and your `operationId` values are not carried into later documents.
 </Aside>
 
 ## Next Steps

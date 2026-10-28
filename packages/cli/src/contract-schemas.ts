@@ -131,6 +131,8 @@ type ComponentIdentity = {
 	explicit: boolean;
 	identity: string;
 	file: string;
+	/** Where the declaration was read: a parameter, a request body, or a response. */
+	placement: string;
 };
 
 /**
@@ -774,6 +776,7 @@ class SchemaProjector {
 					explicit: false,
 					identity: `${declaration.source.file}#${name}`,
 					file: declaration.source.file,
+					placement: placementOf(context),
 				},
 			};
 		}
@@ -1404,6 +1407,7 @@ class SchemaProjector {
 						explicit: true,
 						identity: `${call.getSourceFile().fileName}:${call.pos}`,
 						file: context.source.file,
+						placement: placementOf(context),
 					},
 				}
 			: node;
@@ -1538,6 +1542,18 @@ class SchemaProjector {
 		}
 
 		if (existing.identity === component.identity) {
+			if (stableJson(existing.content) !== stableJson(content)) {
+				const [first, second] = [existing.placement, component.placement].sort();
+				pushUnique(this.diagnostics, {
+					code: "ROUTA_SCHEMA_COMPONENT_COLLISION",
+					severity: "error",
+					message: `Schema ${component.key} in ${component.file} projects differently as ${first} and as ${second}, so it cannot be one OpenAPI component.`,
+					file: component.file,
+					suggestion:
+						"Declare one schema for each placement, or change the schema so it projects the same way everywhere. Routa never picks one projection.",
+				});
+			}
+
 			return;
 		}
 
@@ -1603,6 +1619,11 @@ class SchemaProjector {
 }
 
 const zodRegistryNames = new Set(["globalRegistry", "registry"]);
+
+function placementOf(context: Context): string {
+	if (context.io === "output") return "a response";
+	return context.parameter ? "a parameter" : "a request body";
+}
 
 function isInputField(value: string): value is InputField {
 	return ["params", "query", "headers", "cookies", "body"].includes(value);

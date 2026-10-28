@@ -62,9 +62,9 @@ a removal — which is what makes `routa scaffold --preview` trustworthy.
 
 The OpenAPI contract your team has accepted. `routa openapi check` compares the freshly
 generated document against it to detect drift, and `routa openapi breaking` uses it to
-detect removed operations and newly required inputs. It supplies `info` and
-`components.schemas` to generation. It retains `servers` as baseline-owned metadata, but
-the v0 generator does not emit that field.
+detect removed operations and newly required inputs. It never feeds generation: the
+current document, including `info`, `components.schemas`, `security`, and `operationId`,
+comes from source alone, and `--update-baseline` overwrites the file with it.
 
 ## Rules
 
