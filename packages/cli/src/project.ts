@@ -145,7 +145,9 @@ function validateProjectInSession(
 	const write = options.write ?? true;
 	const discovery = discoverRoutes(cwd, parser);
 	const routes = discovery.routes;
-	const schemas = projectContractSchemas(cwd, routes, parser);
+	const schemas = projectContractSchemas(cwd, routes, parser, {
+		lifecycleHeaders: lifecycleHeadersEnabled(cwd, parser),
+	});
 	const diagnostics = [
 		...projectStructureDiagnostics(cwd),
 		...discovery.diagnostics,
@@ -1127,6 +1129,73 @@ function parseRouteContract(
 	return { configFound: true, explicitOptions, contract };
 }
 
+/**
+ * Reads whether `src/routa.ts` may turn lifecycle headers on.
+ *
+ * Lifecycle headers are a tuning-backed feature: a literal `false` or an omitted key keeps them
+ * off, and any other value counts as possibly enabled. A configuration the source cannot be read
+ * for the key, such as a variable, a call, a spread, or a computed key, counts the same way.
+ * Generation never executes application modules, so ownership diagnostics apply to every
+ * configuration the source can produce.
+ */
+function lifecycleHeadersEnabled(cwd: string, parser: ts.SourceFileParser): boolean {
+	const file = join(cwd, "src/routa.ts");
+
+	if (!existsSync(file)) {
+		return false;
+	}
+
+	const sourceFile = parseTypeScriptFile(file, parser);
+	let foundCall = false;
+	let enabled = false;
+	const visit = (node: ts.Node): void => {
+		if (ts.isCallExpression(node) && callName(node.expression) === "createRouta") {
+			foundCall = true;
+			enabled ||= configMayEnableLifecycleHeaders(node.arguments[0]);
+		}
+
+		ts.forEachChild(node, visit);
+	};
+
+	visit(sourceFile);
+	const hasDefaultExport = sourceFile.statements.some(
+		(statement) =>
+			(ts.isExportAssignment(statement) && !statement.isExportEquals)
+			|| (ts.isExportDeclaration(statement)
+				&& statement.exportClause
+				&& ts.isNamedExports(statement.exportClause)
+				&& statement.exportClause.elements.some((element) => element.name.text === "default")),
+	);
+	return enabled || (!foundCall && hasDefaultExport);
+}
+
+/** Walks a config in source order, so a later literal `false` overrides what a spread may hold. */
+function configMayEnableLifecycleHeaders(argument: ts.Expression | undefined): boolean {
+	if (!argument) {
+		return false;
+	}
+
+	const config = objectLiteral(argument);
+
+	if (!config) {
+		return true;
+	}
+
+	let enabled = false;
+
+	for (const member of config.properties) {
+		if (ts.isSpreadAssignment(member) || ts.isComputedPropertyName(member.name)) {
+			enabled = true;
+		} else if (propertyName(member.name) === "lifecycleHeaders") {
+			enabled =
+				!ts.isPropertyAssignment(member)
+				|| unwrapExpression(member.initializer).kind !== ts.SyntaxKind.FalseKeyword;
+		}
+	}
+
+	return enabled;
+}
+
 function routeDeprecation(
 	routeContract: ts.ObjectLiteralExpression,
 ): RouteDeprecationMetadata | undefined {
@@ -1437,7 +1506,7 @@ function runReturnObjectDiagnostics(
 		for (const property of objectProperties(object)) {
 			const name = propertyName(property.name);
 
-			if (!name || name === "type" || name === "data") {
+			if (!name || name === "type" || name === "data" || name === "headers") {
 				continue;
 			}
 
@@ -1445,7 +1514,7 @@ function runReturnObjectDiagnostics(
 			diagnostics.push({
 				code: "ROUTA_RESULT_SHAPE",
 				severity: "error",
-				message: `Run result includes unsupported field "${name}". Route and middleware results may only include "type" and "data".`,
+				message: `Run result includes unsupported field "${name}". Route and middleware results may only include "type", "data", and "headers".`,
 				file: `${file}:${position.line + 1}:${position.character + 1}`,
 				suggestion: `Remove "${name}" from the returned result object.`,
 			});

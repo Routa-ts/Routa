@@ -2433,6 +2433,61 @@ ${config}
 		expect(missing.stdout).toContain("Expected 1 arguments, but got 0.");
 	});
 
+	it("reports consumer type errors with actionable messages for response headers", async () => {
+		const compile = async (name: string, responses: string, handler: string) => {
+			const cwd = mkdtempSync(join(tmpdir(), `routa-consumer-${name}-`));
+			createTypeScriptProject(cwd);
+			mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
+			writeFileSync(
+				join(cwd, "src/routes/status/route.ts"),
+				`import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/status")({
+\tget: createRoute({
+\t\tresponses: { ${responses} },
+\t\trun: ${handler},
+\t}),
+});
+`,
+			);
+			return run(["check"], { cwd });
+		};
+
+		const valid = await compile(
+			"headers-valid",
+			'ok: { status: 200, schema: z.object({ ok: z.boolean() }), headers: z.object({ etag: z.string(), "x-total": z.number().optional() }) }',
+			'({ response }) => response.ok({ ok: true }, { etag: "a" })',
+		);
+		const missing = await compile(
+			"headers-missing",
+			"ok: { status: 200, headers: z.object({ etag: z.string() }) }",
+			'() => ({ type: "ok" })',
+		);
+		const undeclared = await compile(
+			"headers-undeclared",
+			"ok: { status: 200, schema: z.object({ ok: z.boolean() }) }",
+			'() => ({ type: "ok", data: { ok: true }, headers: { etag: "a" } })',
+		);
+		const uppercase = await compile(
+			"headers-uppercase",
+			"ok: { status: 200, headers: z.object({ ETag: z.string() }) }",
+			'() => ({ type: "ok", headers: { ETag: "a" } })',
+		);
+
+		expect(valid.code).toBe(0);
+		for (const result of [missing, undeclared]) {
+			expect(result.code).not.toBe(0);
+			expect(result.stderr).toContain("TypeScript check failed.");
+		}
+		expect(undeclared.stdout).toContain(
+			"'etag' does not exist in type 'HeadersNotDeclared<\"ok\">'",
+		);
+		// `routa check` reports the declaration before TypeScript runs.
+		expect(uppercase.code).toBe(1);
+		expect(uppercase.stderr).toContain("ROUTA_RESPONSE_HEADER_NAME");
+	});
+
 	it("reports extra fields in route run results", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-result-shape-"));
 		createTypeScriptProject(cwd);

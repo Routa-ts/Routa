@@ -42,6 +42,22 @@ export type ProjectedOperation = {
 export type ProjectedResponse = {
 	description: string;
 	schema?: JsonSchema;
+	headers?: Record<string, ProjectedHeader>;
+};
+
+/**
+ * One declared response header, as an OpenAPI Header Object.
+ */
+export type ProjectedHeader = {
+	required: boolean;
+	description?: string;
+	schema: JsonSchema;
+};
+
+/** What `routa check` knows from outside the route graph. */
+export type ContractSchemaOptions = {
+	/** Whether `src/routa.ts` turns lifecycle headers on. */
+	lifecycleHeaders?: boolean;
 };
 
 /**
@@ -64,14 +80,16 @@ export type ContractSchemaProjection = {
  * @param cwd - The project root
  * @param routes - Route metadata from project discovery
  * @param parser - The TypeScript source-file parser for this session
+ * @param options - Project facts the route graph does not hold
  * @returns Projected operations, components, and coded diagnostics
  */
 export function projectContractSchemas(
 	cwd: string,
 	routes: readonly RouteMetadata[],
 	parser: ts.SourceFileParser,
+	options: ContractSchemaOptions = {},
 ): ContractSchemaProjection {
-	const projector = new SchemaProjector(cwd, parser);
+	const projector = new SchemaProjector(cwd, parser, options);
 	const operations = new Map<string, Record<string, ProjectedOperation>>();
 
 	for (const route of routes) {
@@ -388,6 +406,7 @@ class SchemaProjector {
 	constructor(
 		private readonly cwd: string,
 		private readonly parser: ts.SourceFileParser,
+		private readonly options: ContractSchemaOptions,
 	) {}
 
 	/**
@@ -525,6 +544,7 @@ class SchemaProjector {
 		contract: ts.ObjectLiteralExpression,
 		source: SchemaSource,
 	): Map<number, ProjectedResponse> {
+		const lifecycleOwned = this.lifecycleOwnedHeaders(contract, source);
 		const value = propertyValue(contract, "responses");
 		const responses = objectLiteral(value);
 		const context: Context = { source, io: "output" };
@@ -564,15 +584,226 @@ class SchemaProjector {
 			}
 
 			const schema = propertyValue(outcome, "schema");
+			const headers = propertyValue(outcome, "headers");
 			const name = ts.isPropertyAssignment(response) ? propertyName(response.name) : undefined;
+			const projectedHeaders = headers
+				? this.responseHeaders(headers, context, lifecycleOwned)
+				: undefined;
 
 			result.set(status, {
 				description: text ?? humanizeOutcomeName(name ?? String(status)),
 				...(schema ? { schema: this.materialize(this.node(schema, context)) } : {}),
+				...(projectedHeaders ? { headers: projectedHeaders } : {}),
 			});
 		}
 
 		return result;
+	}
+
+	/**
+	 * The header names the response lifecycle owns on a route: none unless lifecycle headers are on
+	 * and the route declares a `deprecation`; then `deprecation` and `sunset`, plus `link` when
+	 * the deprecation names a replacement.
+	 *
+	 * The deprecation may be an inline object or a local constant. When it is neither, whether the
+	 * lifecycle owns `link` cannot be known, so `unreadable` carries the expression to report.
+	 */
+	private lifecycleOwnedHeaders(
+		contract: ts.ObjectLiteralExpression,
+		source: SchemaSource,
+	): LifecycleOwnership {
+		const deprecation = propertyValue(contract, "deprecation");
+
+		if (!this.options.lifecycleHeaders || !deprecation) {
+			return { owned: new Set() };
+		}
+
+		const object = this.localObject(deprecation, source);
+
+		if (!object || object.properties.some((property) => ts.isSpreadAssignment(property))) {
+			return { owned: new Set(["deprecation", "sunset"]), unreadable: deprecation };
+		}
+
+		return {
+			owned: new Set([
+				"deprecation",
+				"sunset",
+				...(propertyValue(object, "replacement") ? ["link"] : []),
+			]),
+		};
+	}
+
+	/** Resolves an expression to an object literal, following local constants in the same file. */
+	private localObject(
+		expression: ts.Expression,
+		source: SchemaSource,
+	): ts.ObjectLiteralExpression | undefined {
+		const seen = new Set<string>();
+		let current = unwrapExpression(expression);
+
+		while (ts.isIdentifier(current) && !seen.has(current.text)) {
+			seen.add(current.text);
+			const declaration = source.declarations.get(current.text);
+
+			if (!declaration) {
+				return undefined;
+			}
+
+			current = unwrapExpression(declaration.initializer);
+		}
+
+		return objectLiteral(current);
+	}
+
+	/**
+	 * Projects an outcome's `headers` declaration into Header Objects and reports declarations
+	 * Routa cannot honor: names that are not lowercase, collide in case, or belong to Routa or the
+	 * lifecycle, and values that are not strings, numbers, or booleans.
+	 */
+	private responseHeaders(
+		expression: ts.Expression,
+		context: Context,
+		lifecycle: LifecycleOwnership,
+	): Record<string, ProjectedHeader> | undefined {
+		const schema = this.structure(this.node(expression, { ...context, parameter: true }));
+		const properties = schema.properties as Record<string, JsonSchema> | undefined;
+
+		if (schema.type !== "object" || typeof properties !== "object") {
+			if (Object.keys(schema).length > 0) {
+				this.report(context.source, expression, {
+					code: "ROUTA_SCHEMA_UNSUPPORTED",
+					message: "Response headers must be an object schema keyed by header name",
+					suggestion: "Declare headers with z.object({ ... }).",
+				});
+			}
+
+			return undefined;
+		}
+
+		const required = new Set((schema.required as string[] | undefined) ?? []);
+		const names = new Map<string, string>();
+		const headers: Record<string, ProjectedHeader> = {};
+
+		for (const [name, value] of Object.entries(properties)) {
+			const lower = name.toLowerCase();
+			const earlier = names.get(lower);
+			const fail = (code: string, message: string, suggestion: string) =>
+				this.report(context.source, expression, { code, message, suggestion });
+
+			if (earlier !== undefined) {
+				fail(
+					"ROUTA_RESPONSE_HEADER_COLLISION",
+					`Response headers "${earlier}" and "${name}" differ only in case`,
+					"Header identity is case-insensitive and has one owner. Declare the header once, in lowercase.",
+				);
+				continue;
+			}
+
+			names.set(lower, name);
+
+			if (!/^[!#$%&'*+\-.^_`|~0-9a-z]+$/.test(lower)) {
+				fail(
+					"ROUTA_RESPONSE_HEADER_NAME",
+					`Response header "${name}" is not a valid header name`,
+					"Use a header name made of letters, digits, and the characters ! # $ % & ' * + - . ^ _ ` | ~.",
+				);
+			} else if (lower === "set-cookie") {
+				fail(
+					"ROUTA_RESPONSE_HEADER_RESERVED",
+					`Response header "${name}" is reserved: Routa owns Set-Cookie`,
+					"Declare response cookies as cookies, not as a header. Routa serializes Set-Cookie itself.",
+				);
+			} else if (reservedHeaderNames.has(lower)) {
+				fail(
+					"ROUTA_RESPONSE_HEADER_RESERVED",
+					`Response header "${name}" is reserved: Routa owns ${lower}`,
+					`Remove ${lower} from headers. Routa sets it from the response body and transport.`,
+				);
+			} else if (lifecycle.owned.has(lower)) {
+				fail(
+					"ROUTA_RESPONSE_HEADER_LIFECYCLE",
+					`Response header "${name}" is owned by the route's lifecycle headers`,
+					"Remove it from headers, or turn lifecycleHeaders off. Routa writes deprecation, sunset, and the successor link itself.",
+				);
+			} else if (name !== lower) {
+				fail(
+					"ROUTA_RESPONSE_HEADER_NAME",
+					`Header "${name}" must be declared in lowercase ("${lower}")`,
+					`Rename it to "${lower}". Header names are lowercase in Routa contracts.`,
+				);
+			}
+
+			if (lower === "link" && lifecycle.unreadable) {
+				this.report(context.source, lifecycle.unreadable, {
+					code: "ROUTA_SCHEMA_UNSUPPORTED",
+					message:
+						"Route deprecation needs a static object with literal properties, so Routa cannot tell whether lifecycle headers own the link header",
+					suggestion:
+						"Write deprecation as an inline object or a local constant, or stop declaring a link header on this route.",
+				});
+			}
+
+			if (!this.isScalarHeaderValue(value)) {
+				fail(
+					"ROUTA_RESPONSE_HEADER_VALUE",
+					`Header "${name}" must be a string, number, or boolean`,
+					"Declare a string, number, or boolean schema (or a literal or enum of them). Routa does not serialize other header values.",
+				);
+			}
+
+			const description = value.description ?? this.resolved(value).description;
+			headers[name] = {
+				required: required.has(name),
+				...(typeof description === "string" ? { description } : {}),
+				schema: value,
+			};
+		}
+
+		return headers;
+	}
+
+	/**
+	 * Follows `$ref`s through the components registered so far, so an exported wrapper of an
+	 * exported schema reads as what it stands for. Each reference's sibling metadata applies over
+	 * its target, the nearest winning, and a cycle stops at the reference that repeats.
+	 */
+	private resolved(schema: JsonSchema, seen: ReadonlySet<string> = new Set()): JsonSchema {
+		const key =
+			typeof schema.$ref === "string"
+				? schema.$ref.replace("#/components/schemas/", "")
+				: undefined;
+		const target = key === undefined || seen.has(key) ? undefined : this.components.get(key);
+
+		if (!key || !target) {
+			return schema;
+		}
+
+		const { $ref: _ref, ...siblings } = schema;
+		return { ...this.resolved(target.content, new Set(seen).add(key)), ...siblings };
+	}
+
+	/** Whether a projected schema accepts only strings, numbers, and booleans. */
+	private isScalarHeaderValue(schema: JsonSchema): boolean {
+		const value = this.resolved(schema);
+		const scalarTypes = ["string", "number", "integer", "boolean"];
+		const isScalar = (item: unknown) =>
+			typeof item === "string" || typeof item === "number" || typeof item === "boolean";
+
+		if (Array.isArray(value.anyOf) || Array.isArray(value.oneOf) || Array.isArray(value.allOf)) {
+			const members = (value.anyOf ?? value.oneOf ?? value.allOf) as JsonSchema[];
+			return members.every((member) => this.isScalarHeaderValue(member));
+		}
+
+		if (Array.isArray(value.enum)) {
+			return value.enum.every(isScalar);
+		}
+
+		if ("const" in value) {
+			return isScalar(value.const);
+		}
+
+		const types = Array.isArray(value.type) ? value.type : [value.type];
+		return types.every((type) => typeof type === "string" && scalarTypes.includes(type));
 	}
 
 	/**
@@ -1619,6 +1850,18 @@ class SchemaProjector {
 }
 
 const zodRegistryNames = new Set(["globalRegistry", "registry"]);
+
+/** The header names the lifecycle owns on a route, and a deprecation expression that could not be read. */
+type LifecycleOwnership = { owned: ReadonlySet<string>; unreadable?: ts.Expression };
+
+/** Header names Routa owns on every response. */
+const reservedHeaderNames = new Set([
+	"content-type",
+	"content-length",
+	"transfer-encoding",
+	"connection",
+	"set-cookie",
+]);
 
 function placementOf(context: Context): string {
 	if (context.io === "output") return "a response";

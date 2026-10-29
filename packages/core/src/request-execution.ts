@@ -1,6 +1,8 @@
 import { ZodError, type z } from "zod";
 import type { AnyRouteContract, MiddlewareContract, RouteInput } from "./index.js";
+import { type HandlerOutputIssue, InvalidHandlerOutputError } from "./handler-output-error.js";
 import type { RoutaLogger } from "./logger.js";
+import { lifecycleHeaders, resolveHeaders, serializeHeaders } from "./response-headers.js";
 
 type RuntimeResult = {
 	type: string;
@@ -11,21 +13,23 @@ type RuntimeOutcome = {
 	status: number;
 	description?: string;
 	schema?: z.ZodTypeAny;
+	headers?: z.ZodTypeAny;
 };
 
-/** A validated handler result: either a JSON body or an intentionally empty body. */
-type ValidatedResult = { status: number } & ({ body: false } | { body: true; data: unknown });
-
-type HandlerOutputIssue = {
-	code: string;
-	path: readonly PropertyKey[];
-};
+/**
+ * A validated handler result: either a JSON body or an intentionally empty body, with the
+ * serialized response headers its outcome declared.
+ */
+type ValidatedResult = {
+	status: number;
+	headers: ReadonlyArray<readonly [string, string]>;
+} & ({ body: false } | { body: true; data: unknown });
 
 export type RuntimeRouteContract = AnyRouteContract & {
 	run: (args: {
 		input: Record<string, unknown>;
 		ctx: Record<string, unknown>;
-		response: Readonly<Record<string, (...data: [] | [unknown]) => RuntimeResult>>;
+		response: Readonly<Record<string, (...args: unknown[]) => RuntimeResult>>;
 	}) => RuntimeResult | Promise<RuntimeResult>;
 	middleware?: readonly RuntimeMiddlewareContract[];
 };
@@ -65,11 +69,10 @@ export function createRequestExecutor(
 			const result = await runWithMiddleware(contract, input, ctx, inputReader, options.logger);
 			const response = validateResult(contract, result, options.validateResponses);
 
-			const headers = lifecycleHeaders(contract, options.lifecycleHeaders);
-
-			return response.body
-				? json(response.data, response.status, headers)
-				: new Response(null, { status: response.status, headers });
+			return finalizeResponse(
+				response,
+				lifecycleHeaders(contract.deprecation, options.lifecycleHeaders),
+			);
 		} catch (error) {
 			const response = errorResponse(error);
 			logRequestError(options.requestLogger, request, error, response);
@@ -104,12 +107,9 @@ async function runWithMiddleware(
 		if (!item) {
 			// Framework-owned context is applied last so middleware or a low-level
 			// createContext implementation cannot replace the configured logger.
-			const response = Object.create(null) as Record<
-				string,
-				(...data: [] | [unknown]) => RuntimeResult
-			>;
-			for (const type of Object.keys(contract.responses)) {
-				response[type] = (...data) => (data.length === 0 ? { type } : { type, data: data[0] });
+			const response = Object.create(null) as Record<string, (...args: unknown[]) => RuntimeResult>;
+			for (const [type, outcome] of Object.entries(contract.responses)) {
+				response[type] = (...args) => buildResult(type, outcome, args);
 			}
 			const result = await contract.run({
 				input: routeInput,
@@ -163,6 +163,24 @@ async function runWithMiddleware(
 	}
 
 	return await dispatch(0);
+}
+
+/**
+ * Builds a handler result from a builder call: a body outcome takes `(data, headers?)`, a bodyless
+ * outcome takes `(headers?)`.
+ */
+function buildResult(
+	type: string,
+	outcome: RuntimeOutcome,
+	args: readonly unknown[],
+): RuntimeResult & { headers?: unknown } {
+	const [data, headers] = outcome.schema ? args : [undefined, args[0]];
+
+	return {
+		type,
+		...(outcome.schema && args.length > 0 ? { data } : {}),
+		...(headers === undefined ? {} : { headers }),
+	};
 }
 
 class RequestInputReader {
@@ -460,6 +478,8 @@ function validateResult(
 		throw new InvalidHandlerOutputError(`Handler returned unknown response type "${result.type}".`);
 	}
 
+	const headers = validatedHeaders(result, response, validateResponse);
+
 	if (!response.schema) {
 		if (result.data !== undefined) {
 			throw new InvalidHandlerOutputError(
@@ -467,7 +487,7 @@ function validateResult(
 			);
 		}
 
-		return { body: false, status: response.status };
+		return { body: false, status: response.status, headers };
 	}
 
 	if (!("data" in result)) {
@@ -502,7 +522,39 @@ function validateResult(
 		}
 	}
 
-	return { body: true, data: result.data, status: response.status };
+	return { body: true, data: result.data, status: response.status, headers };
+}
+
+/**
+ * Checks and serializes the headers a result writes for its outcome.
+ *
+ * Declared names, required presence, and safe serialization are checked in every mode. Zod parsing
+ * and the comparison with the handler value follow `validateResponse`, like the body.
+ */
+function validatedHeaders(
+	result: RuntimeResult & { headers?: unknown },
+	outcome: RuntimeOutcome,
+	validateResponse: boolean,
+): ReadonlyArray<readonly [string, string]> {
+	const values = resolveHeaders(result.type, outcome, result.headers);
+	const serialized = serializeHeaders(result.type, outcome, values);
+
+	if (validateResponse && outcome.headers) {
+		try {
+			assertUnchanged(parseSchema(outcome.headers, values), { ...values }, ["headers"]);
+		} catch (error) {
+			if (error instanceof ZodError) {
+				throw new InvalidHandlerOutputError(
+					"Handler returned response headers that do not match schema.",
+					handlerOutputIssues(error, ["headers"]),
+				);
+			}
+
+			throw error;
+		}
+	}
+
+	return serialized;
 }
 
 function declaredOutcome(contract: RuntimeRouteContract, type: string): RuntimeOutcome | undefined {
@@ -536,12 +588,16 @@ function jsonSnapshot(value: unknown): unknown {
  * Fails when parsing changed the handler value, so a mutating schema is caught in
  * development instead of silently producing a different body in production.
  */
-function assertUnchanged(parsed: unknown, original: unknown): void {
-	const path = firstChange(parsed, original, []);
+function assertUnchanged(
+	parsed: unknown,
+	original: unknown,
+	root: readonly PropertyKey[] = [],
+): void {
+	const path = firstChange(parsed, original, root);
 
 	if (path) {
 		throw new InvalidHandlerOutputError(
-			"Handler returned response data that its schema would change. Response schemas must not change values.",
+			`Handler returned response ${root[0] === "headers" ? "headers" : "data"} that its schema would change. Response schemas must not change values.`,
 			[{ code: "response_value_changed", path }],
 		);
 	}
@@ -664,6 +720,43 @@ function toRecord(value: unknown): Record<string, unknown> {
 }
 
 /**
+ * The one place a handled outcome becomes a `Response`.
+ *
+ * It combines the transport headers Routa owns (`content-type` for a JSON body, none for a bodyless
+ * outcome), the outcome's declared headers, and the lifecycle headers. A header has one owner:
+ * a declared header that a lifecycle header or a transport header also claims fails instead of
+ * overwriting.
+ *
+ * @param response - The validated outcome, with its serialized declared headers
+ * @param lifecycle - Lifecycle headers for the route, keyed by lowercase name
+ * @throws {InvalidHandlerOutputError} When two owners claim one header
+ */
+function finalizeResponse(
+	response: ValidatedResult,
+	lifecycle: Readonly<Record<string, string>>,
+): Response {
+	const headers = new Headers();
+
+	for (const [name, value] of response.headers) {
+		if (Object.hasOwn(lifecycle, name) || headers.has(name)) {
+			throw new InvalidHandlerOutputError(
+				`Header "${name}" has more than one owner, so Routa will not overwrite it.`,
+			);
+		}
+
+		headers.set(name, value);
+	}
+
+	for (const [name, value] of Object.entries(lifecycle)) {
+		headers.set(name, value);
+	}
+
+	return response.body
+		? json(response.data, response.status, headers)
+		: new Response(null, { status: response.status, headers });
+}
+
+/**
  * Creates a JSON response.
  *
  * @param data - The response body to serialize as JSON
@@ -685,27 +778,10 @@ function json(data: unknown, status: number, headers: HeadersInit = {}): Respons
 		throw new InvalidHandlerOutputError("Response data cannot be serialized as JSON.");
 	}
 
-	return new Response(body, {
-		status,
-		headers: {
-			"content-type": "application/json; charset=utf-8",
-			...headers,
-		},
-	});
-}
+	const responseHeaders = new Headers(headers);
+	responseHeaders.set("content-type", "application/json; charset=utf-8");
 
-function lifecycleHeaders(
-	contract: RuntimeRouteContract,
-	includeLifecycleHeaders?: boolean,
-): HeadersInit {
-	if (!includeLifecycleHeaders || !contract.deprecation) return {};
-	return {
-		Deprecation: "true",
-		...(contract.deprecation.sunset ? { Sunset: contract.deprecation.sunset } : {}),
-		...(contract.deprecation.replacement
-			? { Link: `<${contract.deprecation.replacement}>; rel="successor-version"` }
-			: {}),
-	};
+	return new Response(body, { status, headers: responseHeaders });
 }
 
 /**
@@ -800,15 +876,6 @@ function errorLogData(error: unknown): Record<string, unknown> {
 	return {
 		error: String(error),
 	};
-}
-
-class InvalidHandlerOutputError extends Error {
-	constructor(
-		message: string,
-		readonly issues?: readonly HandlerOutputIssue[],
-	) {
-		super(message);
-	}
 }
 
 class InvalidJsonBodyError extends Error {}

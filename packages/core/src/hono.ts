@@ -6,6 +6,7 @@ import {
 	isBodylessStatus,
 	type RuntimeRouteContract,
 } from "./request-execution.js";
+import { headerDeclarationProblem, lifecycleOwnedHeaders } from "./response-headers.js";
 
 export { isBodylessStatus };
 
@@ -90,7 +91,7 @@ export function createHonoApp(
 			throw new Error(`${route.method.toUpperCase()} ${route.path} cannot declare a request body.`);
 		}
 
-		assertOutcomeDeclarations(contract, route.path, route.method);
+		assertOutcomeDeclarations(contract, route.path, route.method, options.lifecycleHeaders);
 		assertUniqueMiddlewareRejects(contract, route.path, method);
 
 		const methods = methodsByPath.get(route.path) ?? new Set<string>();
@@ -181,11 +182,13 @@ function assertOutcomeDeclarations(
 	contract: RuntimeRouteContract,
 	path: string,
 	method: HttpMethod,
+	lifecycleHeaders: boolean | undefined,
 ): void {
 	const label = `${method.toUpperCase()} ${path}`;
+	const lifecycleOwned = lifecycleOwnedHeaders(contract.deprecation, lifecycleHeaders);
 
 	for (const [name, outcome] of Object.entries(contract.responses)) {
-		const problem = outcomeProblem(outcome, method);
+		const problem = outcomeProblem(outcome, method, lifecycleOwned);
 
 		if (problem) {
 			throw new Error(`Outcome "${name}" on ${label} ${problem}`);
@@ -194,9 +197,9 @@ function assertOutcomeDeclarations(
 
 	for (const item of contract.middleware ?? []) {
 		for (const [name, outcome] of Object.entries(item.rejects ?? {}) as Array<
-			[string, { status: number; schema?: unknown }]
+			[string, { status: number; schema?: unknown; headers?: unknown }]
 		>) {
-			const problem = outcomeProblem(outcome, undefined);
+			const problem = outcomeProblem(outcome, undefined, lifecycleOwned);
 
 			if (problem) {
 				throw new Error(`Middleware reject "${name}" on ${label} ${problem}`);
@@ -206,8 +209,9 @@ function assertOutcomeDeclarations(
 }
 
 function outcomeProblem(
-	outcome: { status: number; schema?: unknown },
+	outcome: { status: number; schema?: unknown; headers?: unknown },
 	method: HttpMethod | undefined,
+	lifecycleOwned: ReadonlySet<string>,
 ): string | undefined {
 	const { status } = outcome;
 
@@ -225,6 +229,10 @@ function outcomeProblem(
 
 	if (status === 304 && method && method !== "get" && method !== "head") {
 		return `declares status 304, which is valid only for GET and HEAD routes.`;
+	}
+
+	if (outcome.headers !== undefined) {
+		return headerDeclarationProblem(outcome.headers, lifecycleOwned);
 	}
 
 	return undefined;

@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { RoutaLogger } from "./logger.js";
+import type { reservedHeaders } from "./response-headers.js";
 
 export type {
 	CreateLoggerOptions,
@@ -25,14 +26,17 @@ export type RouteInput = {
 };
 
 /**
- * A named outcome: its HTTP status, an optional description, and an optional JSON body schema.
+ * A named outcome: its HTTP status, an optional description, an optional JSON body schema,
+ * and optional response headers.
  *
- * An outcome without `schema` is intentionally bodyless.
+ * An outcome without `schema` is intentionally bodyless. `headers` is a Zod object keyed by
+ * lowercase header names whose values are strings, numbers, or booleans.
  */
 export type RouteOutcome = {
 	status: number;
 	description?: string;
 	schema?: z.ZodTypeAny;
+	headers?: z.ZodObject<any, any>;
 };
 
 export type RouteResponses = Record<string, RouteOutcome>;
@@ -57,16 +61,32 @@ type ForbiddenData<TName extends string> = {
 	readonly [K in `Outcome ${TName} declares no schema, so it cannot return data.`]: never;
 };
 
+/** The type of `headers` on an outcome that declares none; see {@link ForbiddenData}. */
+type HeadersNotDeclared<TName extends string> = {
+	readonly [K in `Outcome ${TName} declares no headers, so it cannot return headers.`]: never;
+};
+
+/** The `headers` result field: required when any declared header is required, forbidden when none are declared. */
+type OutcomeHeaders<TName extends string, TOutcome> = TOutcome extends {
+	readonly headers: infer THeaders extends z.ZodTypeAny;
+}
+	? {} extends SchemaOutput<THeaders>
+		? { readonly headers?: SchemaOutput<THeaders> }
+		: { readonly headers: SchemaOutput<THeaders> }
+	: { readonly headers?: HeadersNotDeclared<TName> };
+
 /**
  * The handler result for one outcome: body outcomes require `data`, schema-less outcomes forbid it.
  * An explicit `data: undefined` is accepted and means no data, because TypeScript cannot tell it
- * from an omitted property unless `exactOptionalPropertyTypes` is on.
+ * from an omitted property unless `exactOptionalPropertyTypes` is on. `headers` follows the same
+ * rule: required or optional from the declared headers, and forbidden when none are declared.
  */
-export type OutcomeResult<TName extends string, TOutcome> = TOutcome extends {
+export type OutcomeResult<TName extends string, TOutcome> = (TOutcome extends {
 	readonly schema: infer TSchema extends z.ZodTypeAny;
 }
 	? { readonly type: TName; readonly data: SchemaOutput<TSchema> }
-	: { readonly type: TName; readonly data?: ForbiddenData<TName> };
+	: { readonly type: TName; readonly data?: ForbiddenData<TName> })
+	& OutcomeHeaders<TName, TOutcome>;
 
 /** `true` when any member of a union of booleans is `true`. */
 type AnyTrue<T> = true extends T ? true : false;
@@ -115,17 +135,46 @@ type SameValueType<TSchema extends z.ZodTypeAny> = [z.input<TSchema>] extends [z
 		: false
 	: false;
 
-type SchemaProblem<TSchema> = TSchema extends z.ZodTypeAny
+/** A message under `TKey` when a schema changes values, else `unknown`, which adds no constraint. */
+type SchemaProblem<TSchema, TKey extends string> = TSchema extends z.ZodTypeAny
 	? SameValueType<TSchema> extends false
-		? ValueChangeMessage
+		? ValueChangeMessage<TKey>
 		: ChangesValue<TSchema> extends false
 			? unknown
-			: ValueChangeMessage
+			: ValueChangeMessage<TKey>
 	: unknown;
 
-type ValueChangeMessage = {
-	schema: "Response schemas describe wire-ready JSON and must not change values. Remove transforms, pipes, defaults, catches, and coercion, and return the final value from the handler.";
+type ValueChangeMessage<TKey extends string> = {
+	[
+		K in TKey
+	]: "Response schemas describe wire-ready JSON and must not change values. Remove transforms, pipes, defaults, catches, and coercion, and return the final value from the handler.";
 };
+
+/** Header names Routa owns on every response. */
+type ReservedHeaderName = (typeof reservedHeaders)[number];
+
+type HeaderNameProblem<TName extends string> = TName extends ReservedHeaderName
+	? `Header "${TName}" is reserved: Routa owns it, so an outcome cannot declare it.`
+	: TName extends Lowercase<TName>
+		? never
+		: `Header "${TName}" must be declared in lowercase ("${Lowercase<TName>}").`;
+
+type HeaderValueProblem<TName extends string, TSchema> = TSchema extends z.ZodTypeAny
+	? [Exclude<z.output<TSchema>, undefined>] extends [string | number | boolean]
+		? never
+		: `Header "${TName}" must be a string, number, or boolean schema (or a literal or enum of them).`
+	: never;
+
+type HeaderEntryProblem<TName, TSchema> = TName extends string
+	? HeaderNameProblem<TName> | HeaderValueProblem<TName, TSchema>
+	: never;
+
+type HeadersProblem<THeaders> =
+	THeaders extends z.ZodObject<infer TShape, any>
+		? [{ [K in keyof TShape]: HeaderEntryProblem<K, TShape[K]> }[keyof TShape]] extends [never]
+			? SchemaProblem<THeaders, "headers">
+			: { headers: { [K in keyof TShape]: HeaderEntryProblem<K, TShape[K]> }[keyof TShape] }
+		: unknown;
 
 type StatusProblem<TStatus, TOutcome> = TStatus extends number
 	? `${TStatus}` extends `1${string}`
@@ -145,7 +194,10 @@ type OutcomeChecks<TOutcome> = StatusProblem<
 	TOutcome extends { readonly status: infer TStatus } ? TStatus : never,
 	TOutcome
 >
-	& (TOutcome extends { readonly schema: infer TSchema } ? SchemaProblem<TSchema> : unknown);
+	& (TOutcome extends { readonly schema: infer TSchema }
+		? SchemaProblem<TSchema, "schema">
+		: unknown)
+	& (TOutcome extends { readonly headers: infer THeaders } ? HeadersProblem<THeaders> : unknown);
 
 /** Compile-time checks for declared outcomes; valid outcomes add no constraint. */
 export type ResponseChecks<TResponses extends RouteResponses> = {
@@ -158,16 +210,28 @@ export type RoutaResult<TResponses extends RouteResponses> = {
 
 export type RouteRunResult<TResponses extends RouteResponses> = RoutaResult<TResponses>;
 
-/** Pure result builders keyed by the route's declared outcome names. */
+/** The trailing builder argument for declared headers: required, optional, or absent. */
+type BuilderHeaderArgs<TOutcome> = TOutcome extends {
+	readonly headers: infer THeaders extends z.ZodTypeAny;
+}
+	? {} extends SchemaOutput<THeaders>
+		? [headers?: SchemaOutput<THeaders>]
+		: [headers: SchemaOutput<THeaders>]
+	: [];
+
+/**
+ * Pure result builders keyed by the route's declared outcome names. A body outcome takes its data,
+ * then its headers when it declares any; a bodyless outcome takes only its headers.
+ */
 export type ResponseBuilders<TResponses extends RouteResponses> = {
 	readonly [K in keyof TResponses & string]: TResponses[K] extends {
 		readonly schema: infer TSchema extends z.ZodTypeAny;
 	}
-		? (data: SchemaOutput<TSchema>) => {
-				readonly type: K;
-				readonly data: SchemaOutput<TSchema>;
-			}
-		: () => { readonly type: K };
+		? (
+				data: SchemaOutput<TSchema>,
+				...headers: BuilderHeaderArgs<TResponses[K]>
+			) => Extract<OutcomeResult<K, TResponses[K]>, { readonly data: unknown }>
+		: (...headers: BuilderHeaderArgs<TResponses[K]>) => OutcomeResult<K, TResponses[K]>;
 };
 
 export type MiddlewareRejectResult<TRejects extends MiddlewareRejectsSpec> =

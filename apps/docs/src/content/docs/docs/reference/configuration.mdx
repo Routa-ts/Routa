@@ -98,7 +98,11 @@ Whether to emit deprecation headers on routes that declare `deprecation`. Defaul
 | `Sunset: <date>`                          | `deprecation.sunset` is set          |
 | `Link: <target>; rel="successor-version"` | `deprecation.replacement` is set     |
 
-Routes without `deprecation` are unaffected regardless of this setting.
+Routes without `deprecation` are unaffected regardless of this setting. While this is on,
+Routa owns those headers on deprecated routes, and an outcome that declares `deprecation`,
+`sunset`, or (when a `replacement` is set) `link` in `headers` fails. `routa check` does not run
+your code, so it treats any value other than an omitted key or a literal `false` as possibly on
+and applies the same ownership rules. Declare a literal `false` to opt a route graph out.
 
 ## `responseValidation`
 
@@ -115,9 +119,12 @@ their declared Zod schemas and compares the parsed value with the handler value.
 | `"development"` | Parse and compare response data | Do not parse or compare         |
 | `"always"`      | Parse and compare response data | Parse and compare response data |
 
+The same policy applies to declared response header values.
+
 Routa always checks the result envelope and response type, requires `data` for an outcome
-with a `schema` and rejects it for one without, selects the declared status, and performs
-JSON serialization. Parsing and comparing fail the response as invalid handler output when
+with a `schema` and rejects it for one without, selects the declared status, checks declared
+response headers (names, required headers, and safe values), and performs JSON
+serialization. Parsing and comparing fail the response as invalid handler output when
 the data does not match its schema or when the schema would change it. Routa never sends the
 parsed value. Set `"always"` when production must reject response drift. Response schemas
 must not change values; TypeScript rejects the common cases and `routa check` reports

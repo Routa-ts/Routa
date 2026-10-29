@@ -112,10 +112,57 @@ middleware `rejects` map for that method. The message lists the valid names.
 
 ### `ROUTA_RESULT_SHAPE`
 
-A returned result object contains a field other than `type` and `data`.
+A returned result object contains a field other than `type`, `data`, and `headers`.
 
-**Fix:** remove the extra field. Results are limited to those two so every response can be
-described in OpenAPI. Move anything else into `data`.
+**Fix:** remove the extra field. Results are limited to those three so every response can be
+described in OpenAPI. Move anything else into `data`, or declare it as a response header.
+
+### `ROUTA_RESPONSE_HEADER_NAME`
+
+An outcome's `headers` declares a name that is not a valid HTTP header name, or one that is
+not lowercase, such as `ETag`.
+
+**Fix:** declare the name in lowercase (`etag`), using only letters, digits, and the
+characters allowed in a header name.
+
+### `ROUTA_RESPONSE_HEADER_COLLISION`
+
+An outcome's `headers` declares two names that differ only in case, such as `etag` and
+`ETag`. Header identity is case-insensitive and has one owner.
+
+**Fix:** declare the header once, in lowercase.
+
+### `ROUTA_RESPONSE_HEADER_RESERVED`
+
+An outcome's `headers` declares a header Routa owns: `content-type`, `content-length`,
+`transfer-encoding`, `connection`, or `set-cookie`.
+
+**Fix:** remove it. Routa sets content headers from the body and the transport. Declare
+response cookies as cookies, never as a `set-cookie` header.
+
+### `ROUTA_RESPONSE_HEADER_LIFECYCLE`
+
+An outcome's `headers` declares `deprecation`, `sunset`, or `link` on a route whose
+lifecycle headers Routa may write. `routa check` reads `lifecycleHeaders` without running
+your code: an omitted key or a literal `false` is off, and any other value, such as
+`process.env.LIFECYCLE === "1"`, counts as possibly on. So does a config it cannot read: a
+variable, a call, a spread, or a computed key. A default config exported without a local
+`createRouta` call, including a re-export, also counts as possibly on. A later literal `false` overrides an earlier
+spread, and `createRouta()` with no config is off. `link` is owned only when the route's
+`deprecation` names a `replacement`. The deprecation can be an inline object or a local
+constant. When it is neither, and the route declares `link`, `routa check` reports
+`ROUTA_SCHEMA_UNSUPPORTED` because it cannot tell who owns that header.
+
+**Fix:** remove the header, or set `lifecycleHeaders: false`. If the deprecation is not
+readable, write it as an inline object or a local constant.
+
+### `ROUTA_RESPONSE_HEADER_VALUE`
+
+An outcome's `headers` declares a value that is not a string, number, or boolean (or a
+literal or enum of them), such as an array or an object. Routa has no multi-value header
+support.
+
+**Fix:** declare a string, number, or boolean schema.
 
 ### `ROUTA_DUPLICATE_SCHEMA_NAME`
 

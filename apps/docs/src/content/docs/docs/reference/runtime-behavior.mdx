@@ -31,7 +31,8 @@ For each matched route, in order:
    route's `responses` and every middleware `rejects` map. Its `data` is parsed according
    to the configured response-validation policy.
 7. **Serialization.** The response is written as `application/json; charset=utf-8`, with
-   lifecycle headers when enabled.
+   the outcome's declared headers and, when enabled, lifecycle headers. A bodyless outcome
+   gets no content headers.
 
 ## Status Codes Routa Produces
 
@@ -108,7 +109,7 @@ policy in your application.
 ## Response Serialization
 
 Handlers and middleware rejects return `{ type, data }`, or just `{ type }` for an outcome
-without a `schema`. Routa always looks up the type and status from the matching response
+without a `schema`. A route outcome that declares `headers` also returns them. Routa always looks up the type and status from the matching response
 definition. It requires `data` for an outcome with a `schema` and rejects `data` on one
 without, so an outcome without a schema sends an empty body whatever its status. With the
 default `responseValidation: "development"`, Routa parses `data` through the response schema
@@ -120,6 +121,14 @@ Routa sends the value the handler returned, never the parsed value. Data that do
 the schema, or that the schema would change, produces a handler-output problem. Data that
 cannot be serialized as JSON also produces a handler-output problem rather than a partial
 response. See [Configuration](/docs/reference/configuration/) for the policy table.
+
+An outcome's declared `headers` are part of the same step. In every mode Routa checks that
+the result writes only declared names, writes each once whatever its case, includes every
+required header, and uses safe values: strings without line breaks or surrounding
+whitespace, finite numbers, and booleans. It serializes values to strings in declaration
+order. A violation, or a header that a lifecycle header also claims, is a handler-output
+problem, and Routa never overwrites a header. Parsing header values and comparing the result
+follow `responseValidation` exactly like `data`.
 
 Return the declared result object from handlers and middleware. A raw `Response` is not a
 response escape hatch: returning one is invalid handler output, while throwing one is

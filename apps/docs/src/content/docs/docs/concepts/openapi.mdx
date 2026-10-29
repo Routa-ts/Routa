@@ -21,7 +21,10 @@ method it produces an operation containing the parameters and request body from 
 a response per entry in `responses`, plus every middleware `rejects` outcome in that
 method's chain. An outcome's `description` becomes the response description; without one,
 Routa uses the outcome name, so `notFound` becomes "Not found". An outcome without a
-`schema` is bodyless and its response has no `content`. Middleware `openapi` metadata
+`schema` is bodyless and its response has no `content`. An outcome's `headers` become
+Header Objects on its response, each with the header's schema, `required` for a required
+header, and the schema's `description`. Header schema metadata such as `examples` stays on
+the Header Object's schema. Middleware `openapi` metadata
 contributes `security` and `x-routa-authz`, and route `deprecation` metadata marks the
 operation deprecated.
 
