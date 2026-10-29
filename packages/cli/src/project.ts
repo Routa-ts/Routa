@@ -3034,9 +3034,12 @@ function isExternalApiUrl(value: string): boolean {
  * @returns The generated TypeScript source.
  */
 export function routesMetadataSource(routes: RouteMetadata[]): string {
-	return `${generatedHeader}export const routaRoutes = ${JSON.stringify(routes, null, "\t")} as const;
+	const orderedRoutes = [...routes].sort(
+		(left, right) => compareText(left.path, right.path) || compareText(left.file, right.file),
+	);
+	return `${generatedHeader}export const routaRoutes = ${JSON.stringify(orderedRoutes, null, "\t")} as const;
 
-${routeContextTypes(routes)}
+${routeContextTypes(orderedRoutes)}
 `;
 }
 

@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { run } from "./index.js";
 import { generateOpenApi } from "./openapi.js";
 import {
+	routesMetadataSource,
 	runtimeArgs,
 	sourceSnapshot,
 	sourceSnapshotChanged,
@@ -817,6 +818,14 @@ export default createRouteRoot("/${name}")({
 			(await run(["routes", "--format", "json"], { cwd })).stdout ?? "{}",
 		);
 		const metadata = readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8");
+
+		const routes = validateProject(cwd).routes;
+		const originalOrder = routes.map((route) => route.file);
+		expect(routesMetadataSource(routes)).toBe(routesMetadataSource([...routes].reverse()));
+		expect(routes.map((route) => route.file)).toEqual(originalOrder);
+		const samePath = routes.map((route) => ({ ...route, path: "/same" }));
+		expect(routesMetadataSource(samePath)).toBe(routesMetadataSource([...samePath].reverse()));
+		expect(metadata.indexOf('"path": "/Zeta"')).toBeLessThan(metadata.indexOf('"path": "/alpha"'));
 
 		// Every locale's collation puts "alpha" first; code units put "Z" (U+005A) before "a".
 		expect(reference.routes.map((route: { path: string }) => route.path)).toEqual([

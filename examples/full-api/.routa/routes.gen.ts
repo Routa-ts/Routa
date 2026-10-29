@@ -408,6 +408,1229 @@ export const routaRoutes = [
 		]
 	},
 	{
+		"file": "src/routes/auth/session/route.ts",
+		"path": "/auth/session",
+		"methods": [
+			"GET",
+			"POST",
+			"DELETE"
+		],
+		"responses": {
+			"get": [
+				200
+			],
+			"post": [
+				200,
+				401
+			],
+			"delete": [
+				204
+			]
+		},
+		"inputs": {
+			"get": {
+				"params": false,
+				"query": false,
+				"headers": false,
+				"cookies": true,
+				"body": false
+			},
+			"post": {
+				"params": false,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": true
+			},
+			"delete": {
+				"params": false,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": false
+			}
+		},
+		"middleware": [
+			{
+				"file": "src/routes/middleware.ts",
+				"name": "withRequest",
+				"requires": [],
+				"provides": [
+					"requestId"
+				],
+				"providesTypes": {
+					"requestId": "string"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			},
+			{
+				"file": "src/routes/middleware.ts",
+				"name": "withSession",
+				"requires": [
+					"requestId"
+				],
+				"provides": [
+					"session"
+				],
+				"providesTypes": {
+					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			}
+		],
+		"methodMiddleware": {
+			"get": [
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				}
+			],
+			"post": [
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				}
+			],
+			"delete": [
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				}
+			]
+		},
+		"ctx": [
+			"requestId",
+			"session"
+		],
+		"groups": [],
+		"segments": [
+			"auth",
+			"session"
+		]
+	},
+	{
+		"file": "src/routes/demo/route.ts",
+		"path": "/demo",
+		"methods": [
+			"GET"
+		],
+		"responses": {
+			"get": [
+				200
+			]
+		},
+		"inputs": {
+			"get": {
+				"params": false,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": false
+			}
+		},
+		"middleware": [
+			{
+				"file": "src/routes/middleware.ts",
+				"name": "withRequest",
+				"requires": [],
+				"provides": [
+					"requestId"
+				],
+				"providesTypes": {
+					"requestId": "string"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			},
+			{
+				"file": "src/routes/middleware.ts",
+				"name": "withSession",
+				"requires": [
+					"requestId"
+				],
+				"provides": [
+					"session"
+				],
+				"providesTypes": {
+					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			}
+		],
+		"methodMiddleware": {
+			"get": [
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				}
+			]
+		},
+		"ctx": [
+			"requestId",
+			"session"
+		],
+		"groups": [],
+		"segments": [
+			"demo"
+		]
+	},
+	{
+		"file": "src/routes/legacy.ts",
+		"path": "/legacy",
+		"methods": [
+			"GET"
+		],
+		"responses": {
+			"get": [
+				200
+			]
+		},
+		"inputs": {
+			"get": {
+				"params": false,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": false
+			}
+		},
+		"deprecations": {
+			"get": {
+				"replacement": "/status"
+			}
+		},
+		"middleware": [
+			{
+				"file": "src/routes/middleware.ts",
+				"name": "withRequest",
+				"requires": [],
+				"provides": [
+					"requestId"
+				],
+				"providesTypes": {
+					"requestId": "string"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			},
+			{
+				"file": "src/routes/middleware.ts",
+				"name": "withSession",
+				"requires": [
+					"requestId"
+				],
+				"provides": [
+					"session"
+				],
+				"providesTypes": {
+					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			}
+		],
+		"methodMiddleware": {
+			"get": [
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				}
+			]
+		},
+		"ctx": [
+			"requestId",
+			"session"
+		],
+		"groups": [],
+		"segments": [
+			"legacy"
+		]
+	},
+	{
+		"file": "src/routes/legacy.$id.ts",
+		"path": "/legacy/:id",
+		"methods": [
+			"GET"
+		],
+		"responses": {
+			"get": [
+				200
+			]
+		},
+		"inputs": {
+			"get": {
+				"params": true,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": false
+			}
+		},
+		"deprecations": {
+			"get": {
+				"replacement": "https://api.example.invalid/migrations/legacy-projects"
+			}
+		},
+		"middleware": [
+			{
+				"file": "src/routes/middleware.ts",
+				"name": "withRequest",
+				"requires": [],
+				"provides": [
+					"requestId"
+				],
+				"providesTypes": {
+					"requestId": "string"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			},
+			{
+				"file": "src/routes/middleware.ts",
+				"name": "withSession",
+				"requires": [
+					"requestId"
+				],
+				"provides": [
+					"session"
+				],
+				"providesTypes": {
+					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			}
+		],
+		"methodMiddleware": {
+			"get": [
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				}
+			]
+		},
+		"ctx": [
+			"requestId",
+			"session"
+		],
+		"groups": [],
+		"segments": [
+			"legacy",
+			"$id"
+		]
+	},
+	{
+		"file": "src/routes/logger-showcase/route.ts",
+		"path": "/logger-showcase",
+		"methods": [
+			"POST"
+		],
+		"responses": {
+			"post": [
+				200,
+				403
+			]
+		},
+		"inputs": {
+			"post": {
+				"params": false,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": true
+			}
+		},
+		"middleware": [
+			{
+				"file": "src/routes/middleware.ts",
+				"name": "withRequest",
+				"requires": [],
+				"provides": [
+					"requestId"
+				],
+				"providesTypes": {
+					"requestId": "string"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			},
+			{
+				"file": "src/routes/middleware.ts",
+				"name": "withSession",
+				"requires": [
+					"requestId"
+				],
+				"provides": [
+					"session"
+				],
+				"providesTypes": {
+					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			}
+		],
+		"methodMiddleware": {
+			"post": [
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				}
+			]
+		},
+		"ctx": [
+			"requestId",
+			"session"
+		],
+		"groups": [],
+		"segments": [
+			"logger-showcase"
+		]
+	},
+	{
+		"file": "src/routes/showcase/$itemId/route.ts",
+		"path": "/showcase/:itemId",
+		"methods": [
+			"GET",
+			"PUT",
+			"HEAD"
+		],
+		"responses": {
+			"get": [
+				200,
+				404
+			],
+			"put": [
+				200
+			],
+			"head": [
+				204
+			]
+		},
+		"inputs": {
+			"get": {
+				"params": true,
+				"query": true,
+				"headers": false,
+				"cookies": false,
+				"body": false
+			},
+			"put": {
+				"params": true,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": true
+			},
+			"head": {
+				"params": true,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": false
+			}
+		},
+		"middleware": [
+			{
+				"file": "src/routes/middleware.ts",
+				"name": "withRequest",
+				"requires": [],
+				"provides": [
+					"requestId"
+				],
+				"providesTypes": {
+					"requestId": "string"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			},
+			{
+				"file": "src/routes/middleware.ts",
+				"name": "withSession",
+				"requires": [
+					"requestId"
+				],
+				"provides": [
+					"session"
+				],
+				"providesTypes": {
+					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			}
+		],
+		"methodMiddleware": {
+			"get": [
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				}
+			],
+			"put": [
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				}
+			],
+			"head": [
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				}
+			]
+		},
+		"ctx": [
+			"requestId",
+			"session"
+		],
+		"groups": [],
+		"segments": [
+			"showcase",
+			"$itemId"
+		]
+	},
+	{
+		"file": "src/routes/status/route.ts",
+		"path": "/status",
+		"methods": [
+			"GET"
+		],
+		"responses": {
+			"get": [
+				200
+			]
+		},
+		"inputs": {
+			"get": {
+				"params": false,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": false
+			}
+		},
+		"middleware": [
+			{
+				"file": "src/routes/middleware.ts",
+				"name": "withRequest",
+				"requires": [],
+				"provides": [
+					"requestId"
+				],
+				"providesTypes": {
+					"requestId": "string"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			},
+			{
+				"file": "src/routes/middleware.ts",
+				"name": "withSession",
+				"requires": [
+					"requestId"
+				],
+				"provides": [
+					"session"
+				],
+				"providesTypes": {
+					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			}
+		],
+		"methodMiddleware": {
+			"get": [
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				}
+			]
+		},
+		"ctx": [
+			"requestId",
+			"session"
+		],
+		"groups": [],
+		"segments": [
+			"status"
+		]
+	},
+	{
+		"file": "src/routes/(private)/tenants/$tenantId/projects/route.ts",
+		"path": "/tenants/:tenantId/projects",
+		"methods": [
+			"GET",
+			"POST"
+		],
+		"responses": {
+			"get": [
+				200,
+				401
+			],
+			"post": [
+				201,
+				401,
+				403
+			]
+		},
+		"inputs": {
+			"get": {
+				"params": true,
+				"query": true,
+				"headers": true,
+				"cookies": false,
+				"body": false
+			},
+			"post": {
+				"params": true,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": true
+			}
+		},
+		"middleware": [
+			{
+				"file": "src/routes/middleware.ts",
+				"name": "withRequest",
+				"requires": [],
+				"provides": [
+					"requestId"
+				],
+				"providesTypes": {
+					"requestId": "string"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			},
+			{
+				"file": "src/routes/middleware.ts",
+				"name": "withSession",
+				"requires": [
+					"requestId"
+				],
+				"provides": [
+					"session"
+				],
+				"providesTypes": {
+					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			},
+			{
+				"file": "src/routes/(private)/middleware.ts",
+				"name": "requireAuth",
+				"requires": [
+					"session"
+				],
+				"provides": [
+					"auth"
+				],
+				"providesTypes": {
+					"auth": "{\n\treadonly \"userId\": string;\n}"
+				},
+				"rejects": [
+					{
+						"type": "unauthorized",
+						"status": 401,
+						"schema": "z.object({ message: z.string() })"
+					}
+				],
+				"security": [
+					{
+						"sessionCookie": []
+					}
+				],
+				"permissions": []
+			},
+			{
+				"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
+				"name": "withTenant",
+				"requires": [
+					"auth",
+					"session"
+				],
+				"provides": [
+					"tenant"
+				],
+				"providesTypes": {
+					"tenant": "{\n\treadonly \"id\": string;\n\treadonly \"name\": string;\n}"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			},
+			{
+				"file": "src/routes/(private)/tenants/$tenantId/projects/route.ts",
+				"name": "withProjectScope",
+				"requires": [
+					"tenant",
+					"auth"
+				],
+				"provides": [
+					"projectScope"
+				],
+				"providesTypes": {
+					"projectScope": "{\n\treadonly \"tenantId\": string;\n\treadonly \"canWrite\": boolean;\n}"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			}
+		],
+		"methodMiddleware": {
+			"get": [
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/(private)/middleware.ts",
+					"name": "requireAuth",
+					"requires": [
+						"session"
+					],
+					"provides": [
+						"auth"
+					],
+					"providesTypes": {
+						"auth": "{\n\treadonly \"userId\": string;\n}"
+					},
+					"rejects": [
+						{
+							"type": "unauthorized",
+							"status": 401,
+							"schema": "z.object({ message: z.string() })"
+						}
+					],
+					"security": [
+						{
+							"sessionCookie": []
+						}
+					],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
+					"name": "withTenant",
+					"requires": [
+						"auth",
+						"session"
+					],
+					"provides": [
+						"tenant"
+					],
+					"providesTypes": {
+						"tenant": "{\n\treadonly \"id\": string;\n\treadonly \"name\": string;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/projects/route.ts",
+					"name": "withProjectScope",
+					"requires": [
+						"tenant",
+						"auth"
+					],
+					"provides": [
+						"projectScope"
+					],
+					"providesTypes": {
+						"projectScope": "{\n\treadonly \"tenantId\": string;\n\treadonly \"canWrite\": boolean;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/projects/route.ts",
+					"name": "withProjectListMode",
+					"requires": [
+						"projectScope"
+					],
+					"provides": [
+						"projectListMode"
+					],
+					"providesTypes": {
+						"projectListMode": "{\n\treadonly \"status\": \"active\" | \"archived\";\n\treadonly \"label\": string;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				}
+			],
+			"post": [
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/(private)/middleware.ts",
+					"name": "requireAuth",
+					"requires": [
+						"session"
+					],
+					"provides": [
+						"auth"
+					],
+					"providesTypes": {
+						"auth": "{\n\treadonly \"userId\": string;\n}"
+					},
+					"rejects": [
+						{
+							"type": "unauthorized",
+							"status": 401,
+							"schema": "z.object({ message: z.string() })"
+						}
+					],
+					"security": [
+						{
+							"sessionCookie": []
+						}
+					],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
+					"name": "withTenant",
+					"requires": [
+						"auth",
+						"session"
+					],
+					"provides": [
+						"tenant"
+					],
+					"providesTypes": {
+						"tenant": "{\n\treadonly \"id\": string;\n\treadonly \"name\": string;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/projects/route.ts",
+					"name": "withProjectScope",
+					"requires": [
+						"tenant",
+						"auth"
+					],
+					"provides": [
+						"projectScope"
+					],
+					"providesTypes": {
+						"projectScope": "{\n\treadonly \"tenantId\": string;\n\treadonly \"canWrite\": boolean;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/projects/route.ts",
+					"name": "withProjectPermissions",
+					"requires": [
+						"projectScope"
+					],
+					"provides": [
+						"projectPermissions"
+					],
+					"providesTypes": {
+						"projectPermissions": "{\n\treadonly \"canRead\": boolean;\n\treadonly \"canWrite\": boolean;\n}"
+					},
+					"rejects": [
+						{
+							"type": "forbidden",
+							"status": 403,
+							"schema": "z.object({ message: z.string() })"
+						}
+					],
+					"security": [],
+					"permissions": [
+						"projects.write"
+					]
+				}
+			]
+		},
+		"ctx": [
+			"auth",
+			"projectListMode",
+			"projectPermissions",
+			"projectScope",
+			"requestId",
+			"session",
+			"tenant"
+		],
+		"groups": [
+			"(private)"
+		],
+		"segments": [
+			"tenants",
+			"$tenantId",
+			"projects"
+		]
+	},
+	{
 		"file": "src/routes/(private)/tenants/$tenantId/projects/$projectId/route.ts",
 		"path": "/tenants/:tenantId/projects/:projectId",
 		"methods": [
@@ -889,1229 +2112,6 @@ export const routaRoutes = [
 			"projects",
 			"$projectId"
 		]
-	},
-	{
-		"file": "src/routes/(private)/tenants/$tenantId/projects/route.ts",
-		"path": "/tenants/:tenantId/projects",
-		"methods": [
-			"GET",
-			"POST"
-		],
-		"responses": {
-			"get": [
-				200,
-				401
-			],
-			"post": [
-				201,
-				401,
-				403
-			]
-		},
-		"inputs": {
-			"get": {
-				"params": true,
-				"query": true,
-				"headers": true,
-				"cookies": false,
-				"body": false
-			},
-			"post": {
-				"params": true,
-				"query": false,
-				"headers": false,
-				"cookies": false,
-				"body": true
-			}
-		},
-		"middleware": [
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			},
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			},
-			{
-				"file": "src/routes/(private)/middleware.ts",
-				"name": "requireAuth",
-				"requires": [
-					"session"
-				],
-				"provides": [
-					"auth"
-				],
-				"providesTypes": {
-					"auth": "{\n\treadonly \"userId\": string;\n}"
-				},
-				"rejects": [
-					{
-						"type": "unauthorized",
-						"status": 401,
-						"schema": "z.object({ message: z.string() })"
-					}
-				],
-				"security": [
-					{
-						"sessionCookie": []
-					}
-				],
-				"permissions": []
-			},
-			{
-				"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
-				"name": "withTenant",
-				"requires": [
-					"auth",
-					"session"
-				],
-				"provides": [
-					"tenant"
-				],
-				"providesTypes": {
-					"tenant": "{\n\treadonly \"id\": string;\n\treadonly \"name\": string;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			},
-			{
-				"file": "src/routes/(private)/tenants/$tenantId/projects/route.ts",
-				"name": "withProjectScope",
-				"requires": [
-					"tenant",
-					"auth"
-				],
-				"provides": [
-					"projectScope"
-				],
-				"providesTypes": {
-					"projectScope": "{\n\treadonly \"tenantId\": string;\n\treadonly \"canWrite\": boolean;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			}
-		],
-		"methodMiddleware": {
-			"get": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/(private)/middleware.ts",
-					"name": "requireAuth",
-					"requires": [
-						"session"
-					],
-					"provides": [
-						"auth"
-					],
-					"providesTypes": {
-						"auth": "{\n\treadonly \"userId\": string;\n}"
-					},
-					"rejects": [
-						{
-							"type": "unauthorized",
-							"status": 401,
-							"schema": "z.object({ message: z.string() })"
-						}
-					],
-					"security": [
-						{
-							"sessionCookie": []
-						}
-					],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
-					"name": "withTenant",
-					"requires": [
-						"auth",
-						"session"
-					],
-					"provides": [
-						"tenant"
-					],
-					"providesTypes": {
-						"tenant": "{\n\treadonly \"id\": string;\n\treadonly \"name\": string;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/(private)/tenants/$tenantId/projects/route.ts",
-					"name": "withProjectScope",
-					"requires": [
-						"tenant",
-						"auth"
-					],
-					"provides": [
-						"projectScope"
-					],
-					"providesTypes": {
-						"projectScope": "{\n\treadonly \"tenantId\": string;\n\treadonly \"canWrite\": boolean;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/(private)/tenants/$tenantId/projects/route.ts",
-					"name": "withProjectListMode",
-					"requires": [
-						"projectScope"
-					],
-					"provides": [
-						"projectListMode"
-					],
-					"providesTypes": {
-						"projectListMode": "{\n\treadonly \"status\": \"active\" | \"archived\";\n\treadonly \"label\": string;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			],
-			"post": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/(private)/middleware.ts",
-					"name": "requireAuth",
-					"requires": [
-						"session"
-					],
-					"provides": [
-						"auth"
-					],
-					"providesTypes": {
-						"auth": "{\n\treadonly \"userId\": string;\n}"
-					},
-					"rejects": [
-						{
-							"type": "unauthorized",
-							"status": 401,
-							"schema": "z.object({ message: z.string() })"
-						}
-					],
-					"security": [
-						{
-							"sessionCookie": []
-						}
-					],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
-					"name": "withTenant",
-					"requires": [
-						"auth",
-						"session"
-					],
-					"provides": [
-						"tenant"
-					],
-					"providesTypes": {
-						"tenant": "{\n\treadonly \"id\": string;\n\treadonly \"name\": string;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/(private)/tenants/$tenantId/projects/route.ts",
-					"name": "withProjectScope",
-					"requires": [
-						"tenant",
-						"auth"
-					],
-					"provides": [
-						"projectScope"
-					],
-					"providesTypes": {
-						"projectScope": "{\n\treadonly \"tenantId\": string;\n\treadonly \"canWrite\": boolean;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/(private)/tenants/$tenantId/projects/route.ts",
-					"name": "withProjectPermissions",
-					"requires": [
-						"projectScope"
-					],
-					"provides": [
-						"projectPermissions"
-					],
-					"providesTypes": {
-						"projectPermissions": "{\n\treadonly \"canRead\": boolean;\n\treadonly \"canWrite\": boolean;\n}"
-					},
-					"rejects": [
-						{
-							"type": "forbidden",
-							"status": 403,
-							"schema": "z.object({ message: z.string() })"
-						}
-					],
-					"security": [],
-					"permissions": [
-						"projects.write"
-					]
-				}
-			]
-		},
-		"ctx": [
-			"auth",
-			"projectListMode",
-			"projectPermissions",
-			"projectScope",
-			"requestId",
-			"session",
-			"tenant"
-		],
-		"groups": [
-			"(private)"
-		],
-		"segments": [
-			"tenants",
-			"$tenantId",
-			"projects"
-		]
-	},
-	{
-		"file": "src/routes/auth/session/route.ts",
-		"path": "/auth/session",
-		"methods": [
-			"GET",
-			"POST",
-			"DELETE"
-		],
-		"responses": {
-			"get": [
-				200
-			],
-			"post": [
-				200,
-				401
-			],
-			"delete": [
-				204
-			]
-		},
-		"inputs": {
-			"get": {
-				"params": false,
-				"query": false,
-				"headers": false,
-				"cookies": true,
-				"body": false
-			},
-			"post": {
-				"params": false,
-				"query": false,
-				"headers": false,
-				"cookies": false,
-				"body": true
-			},
-			"delete": {
-				"params": false,
-				"query": false,
-				"headers": false,
-				"cookies": false,
-				"body": false
-			}
-		},
-		"middleware": [
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			},
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			}
-		],
-		"methodMiddleware": {
-			"get": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			],
-			"post": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			],
-			"delete": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			]
-		},
-		"ctx": [
-			"requestId",
-			"session"
-		],
-		"groups": [],
-		"segments": [
-			"auth",
-			"session"
-		]
-	},
-	{
-		"file": "src/routes/demo/route.ts",
-		"path": "/demo",
-		"methods": [
-			"GET"
-		],
-		"responses": {
-			"get": [
-				200
-			]
-		},
-		"inputs": {
-			"get": {
-				"params": false,
-				"query": false,
-				"headers": false,
-				"cookies": false,
-				"body": false
-			}
-		},
-		"middleware": [
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			},
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			}
-		],
-		"methodMiddleware": {
-			"get": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			]
-		},
-		"ctx": [
-			"requestId",
-			"session"
-		],
-		"groups": [],
-		"segments": [
-			"demo"
-		]
-	},
-	{
-		"file": "src/routes/legacy.$id.ts",
-		"path": "/legacy/:id",
-		"methods": [
-			"GET"
-		],
-		"responses": {
-			"get": [
-				200
-			]
-		},
-		"inputs": {
-			"get": {
-				"params": true,
-				"query": false,
-				"headers": false,
-				"cookies": false,
-				"body": false
-			}
-		},
-		"deprecations": {
-			"get": {
-				"replacement": "https://api.example.invalid/migrations/legacy-projects"
-			}
-		},
-		"middleware": [
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			},
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			}
-		],
-		"methodMiddleware": {
-			"get": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			]
-		},
-		"ctx": [
-			"requestId",
-			"session"
-		],
-		"groups": [],
-		"segments": [
-			"legacy",
-			"$id"
-		]
-	},
-	{
-		"file": "src/routes/legacy.ts",
-		"path": "/legacy",
-		"methods": [
-			"GET"
-		],
-		"responses": {
-			"get": [
-				200
-			]
-		},
-		"inputs": {
-			"get": {
-				"params": false,
-				"query": false,
-				"headers": false,
-				"cookies": false,
-				"body": false
-			}
-		},
-		"deprecations": {
-			"get": {
-				"replacement": "/status"
-			}
-		},
-		"middleware": [
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			},
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			}
-		],
-		"methodMiddleware": {
-			"get": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			]
-		},
-		"ctx": [
-			"requestId",
-			"session"
-		],
-		"groups": [],
-		"segments": [
-			"legacy"
-		]
-	},
-	{
-		"file": "src/routes/logger-showcase/route.ts",
-		"path": "/logger-showcase",
-		"methods": [
-			"POST"
-		],
-		"responses": {
-			"post": [
-				200,
-				403
-			]
-		},
-		"inputs": {
-			"post": {
-				"params": false,
-				"query": false,
-				"headers": false,
-				"cookies": false,
-				"body": true
-			}
-		},
-		"middleware": [
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			},
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			}
-		],
-		"methodMiddleware": {
-			"post": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			]
-		},
-		"ctx": [
-			"requestId",
-			"session"
-		],
-		"groups": [],
-		"segments": [
-			"logger-showcase"
-		]
-	},
-	{
-		"file": "src/routes/showcase/$itemId/route.ts",
-		"path": "/showcase/:itemId",
-		"methods": [
-			"GET",
-			"PUT",
-			"HEAD"
-		],
-		"responses": {
-			"get": [
-				200,
-				404
-			],
-			"put": [
-				200
-			],
-			"head": [
-				204
-			]
-		},
-		"inputs": {
-			"get": {
-				"params": true,
-				"query": true,
-				"headers": false,
-				"cookies": false,
-				"body": false
-			},
-			"put": {
-				"params": true,
-				"query": false,
-				"headers": false,
-				"cookies": false,
-				"body": true
-			},
-			"head": {
-				"params": true,
-				"query": false,
-				"headers": false,
-				"cookies": false,
-				"body": false
-			}
-		},
-		"middleware": [
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			},
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			}
-		],
-		"methodMiddleware": {
-			"get": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			],
-			"put": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			],
-			"head": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			]
-		},
-		"ctx": [
-			"requestId",
-			"session"
-		],
-		"groups": [],
-		"segments": [
-			"showcase",
-			"$itemId"
-		]
-	},
-	{
-		"file": "src/routes/status/route.ts",
-		"path": "/status",
-		"methods": [
-			"GET"
-		],
-		"responses": {
-			"get": [
-				200
-			]
-		},
-		"inputs": {
-			"get": {
-				"params": false,
-				"query": false,
-				"headers": false,
-				"cookies": false,
-				"body": false
-			}
-		},
-		"middleware": [
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			},
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			}
-		],
-		"methodMiddleware": {
-			"get": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			]
-		},
-		"ctx": [
-			"requestId",
-			"session"
-		],
-		"groups": [],
-		"segments": [
-			"status"
-		]
 	}
 ] as const;
 
@@ -2129,25 +2129,6 @@ export type AdminReportsCtx = {
 	"session": unknown;
 };
 
-export type TenantsTenantIdProjectsProjectIdCtx = {
-	"auth": unknown;
-	"projectPermissions": unknown;
-	"projectScope": unknown;
-	"requestId": unknown;
-	"session": unknown;
-	"tenant": unknown;
-};
-
-export type TenantsTenantIdProjectsCtx = {
-	"auth": unknown;
-	"projectListMode": unknown;
-	"projectPermissions": unknown;
-	"projectScope": unknown;
-	"requestId": unknown;
-	"session": unknown;
-	"tenant": unknown;
-};
-
 export type AuthSessionCtx = {
 	"requestId": unknown;
 	"session": unknown;
@@ -2158,12 +2139,12 @@ export type DemoCtx = {
 	"session": unknown;
 };
 
-export type LegacyIdCtx = {
+export type LegacyCtx = {
 	"requestId": unknown;
 	"session": unknown;
 };
 
-export type LegacyCtx = {
+export type LegacyIdCtx = {
 	"requestId": unknown;
 	"session": unknown;
 };
@@ -2181,6 +2162,25 @@ export type ShowcaseItemIdCtx = {
 export type StatusCtx = {
 	"requestId": unknown;
 	"session": unknown;
+};
+
+export type TenantsTenantIdProjectsCtx = {
+	"auth": unknown;
+	"projectListMode": unknown;
+	"projectPermissions": unknown;
+	"projectScope": unknown;
+	"requestId": unknown;
+	"session": unknown;
+	"tenant": unknown;
+};
+
+export type TenantsTenantIdProjectsProjectIdCtx = {
+	"auth": unknown;
+	"projectPermissions": unknown;
+	"projectScope": unknown;
+	"requestId": unknown;
+	"session": unknown;
+	"tenant": unknown;
 };
 
 export type RoutaRouteCtxByPath = {
@@ -2344,242 +2344,6 @@ export type RoutaRouteCtxByPath = {
 			};
 		};
 	};
-	"/tenants/:tenantId/projects/:projectId": {
-		get: {
-			"auth": {
-				readonly "userId": string;
-			};
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		post: {
-			"auth": {
-				readonly "userId": string;
-			};
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		put: {
-			"auth": {
-				readonly "userId": string;
-			};
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		patch: {
-			"auth": {
-				readonly "userId": string;
-			};
-			"projectPermissions": {
-				readonly "canRead": boolean;
-				readonly "canWrite": boolean;
-			};
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		delete: {
-			"auth": {
-				readonly "userId": string;
-			};
-			"projectPermissions": {
-				readonly "canRead": boolean;
-				readonly "canWrite": boolean;
-			};
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		head: {
-			"auth": {
-				readonly "userId": string;
-			};
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-	};
-	"/tenants/:tenantId/projects": {
-		get: {
-			"auth": {
-				readonly "userId": string;
-			};
-			"projectListMode": {
-				readonly "status": "active" | "archived";
-				readonly "label": string;
-			};
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		post: {
-			"auth": {
-				readonly "userId": string;
-			};
-			"projectPermissions": {
-				readonly "canRead": boolean;
-				readonly "canWrite": boolean;
-			};
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		put: {
-			"auth": {
-				readonly "userId": string;
-			};
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		patch: {
-			"auth": {
-				readonly "userId": string;
-			};
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		delete: {
-			"auth": {
-				readonly "userId": string;
-			};
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-		head: {
-			"auth": {
-				readonly "userId": string;
-			};
-			"projectScope": {
-				readonly "tenantId": string;
-				readonly "canWrite": boolean;
-			};
-			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
-			"tenant": {
-				readonly "id": string;
-				readonly "name": string;
-			};
-		};
-	};
 	"/auth/session": {
 		get: {
 			"requestId": string;
@@ -2668,7 +2432,7 @@ export type RoutaRouteCtxByPath = {
 			};
 		};
 	};
-	"/legacy/:id": {
+	"/legacy": {
 		get: {
 			"requestId": string;
 			"session": {
@@ -2712,7 +2476,7 @@ export type RoutaRouteCtxByPath = {
 			};
 		};
 	};
-	"/legacy": {
+	"/legacy/:id": {
 		get: {
 			"requestId": string;
 			"session": {
@@ -2885,6 +2649,242 @@ export type RoutaRouteCtxByPath = {
 			"session": {
 				readonly "authenticated": boolean;
 				readonly "userId"?: string | undefined;
+			};
+		};
+	};
+	"/tenants/:tenantId/projects": {
+		get: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectListMode": {
+				readonly "status": "active" | "archived";
+				readonly "label": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		post: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectPermissions": {
+				readonly "canRead": boolean;
+				readonly "canWrite": boolean;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		put: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		patch: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		delete: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		head: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+	};
+	"/tenants/:tenantId/projects/:projectId": {
+		get: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		post: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		put: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		patch: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectPermissions": {
+				readonly "canRead": boolean;
+				readonly "canWrite": boolean;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		delete: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectPermissions": {
+				readonly "canRead": boolean;
+				readonly "canWrite": boolean;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+		};
+		head: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
 			};
 		};
 	};

@@ -122,7 +122,7 @@ I did not find a primary source that shows complexity thresholds reduce defect c
 
 - _Oracle comparison_ (defects 3 and 5). Generate Zod schemas, project them with the static analyzer, and compare to `z.toJSONSchema` through the existing `semantic()` normalizer. Today the test uses chosen schemas. Writing the schema generator is the large part of the work; the library does not supply one.
 - _Round trips_ (cookies, headers). Encode then decode and check equality, or check the output stays within RFC 6265 octets.
-- _Determinism_ (defect 2). Run the generator twice or on shuffled inputs and compare byte-for-byte.
+- _Determinism_. Repeated runs or shuffled inputs under one locale do not detect locale-dependent output (defect 2). Run the generator under two different locales, such as `en_US.UTF-8` and `sv_SE.UTF-8`, and compare the outputs byte-for-byte.
 - _Shared-state bugs_ (defect 1). Generate branching structures with repeated sub-nodes to hit sibling-sharing and one-hop-reference cases.
 
 **Compatibility.** `@fast-check/vitest` 0.5.0 declares peer `vitest ^4.1.0 || ^5.0.0` and depends on `fast-check ^3 || ^4`; latest `fast-check` is 4.10.2. [@fast-check/vitest](https://registry.npmjs.org/@fast-check/vitest/latest), [fast-check](https://registry.npmjs.org/fast-check/latest) It adds `.prop` to Vitest's `test` and `it`, with record or tuple notation, sync or async predicates, and a per-test context function `g`. A failing run prints a seed; replay it with `fc.configureGlobal({ seed })`. [Vitest tutorial](https://fast-check.dev/docs/tutorials/setting-up-your-test-environment/property-based-testing-with-vitest/) The docs I fetched do not state the default `numRuns`.

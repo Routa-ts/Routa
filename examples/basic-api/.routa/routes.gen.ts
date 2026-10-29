@@ -64,35 +64,45 @@ export const routaRoutes = [
 		]
 	},
 	{
-		"file": "src/routes/users/$userId/posts/route.ts",
-		"path": "/users/:userId/posts",
+		"file": "src/routes/users/route.ts",
+		"path": "/users",
 		"methods": [
-			"GET"
+			"GET",
+			"POST"
 		],
 		"responses": {
 			"get": [
 				200
+			],
+			"post": [
+				201
 			]
 		},
 		"inputs": {
 			"get": {
-				"params": true,
+				"params": false,
 				"query": true,
 				"headers": false,
 				"cookies": false,
 				"body": false
+			},
+			"post": {
+				"params": false,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": true
 			}
 		},
 		"middleware": [],
 		"methodMiddleware": {
-			"get": []
+			"get": [],
+			"post": []
 		},
 		"ctx": [],
 		"groups": [],
 		"segments": [
-			"users",
-			"$userId",
-			"posts"
+			"users"
 		]
 	},
 	{
@@ -151,45 +161,35 @@ export const routaRoutes = [
 		]
 	},
 	{
-		"file": "src/routes/users/route.ts",
-		"path": "/users",
+		"file": "src/routes/users/$userId/posts/route.ts",
+		"path": "/users/:userId/posts",
 		"methods": [
-			"GET",
-			"POST"
+			"GET"
 		],
 		"responses": {
 			"get": [
 				200
-			],
-			"post": [
-				201
 			]
 		},
 		"inputs": {
 			"get": {
-				"params": false,
+				"params": true,
 				"query": true,
 				"headers": false,
 				"cookies": false,
 				"body": false
-			},
-			"post": {
-				"params": false,
-				"query": false,
-				"headers": false,
-				"cookies": false,
-				"body": true
 			}
 		},
 		"middleware": [],
 		"methodMiddleware": {
-			"get": [],
-			"post": []
+			"get": []
 		},
 		"ctx": [],
 		"groups": [],
 		"segments": [
-			"users"
+			"users",
+			"$userId",
+			"posts"
 		]
 	}
 ] as const;
@@ -202,7 +202,7 @@ export type StatusCtx = {
 	readonly __empty?: never;
 };
 
-export type UsersUserIdPostsCtx = {
+export type UsersCtx = {
 	readonly __empty?: never;
 };
 
@@ -210,7 +210,7 @@ export type UsersUserIdCtx = {
 	readonly __empty?: never;
 };
 
-export type UsersCtx = {
+export type UsersUserIdPostsCtx = {
 	readonly __empty?: never;
 };
 
@@ -231,7 +231,7 @@ export type RoutaRouteCtxByPath = {
 		delete: { readonly __empty?: never };
 		head: { readonly __empty?: never };
 	};
-	"/users/:userId/posts": {
+	"/users": {
 		get: { readonly __empty?: never };
 		post: { readonly __empty?: never };
 		put: { readonly __empty?: never };
@@ -247,7 +247,7 @@ export type RoutaRouteCtxByPath = {
 		delete: { readonly __empty?: never };
 		head: { readonly __empty?: never };
 	};
-	"/users": {
+	"/users/:userId/posts": {
 		get: { readonly __empty?: never };
 		post: { readonly __empty?: never };
 		put: { readonly __empty?: never };
