@@ -1133,8 +1133,10 @@ function parseRouteContract(
  * Reads whether `src/routa.ts` may turn lifecycle headers on.
  *
  * Lifecycle headers are a tuning-backed feature: a literal `false` or an omitted key keeps them
- * off, and any other value counts as possibly enabled. Generation never executes application
- * modules, so ownership diagnostics apply to every configuration the source can produce.
+ * off, and any other value counts as possibly enabled. A configuration the source cannot be read
+ * for the key, such as a variable, a call, a spread, or a computed key, counts the same way.
+ * Generation never executes application modules, so ownership diagnostics apply to every
+ * configuration the source can produce.
  */
 function lifecycleHeadersEnabled(cwd: string, parser: ts.SourceFileParser): boolean {
 	const file = join(cwd, "src/routa.ts");
@@ -1146,15 +1148,40 @@ function lifecycleHeadersEnabled(cwd: string, parser: ts.SourceFileParser): bool
 	let enabled = false;
 	const visit = (node: ts.Node): void => {
 		if (ts.isCallExpression(node) && callName(node.expression) === "createRouta") {
-			const config = objectLiteral(node.arguments[0]);
-			const value = config && propertyValue(config, "lifecycleHeaders");
-			enabled ||= Boolean(value && unwrapExpression(value).kind !== ts.SyntaxKind.FalseKeyword);
+			enabled ||= configMayEnableLifecycleHeaders(node.arguments[0]);
 		}
 
 		ts.forEachChild(node, visit);
 	};
 
 	visit(parseTypeScriptFile(file, parser));
+	return enabled;
+}
+
+/** Walks a config in source order, so a later literal `false` overrides what a spread may hold. */
+function configMayEnableLifecycleHeaders(argument: ts.Expression | undefined): boolean {
+	if (!argument) {
+		return false;
+	}
+
+	const config = objectLiteral(argument);
+
+	if (!config) {
+		return true;
+	}
+
+	let enabled = false;
+
+	for (const member of config.properties) {
+		if (ts.isSpreadAssignment(member) || ts.isComputedPropertyName(member.name)) {
+			enabled = true;
+		} else if (propertyName(member.name) === "lifecycleHeaders") {
+			enabled =
+				!ts.isPropertyAssignment(member)
+				|| unwrapExpression(member.initializer).kind !== ts.SyntaxKind.FalseKeyword;
+		}
+	}
+
 	return enabled;
 }
 

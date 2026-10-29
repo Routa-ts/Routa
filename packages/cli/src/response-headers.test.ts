@@ -466,11 +466,26 @@ describe("response header declaration checks", () => {
 				],
 				["literal false", "createRouta({ lifecycleHeaders: false })", []],
 				["omitted", "createRouta({})", []],
+				["no arguments", "createRouta()", []],
+				["variable", "createRouta(config)", ["ROUTA_RESPONSE_HEADER_LIFECYCLE"]],
+				["call", "createRouta(buildConfig())", ["ROUTA_RESPONSE_HEADER_LIFECYCLE"]],
+				["spread", "createRouta({ ...shared })", ["ROUTA_RESPONSE_HEADER_LIFECYCLE"]],
+				[
+					"spread after literal false",
+					"createRouta({ lifecycleHeaders: false, ...shared })",
+					["ROUTA_RESPONSE_HEADER_LIFECYCLE"],
+				],
+				["literal false after spread", "createRouta({ ...shared, lifecycleHeaders: false })", []],
+				[
+					"computed key",
+					'createRouta({ ["lifecycleHeaders"]: true })',
+					["ROUTA_RESPONSE_HEADER_LIFECYCLE"],
+				],
 			];
 
 			for (const [label, call, expected] of configs) {
 				const cwd = project({
-					"src/routa.ts": `import { createRouta } from "@routa-ts/core";\n\nconst lifecycleHeaders = Boolean(process.env.LIFECYCLE);\n\nexport default ${call};\n`,
+					"src/routa.ts": `import { createRouta } from "@routa-ts/core";\n\nconst lifecycleHeaders = Boolean(process.env.LIFECYCLE);\nconst config = { lifecycleHeaders };\nconst shared = { lifecycleHeaders };\nconst buildConfig = () => config;\n\nexport default ${call};\n`,
 					"src/routes/items/route.ts": deprecated("deprecation: z.string()", replacement),
 				});
 
