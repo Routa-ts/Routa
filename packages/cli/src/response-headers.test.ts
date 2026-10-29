@@ -496,6 +496,29 @@ describe("response header declaration checks", () => {
 			}
 		});
 
+		it("treats a default config without a local createRouta call as possibly enabled", () => {
+			for (const config of [
+				'export { default } from "./config.js";',
+				'export { config as default } from "./config.js";',
+				'import config from "./config.js"; export default config;',
+			]) {
+				const cwd = project({
+					"src/routa.ts": config,
+					"src/config.ts":
+						'import { createRouta } from "@routa-ts/core"; export const config = createRouta({ lifecycleHeaders: true }); export default config;',
+					"src/routes/items/route.ts": deprecated(
+						"deprecation: z.string()",
+						'{ replacement: "https://example.com/v2/items" }',
+					),
+				});
+
+				expect(
+					codes(cwd).map(([code]) => code),
+					config,
+				).toEqual(["ROUTA_RESPONSE_HEADER_LIFECYCLE"]);
+			}
+		});
+
 		it("reads a deprecation declared as a local constant before computing ownership", () => {
 			const declared = (name: string) =>
 				`const ${name} = { replacement: "https://example.com/v2/items" };\n`;

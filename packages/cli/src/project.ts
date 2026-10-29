@@ -1145,17 +1145,28 @@ function lifecycleHeadersEnabled(cwd: string, parser: ts.SourceFileParser): bool
 		return false;
 	}
 
+	const sourceFile = parseTypeScriptFile(file, parser);
+	let foundCall = false;
 	let enabled = false;
 	const visit = (node: ts.Node): void => {
 		if (ts.isCallExpression(node) && callName(node.expression) === "createRouta") {
+			foundCall = true;
 			enabled ||= configMayEnableLifecycleHeaders(node.arguments[0]);
 		}
 
 		ts.forEachChild(node, visit);
 	};
 
-	visit(parseTypeScriptFile(file, parser));
-	return enabled;
+	visit(sourceFile);
+	const hasDefaultExport = sourceFile.statements.some(
+		(statement) =>
+			(ts.isExportAssignment(statement) && !statement.isExportEquals)
+			|| (ts.isExportDeclaration(statement)
+				&& statement.exportClause
+				&& ts.isNamedExports(statement.exportClause)
+				&& statement.exportClause.elements.some((element) => element.name.text === "default")),
+	);
+	return enabled || (!foundCall && hasDefaultExport);
 }
 
 /** Walks a config in source order, so a later literal `false` overrides what a spread may hold. */

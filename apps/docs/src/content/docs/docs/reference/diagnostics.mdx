@@ -146,7 +146,8 @@ An outcome's `headers` declares `deprecation`, `sunset`, or `link` on a route wh
 lifecycle headers Routa may write. `routa check` reads `lifecycleHeaders` without running
 your code: an omitted key or a literal `false` is off, and any other value, such as
 `process.env.LIFECYCLE === "1"`, counts as possibly on. So does a config it cannot read: a
-variable, a call, a spread, or a computed key. A later literal `false` overrides an earlier
+variable, a call, a spread, or a computed key. A default config exported without a local
+`createRouta` call, including a re-export, also counts as possibly on. A later literal `false` overrides an earlier
 spread, and `createRouta()` with no config is off. `link` is owned only when the route's
 `deprecation` names a `replacement`. The deprecation can be an inline object or a local
 constant. When it is neither, and the route declares `link`, `routa check` reports
