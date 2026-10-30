@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { RoutaLogger } from "./logger.js";
+import { defineCookie } from "./response-cookies.js";
 import type { reservedHeaders } from "./response-headers.js";
 
 export type {
@@ -25,18 +26,71 @@ export type RouteInput = {
 	body?: z.ZodTypeAny;
 };
 
+export type CookieSameSite = "strict" | "lax" | "none";
+
+/**
+ * The static declaration behind a cookie handle. Every attribute is a contract fact that
+ * `routa check` and OpenAPI read from source, so write each one as a literal.
+ *
+ * `expires` is an ISO 8601 date-time string such as `"2030-01-01T00:00:00Z"`.
+ */
+export type CookieConfig = {
+	name: string;
+	/** Validates the cookie value: a string, number, or boolean schema that does not change values. */
+	schema: z.ZodTypeAny;
+	httpOnly: boolean;
+	secure: boolean;
+	sameSite: CookieSameSite;
+	path: string;
+	domain?: string;
+	maxAge?: number;
+	expires?: string;
+	partitioned?: boolean;
+};
+
+/** A pure description of one cookie change. Only Routa turns it into a `Set-Cookie` field. */
+export type CookieEffect<THandle = AnyCookie> = {
+	readonly kind: "set" | "clear";
+	readonly cookie: THandle;
+	readonly value?: unknown;
+};
+
+/** A declared cookie whose `set` and `clear` return effects bound to this handle. */
+export type CookieHandle<TConfig extends CookieConfig> = Readonly<TConfig> & {
+	set(value: SchemaOutput<TConfig["schema"]>): CookieEffect<CookieHandle<TConfig>>;
+	clear(): CookieEffect<CookieHandle<TConfig>>;
+};
+
+/** Any cookie handle, whatever its name, value type, or attributes. */
+export type AnyCookie = Readonly<CookieConfig> & {
+	set(value: never): CookieEffect<any>;
+	clear(): CookieEffect<any>;
+};
+
+/**
+ * A cookie an outcome must always set or clear. List a bare handle in `cookies` to make it
+ * optional, and `{ handle, required: true }` to require an effect for it. Write the entry as a
+ * literal, because `routa check` reads it from source.
+ */
+export type RequiredCookie<THandle extends AnyCookie = AnyCookie> = {
+	readonly handle: THandle;
+	readonly required: true;
+};
+
 /**
  * A named outcome: its HTTP status, an optional description, an optional JSON body schema,
- * and optional response headers.
+ * optional response headers, and optional cookie handles.
  *
  * An outcome without `schema` is intentionally bodyless. `headers` is a Zod object keyed by
- * lowercase header names whose values are strings, numbers, or booleans.
+ * lowercase header names whose values are strings, numbers, or booleans. `cookies` lists the
+ * handles the outcome may set or clear, each bare (optional) or as a {@link RequiredCookie}.
  */
 export type RouteOutcome = {
 	status: number;
 	description?: string;
 	schema?: z.ZodTypeAny;
 	headers?: z.ZodObject<any, any>;
+	cookies?: readonly (AnyCookie | RequiredCookie)[];
 };
 
 export type RouteResponses = Record<string, RouteOutcome>;
@@ -66,6 +120,52 @@ type HeadersNotDeclared<TName extends string> = {
 	readonly [K in `Outcome ${TName} declares no headers, so it cannot return headers.`]: never;
 };
 
+/** The type of `cookies` on an outcome that declares none; see {@link ForbiddenData}. */
+type CookiesNotDeclared<TName extends string> = {
+	readonly [K in `Outcome ${TName} declares no cookies, so it cannot return cookies.`]: never;
+};
+
+/** The handle behind a `cookies` entry, whether it is bare or required. */
+type DeclaredCookieHandle<TEntry> = TEntry extends { readonly handle: infer THandle }
+	? THandle
+	: TEntry;
+
+/** The handles a `cookies` declaration marks required. */
+type RequiredCookieHandle<TEntry> = TEntry extends {
+	readonly handle: infer THandle;
+	readonly required: true;
+}
+	? THandle
+	: never;
+
+/** One effect type per handle, so a union of handles needs an effect for each of them. */
+type EffectOf<THandle> = THandle extends unknown ? CookieEffect<THandle> : never;
+
+/**
+ * Requires the effects array to hold an effect for every required handle. `includes` is a
+ * function-typed property, so its parameter is checked contravariantly: the array's element type
+ * must accept an effect for each required handle. An empty array or a missing handle fails.
+ */
+type IncludesEffects<TRequired> = {
+	readonly includes: (effect: EffectOf<TRequired>, fromIndex?: number) => boolean;
+};
+
+/**
+ * The `cookies` result field: effects for the declared handles. It is required, with an effect for
+ * each required handle, when any declared handle is required; optional otherwise; and forbidden when
+ * none are declared.
+ */
+type OutcomeCookies<TName extends string, TOutcome> = TOutcome extends {
+	readonly cookies: infer TEntries extends readonly unknown[];
+}
+	? [RequiredCookieHandle<TEntries[number]>] extends [never]
+		? { readonly cookies?: readonly EffectOf<DeclaredCookieHandle<TEntries[number]>>[] }
+		: {
+				readonly cookies: readonly EffectOf<DeclaredCookieHandle<TEntries[number]>>[]
+					& IncludesEffects<RequiredCookieHandle<TEntries[number]>>;
+			}
+	: { readonly cookies?: CookiesNotDeclared<TName> };
+
 /** The `headers` result field: required when any declared header is required, forbidden when none are declared. */
 type OutcomeHeaders<TName extends string, TOutcome> = TOutcome extends {
 	readonly headers: infer THeaders extends z.ZodTypeAny;
@@ -80,13 +180,16 @@ type OutcomeHeaders<TName extends string, TOutcome> = TOutcome extends {
  * An explicit `data: undefined` is accepted and means no data, because TypeScript cannot tell it
  * from an omitted property unless `exactOptionalPropertyTypes` is on. `headers` follows the same
  * rule: required or optional from the declared headers, and forbidden when none are declared.
+ * `cookies` lists effects for the declared handles. A bare handle may be left out, a required one
+ * (`{ handle, required: true }`) needs an effect, and the field is forbidden when none are declared.
  */
 export type OutcomeResult<TName extends string, TOutcome> = (TOutcome extends {
 	readonly schema: infer TSchema extends z.ZodTypeAny;
 }
 	? { readonly type: TName; readonly data: SchemaOutput<TSchema> }
 	: { readonly type: TName; readonly data?: ForbiddenData<TName> })
-	& OutcomeHeaders<TName, TOutcome>;
+	& OutcomeHeaders<TName, TOutcome>
+	& OutcomeCookies<TName, TOutcome>;
 
 /** `true` when any member of a union of booleans is `true`. */
 type AnyTrue<T> = true extends T ? true : false;
@@ -176,6 +279,48 @@ type HeadersProblem<THeaders> =
 			: { headers: { [K in keyof TShape]: HeaderEntryProblem<K, TShape[K]> }[keyof TShape] }
 		: unknown;
 
+type CookieValueProblem<TSchema> = TSchema extends z.ZodTypeAny
+	? unknown extends z.output<TSchema>
+		? {
+				schema: "A cookie value must be a string, number, or boolean schema (or a literal or enum of them).";
+			}
+		: [z.output<TSchema>] extends [string | number | boolean]
+			? unknown
+			: {
+					schema: "A cookie value must be a string, number, or boolean schema (or a literal or enum of them).";
+				}
+	: unknown;
+
+/** A rule violation. The property name carries the message, so it reads as a missing key. */
+type CookieRuleProblem<TMessage extends string> = { readonly [K in TMessage]: never };
+
+/** Cookie rules TypeScript can know from one declaration; `routa check` and registration repeat them. */
+type CookieRules<TConfig extends CookieConfig> = ([TConfig["sameSite"]] extends ["none"]
+	? TConfig extends { readonly secure: true }
+		? unknown
+		: CookieRuleProblem<"SameSite=None requires secure: true.">
+	: unknown)
+	& (TConfig extends { readonly partitioned: true }
+		? TConfig extends { readonly secure: true }
+			? unknown
+			: CookieRuleProblem<"Partitioned cookies require secure: true.">
+		: unknown)
+	& (Lowercase<TConfig["name"]> extends `__secure-${string}` | `__host-${string}`
+		? TConfig extends { readonly secure: true }
+			? unknown
+			: CookieRuleProblem<"Cookies with a __Secure- or __Host- prefix require secure: true.">
+		: unknown)
+	& (Lowercase<TConfig["name"]> extends `__host-${string}`
+		? (TConfig extends { readonly path: "/" }
+				? unknown
+				: CookieRuleProblem<'Cookies with a __Host- prefix require path: "/".'>)
+				& (TConfig extends { readonly domain: string }
+					? CookieRuleProblem<"Cookies with a __Host- prefix cannot declare a domain.">
+					: unknown)
+		: unknown)
+	& SchemaProblem<TConfig["schema"], "schema">
+	& CookieValueProblem<TConfig["schema"]>;
+
 type StatusProblem<TStatus, TOutcome> = TStatus extends number
 	? `${TStatus}` extends `1${string}`
 		? {
@@ -219,12 +364,26 @@ type BuilderHeaderArgs<TOutcome> = TOutcome extends {
 		: [headers: SchemaOutput<THeaders>]
 	: [];
 
+/** The outcome names that declare a required cookie, which builders cannot supply. */
+type OutcomesWithRequiredCookies<TResponses extends RouteResponses> = {
+	[K in keyof TResponses & string]: TResponses[K] extends {
+		readonly cookies: infer TEntries extends readonly unknown[];
+	}
+		? [RequiredCookieHandle<TEntries[number]>] extends [never]
+			? never
+			: K
+		: never;
+}[keyof TResponses & string];
+
 /**
  * Pure result builders keyed by the route's declared outcome names. A body outcome takes its data,
- * then its headers when it declares any; a bodyless outcome takes only its headers.
+ * then its headers when it declares any; a bodyless outcome takes only its headers. An outcome with
+ * a required cookie has no builder: return the result object so the cookie effect can be set.
  */
 export type ResponseBuilders<TResponses extends RouteResponses> = {
-	readonly [K in keyof TResponses & string]: TResponses[K] extends {
+	readonly [
+		K in Exclude<keyof TResponses & string, OutcomesWithRequiredCookies<TResponses>>
+	]: TResponses[K] extends {
 		readonly schema: infer TSchema extends z.ZodTypeAny;
 	}
 		? (
@@ -460,6 +619,21 @@ export function createRouta<const TConfig extends RoutaConfig>(
 	config: TConfig,
 ): TConfig & RoutaConfig {
 	return config;
+}
+
+/**
+ * Declares a response cookie handle. `handle.set(value)` and `handle.clear()` return effects; an
+ * outcome that lists the handle in `cookies` may return them, and Routa validates, encodes, and
+ * sends them as `Set-Cookie` fields.
+ *
+ * @param config - The cookie's name, value schema, and static attributes
+ * @returns A handle bound to the declaration
+ * @throws {Error} When the declaration breaks a cookie rule
+ */
+export function createCookie<const TConfig extends CookieConfig>(
+	config: TConfig & CookieRules<NoInfer<TConfig>>,
+): CookieHandle<TConfig> {
+	return defineCookie(config) as CookieHandle<TConfig>;
 }
 
 /**

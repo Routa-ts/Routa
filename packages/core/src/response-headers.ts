@@ -290,7 +290,7 @@ function zodDef(schema: unknown): ZodDef | undefined {
  * rewrites a value in the declaration, such as a transform, a default, or coercion, does not.
  * Same-type rewrites like `.trim()` are not visible here; response validation catches them.
  */
-function isScalarSchema(schema: unknown): boolean {
+export function isScalarSchema(schema: unknown): boolean {
 	const def = zodDef(schema);
 
 	if (!def || def.coerce === true) {

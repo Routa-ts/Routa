@@ -1231,6 +1231,41 @@ export const ${name} = createMiddleware({
 		]);
 	});
 
+	it("resolves two middleware re-exported through one barrel", () => {
+		const guards = `import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+
+export const a = createMiddleware({
+	rejects: { denied: { status: 403, schema: z.object({ forbidden: z.string() }) } },
+	run: ({ next }) => next({}),
+});
+
+export const b = createMiddleware({
+	rejects: { expired: { status: 401, schema: z.object({ expired: z.string() }) } },
+	run: ({ next }) => next({}),
+});
+`;
+		const cwd = project({
+			"src/routes/admin/route.ts": routeFile("/admin", {
+				imports: 'import { a, b } from "../../middleware/index.js";',
+				responses: "ok: { status: 200, schema: z.object({ ok: z.boolean() }) }",
+			}).replace("\tget: createRoute({", "\tmiddleware: [a, b],\n\tget: createRoute({"),
+			"src/middleware/index.ts":
+				'export { a } from "./barrel.js";\nexport { b } from "./barrel.js";\n',
+			"src/middleware/barrel.ts": 'export { a, b } from "./guards.js";\n',
+			"src/middleware/guards.ts": guards,
+		});
+		const document = generateOpenApi(cwd);
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(responseSchema(document, "/admin", "get", 403)).toMatchObject({
+			properties: { forbidden: { type: "string" } },
+		});
+		expect(responseSchema(document, "/admin", "get", 401)).toMatchObject({
+			properties: { expired: { type: "string" } },
+		});
+	});
+
 	it("projects Routa's Sort and Fields query helpers as their incoming strings", () => {
 		const cwd = project({
 			"src/routes/projects/schemas.ts": `import { Fields, Sort } from "@routa-ts/core/query/helpers";

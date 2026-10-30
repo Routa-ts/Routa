@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import * as ts from "./typescript.js";
 
@@ -148,7 +148,7 @@ export function resolveImportFile(
 		join(base, "index.ts"),
 	].filter((item): item is string => Boolean(item));
 
-	return candidates.find((candidate) => existsSync(join(cwd, candidate)));
+	return candidates.find((candidate) => isFile(join(cwd, candidate)));
 }
 
 /**
@@ -234,4 +234,13 @@ export function createRouteObject(
 	}
 
 	return objectLiteral(unwrapped.arguments[0]);
+}
+
+/** Whether a path is a file, so a directory named like a module does not shadow its `index.ts`. */
+function isFile(path: string): boolean {
+	try {
+		return statSync(path).isFile();
+	} catch {
+		return false;
+	}
 }

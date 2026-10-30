@@ -218,7 +218,7 @@ import { z } from "zod";
 export default createRouteRoot("/items")({
 \tget: createRoute({
 \t\tresponses: { ok: { status: 200, schema: z.object({ id: z.string() }) } },
-\t\trun: () => ({ type: "ok", data: { id: "1" }, cookies: {} }),
+\t\trun: () => ({ type: "ok", data: { id: "1" }, extra: {} }),
 \t}),
 });
 `,
@@ -226,7 +226,7 @@ export default createRouteRoot("/items")({
 
 		const [diagnostic] = validateProject(cwd, { write: false }).diagnostics;
 		expect(diagnostic.code).toBe("ROUTA_RESULT_SHAPE");
-		expect(diagnostic.message).toContain('"type", "data", and "headers"');
+		expect(diagnostic.message).toContain('"type", "data", "headers", and "cookies"');
 	});
 });
 
