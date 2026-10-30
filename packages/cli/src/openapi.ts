@@ -151,10 +151,6 @@ function generateOpenApiInSession(cwd: string, parser: ts.SourceFileParser): Ope
 				const operation = operations[method];
 				const input = operationInput(route.path, operation?.input);
 				const middleware = route.methodMiddleware[method] ?? route.middleware;
-				const responseSchemas = new Map<number, ProjectedResponse>([
-					...(operation?.rejects ?? new Map()),
-					...(operation?.responses ?? new Map()),
-				]);
 
 				return [
 					method,
@@ -163,7 +159,7 @@ function generateOpenApiInSession(cwd: string, parser: ts.SourceFileParser): Ope
 						...middlewareOpenApiMetadata(middleware),
 						...deprecationMetadata(operation?.deprecation),
 						...input,
-						responses: operationResponses(statuses, responseSchemas),
+						responses: operationResponses(statuses, operation?.responses),
 					},
 				];
 			}),
@@ -257,7 +253,7 @@ function deprecationMetadata(
  * Builds OpenAPI responses for a route operation from its source statuses.
  *
  * @param statuses - The response statuses discovered from route code.
- * @param projected - The projected outcomes discovered from route code.
+ * @param projected - One composed response per status, from route outcomes and middleware rejects.
  * @returns OpenAPI response entries for the operation.
  */
 function operationResponses(
@@ -275,7 +271,9 @@ function operationResponses(
 						? {
 								headers: {
 									...(response.headers ? headerObjects(response.headers) : {}),
-									...(response.cookies ? setCookieHeader(response.cookies) : {}),
+									...(response.cookies
+										? setCookieHeader(response.cookies, response.setCookieRequired ?? false)
+										: {}),
 								},
 							}
 						: {}),
@@ -310,13 +308,17 @@ function headerObjects(
 }
 
 /**
- * Builds the one standard `Set-Cookie` Header Object for an outcome's declared cookies.
+ * Builds the one standard `Set-Cookie` Header Object for a response's declared cookies.
  *
  * The description lists each cookie's name and static attributes and says every cookie is its
- * own repeated field. It never carries a value, an example, or a vendor extension. The header is
- * required only when the outcome declares a required cookie, which it must always set or clear.
+ * own repeated field. It never carries a value, an example, or a vendor extension. It names as
+ * always set or cleared only the cookies every outcome under the status requires. The header is
+ * required when every outcome requires some cookie, even when they require different ones.
  */
-function setCookieHeader(cookies: readonly ProjectedResponseCookie[]): Record<string, unknown> {
+function setCookieHeader(
+	cookies: readonly ProjectedResponseCookie[],
+	required: boolean,
+): Record<string, unknown> {
 	const described = cookies.map((cookie) => {
 		const attributes = [
 			...(cookie.httpOnly ? ["HttpOnly"] : []),
@@ -331,12 +333,12 @@ function setCookieHeader(cookies: readonly ProjectedResponseCookie[]): Record<st
 		return `"${cookie.name}" (${attributes.join(", ")})`;
 	});
 
-	const required = cookies.filter((cookie) => cookie.required).map((cookie) => `"${cookie.name}"`);
+	const always = cookies.filter((cookie) => cookie.required).map((cookie) => `"${cookie.name}"`);
 
 	return {
 		"Set-Cookie": {
-			description: `Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: ${described.join("; ")}.${required.length ? ` It always sets or clears: ${required.join("; ")}.` : ""}`,
-			...(required.length ? { required: true } : {}),
+			description: `Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: ${described.join("; ")}.${always.length ? ` It always sets or clears: ${always.join("; ")}.` : ""}`,
+			...(required ? { required: true } : {}),
 			schema: { type: "string" },
 		},
 	};

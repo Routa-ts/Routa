@@ -349,6 +349,27 @@ export type ResponseChecks<TResponses extends RouteResponses> = {
 	readonly [K in keyof TResponses]: OutcomeChecks<TResponses[K]>;
 };
 
+/** The reject names a route's own `middleware` declares; middleware from `middleware.ts` files is not visible here. */
+type MiddlewareRejectNames<TMiddleware> = TMiddleware extends readonly (infer TItem)[]
+	? TItem extends { readonly rejects?: infer TRejects }
+		? string extends keyof NonNullable<TRejects>
+			? never
+			: keyof NonNullable<TRejects>
+		: never
+	: never;
+
+/**
+ * Fails a route outcome named like a reject of the route's own middleware: the handler result names
+ * its outcome, so the names must be distinct. `routa check` and registration cover every middleware.
+ */
+type OutcomeNameChecks<TResponses, TMiddleware> = {
+	readonly [K in keyof TResponses & MiddlewareRejectNames<TMiddleware> & string]: {
+		readonly [
+			M in `Outcome "${K}" is also a reject of this route's middleware. Give each outcome its own name.`
+		]: never;
+	};
+};
+
 export type RoutaResult<TResponses extends RouteResponses> = {
 	[K in keyof TResponses & string]: OutcomeResult<K, TResponses[K]>;
 }[keyof TResponses & string];
@@ -409,22 +430,29 @@ export type MiddlewareProvidedCtx<TProvides extends MiddlewareProvidesSpec> = {
 	[K in keyof TProvides]: SchemaOutput<TProvides[K]>;
 };
 
-export type MiddlewareNext<
-	TProvides extends MiddlewareProvidesSpec,
-	TRejects extends MiddlewareRejectsSpec,
-> = keyof TProvides extends never
-	? (ctx?: MiddlewareProvidedCtx<TProvides>) => Promise<MiddlewareRejectResult<TRejects>>
-	: (ctx: MiddlewareProvidedCtx<TProvides>) => Promise<MiddlewareRejectResult<TRejects>>;
+declare class SelectedOutcome {
+	private readonly selectedOutcome: never;
+}
+
+/**
+ * What `next()` resolves to: the outcome the rest of the chain selected. It is opaque, so a
+ * continuing middleware can only return it unchanged. It cannot read, copy, or add headers or
+ * cookies to it, and Routa fails a middleware that returns anything else after calling `next()`.
+ */
+export type MiddlewareContinuation = SelectedOutcome;
+
+export type MiddlewareNext<TProvides extends MiddlewareProvidesSpec> = keyof TProvides extends never
+	? (ctx?: MiddlewareProvidedCtx<TProvides>) => Promise<MiddlewareContinuation>
+	: (ctx: MiddlewareProvidedCtx<TProvides>) => Promise<MiddlewareContinuation>;
 
 export type MiddlewareRunArgs<
 	TRequires extends readonly RegisteredCtxKey[],
 	TProvides extends MiddlewareProvidesSpec,
-	TRejects extends MiddlewareRejectsSpec,
 	TInput extends RouteInput | undefined,
 > = {
 	input: InferInput<TInput>;
 	ctx: RequiredMiddlewareCtx<TRequires>;
-	next: MiddlewareNext<TProvides, TRejects>;
+	next: MiddlewareNext<TProvides>;
 };
 
 export type MiddlewareRun<
@@ -433,8 +461,8 @@ export type MiddlewareRun<
 	TRejects extends MiddlewareRejectsSpec,
 	TInput extends RouteInput | undefined,
 > = (
-	args: MiddlewareRunArgs<TRequires, TProvides, TRejects, TInput>,
-) => MaybePromise<MiddlewareRejectResult<NoInfer<TRejects>>>;
+	args: MiddlewareRunArgs<TRequires, TProvides, TInput>,
+) => MaybePromise<MiddlewareRejectResult<NoInfer<TRejects>> | MiddlewareContinuation>;
 
 export type MiddlewareContract<
 	TRequires extends readonly RegisteredCtxKey[] = readonly RegisteredCtxKey[],
@@ -649,7 +677,8 @@ export function createRoute<
 	TCtx = InferMiddlewareCtx<TMiddleware>,
 >(
 	contract: RouteContract<TInput, TResponses, TCtx, TMiddleware> & {
-		readonly responses: ResponseChecks<NoInfer<TResponses>>;
+		readonly responses: ResponseChecks<NoInfer<TResponses>>
+			& OutcomeNameChecks<NoInfer<TResponses>, NoInfer<TMiddleware>>;
 	},
 ): RouteContract<TInput, NoInfer<TResponses>, TCtx, TMiddleware> {
 	return contract;

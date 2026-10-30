@@ -52,9 +52,18 @@ of the response-validation policy.
 
 `rejects` declares early responses. Returning `{ type: "unauthorized", data }` ends the
 request with the declared status and skips the rest of the chain, including the handler.
-Those outcomes are merged into the route's response map, so they are type-checked in
-handlers and included in generated OpenAPI. Their response data follows the same runtime
-response-validation policy as handler responses.
+A reject is a full outcome: it may omit `schema` to be bodyless and declare `headers` and
+`cookies`, and it follows the same declaration rules, response-validation policy, and
+OpenAPI projection as a route outcome. A middleware can only return its own rejects, and a
+handler only its route's `responses`.
+
+A middleware that calls `next()` continues the request, and must return what `next()`
+resolves to. That value is opaque: middleware cannot read it, copy it, or add headers or
+cookies to it, so the outcome the handler (or a later middleware) selected is the response.
+TypeScript rejects a changed value, and Routa answers `500 Invalid handler output` when a
+middleware returns anything else after `next()`, including one of its own rejects. Routa
+validates and serializes the selected outcome before `next()` resolves, so changing the
+handler's data, header, or cookie objects afterwards does not change the response.
 
 `input` is optional and works exactly like a route's `input`. It lets middleware read
 validated headers, cookies, or query values without the route declaring them:
@@ -145,8 +154,14 @@ Routa emits `security` and `x-routa-authz` on every operation the middleware cov
 
 ## Rules
 
-- Every reject name must be unique across a method's whole chain. Two middleware both
-  declaring `forbidden` on the same route is a registration error.
+- Every outcome name must be unique across a method's `responses` and its whole chain.
+  A route outcome or a second middleware reusing a reject name such as `forbidden` fails
+  `routa check` (`ROUTA_OUTCOME_NAME_COLLISION`) and app registration. TypeScript also
+  flags a route outcome named like a reject of the route's own `middleware`.
+- A reject reachable from a `HEAD` route cannot declare a `schema`
+  (`ROUTA_RESPONSE_BODYLESS_SCHEMA`).
+- Rejects that share a status with each other or with route outcomes must be
+  distinguishable; see [Outcomes That Share a Status](/docs/concepts/openapi/#outcomes-that-share-a-status).
 - Reject statuses must be 4xx or 5xx (`ROUTA_MIDDLEWARE_REJECT_STATUS`).
 - Always `await` or return `next()`. Calling it without awaiting drops the downstream
   result and can leave the request hanging.

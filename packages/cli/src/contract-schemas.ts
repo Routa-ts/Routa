@@ -2,7 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
 	createRouteObject,
-	localInitializer,
 	objectLiteral,
 	propertyName,
 	propertyValue,
@@ -12,7 +11,7 @@ import {
 import {
 	cookieDeclaration,
 	type Diagnostic,
-	middlewareDeclaration,
+	middlewareContract,
 	type MiddlewareMetadata,
 	type RouteMetadata,
 } from "./project.js";
@@ -30,8 +29,11 @@ type InputField = "params" | "query" | "headers" | "cookies" | "body";
  */
 export type ProjectedOperation = {
 	input: Partial<Record<InputField, JsonSchema>>;
+	/**
+	 * One Response Object per status, composed from the operation's effective outcomes: its route
+	 * outcomes and the rejects of every middleware in its chain.
+	 */
 	responses: Map<number, ProjectedResponse>;
-	rejects: Map<number, ProjectedResponse>;
 	deprecation?: { sunset?: string; replacement?: string };
 };
 
@@ -45,10 +47,34 @@ export type ProjectedResponse = {
 	schema?: JsonSchema;
 	headers?: Record<string, ProjectedHeader>;
 	cookies?: ProjectedResponseCookie[];
+	/**
+	 * Every response at this status has at least one `Set-Cookie` field: each outcome under it
+	 * requires some cookie, though not necessarily the same one.
+	 */
+	setCookieRequired?: true;
 };
 
-/** A cookie as one outcome declares it: required when listed as `{ handle, required: true }`. */
-export type ProjectedResponseCookie = ProjectedCookie & { required: boolean };
+/**
+ * A cookie as one outcome declares it: required when listed as `{ handle, required: true }`.
+ * `declaration` names the `createCookie` declaration (`file#name`) behind the handle.
+ */
+export type ProjectedResponseCookie = ProjectedCookie & { required: boolean; declaration: string };
+
+/** A handle's static facts and the `createCookie` declaration (`file#name`) they came from. */
+type DeclaredCookie = ProjectedCookie & { declaration: string };
+
+/** One named outcome that can end an operation: a route outcome or a middleware reject. */
+type ProjectedOutcome = ProjectedResponse & {
+	name: string;
+	status: number;
+	/** Who declares it, for messages: `the route` or `middleware <name>`. */
+	producer: string;
+	/** Names the outcome in messages, with its middleware when it is a reject. */
+	label: string;
+};
+
+/** The operation a set of outcomes belongs to, for diagnostics. */
+type OperationSite = { file: string; routePath: string; method: string };
 
 /**
  * One declared response cookie: the static facts of its `createCookie` handle. No value is ever
@@ -118,10 +144,17 @@ export function projectContractSchemas(
 		const methods: Record<string, ProjectedOperation> = {};
 
 		for (const method of Object.keys(route.responses)) {
-			const middleware = route.methodMiddleware[method] ?? route.middleware;
+			const contract = contracts[method];
+			const site = { file: route.file, routePath: route.path, method };
+			const rejects = projector.middlewareRejects(
+				route.methodMiddleware[method] ?? route.middleware,
+				site,
+				contract?.lifecycle ?? { owned: new Set() },
+			);
 			methods[method] = {
-				...(contracts[method] ?? { input: {}, responses: new Map() }),
-				rejects: projector.middlewareRejects(middleware),
+				input: contract?.input ?? {},
+				responses: projector.compose([...(contract?.outcomes ?? []), ...rejects], site),
+				...(contract?.deprecation ? { deprecation: contract.deprecation } : {}),
 			};
 		}
 
@@ -412,6 +445,35 @@ function stringNode(format: string): SchemaNode {
 	return plainNode(format ? { type: "string", format } : { type: "string" });
 }
 
+const componentPrefix = "#/components/schemas/";
+
+/** Whether an outcome always sends at least one cookie effect. */
+function requiresCookie(outcome: ProjectedResponse): boolean {
+	return outcome.cookies?.some((cookie) => cookie.required) ?? false;
+}
+
+/** The `allOf` members of a projected schema, if it has any. */
+function allOfMembers(schema: JsonSchema): JsonSchema[] {
+	return Array.isArray(schema.allOf) ? (schema.allOf as JsonSchema[]) : [];
+}
+
+/**
+ * The single string, number, or boolean value a schema allows (a `const` or one-value `enum`), as
+ * text, or `undefined` when it allows other values.
+ */
+function literalText(schema: JsonSchema): string | undefined {
+	const value =
+		"const" in schema
+			? schema.const
+			: Array.isArray(schema.enum) && schema.enum.length === 1
+				? schema.enum[0]
+				: undefined;
+
+	return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+		? String(value)
+		: undefined;
+}
+
 const unsupportedSuggestion =
 	"Use a supported Zod construct: primitives, z.literal, z.enum, z.object, z.array, z.record, z.union, z.discriminatedUnion, z.intersection or .and(), .optional(), .nullable(), checks such as .min(), and .meta() or .describe().";
 
@@ -421,9 +483,8 @@ class SchemaProjector {
 	private readonly declarationNodes = new Map<string, SchemaNode>();
 	private readonly inProgress = new Set<string>();
 	private readonly components = new Map<string, ComponentIdentity & { content: JsonSchema }>();
-	private readonly rejectCache = new Map<string, JsonSchema>();
 	private readonly scannedRegistries = new Set<string>();
-	private readonly cookieHandles = new Map<string, ProjectedCookie | null>();
+	private readonly cookieHandles = new Map<string, DeclaredCookie | null>();
 
 	constructor(
 		private readonly cwd: string,
@@ -437,12 +498,18 @@ class SchemaProjector {
 	routeContracts(
 		routeFile: string,
 		methods: readonly string[],
-	): Record<string, Omit<ProjectedOperation, "rejects">> {
+	): Record<
+		string,
+		Pick<ProjectedOperation, "input" | "deprecation"> & {
+			outcomes: ProjectedOutcome[];
+			lifecycle: LifecycleOwnership;
+		}
+	> {
 		const schemasFile = join(dirname(routeFile), "schemas.ts");
 		const schemas = existsSync(join(this.cwd, schemasFile)) ? this.source(schemasFile) : undefined;
 		const route = this.source(routeFile, schemas);
 		const config = routeConfigObject(this.parse(routeFile));
-		const contracts: Record<string, Omit<ProjectedOperation, "rejects">> = {};
+		const contracts: ReturnType<SchemaProjector["routeContracts"]> = {};
 
 		for (const method of methods) {
 			const value = config && propertyValue(config, method);
@@ -452,9 +519,11 @@ class SchemaProjector {
 				continue;
 			}
 
+			const lifecycle = this.lifecycleOwnedHeaders(contract, route);
 			contracts[method] = {
 				input: this.inputSchemas(contract, route),
-				responses: this.responseSchemas(contract, route),
+				outcomes: this.outcomes(propertyValue(contract, "responses"), route, lifecycle),
+				lifecycle,
 				deprecation: readDeprecation(contract),
 			};
 		}
@@ -463,45 +532,378 @@ class SchemaProjector {
 	}
 
 	/**
-	 * Projects terminal middleware rejects, keyed by status.
-	 *
-	 * Identifiers resolve against the middleware's own source file. Every route
-	 * that imports a middleware shares one projection per declared reject, so a
-	 * reject schema keeps one component identity.
+	 * Projects the rejects of every middleware in an operation's chain with the same reader as
+	 * route outcomes, so they follow the same rules. Identifiers resolve against the middleware's
+	 * own source file. The route's lifecycle headers apply to rejects too, and a HEAD operation
+	 * forbids reject bodies like it forbids outcome bodies.
 	 */
-	middlewareRejects(middleware: readonly MiddlewareMetadata[]): Map<number, ProjectedResponse> {
-		const responses = new Map<number, ProjectedResponse>();
+	middlewareRejects(
+		middleware: readonly MiddlewareMetadata[],
+		site: OperationSite,
+		lifecycle: LifecycleOwnership,
+	): ProjectedOutcome[] {
+		const rejects: ProjectedOutcome[] = [];
 
 		for (const item of middleware) {
-			const declaration = middlewareDeclaration(this.cwd, item.file, item.name, this.parser);
+			const declaration = middlewareContract(item);
 
-			for (const reject of item.rejects) {
-				const description = reject.description ?? humanizeOutcomeName(reject.type);
+			if (!declaration) {
+				continue;
+			}
 
-				if (reject.schema === undefined) {
-					responses.set(reject.status, { description });
-					continue;
+			const source = this.source(declaration.file);
+			const { contract } = declaration;
+			// A spread after `rejects` (or with no `rejects` at all) can hide or replace them.
+			const spread = contract.properties
+				.slice(
+					contract.properties.findIndex(
+						(property) =>
+							(ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property))
+							&& propertyName(property.name) === "rejects",
+					) + 1,
+				)
+				.find(ts.isSpreadAssignment);
+
+			if (spread) {
+				this.unsupported(
+					spread,
+					{ source, io: "output" },
+					"middleware contracts need a static rejects property; a spread can hide or replace rejects",
+				);
+				continue;
+			}
+
+			const value = propertyValue(contract, "rejects");
+
+			if (!value) {
+				continue;
+			}
+
+			for (const reject of this.outcomes(value, source, lifecycle, item.name)) {
+				if (site.method === "head" && reject.schema) {
+					this.operationProblem(site, {
+						code: "ROUTA_RESPONSE_BODYLESS_SCHEMA",
+						message: `${reject.producer} reject "${reject.name}" declares a schema, but HEAD responses have no body`,
+						suggestion:
+							"Remove the reject's schema, or keep the middleware off the HEAD route. A reject reachable from a HEAD route cannot have a body.",
+					});
 				}
 
-				const key = `${declaration.file}#${declaration.name}#${reject.type}`;
-				let schema = this.rejectCache.get(key);
-
-				if (!schema) {
-					const source = this.source(declaration.file);
-					const virtualFile = join(".routa", "middleware-rejects", `${key}.ts`);
-					const ast = this.parser.createSourceFile(virtualFile, `const schema = ${reject.schema};`);
-					const initializer = localInitializer(ast, "schema");
-					schema = initializer
-						? this.materialize(this.node(initializer, { source, io: "output" }))
-						: {};
-					this.rejectCache.set(key, schema);
-				}
-
-				responses.set(reject.status, { description, schema });
+				rejects.push(reject);
 			}
 		}
 
-		return responses;
+		return rejects;
+	}
+
+	/**
+	 * Composes an operation's effective outcomes into one Response Object per status.
+	 *
+	 * A status with one outcome keeps it. Outcomes that share a status compose only when every one
+	 * has a body and they share a required property whose literal values all differ: the body
+	 * becomes a `oneOf` of the alternatives with that property as the discriminator. Headers and
+	 * cookies under the status must agree and project once. Alternatives are ordered by outcome
+	 * name, so nothing depends on source order. Every other combination is a diagnostic.
+	 */
+	compose(
+		outcomes: readonly ProjectedOutcome[],
+		site: OperationSite,
+	): Map<number, ProjectedResponse> {
+		const byName = new Map<string, ProjectedOutcome>();
+		const byStatus = new Map<number, ProjectedOutcome[]>();
+
+		for (const outcome of outcomes) {
+			const earlier = byName.get(outcome.name);
+
+			if (earlier) {
+				this.operationProblem(site, {
+					code: "ROUTA_OUTCOME_NAME_COLLISION",
+					message: `Outcome "${outcome.name}" is declared by ${earlier.producer} and by ${outcome.producer}`,
+					suggestion:
+						"Every outcome that can end an operation needs its own name, because the handler result names its outcome. Rename one of them.",
+				});
+				continue;
+			}
+
+			byName.set(outcome.name, outcome);
+			byStatus.set(outcome.status, [...(byStatus.get(outcome.status) ?? []), outcome]);
+		}
+
+		return new Map(
+			Array.from(byStatus.entries())
+				.sort(([left], [right]) => left - right)
+				.map(([status, alternatives]) => [
+					status,
+					this.composeStatus(
+						[...alternatives].sort((left, right) => compareText(left.name, right.name)),
+						status,
+						site,
+					),
+				]),
+		);
+	}
+
+	private composeStatus(
+		alternatives: readonly ProjectedOutcome[],
+		status: number,
+		site: OperationSite,
+	): ProjectedResponse {
+		if (alternatives.length === 1) {
+			const {
+				name: _name,
+				status: _status,
+				producer: _producer,
+				label: _label,
+				...response
+			} = alternatives[0]!;
+			return {
+				...response,
+				...(requiresCookie(alternatives[0]!) ? { setCookieRequired: true } : {}),
+			};
+		}
+
+		const list = (outcomes: readonly ProjectedOutcome[]) =>
+			outcomes.map((outcome) => outcome.label).join(", ");
+		const names = list(alternatives);
+		const at = `${site.method.toUpperCase()} ${site.routePath} status ${status}`;
+		const ambiguous = (message: string) =>
+			this.operationProblem(site, {
+				code: "ROUTA_RESPONSE_STATUS_AMBIGUOUS",
+				message: `${at}: ${message}`,
+				suggestion:
+					'Give every body outcome under this status a required property with a different literal value (a literal discriminator such as kind: z.literal("created")), or use a distinct status for each outcome.',
+			});
+		const bodies = alternatives.filter((outcome) => outcome.schema);
+		let schema: JsonSchema | undefined;
+
+		if (bodies.length === 0) {
+			ambiguous(`outcomes ${names} have no body, so they are indistinguishable to clients`);
+		} else if (bodies.length < alternatives.length) {
+			const bodyless = alternatives.filter((outcome) => !outcome.schema);
+			ambiguous(`outcomes ${names} mix a body (${list(bodies)}) with no body (${list(bodyless)})`);
+		} else {
+			const discriminator = this.discriminator(bodies.map((outcome) => outcome.schema!));
+
+			if (discriminator) {
+				schema = { oneOf: bodies.map((outcome) => outcome.schema!), discriminator };
+			} else {
+				ambiguous(
+					`body outcomes ${names} share no required property whose literal values all differ, so clients cannot tell them apart`,
+				);
+			}
+		}
+
+		const headers = this.composeHeaders(alternatives, site);
+		const cookies = this.composeCookies(alternatives, site);
+
+		return {
+			description: alternatives
+				.map((outcome) => `- \`${outcome.name}\`: ${outcome.description}`)
+				.join("\n"),
+			...(schema ? { schema } : {}),
+			...(headers ? { headers } : {}),
+			...(cookies ? { cookies } : {}),
+			...(alternatives.every(requiresCookie) ? { setCookieRequired: true } : {}),
+		};
+	}
+
+	/**
+	 * The discriminator for same-status body alternatives: a property every alternative requires
+	 * with a single literal value (string, number, or boolean), each value different as text,
+	 * because discriminator values compare as strings. When several qualify, the
+	 * lexicographically first name wins.
+	 *
+	 * A referenced alternative is matched implicitly by its component name. When any referenced
+	 * alternative's value differs from its component name, `mapping` names every referenced
+	 * alternative's component explicitly.
+	 */
+	private discriminator(
+		schemas: readonly JsonSchema[],
+	): { propertyName: string; mapping?: Record<string, string> } | undefined {
+		const literals = schemas.map((schema) => this.requiredLiterals(schema));
+		const [first, ...rest] = literals;
+		const propertyName = Array.from(first?.keys() ?? [])
+			.filter((name) => {
+				const values = literals.map((properties) => properties.get(name));
+				return (
+					values.every((value) => value !== undefined) && new Set(values).size === values.length
+				);
+			})
+			.sort(compareText)[0];
+
+		if (rest.length === 0 || propertyName === undefined) {
+			return undefined;
+		}
+
+		const referenced = schemas.flatMap((schema, index) =>
+			typeof schema.$ref === "string" && schema.$ref.startsWith(componentPrefix)
+				? [[literals[index]!.get(propertyName)!, schema.$ref] as const]
+				: [],
+		);
+		const implicit = referenced.every(([value, ref]) => ref === `${componentPrefix}${value}`);
+
+		return implicit ? { propertyName } : { propertyName, mapping: Object.fromEntries(referenced) };
+	}
+
+	/**
+	 * Required properties that hold one string, number, or boolean literal, keyed by name with the
+	 * literal as text. Reads through component references and `allOf` members, so a described or
+	 * component-backed intersection keeps its literals. A property that members constrain to
+	 * different literals has none.
+	 */
+	private requiredLiterals(schema: JsonSchema): Map<string, string> {
+		const required = new Set<string>();
+		const values = new Map<string, string | null>();
+		const collect = (node: JsonSchema): void => {
+			const object = this.resolved(node);
+
+			for (const member of allOfMembers(object)) {
+				collect(member);
+			}
+
+			if (object.type !== "object") {
+				return;
+			}
+
+			for (const name of Array.isArray(object.required) ? (object.required as string[]) : []) {
+				required.add(name);
+			}
+
+			for (const [name, property] of Object.entries(
+				(object.properties ?? {}) as Record<string, JsonSchema>,
+			)) {
+				const value = this.literalOf(property);
+				const earlier = values.get(name);
+
+				if (value !== undefined) {
+					values.set(name, earlier === undefined || earlier === value ? value : null);
+				}
+			}
+		};
+
+		collect(schema);
+		return new Map(
+			Array.from(required).flatMap((name) => {
+				const value = values.get(name);
+				return typeof value === "string" ? [[name, value] as const] : [];
+			}),
+		);
+	}
+
+	/**
+	 * The one literal a property schema allows, as text, reading through component references and
+	 * `allOf` members: `null` when members require different literals, `undefined` when none
+	 * requires one.
+	 */
+	private literalOf(property: JsonSchema): string | null | undefined {
+		const schema = this.resolved(property);
+		const values = new Set(
+			[literalText(schema), ...allOfMembers(schema).map((member) => this.literalOf(member))].filter(
+				(value) => value !== undefined,
+			),
+		);
+
+		return values.size > 1 ? null : values.values().next().value;
+	}
+
+	/**
+	 * Projects the headers of same-status alternatives once. One name must have one projected
+	 * schema, compared by content so an inline schema and a reference to an equal component
+	 * agree; the first alternative's spelling is kept. A header is required only when every
+	 * alternative declares it required.
+	 */
+	private composeHeaders(
+		alternatives: readonly ProjectedOutcome[],
+		site: OperationSite,
+	): Record<string, ProjectedHeader> | undefined {
+		const headers: Record<string, ProjectedHeader> = {};
+		const owners = new Map<string, ProjectedOutcome>();
+
+		for (const outcome of alternatives) {
+			for (const [name, header] of Object.entries(outcome.headers ?? {})) {
+				const earlier = owners.get(name);
+
+				if (!earlier) {
+					owners.set(name, outcome);
+					headers[name] = header;
+					continue;
+				}
+
+				if (
+					stableJson(this.inlined(earlier.headers![name]!.schema))
+					!== stableJson(this.inlined(header.schema))
+				) {
+					this.operationProblem(site, {
+						code: "ROUTA_RESPONSE_HEADER_INCOMPATIBLE",
+						message: `Header "${name}" has different schemas in outcomes ${earlier.label} and ${outcome.label}, which share status ${outcome.status}`,
+						suggestion:
+							"Outcomes under one status document one Header Object per name. Declare the header with the same schema and metadata in both, or use distinct statuses.",
+					});
+				}
+			}
+		}
+
+		for (const [name, header] of Object.entries(headers)) {
+			const required = alternatives.every((outcome) => outcome.headers?.[name]?.required);
+			const { required: _required, ...rest } = header;
+			headers[name] = { ...rest, required };
+		}
+
+		return Object.keys(headers).length > 0 ? headers : undefined;
+	}
+
+	/**
+	 * Lists the cookies of same-status alternatives once. One identity must come from one
+	 * `createCookie` declaration; it is always set only when every alternative requires that
+	 * identity. Whether `Set-Cookie` itself is always present is `setCookieRequired`.
+	 */
+	private composeCookies(
+		alternatives: readonly ProjectedOutcome[],
+		site: OperationSite,
+	): ProjectedResponseCookie[] | undefined {
+		const cookies = new Map<string, { cookie: ProjectedResponseCookie; owner: ProjectedOutcome }>();
+
+		for (const outcome of alternatives) {
+			for (const cookie of outcome.cookies ?? []) {
+				const identity = cookieIdentity(cookie);
+				const earlier = cookies.get(identity);
+
+				if (!earlier) {
+					cookies.set(identity, { cookie, owner: outcome });
+				} else if (earlier.cookie.declaration !== cookie.declaration) {
+					this.operationProblem(site, {
+						code: "ROUTA_RESPONSE_COOKIE_CONFLICT",
+						message: `Cookie ${describeCookie(cookie)} comes from different createCookie declarations in outcomes ${earlier.owner.label} and ${outcome.label}, which share status ${outcome.status}`,
+						suggestion:
+							"A cookie identity (name, domain, and path) has one declaration. Share one createCookie handle between the outcomes, or use distinct statuses.",
+					});
+				}
+			}
+		}
+
+		const composed = Array.from(cookies.values(), ({ cookie }) => ({
+			...cookie,
+			required: alternatives.every((outcome) =>
+				outcome.cookies?.some(
+					(item) => cookieIdentity(item) === cookieIdentity(cookie) && item.required,
+				),
+			),
+		}));
+
+		return composed.length > 0 ? composed : undefined;
+	}
+
+	/** Reports a problem with an operation's composed outcomes, at the route file. */
+	private operationProblem(
+		site: OperationSite,
+		diagnostic: { code: string; message: string; suggestion: string },
+	): void {
+		pushUnique(this.diagnostics, {
+			...diagnostic,
+			severity: "error",
+			file: site.file,
+			routePath: site.routePath,
+		});
 	}
 
 	/**
@@ -562,18 +964,31 @@ class SchemaProjector {
 		);
 	}
 
-	private responseSchemas(
-		contract: ts.ObjectLiteralExpression,
+	/**
+	 * Reads a record of named outcomes: a route's `responses`, or a middleware's `rejects` when
+	 * `middleware` names it. Both follow the same declaration rules, so a reject gets every check
+	 * a route outcome gets.
+	 */
+	private outcomes(
+		value: ts.Expression | undefined,
 		source: SchemaSource,
-	): Map<number, ProjectedResponse> {
-		const lifecycleOwned = this.lifecycleOwnedHeaders(contract, source);
-		const value = propertyValue(contract, "responses");
+		lifecycleOwned: LifecycleOwnership,
+		middleware?: string,
+	): ProjectedOutcome[] {
 		const responses = objectLiteral(value);
 		const context: Context = { source, io: "output" };
-		const result = new Map<number, ProjectedResponse>();
+		const kind = middleware === undefined ? "route" : "middleware";
+		const producer = middleware === undefined ? "the route" : `middleware ${middleware}`;
+		const result: ProjectedOutcome[] = [];
 
 		if (value && !responses) {
-			this.unsupported(value, context, "route responses need an inline object of outcomes");
+			this.unsupported(
+				value,
+				context,
+				kind === "route"
+					? "route responses need an inline object of outcomes"
+					: "middleware rejects need an inline object of outcomes",
+			);
 		}
 
 		for (const response of responses?.properties ?? []) {
@@ -587,13 +1002,14 @@ class SchemaProjector {
 				|| status === undefined
 				|| outcome.properties.some(
 					(property) =>
-						!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property),
+						(!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property))
+						|| ts.isComputedPropertyName(property.name),
 				)
 			) {
 				this.unsupported(
 					response,
 					context,
-					"route outcomes need static status and schema properties without spreads",
+					`${kind === "route" ? "route outcomes" : "middleware rejects"} need static status and schema properties without spreads or computed keys`,
 				);
 				continue;
 			}
@@ -605,17 +1021,30 @@ class SchemaProjector {
 				this.unsupported(description, context, "outcome descriptions need a string literal");
 			}
 
+			const name = ts.isPropertyAssignment(response) ? propertyName(response.name) : undefined;
+
+			if (name === undefined) {
+				this.unsupported(response, context, "outcome names need an identifier or string literal");
+				continue;
+			}
+
 			const schema = propertyValue(outcome, "schema");
 			const headers = propertyValue(outcome, "headers");
-			const name = ts.isPropertyAssignment(response) ? propertyName(response.name) : undefined;
 			const projectedHeaders = headers
 				? this.responseHeaders(headers, context, lifecycleOwned)
 				: undefined;
 			const cookies = propertyValue(outcome, "cookies");
 			const projectedCookies = cookies ? this.responseCookies(cookies, context) : undefined;
 
-			result.set(status, {
-				description: text ?? humanizeOutcomeName(name ?? String(status)),
+			result.push({
+				name,
+				status,
+				producer,
+				label:
+					middleware === undefined
+						? `"${name}"`
+						: `"${name}" (a reject of middleware ${middleware})`,
+				description: text ?? humanizeOutcomeName(name),
 				...(schema ? { schema: this.materialize(this.node(schema, context)) } : {}),
 				...(projectedHeaders ? { headers: projectedHeaders } : {}),
 				...(projectedCookies?.length ? { cookies: projectedCookies } : {}),
@@ -867,7 +1296,7 @@ class SchemaProjector {
 	private cookieEntry(
 		element: ts.Expression,
 		source: SchemaSource,
-	): { handle: ProjectedCookie | null; required: boolean } | undefined {
+	): { handle: DeclaredCookie | null; required: boolean } | undefined {
 		const entry = unwrapExpression(element);
 
 		if (ts.isIdentifier(entry)) {
@@ -951,7 +1380,7 @@ class SchemaProjector {
 	 * it, and reads its static facts once. `undefined` means no declaration was found; `null` means
 	 * one was found and reported as invalid.
 	 */
-	private cookieHandle(name: string, source: SchemaSource): ProjectedCookie | null | undefined {
+	private cookieHandle(name: string, source: SchemaSource): DeclaredCookie | null | undefined {
 		for (const file of [source.file, source.fallback?.file]) {
 			const declaration = file && cookieDeclaration(this.cwd, file, name, this.parser);
 
@@ -959,10 +1388,8 @@ class SchemaProjector {
 				const key = `${declaration.file}#${declaration.name}`;
 
 				if (!this.cookieHandles.has(key)) {
-					this.cookieHandles.set(
-						key,
-						this.readCookie(declaration.contract, declaration.file) ?? null,
-					);
+					const cookie = this.readCookie(declaration.contract, declaration.file);
+					this.cookieHandles.set(key, cookie ? { ...cookie, declaration: key } : null);
 				}
 
 				return this.cookieHandles.get(key);
@@ -1195,9 +1622,7 @@ class SchemaProjector {
 	 */
 	private resolved(schema: JsonSchema, seen: ReadonlySet<string> = new Set()): JsonSchema {
 		const key =
-			typeof schema.$ref === "string"
-				? schema.$ref.replace("#/components/schemas/", "")
-				: undefined;
+			typeof schema.$ref === "string" ? schema.$ref.replace(componentPrefix, "") : undefined;
 		const target = key === undefined || seen.has(key) ? undefined : this.components.get(key);
 
 		if (!key || !target) {
@@ -1206,6 +1631,32 @@ class SchemaProjector {
 
 		const { $ref: _ref, ...siblings } = schema;
 		return { ...this.resolved(target.content, new Set(seen).add(key)), ...siblings };
+	}
+
+	/**
+	 * A schema with every component reference, at any depth, replaced by what it stands for, so
+	 * equal content compares equal however it is spelled. References resolve like `resolved`.
+	 */
+	private inlined(value: unknown, seen: ReadonlySet<string> = new Set()): unknown {
+		if (Array.isArray(value)) {
+			return value.map((item) => this.inlined(item, seen));
+		}
+
+		if (typeof value !== "object" || value === null) {
+			return value;
+		}
+
+		const { $ref, ...siblings } = value as JsonSchema;
+		const key = typeof $ref === "string" ? $ref.replace(componentPrefix, "") : undefined;
+		const target = key === undefined || seen.has(key) ? undefined : this.components.get(key);
+
+		if (key && target) {
+			return this.inlined({ ...target.content, ...siblings }, new Set(seen).add(key));
+		}
+
+		return Object.fromEntries(
+			Object.entries(value).map(([name, item]) => [name, this.inlined(item, seen)]),
+		);
 	}
 
 	/** Whether a projected schema accepts only strings, numbers, and booleans. */

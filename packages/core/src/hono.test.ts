@@ -921,7 +921,9 @@ describe("createHonoApp", () => {
 					}),
 				},
 			]),
-		).toThrow('Duplicate middleware reject key "unauthorized" on GET /me');
+		).toThrow(
+			'Outcome "unauthorized" on GET /me is declared by middleware[0] and by middleware[1]',
+		);
 	});
 
 	it("returns problem details when createContext returns a non-object", async () => {
@@ -1066,10 +1068,6 @@ describe("createHonoApp", () => {
 									status: 200,
 									schema: z.object({ id: z.string() }),
 								},
-								unauthorized: {
-									status: 401,
-									schema: z.object({ message: z.string() }),
-								},
 							},
 							run: ({ ctx }) => ({ type: "success", data: { id: ctx.auth.userId } }),
 						}),
@@ -1127,10 +1125,6 @@ describe("createHonoApp", () => {
 								success: {
 									status: 200,
 									schema: z.object({ id: z.string() }),
-								},
-								unauthorized: {
-									status: 401,
-									schema: z.object({ message: z.string() }),
 								},
 							},
 							run: ({ ctx }) => ({ type: "success", data: { id: ctx.auth.userId } }),

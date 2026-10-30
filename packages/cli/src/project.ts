@@ -1659,7 +1659,7 @@ function parseMiddlewareFile(
 	const sourceFile = parseTypeScriptFile(join(cwd, file), parser);
 
 	return exportedMiddlewareDeclarations(cwd, file, sourceFile, parser).map((block) =>
-		middlewareMetadata(file, block.exportedName, block.contract),
+		middlewareMetadata(file, block.exportedName, block.contract, block.file),
 	);
 }
 
@@ -1857,30 +1857,27 @@ function importedMiddlewareDeclaration(
 }
 
 /**
- * Finds the declaration of a middleware a module uses. Route files record
- * middleware they import under their own path and local name, and middleware
- * files record what they export, so follow the import or the exports and any
- * re-exports to the declaring file and its declared name.
- *
- * @param cwd - The project root directory
- * @param file - The module that declares, imports, or re-exports the middleware
- * @param name - The middleware's local name in a route file, or its exported name in a middleware file
- * @returns The declaring file and declared name, or `file` and `name` when the middleware is unresolved
+ * The `createMiddleware({ ... })` argument behind each discovered middleware and the file that
+ * declares it. Route files record middleware they import under their own path, and middleware
+ * files record the names they export, so `file` on the metadata is not always where the contract
+ * lives. Kept beside the metadata so it never reaches generated files.
  */
-export function middlewareDeclaration(
-	cwd: string,
-	file: string,
-	name: string,
-	parser: ts.SourceFileParser,
-): { file: string; name: string } {
-	const sourceFile = parseTypeScriptFile(join(cwd, file), parser);
-	const source = namedImportMap(cwd, file, sourceFile).get(name);
-	const declaration = source
-		? importedMiddlewareDeclaration(cwd, source, parser)
-		: exportedMiddlewareDeclarations(cwd, file, sourceFile, parser).find(
-				(item) => item.exportedName === name,
-			);
-	return declaration ? { file: declaration.file, name: declaration.name } : { file, name };
+const middlewareContracts = new WeakMap<
+	MiddlewareMetadata,
+	{ file: string; contract: ts.ObjectLiteralExpression }
+>();
+
+/**
+ * Finds the contract a discovered middleware was read from, so its rejects can be checked like
+ * route outcomes.
+ *
+ * @param middleware - Middleware metadata from route discovery
+ * @returns The declaring file and `createMiddleware` argument, or `undefined` for other metadata
+ */
+export function middlewareContract(
+	middleware: MiddlewareMetadata,
+): { file: string; contract: ts.ObjectLiteralExpression } | undefined {
+	return middlewareContracts.get(middleware);
 }
 
 /**
@@ -1970,7 +1967,7 @@ function parseRouteFileMiddleware(
 		const metadata = middlewareExpressionMetadata(expression, middlewareByName);
 
 		if (metadata) {
-			return middlewareMetadata(routeFile, metadata.name, metadata.contract);
+			return middlewareMetadata(routeFile, metadata.name, metadata.contract, routeFile);
 		}
 
 		const unwrapped = unwrapExpression(expression);
@@ -1986,7 +1983,7 @@ function parseRouteFileMiddleware(
 			return;
 		}
 
-		return middlewareMetadata(routeFile, unwrapped.text, declaration.contract);
+		return middlewareMetadata(routeFile, unwrapped.text, declaration.contract, declaration.file);
 	};
 
 	for (const property of objectProperties(routeConfig)) {
@@ -2067,19 +2064,21 @@ function stringArrayProperty(source: ts.ObjectLiteralExpression, property: strin
 }
 
 /**
- * Creates metadata for a middleware declaration.
+ * Creates metadata for a middleware declaration and remembers the contract it was read from.
  *
+ * @param declarationFile - The file that declares the contract, which differs from `file` for
+ *   middleware a route file imports
  * @returns Middleware metadata including its source file, name, required context keys, provided context keys and types, and rejected keys.
  */
 function middlewareMetadata(
 	file: string,
 	name: string,
 	contract: ts.ObjectLiteralExpression,
+	declarationFile: string,
 ): MiddlewareMetadata {
 	const provides = middlewareProvides(contract);
 	const inferred = middlewareNextProvidesTypes(contract);
-
-	return {
+	const metadata: MiddlewareMetadata = {
 		file,
 		name,
 		requires: stringArrayProperty(contract, "requires"),
@@ -2094,6 +2093,9 @@ function middlewareMetadata(
 		security: middlewareSecurity(contract),
 		permissions: middlewarePermissions(contract),
 	};
+
+	middlewareContracts.set(metadata, { file: declarationFile, contract });
+	return metadata;
 }
 
 function middlewareOpenApi(

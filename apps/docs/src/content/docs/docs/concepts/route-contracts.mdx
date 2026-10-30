@@ -123,6 +123,9 @@ own typed keys to `ctx` on top of that.
 - `GET` and `HEAD` contracts cannot declare `input.body`.
 - Response type names must be unique across the method's own `responses` and the `rejects`
   of every middleware in its chain.
+- Outcomes that share a status need a required literal discriminator with a different value
+  in each, and cannot mix bodies with bodyless outcomes. See
+  [Outcomes That Share a Status](/docs/concepts/openapi/#outcomes-that-share-a-status).
 - Middleware `rejects` must use 4xx or 5xx statuses.
 - The route config must be the direct default export of the file. Routa resolves it
   statically, so indirection through a variable exported later cannot be analyzed.

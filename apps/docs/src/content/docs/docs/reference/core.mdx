@@ -267,14 +267,17 @@ function createMiddleware<TRequires, TProvides, TRejects, TInput>(
 | `openapi`  | `{ security?, permissions? }`                                           | Metadata emitted into generated OpenAPI |
 | `run`      | `({ input, ctx, next }) => …`                                           | The implementation                      |
 
-`run` either returns a reject outcome or returns `next(providedCtx)`. Routa parses every
+`run` either returns one of its own reject outcomes or returns `next(providedCtx)`. `next()`
+resolves to an opaque `MiddlewareContinuation`, the outcome the rest of the chain selected;
+return it unchanged. Routa parses every
 declared `provides` value before merging any of them into `ctx`, and downstream code
 receives the parsed output. Undeclared top-level keys are omitted. A normal `z.object()`
 schema strips unknown nested keys; use `.strict()` on that schema when unknown nested keys
 must reject the request instead.
 
 **Errors:** `next()` called more than once throws. A `provides` value that fails its
-schema produces an `Invalid handler output` response. Reject statuses must be 4xx or 5xx.
+schema, or a value other than `next()`'s result returned after calling it, produces an
+`Invalid handler output` response. Reject statuses must be 4xx or 5xx.
 
 ```ts
 import { randomUUID } from "node:crypto";
@@ -509,7 +512,7 @@ type UsersRouteConfig = RouteRootConfigForCtx<{
 `ResponseValidation`, `RouteDeprecation`, `RouteDeprecationReplacement`, `RegisteredRoutePath`,
 `ExternalApiUrl`, `ContextualRouteContract`, `RouteRootConfigForCtx`, `MiddlewareContract`,
 `AnyMiddlewareContract`, `MiddlewareRun`,
-`MiddlewareRunArgs`, `MiddlewareNext`, `MiddlewareProvidesSpec`, `MiddlewareProvidesKeys`,
+`MiddlewareRunArgs`, `MiddlewareNext`, `MiddlewareContinuation`, `MiddlewareProvidesSpec`, `MiddlewareProvidesKeys`,
 `MiddlewareProvidedCtx`, `MiddlewareProvides`, `MiddlewareRejectsSpec`,
 `MiddlewareRejectResult`, `MiddlewareOpenApi`, `InferMiddlewareCtx`, `CookieConfig`,
 `CookieHandle`, `CookieEffect`, `CookieSameSite`, `RequiredCookie`, `AnyCookie`, and `Register`.

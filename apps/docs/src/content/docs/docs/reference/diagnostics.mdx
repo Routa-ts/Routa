@@ -93,9 +93,11 @@ cannot be terminal route outcomes.
 ### `ROUTA_RESPONSE_BODYLESS_SCHEMA`
 
 An outcome declares a `schema` but its status is `204`, `205`, or `304`, or it belongs to a
-`HEAD` route. None of those responses has a body.
+`HEAD` route. None of those responses has a body. A middleware reject reachable from a `HEAD`
+route reports this too, at the route file.
 
-**Fix:** remove the `schema`, and return only `{ type }` from the handler.
+**Fix:** remove the `schema`, and return only `{ type }` from the handler or middleware. For a
+reject, you can instead keep that middleware off the `HEAD` route.
 
 ### `ROUTA_RESPONSE_NOT_MODIFIED_METHOD`
 
@@ -105,10 +107,30 @@ An outcome uses status `304` on a method other than `GET` or `HEAD`.
 
 ### `ROUTA_RESULT_TYPE`
 
-A handler or middleware returns a `type` that is not declared in `responses` or in any
-middleware `rejects` map for that method. The message lists the valid names.
+A handler returns a `type` that is not declared in its route's `responses`, or a middleware
+returns one that is not in its own `rejects`. The message lists the valid names.
 
 **Fix:** correct the name, or declare the outcome.
+
+### `ROUTA_OUTCOME_NAME_COLLISION`
+
+Two outcomes that can end the same operation share a name: a route outcome and a middleware
+reject, or the rejects of two middleware in one chain. The handler result names its outcome,
+so the names must be distinct.
+
+**Fix:** rename one of them. A route does not need to redeclare a reject its middleware
+already declares.
+
+### `ROUTA_RESPONSE_STATUS_AMBIGUOUS`
+
+Outcomes that can end the same operation share a status, and clients could not tell them
+apart. Body outcomes need a required property with a single string, number, or boolean
+literal value that differs, as text, in every outcome. A body outcome and a bodyless outcome cannot share a status, and neither can
+two bodyless outcomes. Route outcomes and middleware rejects count alike.
+
+**Fix:** add a literal discriminator such as `kind: z.literal("created")` to each body
+schema, or give each outcome its own status. See
+[Outcomes That Share a Status](/docs/concepts/openapi/#outcomes-that-share-a-status).
 
 ### `ROUTA_RESULT_SHAPE`
 
@@ -215,12 +237,21 @@ A value schema that changes values reports `ROUTA_RESPONSE_SCHEMA_MUTATION` inst
 
 **Fix:** declare a scalar schema that validates the value without changing it.
 
+### `ROUTA_RESPONSE_HEADER_INCOMPATIBLE`
+
+Outcomes that share a status declare one header name with different schemas or metadata.
+OpenAPI documents one Header Object per name for the status.
+
+**Fix:** declare the header the same way in each outcome, or use distinct statuses.
+
 ### `ROUTA_RESPONSE_COOKIE_CONFLICT`
 
 An outcome's `cookies` lists the same handle twice, or two handles with one identity (name,
-domain, and path). One producer owns an identity in a response.
+domain, and path). One producer owns an identity in a response. Outcomes that share a status
+also report this when they list one identity from different `createCookie` declarations.
 
-**Fix:** list the cookie once, or give the handles different names, domains, or paths.
+**Fix:** list the cookie once, share one handle between the outcomes, or give the handles
+different names, domains, or paths.
 
 ### `ROUTA_RESPONSE_COOKIE_SCOPE`
 
@@ -289,7 +320,10 @@ A schema uses a construct Routa cannot describe in OpenAPI, such as `z.tuple()`,
 `.extend()`, `z.date()`, a schema built by calling your own function, or a value that is
 not a Zod schema. Route `input` also needs static `params`, `query`, `headers`, `cookies`,
 or `body` properties, not a spread or a shared variable, and each outcome in `responses`
-needs a literal `status` and a `schema` written in place, not spread in.
+or a middleware's `rejects` needs an identifier or string-literal name, a literal `status`,
+and a `schema` written in place, not spread in. A `createMiddleware` config cannot spread
+in properties after its `rejects`, or anywhere when it has no `rejects`, because the spread
+could hide or replace them.
 
 In response schemas, Routa also reports a `.check()` argument it cannot classify, such as
 a check built by your own function, and URL options whose `normalize` value it cannot read.
@@ -416,14 +450,14 @@ missing. Routa refuses to overwrite or remove it because local edits may be lost
 Some conditions fail without a `ROUTA_*` code because they are detected at registration or
 in the OpenAPI commands rather than during route validation:
 
-| Message                                                           | Meaning                                                  |
-| ----------------------------------------------------------------- | -------------------------------------------------------- |
-| `Missing .routa/openapi-baseline.json. Run routa scaffold first.` | No accepted contract exists yet                          |
-| `Regeneration requires preview or confirmation.`                  | Scaffolding again without `--preview` or `--yes`         |
-| `Duplicate middleware reject key "…"`                             | Two middleware in one chain declare the same reject name |
-| `Duplicate route registration: …`                                 | The same method and path registered twice at runtime     |
-| `Middleware requires ctx.… but it was not provided.`              | A required context key was missing at request time       |
-| `Missing compiled runtime output for …`                           | `routa start` without a current `routa build`            |
+| Message                                                           | Meaning                                                    |
+| ----------------------------------------------------------------- | ---------------------------------------------------------- |
+| `Missing .routa/openapi-baseline.json. Run routa scaffold first.` | No accepted contract exists yet                            |
+| `Regeneration requires preview or confirmation.`                  | Scaffolding again without `--preview` or `--yes`           |
+| `Outcome "…" on … is declared by … and by …`                      | A route outcome and a reject, or two rejects, share a name |
+| `Duplicate route registration: …`                                 | The same method and path registered twice at runtime       |
+| `Middleware requires ctx.… but it was not provided.`              | A required context key was missing at request time         |
+| `Missing compiled runtime output for …`                           | `routa start` without a current `routa build`              |
 
 <Aside type="note" title="Generated documents carry diagnostics">
 	When OpenAPI generation runs against a project that does not validate, the output

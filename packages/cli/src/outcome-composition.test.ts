@@ -1,0 +1,946 @@
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { afterEach, describe, expect, it } from "vite-plus/test";
+import { generateOpenApi } from "./openapi.js";
+import { validateProject } from "./project.js";
+
+type Json = Record<string, unknown>;
+
+const temporaryProjects = new Set<string>();
+
+afterEach(() => {
+	for (const cwd of temporaryProjects) {
+		rmSync(cwd, { recursive: true, force: true });
+	}
+	temporaryProjects.clear();
+});
+
+const created = `created: {
+			status: 201,
+			description: "The project was created.",
+			schema: z.object({ kind: z.literal("created"), id: z.string() }),
+		}`;
+const queued = `queued: {
+			status: 201,
+			description: "The project was queued for creation.",
+			schema: z.object({ kind: z.literal("queued"), ticket: z.number() }),
+		}`;
+
+describe("same-status outcomes", () => {
+	it("composes literal-discriminated body outcomes into oneOf with a discriminator", () => {
+		const document = generateOpenApi(
+			project({ "src/routes/projects/route.ts": route(`${queued}, ${created}`) }),
+		);
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(responseOf(document, 201)).toEqual({
+			description:
+				"- `created`: The project was created.\n- `queued`: The project was queued for creation.",
+			content: {
+				"application/json": {
+					schema: {
+						oneOf: [
+							{
+								type: "object",
+								properties: { kind: { type: "string", const: "created" }, id: { type: "string" } },
+								required: ["kind", "id"],
+							},
+							{
+								type: "object",
+								properties: {
+									kind: { type: "string", const: "queued" },
+									ticket: { type: "number" },
+								},
+								required: ["kind", "ticket"],
+							},
+						],
+						discriminator: { propertyName: "kind" },
+					},
+				},
+			},
+		});
+	});
+
+	it("selects nothing by source order", () => {
+		const forward = generateOpenApi(
+			project({ "src/routes/projects/route.ts": route(`${created}, ${queued}`) }),
+		);
+		const reversed = generateOpenApi(
+			project({ "src/routes/projects/route.ts": route(`${queued}, ${created}`) }),
+		);
+
+		expect(reversed).toEqual(forward);
+	});
+
+	it("chooses the lexicographically first property when several literals discriminate", () => {
+		const document = generateOpenApi(
+			project({
+				"src/routes/projects/route.ts":
+					route(`a: { status: 200, schema: z.object({ type: z.literal("x"), kind: z.enum(["one"]) }) },
+		b: { status: 200, schema: z.object({ type: z.literal("y"), kind: z.enum(["two"]) }) }`),
+			}),
+		);
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(schemaOf(document, 200).discriminator).toEqual({ propertyName: "kind" });
+	});
+
+	it("reads discriminators through component references", () => {
+		const document = generateOpenApi(
+			project({
+				"src/routes/projects/schemas.ts": `import { z } from "zod";
+
+export const Created = z.object({ kind: z.literal("created"), id: z.string() });
+export const Queued = z.object({ kind: z.literal("queued") }).meta({ id: "QueuedProject" });
+`,
+				"src/routes/projects/route.ts": route(
+					`created: { status: 201, schema: Created }, queued: { status: 201, schema: Queued }`,
+					'import { Created, Queued } from "./schemas";',
+				),
+			}),
+		);
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(schemaOf(document, 201)).toEqual({
+			oneOf: [
+				{ $ref: "#/components/schemas/Created" },
+				{ $ref: "#/components/schemas/QueuedProject" },
+			],
+			// Component names differ from the payload values, so the mapping says which is which.
+			discriminator: {
+				propertyName: "kind",
+				mapping: {
+					created: "#/components/schemas/Created",
+					queued: "#/components/schemas/QueuedProject",
+				},
+			},
+		});
+	});
+
+	it("reads discriminator literals through chains of exported wrappers", () => {
+		const document = generateOpenApi(
+			project({
+				"src/routes/projects/schemas.ts": `import { z } from "zod";
+
+export const CreatedKind = z.literal("created");
+export const FrozenCreatedKind = CreatedKind.readonly();
+`,
+				"src/routes/projects/route.ts": route(
+					`created: { status: 201, schema: z.object({ kind: FrozenCreatedKind }) },
+		queued: { status: 201, schema: z.object({ kind: z.literal("queued") }) }`,
+					'import { FrozenCreatedKind } from "./schemas";',
+				),
+			}),
+		);
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(schemaOf(document, 201).discriminator).toEqual({ propertyName: "kind" });
+	});
+
+	it("omits the mapping when component names already match the payload values", () => {
+		const document = generateOpenApi(
+			project({
+				"src/routes/projects/schemas.ts": `import { z } from "zod";
+
+export const Created = z.object({ kind: z.literal("created") }).meta({ id: "created" });
+export const queued = z.object({ kind: z.literal("queued") });
+`,
+				"src/routes/projects/route.ts": route(
+					`created: { status: 201, schema: Created }, queued: { status: 201, schema: queued }`,
+					'import { Created, queued } from "./schemas";',
+				),
+			}),
+		);
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(schemaOf(document, 201).discriminator).toEqual({ propertyName: "kind" });
+	});
+
+	it.each([
+		["boolean", "z.literal(true)", "z.literal(false)", "false", "true"],
+		["number", "z.literal(2)", "z.literal(1)", "1", "2"],
+	])("composes %s literal discriminators", (_kind, first, second, low, high) => {
+		const inline = generateOpenApi(
+			project({
+				"src/routes/projects/route.ts": route(
+					`a: { status: 200, schema: z.object({ ok: ${first} }) }, b: { status: 200, schema: z.object({ ok: ${second} }) }`,
+				),
+			}),
+		);
+		const referenced = generateOpenApi(
+			project({
+				"src/routes/projects/schemas.ts": `import { z } from "zod";
+
+export const First = z.object({ ok: ${first} });
+export const Second = z.object({ ok: ${second} }).meta({ id: "SecondResult" });
+`,
+				"src/routes/projects/route.ts": route(
+					`a: { status: 200, schema: First }, b: { status: 200, schema: Second }`,
+					'import { First, Second } from "./schemas";',
+				),
+			}),
+		);
+
+		expect(diagnosticsOf(inline)).toEqual([]);
+		expect(schemaOf(inline, 200).discriminator).toEqual({ propertyName: "ok" });
+		expect(diagnosticsOf(referenced)).toEqual([]);
+		// Mapping keys are the payload values as strings.
+		expect(schemaOf(referenced, 200).discriminator).toEqual({
+			propertyName: "ok",
+			mapping: {
+				[high]: "#/components/schemas/First",
+				[low]: "#/components/schemas/SecondResult",
+			},
+		});
+	});
+
+	it("finds required literals through described and component-backed intersections", () => {
+		const document = generateOpenApi(
+			project({
+				"src/routes/projects/schemas.ts": `import { z } from "zod";
+
+export const Identified = z.object({ id: z.string() });
+export const KindC = z.object({ kind: z.literal("c") }).describe("C");
+export const KindD = z.object({ kind: z.literal("d") }).describe("D").and(Identified);
+`,
+				"src/routes/projects/route.ts": route(
+					`a: { status: 200, schema: z.object({ kind: z.literal("a") }).describe("A").and(z.object({ id: z.string() })) },
+		b: { status: 200, schema: z.object({ kind: z.literal("b") }).and(Identified) },
+		c: { status: 200, schema: KindC.and(Identified) },
+		d: { status: 200, schema: KindD },
+		e: { status: 200, schema: z.object({ kind: z.literal("e") }).and(z.object({ kind: z.string(), id: z.string() })) }`,
+					'import { Identified, KindC, KindD } from "./schemas";',
+				),
+			}),
+		);
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(schemaOf(document, 200)).toMatchObject({
+			oneOf: [
+				{ allOf: expect.any(Array) },
+				{ allOf: expect.any(Array) },
+				{ allOf: expect.any(Array) },
+				{ $ref: "#/components/schemas/KindD" },
+				// Plain object members fold, so both constraints on `kind` meet in one property.
+				{ properties: { kind: { allOf: [{ const: "e" }, { type: "string" }] } } },
+			],
+			discriminator: {
+				propertyName: "kind",
+				mapping: expect.objectContaining({ d: "#/components/schemas/KindD" }),
+			},
+		});
+	});
+
+	it.each([
+		[
+			"no shared literal",
+			`a: { status: 200, schema: z.object({ id: z.string() }) },
+		b: { status: 200, schema: z.object({ name: z.string() }) }`,
+		],
+		[
+			"an overlapping literal",
+			`a: { status: 200, schema: z.object({ kind: z.literal("same"), id: z.string() }) },
+		b: { status: 200, schema: z.object({ kind: z.literal("same"), name: z.string() }) }`,
+		],
+		[
+			"an optional literal",
+			`a: { status: 200, schema: z.object({ kind: z.literal("a").optional() }) },
+		b: { status: 200, schema: z.object({ kind: z.literal("b") }) }`,
+		],
+		[
+			"a literal only some alternatives share",
+			`a: { status: 200, schema: z.object({ kind: z.literal("a") }) },
+		b: { status: 200, schema: z.object({ kind: z.literal("b") }) },
+		c: { status: 200, schema: z.object({ id: z.string() }) }`,
+		],
+		[
+			"literals that read the same as text",
+			`a: { status: 200, schema: z.object({ kind: z.literal(1) }) },
+		b: { status: 200, schema: z.object({ kind: z.literal("1") }) }`,
+		],
+		[
+			"an intersection whose members require conflicting literals",
+			`a: { status: 200, schema: z.object({ kind: z.literal("a") }).describe("A").and(z.object({ kind: z.literal("b") })) },
+		b: { status: 200, schema: z.object({ kind: z.literal("c") }) }`,
+		],
+		[
+			"a folded intersection whose members require conflicting literals",
+			`a: { status: 200, schema: z.object({ kind: z.literal("a") }).and(z.object({ kind: z.literal("b") })) },
+		b: { status: 200, schema: z.object({ kind: z.literal("c") }) }`,
+		],
+		[
+			"a union alternative",
+			`a: { status: 200, schema: z.object({ kind: z.literal("a") }) },
+		b: { status: 200, schema: z.union([z.object({ kind: z.literal("b") }), z.string()]) }`,
+		],
+	])("rejects same-status body outcomes with %s and suggests a fix", (_label, responses) => {
+		const diagnostics = errorsOf(project({ "src/routes/projects/route.ts": route(responses) }));
+
+		expect(diagnostics).toEqual([
+			expect.objectContaining({
+				code: "ROUTA_RESPONSE_STATUS_AMBIGUOUS",
+				file: "src/routes/projects/route.ts",
+				routePath: "/projects",
+				message: expect.stringMatching(/GET \/projects.*status 200.*"a".*"b"/),
+				suggestion: expect.stringMatching(/literal discriminator.*distinct status/),
+			}),
+		]);
+	});
+
+	it("rejects body and bodyless outcomes that share a status", () => {
+		const diagnostics = errorsOf(
+			project({
+				"src/routes/projects/route.ts":
+					route(`done: { status: 200, schema: z.object({ id: z.string() }) },
+		empty: { status: 200 }`),
+			}),
+		);
+
+		expect(diagnostics).toEqual([
+			expect.objectContaining({
+				code: "ROUTA_RESPONSE_STATUS_AMBIGUOUS",
+				message: expect.stringMatching(/"done".*"empty".*body.*no body|bodyless/),
+			}),
+		]);
+	});
+
+	it("rejects several bodyless outcomes under one status", () => {
+		const diagnostics = errorsOf(
+			project({
+				"src/routes/projects/route.ts":
+					route(`ok: { status: 200, schema: z.object({ id: z.string() }) },
+		gone: { status: 204 },
+		removed: { status: 204, headers: z.object({ "x-removed": z.string() }) }`),
+			}),
+		);
+
+		expect(diagnostics).toEqual([
+			expect.objectContaining({
+				code: "ROUTA_RESPONSE_STATUS_AMBIGUOUS",
+				message: expect.stringMatching(/"gone".*"removed".*indistinguishable/),
+			}),
+		]);
+	});
+
+	it("projects a compatible header once, required only when every alternative requires it", () => {
+		const document = generateOpenApi(
+			project({
+				"src/routes/projects/route.ts": route(`a: {
+			status: 200,
+			schema: z.object({ kind: z.literal("a") }),
+			headers: z.object({ etag: z.string().describe("Tag."), "x-a": z.string() }),
+		},
+		b: {
+			status: 200,
+			schema: z.object({ kind: z.literal("b") }),
+			headers: z.object({ etag: z.string().describe("Tag.").optional(), "x-b": z.number() }),
+		},
+		c: {
+			status: 200,
+			schema: z.object({ kind: z.literal("c") }),
+			headers: z.object({ etag: z.string().describe("Tag.") }),
+		}`),
+			}),
+		);
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(responseOf(document, 200).headers).toEqual({
+			etag: { description: "Tag.", schema: { type: "string", description: "Tag." } },
+			"x-a": { schema: { type: "string" } },
+			"x-b": { schema: { type: "number" } },
+		});
+	});
+
+	it("rejects one header name with different schemas under one status", () => {
+		const diagnostics = errorsOf(
+			project({
+				"src/routes/projects/route.ts":
+					route(`a: { status: 200, schema: z.object({ kind: z.literal("a") }), headers: z.object({ etag: z.string() }) },
+		b: { status: 200, schema: z.object({ kind: z.literal("b") }), headers: z.object({ etag: z.string().describe("Other.") }) }`),
+			}),
+		);
+
+		expect(diagnostics).toEqual([
+			expect.objectContaining({
+				code: "ROUTA_RESPONSE_HEADER_INCOMPATIBLE",
+				message: expect.stringMatching(/"etag".*"a".*"b"/),
+			}),
+		]);
+	});
+
+	it("compares header schemas by their content, not by how they are referenced", () => {
+		const document = (a: string, b: string, c = 'z.string().describe("Tag")') =>
+			generateOpenApi(
+				project({
+					"src/routes/projects/schemas.ts": `import { z } from "zod";
+
+export const Tag = z.string().describe("Tag");
+export const SameTag = z.string().describe("Tag");
+`,
+					"src/routes/projects/route.ts": route(
+						`a: { status: 200, schema: z.object({ kind: z.literal("a") }), headers: z.object({ etag: ${a} }) },
+		b: { status: 200, schema: z.object({ kind: z.literal("b") }), headers: z.object({ etag: ${b} }) },
+		c: { status: 200, schema: z.object({ kind: z.literal("c") }), headers: z.object({ etag: ${c} }) }`,
+						'import { SameTag, Tag } from "./schemas";',
+					),
+				}),
+			);
+		const incompatible = [expect.objectContaining({ code: "ROUTA_RESPONSE_HEADER_INCOMPATIBLE" })];
+		const inlineAndReferenced = document("Tag", 'z.string().describe("Tag")');
+
+		expect(diagnosticsOf(inlineAndReferenced)).toEqual([]);
+		// The first alternative in outcome-name order decides how the header is written.
+		expect(responseOf(inlineAndReferenced, 200).headers).toMatchObject({
+			etag: { required: true, schema: { $ref: "#/components/schemas/Tag" } },
+		});
+		expect(diagnosticsOf(document("Tag", "SameTag", "Tag"))).toEqual([]);
+		expect(diagnosticsOf(document("Tag", 'z.string().describe("Other")'))).toEqual(incompatible);
+		// Metadata added to a component counts as content.
+		expect(
+			diagnosticsOf(document('Tag.describe("Other")', "Tag", 'z.string().describe("Other")')),
+		).toEqual(incompatible);
+		expect(diagnosticsOf(document("Tag", 'z.literal("v1").describe("Tag")'))).toEqual(incompatible);
+		// References nested in unions and intersections compare by content too.
+		const union = (tag: string) => `z.union([${tag}, z.literal("none")])`;
+		const intersection = (tag: string) => `${tag}.and(z.string())`;
+		for (const nested of [union, intersection]) {
+			const inline = nested('z.string().describe("Tag")');
+
+			expect(diagnosticsOf(document(nested("Tag"), inline, inline))).toEqual([]);
+			expect(diagnosticsOf(document(nested("Tag"), nested("SameTag"), inline))).toEqual([]);
+			expect(
+				diagnosticsOf(document(nested("Tag"), nested('z.string().describe("Other")'), inline)),
+			).toEqual(incompatible);
+		}
+		expect(
+			responseOf(document(union("Tag"), union('z.string().describe("Tag")'), union("SameTag")), 200)
+				.headers,
+		).toMatchObject({
+			etag: {
+				schema: {
+					anyOf: [{ $ref: "#/components/schemas/Tag" }, { type: "string", const: "none" }],
+				},
+			},
+		});
+	});
+
+	it("lists a cookie once and marks it always set only when every alternative requires it", () => {
+		const document = generateOpenApi(
+			project({
+				"src/cookies.ts": cookies,
+				"src/routes/projects/route.ts": route(
+					`a: { status: 200, schema: z.object({ kind: z.literal("a") }), cookies: [{ handle: session, required: true }, theme] },
+		b: { status: 200, schema: z.object({ kind: z.literal("b") }), cookies: [session] }`,
+					'import { session, theme } from "../../cookies";',
+				),
+			}),
+		);
+		const setCookie = (responseOf(document, 200).headers as Record<string, Json>)["Set-Cookie"]!;
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(setCookie.required).toBeUndefined();
+		expect(String(setCookie.description).match(/"session"/g)).toHaveLength(1);
+		expect(setCookie.description).toContain('"theme"');
+		expect(setCookie.description).not.toContain("always sets");
+	});
+
+	it("requires Set-Cookie when every alternative requires some cookie, even different ones", () => {
+		const setCookieOf = (routeOutcomes: string, rejects?: string) =>
+			(
+				responseOf(
+					generateOpenApi(
+						project({
+							"src/cookies.ts": cookies,
+							...(rejects
+								? {
+										"src/routes/projects/middleware.ts": `import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+import { theme } from "../../cookies";
+
+export const guard = createMiddleware({ rejects: { ${rejects} }, run: ({ next }) => next() });
+`,
+									}
+								: {}),
+							"src/routes/projects/route.ts": route(
+								routeOutcomes,
+								'import { session, theme } from "../../cookies";',
+							),
+						}),
+					),
+					400,
+				).headers as Record<string, Json>
+			)["Set-Cookie"]!;
+		const a = `a: { status: 400, schema: z.object({ kind: z.literal("a") }), cookies: [{ handle: session, required: true }] }`;
+		const routeOnly = setCookieOf(
+			`ok: { status: 200 }, ${a}, b: { status: 400, schema: z.object({ kind: z.literal("b") }), cookies: [{ handle: theme, required: true }] }`,
+		);
+		const withReject = setCookieOf(
+			`ok: { status: 200 }, ${a}`,
+			`b: { status: 400, schema: z.object({ kind: z.literal("b") }), cookies: [{ handle: theme, required: true }] }`,
+		);
+		const oneOptional = setCookieOf(
+			`ok: { status: 200 }, ${a}`,
+			`b: { status: 400, schema: z.object({ kind: z.literal("b") }), cookies: [theme] }`,
+		);
+
+		for (const setCookie of [routeOnly, withReject]) {
+			expect(setCookie.required).toBe(true);
+			// Neither cookie is set by every alternative, so neither is listed as always set.
+			expect(setCookie.description).not.toContain("always sets");
+		}
+
+		expect(oneOptional.required).toBeUndefined();
+	});
+
+	it("rejects different cookie declarations that claim one identity under one status", () => {
+		const diagnostics = errorsOf(
+			project({
+				"src/cookies.ts": `${cookies}
+export const otherSession = createCookie({ name: "session", schema: z.string(), httpOnly: false, secure: true, sameSite: "lax", path: "/" });
+`,
+				"src/routes/projects/route.ts": route(
+					`a: { status: 200, schema: z.object({ kind: z.literal("a") }), cookies: [session] },
+		b: { status: 200, schema: z.object({ kind: z.literal("b") }), cookies: [otherSession] }`,
+					'import { otherSession, session } from "../../cookies";',
+				),
+			}),
+		);
+
+		expect(diagnostics).toEqual([
+			expect.objectContaining({
+				code: "ROUTA_RESPONSE_COOKIE_CONFLICT",
+				message: expect.stringMatching(/"session".*"a".*"b"/),
+			}),
+		]);
+	});
+});
+
+describe("terminal middleware rejects", () => {
+	const okRoute = route(`ok: { status: 200, schema: z.object({ id: z.string() }) }`);
+	const guard = (rejects: string, extra = "") => `import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+${extra}
+export const guard = createMiddleware({
+\trejects: { ${rejects} },
+\trun: ({ next }) => next(),
+});
+`;
+
+	it.each(
+		["schema", "headers", "cookies"].flatMap((field) =>
+			["route", "middleware"].map((producer) => ({ field, producer })),
+		),
+	)("rejects a computed $field key on a $producer outcome", ({ field, producer }) => {
+		const expressions: Record<string, string> = {
+			schema: "z.object({ message: z.string() })",
+			headers: "z.object({ etag: z.string() })",
+			cookies: "[session]",
+		};
+		const outcome = `computed: { status: 401, ["${field}"]: ${expressions[field]} }`;
+		const imports = 'import { session } from "../../cookies";';
+		const cwd = project({
+			"src/cookies.ts": cookies,
+			"src/routes/projects/route.ts":
+				producer === "route" ? route(`ok: { status: 200 }, ${outcome}`, imports) : okRoute,
+			...(producer === "middleware"
+				? { "src/routes/projects/middleware.ts": guard(outcome, imports) }
+				: {}),
+		});
+		expect(errorsOf(cwd)).toEqual([expect.objectContaining({ code: "ROUTA_SCHEMA_UNSUPPORTED" })]);
+		expect(diagnosticsOf(generateOpenApi(cwd))).toEqual([
+			expect.objectContaining({ code: "ROUTA_SCHEMA_UNSUPPORTED" }),
+		]);
+	});
+
+	it("includes rejects from route-root and method middleware on one operation", () => {
+		const document = generateOpenApi(
+			project({
+				"src/cookies.ts": cookies,
+				"src/guards.ts": `import { createMiddleware } from "@routa-ts/core";
+import { session, theme } from "./cookies";
+export const rootGuard = createMiddleware({
+	rejects: { rootDenied: { status: 401, cookies: [session] } },
+	run: ({ next }) => next(),
+});
+export const methodGuard = createMiddleware({
+	rejects: { methodDenied: { status: 403, cookies: [theme] } },
+	run: ({ next }) => next(),
+});`,
+				"src/routes/projects/route.ts": route(
+					"ok: { status: 200 }",
+					'import { rootGuard, methodGuard } from "../../guards";',
+					{ rootMiddleware: "rootGuard", middleware: "methodGuard" },
+				),
+			}),
+		);
+		expect(diagnosticsOf(document)).toEqual([]);
+		const responses = (document as { paths: Record<string, Record<string, Json>> }).paths[
+			"/projects"
+		]!.get!.responses as Json;
+		expect(Object.keys(responses).sort()).toEqual(["200", "401", "403"]);
+		expect(
+			((responseOf(document, 401).headers as Json)["Set-Cookie"] as Json).description,
+		).toContain('"session"');
+		expect(
+			((responseOf(document, 403).headers as Json)["Set-Cookie"] as Json).description,
+		).toContain('"theme"');
+	});
+
+	it("documents reject headers, cookies, bodies, and descriptions like route outcomes", () => {
+		const document = generateOpenApi(
+			project({
+				"src/cookies.ts": cookies,
+				"src/routes/projects/middleware.ts": guard(
+					`unauthorized: {
+			status: 401,
+			description: "Sign in first.",
+			schema: z.object({ message: z.string() }),
+			headers: z.object({ "www-authenticate": z.string().describe("The challenge.") }),
+			cookies: [{ handle: session, required: true }],
+		}`,
+					'import { session } from "../../cookies";',
+				),
+				"src/routes/projects/route.ts": okRoute,
+			}),
+		);
+		const unauthorized = responseOf(document, 401);
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(unauthorized.description).toBe("Sign in first.");
+		expect(unauthorized.content).toEqual({
+			"application/json": {
+				schema: {
+					type: "object",
+					properties: { message: { type: "string" } },
+					required: ["message"],
+				},
+			},
+		});
+		expect(unauthorized.headers).toMatchObject({
+			"www-authenticate": {
+				required: true,
+				description: "The challenge.",
+				schema: { type: "string", description: "The challenge." },
+			},
+			"Set-Cookie": { required: true, schema: { type: "string" } },
+		});
+		expect(
+			(unauthorized.headers as Record<string, Json>)["Set-Cookie"]!.description as string,
+		).toContain('"session" (HttpOnly, Secure, SameSite=Lax, Path=/)');
+	});
+
+	it.each([
+		[
+			"a reserved header",
+			`denied: { status: 403, headers: z.object({ "content-type": z.string() }) }`,
+			"ROUTA_RESPONSE_HEADER_RESERVED",
+		],
+		[
+			"a raw Set-Cookie header",
+			`denied: { status: 403, headers: z.object({ "set-cookie": z.string() }) }`,
+			"ROUTA_RESPONSE_HEADER_RESERVED",
+		],
+		[
+			"an uppercase header",
+			`denied: { status: 403, headers: z.object({ "Retry-After": z.number() }) }`,
+			"ROUTA_RESPONSE_HEADER_NAME",
+		],
+		[
+			"an object header value",
+			`denied: { status: 403, headers: z.object({ "x-info": z.object({ a: z.string() }) }) }`,
+			"ROUTA_RESPONSE_HEADER_VALUE",
+		],
+		[
+			"a cookie that is not a handle",
+			`denied: { status: 403, cookies: ["session"] }`,
+			"ROUTA_RESPONSE_COOKIE_UNRESOLVED",
+		],
+		["a spread", `denied: { status: 403, ...shared }`, "ROUTA_SCHEMA_UNSUPPORTED"],
+		["a computed status", `denied: { status: 400 + 3 }`, "ROUTA_SCHEMA_UNSUPPORTED"],
+		[
+			"a computed description",
+			`denied: { status: 403, description: \`Denied \${1}\` }`,
+			"ROUTA_SCHEMA_UNSUPPORTED",
+		],
+		[
+			"an unreadable schema",
+			`denied: { status: 403, schema: makeSchema() }`,
+			"ROUTA_SCHEMA_UNSUPPORTED",
+		],
+		[
+			"a schema that changes values",
+			`denied: { status: 403, schema: z.object({ message: z.string().trim() }) }`,
+			"ROUTA_RESPONSE_SCHEMA_MUTATION",
+		],
+	])("reports a reject with %s in routa check", (_label, rejects, code) => {
+		const diagnostics = errorsOf(
+			project({
+				"src/routes/projects/middleware.ts": guard(
+					rejects,
+					"const shared = { status: 403 } as const;\nconst makeSchema = () => z.object({});",
+				),
+				"src/routes/projects/route.ts": okRoute,
+			}),
+		);
+
+		expect(diagnostics).toEqual([
+			expect.objectContaining({ code, file: "src/routes/projects/middleware.ts" }),
+		]);
+	});
+
+	it("reports a reject rejects object Routa cannot read", () => {
+		const diagnostics = errorsOf(
+			project({
+				"src/routes/projects/middleware.ts": `import { createMiddleware } from "@routa-ts/core";
+
+const rejects = { denied: { status: 403 } } as const;
+
+export const guard = createMiddleware({ rejects: { ...rejects }, run: ({ next }) => next() });
+`,
+				"src/routes/projects/route.ts": okRoute,
+			}),
+		);
+
+		expect(diagnostics).toEqual([
+			expect.objectContaining({
+				code: "ROUTA_SCHEMA_UNSUPPORTED",
+				message: expect.stringContaining("middleware rejects need static status"),
+			}),
+		]);
+	});
+
+	it.each([
+		[
+			"a contract spread that can hide its rejects",
+			`const base = { rejects: { denied: { status: 403, schema: z.object({ message: z.string() }) } } } as const;
+
+export const guard = createMiddleware({ ...base, run: () => ({ type: "denied", data: { message: "No" } }) as never });`,
+			"middleware contracts need a static rejects property",
+		],
+		[
+			"a computed reject name",
+			`const name = "denied";
+
+export const guard = createMiddleware({
+	rejects: { [name]: { status: 403, schema: z.object({ message: z.string() }) } },
+	run: ({ next }) => next(),
+});`,
+			"outcome names need an identifier or string literal",
+		],
+	])("reports %s instead of dropping the reject", (_label, declaration, message) => {
+		const cwd = project({
+			"src/routes/projects/middleware.ts": `import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+
+${declaration}
+`,
+			"src/routes/projects/route.ts": okRoute,
+		});
+		const expected = expect.objectContaining({
+			code: "ROUTA_SCHEMA_UNSUPPORTED",
+			file: "src/routes/projects/middleware.ts",
+			message: expect.stringContaining(message),
+		});
+		const validation = validateProject(cwd);
+
+		expect(validation.diagnostics).toEqual([expected]);
+		// Route metadata is written only for a clean project, and never invents an outcome name.
+		expect(existsSync(join(cwd, ".routa/routes.gen.ts"))).toBe(false);
+		expect(JSON.stringify(validation.routes)).not.toContain('"403"');
+		expect(diagnosticsOf(generateOpenApi(cwd))).toEqual([expected]);
+	});
+
+	it("reports a reject header the route's lifecycle headers own", () => {
+		const diagnostics = errorsOf(
+			project({
+				"src/routa.ts":
+					'import { createRouta } from "@routa-ts/core";\n\nexport default createRouta({ lifecycleHeaders: true });\n',
+				"src/routes/projects/middleware.ts": guard(
+					`denied: { status: 403, headers: z.object({ sunset: z.string() }) }`,
+				),
+				"src/routes/projects/route.ts": route(
+					`ok: { status: 200, schema: z.object({ id: z.string() }) }`,
+					"",
+					{ deprecation: '{ sunset: "2030-01-01" }' },
+				),
+			}),
+		);
+
+		expect(diagnostics).toEqual([
+			expect.objectContaining({ code: "ROUTA_RESPONSE_HEADER_LIFECYCLE" }),
+		]);
+	});
+
+	it("reports a reject body reachable from a HEAD route", () => {
+		const files = (method: string) =>
+			project({
+				"src/routes/projects/middleware.ts": guard(
+					`denied: { status: 403, schema: z.object({ message: z.string() }) }, gone: { status: 410 }`,
+				),
+				"src/routes/projects/route.ts": route(`ok: { status: 200 }`, "", { method }),
+			});
+
+		expect(errorsOf(files("get"))).toEqual([]);
+		expect(errorsOf(files("head"))).toEqual([
+			expect.objectContaining({
+				code: "ROUTA_RESPONSE_BODYLESS_SCHEMA",
+				file: "src/routes/projects/route.ts",
+				routePath: "/projects",
+				message: expect.stringContaining('middleware guard reject "denied"'),
+			}),
+		]);
+	});
+
+	it("composes a reject with a route outcome under one status", () => {
+		const cwd = (routeOutcome: string) =>
+			project({
+				"src/routes/projects/middleware.ts": guard(
+					`tooLarge: { status: 400, schema: z.object({ kind: z.literal("tooLarge"), limit: z.number() }) }`,
+				),
+				"src/routes/projects/route.ts": route(`ok: { status: 200 }, ${routeOutcome}`),
+			});
+		const document = generateOpenApi(
+			cwd(`invalid: { status: 400, schema: z.object({ kind: z.literal("invalid") }) }`),
+		);
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(schemaOf(document, 400)).toMatchObject({
+			oneOf: [
+				{ properties: { kind: { const: "invalid" } } },
+				{ properties: { kind: { const: "tooLarge" } } },
+			],
+			discriminator: { propertyName: "kind" },
+		});
+		expect(
+			errorsOf(cwd(`invalid: { status: 400, schema: z.object({ message: z.string() }) }`)),
+		).toEqual([
+			expect.objectContaining({
+				code: "ROUTA_RESPONSE_STATUS_AMBIGUOUS",
+				message: expect.stringContaining('"invalid", "tooLarge" (a reject of middleware guard)'),
+			}),
+		]);
+	});
+
+	it("maps discriminator values to referenced route and reject alternatives", () => {
+		const document = generateOpenApi(
+			project({
+				"src/routes/projects/schemas.ts": `import { z } from "zod";
+
+export const Invalid = z.object({ kind: z.literal("invalid") }).meta({ id: "InvalidInput" });
+`,
+				"src/routes/projects/middleware.ts": guard(
+					"tooLarge: { status: 400, schema: TooLarge }",
+					'export const TooLarge = z.object({ kind: z.literal("tooLarge"), limit: z.number() });',
+				),
+				"src/routes/projects/route.ts": route(
+					"ok: { status: 200 }, invalid: { status: 400, schema: Invalid }",
+					'import { Invalid } from "./schemas";',
+				),
+			}),
+		);
+
+		expect(diagnosticsOf(document)).toEqual([]);
+		expect(schemaOf(document, 400)).toEqual({
+			oneOf: [
+				{ $ref: "#/components/schemas/InvalidInput" },
+				{ $ref: "#/components/schemas/TooLarge" },
+			],
+			discriminator: {
+				propertyName: "kind",
+				mapping: {
+					invalid: "#/components/schemas/InvalidInput",
+					tooLarge: "#/components/schemas/TooLarge",
+				},
+			},
+		});
+	});
+
+	it("reports an outcome name the route and a middleware both declare", () => {
+		const diagnostics = errorsOf(
+			project({
+				"src/routes/projects/middleware.ts": guard(`unauthorized: { status: 401 }`),
+				"src/routes/projects/route.ts": route(
+					`ok: { status: 200 }, unauthorized: { status: 401, description: "Again." }`,
+				),
+			}),
+		);
+
+		expect(diagnostics).toEqual([
+			expect.objectContaining({
+				code: "ROUTA_OUTCOME_NAME_COLLISION",
+				message: 'Outcome "unauthorized" is declared by the route and by middleware guard',
+			}),
+		]);
+	});
+});
+
+const cookies = `import { createCookie } from "@routa-ts/core";
+import { z } from "zod";
+
+export const session = createCookie({ name: "session", schema: z.string(), httpOnly: true, secure: true, sameSite: "lax", path: "/" });
+export const theme = createCookie({ name: "theme", schema: z.string(), httpOnly: false, secure: false, sameSite: "lax", path: "/" });
+`;
+
+function project(files: Record<string, string>): string {
+	const cwd = mkdtempSync(join(tmpdir(), "routa-outcome-composition-"));
+	temporaryProjects.add(cwd);
+	const allFiles: Record<string, string> = {
+		"package.json": JSON.stringify({ type: "module" }),
+		"tsconfig.json": "{}",
+		"src/routa.ts":
+			'import { createRouta } from "@routa-ts/core";\n\nexport default createRouta({});\n',
+		".routa/.keep": "",
+		...files,
+	};
+
+	for (const [file, content] of Object.entries(allFiles)) {
+		mkdirSync(dirname(join(cwd, file)), { recursive: true });
+		writeFileSync(join(cwd, file), content);
+	}
+
+	return cwd;
+}
+
+function route(
+	responses: string,
+	imports = "",
+	options: {
+		method?: string;
+		path?: string;
+		middleware?: string;
+		rootMiddleware?: string;
+		deprecation?: string;
+	} = {},
+): string {
+	return `import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+${imports}
+export default createRouteRoot(${JSON.stringify(options.path ?? "/projects")})({
+${options.rootMiddleware ? `\tmiddleware: [${options.rootMiddleware}],\n` : ""}\t${options.method ?? "get"}: createRoute({
+${options.middleware ? `\t\tmiddleware: [${options.middleware}],\n` : ""}${options.deprecation ? `\t\tdeprecation: ${options.deprecation},\n` : ""}\t\tresponses: { ${responses} },
+\t\trun: async () => ({}) as never,
+\t}),
+});
+`;
+}
+
+function errorsOf(cwd: string) {
+	return validateProject(cwd, { write: false }).diagnostics;
+}
+
+function diagnosticsOf(document: unknown): unknown[] {
+	return ((document as Json)["x-routa-diagnostics"] as unknown[] | undefined) ?? [];
+}
+
+function responseOf(document: unknown, status: number, path = "/projects", method = "get"): Json {
+	const operation = (document as { paths: Record<string, Record<string, Json>> }).paths[path]![
+		method
+	]!;
+	return (operation.responses as Record<string, Json>)[String(status)]!;
+}
+
+function schemaOf(document: unknown, status: number): Json {
+	return ((responseOf(document, status).content as Json)["application/json"] as Json)
+		.schema as Json;
+}

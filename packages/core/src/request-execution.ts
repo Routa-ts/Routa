@@ -15,6 +15,19 @@ type RuntimeResult = {
 	data?: unknown;
 };
 
+/**
+ * The result that ends a request and who produced it: the route handler or one terminal
+ * middleware. A result is checked only against its producer's own declared outcomes.
+ */
+type ProducedResult = {
+	result: RuntimeResult;
+	outcomes: Readonly<Record<string, RuntimeOutcome>>;
+	/** Names the producer in messages, such as `the route handler` or `middleware[0]`. */
+	producer: string;
+	/** Names one of its outcomes in messages, such as `middleware[0] reject "expired"`. */
+	label: (type: string) => string;
+};
+
 type RuntimeOutcome = {
 	status: number;
 	description?: string;
@@ -24,14 +37,14 @@ type RuntimeOutcome = {
 };
 
 /**
- * A validated handler result: either a JSON body or an intentionally empty body, with the
- * serialized response headers and cookies its outcome declared.
+ * A validated handler result, already serialized: either JSON body text or an intentionally empty
+ * body, with the serialized response headers and cookies its outcome declared.
  */
 type ValidatedResult = {
 	status: number;
 	headers: ReadonlyArray<readonly [string, string]>;
 	cookies: readonly CookieEntry[];
-} & ({ body: false } | { body: true; data: unknown });
+} & ({ body: false } | { body: true; text: string });
 
 export type RuntimeRouteContract = AnyRouteContract & {
 	run: (args: {
@@ -46,8 +59,8 @@ type RuntimeMiddlewareContract = MiddlewareContract & {
 	run?: (args: {
 		input: Record<string, unknown>;
 		ctx: Record<string, unknown>;
-		next: (ctx?: Record<string, unknown>) => Promise<RuntimeResult>;
-	}) => RuntimeResult | Promise<RuntimeResult>;
+		next: (ctx?: Record<string, unknown>) => Promise<object>;
+	}) => unknown;
 };
 
 type RequestExecutorOptions = {
@@ -74,12 +87,16 @@ export function createRequestExecutor(
 			const inputReader = new RequestInputReader(request, params);
 			const input = await inputReader.parse(contract.input);
 			const ctx = toRecord(options.createContext ? await options.createContext() : {});
-			const result = await runWithMiddleware(contract, input, ctx, inputReader, options.logger);
-			const response = validateResult(contract, result, options.validateResponses);
+			const lifecycle = lifecycleHeaders(contract.deprecation, options.lifecycleHeaders);
 
-			return finalizeResponse(
-				response,
-				lifecycleHeaders(contract.deprecation, options.lifecycleHeaders),
+			return await runWithMiddleware(
+				contract,
+				input,
+				ctx,
+				inputReader,
+				options.logger,
+				(produced) =>
+					finalizeResponse(validateResult(produced, options.validateResponses), lifecycle),
 			);
 		} catch (error) {
 			const response = errorResponse(error);
@@ -91,14 +108,21 @@ export function createRequestExecutor(
 /**
  * Runs route middleware and the final handler in sequence.
  *
- * Middleware can either return a runtime result or call `next()` to continue to the next step.
- * Context updates passed to `next()` are merged into the shared context object.
+ * Middleware either returns one of its own rejects, ending the request, or calls `next()` and
+ * returns its result unchanged. A middleware that returns anything else after `next()` fails, so
+ * no middleware can change or add to the selected outcome's response. Context updates passed to
+ * `next()` are merged into the shared context object.
+ *
+ * The response is fixed where its outcome is selected: `select` validates and serializes the
+ * result before the chain unwinds, so later changes to objects the result shared with application
+ * code cannot reach the wire.
  *
  * @param contract - The route contract to execute
  * @param routeInput - Parsed input passed to the final handler
  * @param ctx - Shared context object available to middleware and the final handler
  * @param inputReader - Reader used to parse middleware-specific input
- * @returns The runtime result produced by middleware or the final handler
+ * @param select - Turns the result that ends the request into its response
+ * @returns The response of the selected outcome
  */
 async function runWithMiddleware(
 	contract: RuntimeRouteContract,
@@ -106,10 +130,11 @@ async function runWithMiddleware(
 	ctx: Record<string, unknown>,
 	inputReader: RequestInputReader,
 	logger: RoutaLogger,
-): Promise<RuntimeResult> {
+	select: (produced: ProducedResult) => Response,
+): Promise<Response> {
 	const middleware = contract.middleware ?? [];
 
-	async function dispatch(index: number): Promise<RuntimeResult> {
+	async function dispatch(index: number): Promise<Response> {
 		const item = middleware[index];
 
 		if (!item) {
@@ -126,7 +151,12 @@ async function runWithMiddleware(
 			});
 
 			if (isRuntimeResult(result)) {
-				return result;
+				return select({
+					result,
+					outcomes: contract.responses,
+					producer: "the route handler",
+					label: (type) => `outcome "${type}"`,
+				});
 			}
 
 			throw new InvalidHandlerOutputError("Handler returned invalid output.");
@@ -139,6 +169,10 @@ async function runWithMiddleware(
 		assertMiddlewareRequires(item.requires, ctx);
 
 		let nextCalled = false;
+		let downstream: Response | undefined;
+		// next() resolves to this token, never to the selected result itself, so middleware cannot
+		// read or mutate the outcome; returning the token is how it continues.
+		const continuation = Object.freeze(Object.create(null) as object);
 		const input = await inputReader.parse(item.input);
 		const result = await item.run({
 			input,
@@ -155,16 +189,28 @@ async function runWithMiddleware(
 
 				nextCalled = true;
 				Object.assign(ctx, parseMiddlewareProvides(item.provides, providedCtx));
-				return await dispatch(index + 1);
+				downstream = await dispatch(index + 1);
+				return continuation;
 			},
 		});
 
-		if (isRuntimeResult(result)) {
-			return result;
+		if (nextCalled) {
+			if (!downstream || result !== continuation) {
+				throw new InvalidHandlerOutputError(
+					"Middleware called next() and then returned something other than next()'s result. A continuing middleware returns next()'s result unchanged; it cannot change the selected outcome or add headers or cookies to it.",
+				);
+			}
+
+			return downstream;
 		}
 
-		if (nextCalled) {
-			throw new InvalidHandlerOutputError("Middleware returned invalid output after next().");
+		if (isRuntimeResult(result)) {
+			return select({
+				result,
+				outcomes: item.rejects ?? {},
+				producer: `middleware[${index}]`,
+				label: (type) => `middleware[${index}] reject "${type}"`,
+			});
 		}
 
 		throw new InvalidHandlerOutputError("Middleware returned invalid output.");
@@ -449,12 +495,12 @@ function problem(
 	extra?: Record<string, unknown>,
 ): Response {
 	return json(
-		{
+		jsonText({
 			type,
 			title,
 			status,
-			...(extra ?? {}),
-		},
+			...extra,
+		}),
 		status,
 	);
 }
@@ -466,28 +512,28 @@ function problem(
  * Zod parsing is gated by `validateResponse`. It only checks that the handler value is
  * valid and unchanged: the handler value is always what gets sent, never the parsed one.
  *
- * @param contract - The route contract that defines allowed response types and schemas.
- * @param result - The value returned by a handler.
+ * Route outcomes and terminal middleware rejects share this path, so both get the same body,
+ * header, cookie, and validation behavior. A result is checked only against its producer's own
+ * outcomes: a handler cannot return a reject, and a middleware cannot return another's.
+ *
+ * @param produced - The result that ends the request and the outcomes its producer declares.
  * @param validateResponse - Whether to parse response data through its declared schema.
  * @returns A validated runtime result with the corresponding HTTP status.
  */
-function validateResult(
-	contract: RuntimeRouteContract,
-	result: unknown,
-	validateResponse: boolean,
-): ValidatedResult {
-	if (!isRuntimeResult(result)) {
-		throw new InvalidHandlerOutputError("Handler returned invalid output.");
-	}
-
-	const response = declaredOutcome(contract, result.type);
+function validateResult(produced: ProducedResult, validateResponse: boolean): ValidatedResult {
+	const { result } = produced;
+	const response = Object.hasOwn(produced.outcomes, result.type)
+		? produced.outcomes[result.type]
+		: undefined;
 
 	if (!response) {
-		throw new InvalidHandlerOutputError(`Handler returned unknown response type "${result.type}".`);
+		throw new InvalidHandlerOutputError(
+			`${produced.producer} returned unknown response type "${result.type}"; it can only return its own outcomes.`,
+		);
 	}
 
 	const headers = validatedHeaders(result, response, validateResponse);
-	const cookies = validatedCookies(result, response, validateResponse);
+	const cookies = validatedCookies(result, response, validateResponse, produced.label(result.type));
 
 	if (!response.schema) {
 		if (result.data !== undefined) {
@@ -511,11 +557,13 @@ function validateResult(
 		);
 	}
 
+	const text = jsonText(result.data);
+
 	if (validateResponse) {
 		try {
 			// Zod can hand back references shared with the handler value, so a refinement may
-			// mutate both. Compare against a copy taken before parsing.
-			const snapshot = jsonSnapshot(result.data);
+			// mutate both. Compare against the wire copy taken before parsing.
+			const snapshot: unknown = JSON.parse(text);
 
 			assertUnchanged(parseSchema(response.schema, result.data), snapshot);
 			assertUnchanged(result.data, snapshot);
@@ -531,7 +579,7 @@ function validateResult(
 		}
 	}
 
-	return { body: true, data: result.data, status: response.status, headers, cookies };
+	return { body: true, text, status: response.status, headers, cookies };
 }
 
 /**
@@ -577,9 +625,10 @@ function validatedCookies(
 	result: RuntimeResult & { cookies?: unknown },
 	outcome: RuntimeOutcome,
 	validateResponse: boolean,
+	producer: string,
 ): readonly CookieEntry[] {
 	return resolveCookieEffects(result.type, outcome, result.cookies).map((effect) => {
-		const entry = serializeCookieEffect(result.type, effect, `outcome "${result.type}"`);
+		const entry = serializeCookieEffect(result.type, effect, producer);
 
 		if (validateResponse && effect.kind === "set") {
 			try {
@@ -601,33 +650,6 @@ function validatedCookies(
 
 		return entry;
 	});
-}
-
-function declaredOutcome(contract: RuntimeRouteContract, type: string): RuntimeOutcome | undefined {
-	if (Object.hasOwn(contract.responses, type)) {
-		return contract.responses[type];
-	}
-
-	return middlewareResponses(contract)[type];
-}
-
-/** Copies a value through JSON, the representation that would go on the wire. */
-function jsonSnapshot(value: unknown): unknown {
-	let text: string | undefined;
-
-	try {
-		text = JSON.stringify(value);
-	} catch (error) {
-		throw new InvalidHandlerOutputError(
-			`Failed to serialize response as JSON: ${error instanceof Error ? error.message : String(error)}`,
-		);
-	}
-
-	if (text === undefined) {
-		throw new InvalidHandlerOutputError("Response data cannot be serialized as JSON.");
-	}
-
-	return JSON.parse(text);
 }
 
 /**
@@ -724,19 +746,6 @@ function handlerOutputIssues(
 	}));
 }
 
-function middlewareResponses(contract: RuntimeRouteContract): Record<string, RuntimeOutcome> {
-	const responses: Record<string, RuntimeOutcome> = Object.create(null);
-
-	for (const item of contract.middleware ?? []) {
-		for (const [type, response] of Object.entries(item.rejects ?? {}) as Array<
-			[string, RuntimeOutcome]
-		>) {
-			responses[type] = response;
-		}
-	}
-
-	return responses;
-}
 /**
  * Determines whether a value matches the runtime result shape.
  *
@@ -803,36 +812,45 @@ function finalizeResponse(
 	}
 
 	return response.body
-		? json(response.data, response.status, headers)
+		? json(response.text, response.status, headers)
 		: new Response(null, { status: response.status, headers });
 }
 
 /**
- * Creates a JSON response.
+ * Serializes a response body as JSON, the representation that goes on the wire.
  *
- * @param data - The response body to serialize as JSON
- * @param status - The HTTP status code for the response
- * @returns A `Response` with a JSON body and `application/json; charset=utf-8` content type
+ * @throws {InvalidHandlerOutputError} When the value cannot be serialized as JSON
  */
-function json(data: unknown, status: number, headers: HeadersInit = {}): Response {
-	let body: string | undefined;
+function jsonText(data: unknown): string {
+	let text: string | undefined;
 
 	try {
-		body = JSON.stringify(data);
+		text = JSON.stringify(data);
 	} catch (error) {
 		throw new InvalidHandlerOutputError(
 			`Failed to serialize response as JSON: ${error instanceof Error ? error.message : String(error)}`,
 		);
 	}
 
-	if (body === undefined) {
+	if (text === undefined) {
 		throw new InvalidHandlerOutputError("Response data cannot be serialized as JSON.");
 	}
 
+	return text;
+}
+
+/**
+ * Creates a JSON response from serialized body text.
+ *
+ * @param text - The JSON body text
+ * @param status - The HTTP status code for the response
+ * @returns A `Response` with a JSON body and `application/json; charset=utf-8` content type
+ */
+function json(text: string, status: number, headers: HeadersInit = {}): Response {
 	const responseHeaders = new Headers(headers);
 	responseHeaders.set("content-type", "application/json; charset=utf-8");
 
-	return new Response(body, { status, headers: responseHeaders });
+	return new Response(text, { status, headers: responseHeaders });
 }
 
 /**

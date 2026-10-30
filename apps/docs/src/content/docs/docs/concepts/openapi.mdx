@@ -27,10 +27,62 @@ header, and the schema's `description`. Header schema metadata such as `examples
 the Header Object's schema. An outcome's `cookies` become one standard `Set-Cookie` Header
 Object whose description lists each cookie's name and static attributes and says each is a
 separate repeated field. The header is `required` when the outcome declares a required cookie,
-and the description then names the required cookies. It never carries a value, an example, or a vendor extension. Cookies
-declared on middleware `rejects` are not documented yet. Middleware `openapi` metadata
-contributes `security` and `x-routa-authz`, and route `deprecation` metadata marks the
-operation deprecated.
+and the description then names the required cookies. It never carries a value, an example, or a vendor extension.
+Middleware `rejects` are documented exactly like route outcomes: description, body, headers,
+and cookies. Middleware `openapi` metadata contributes `security` and `x-routa-authz`, and
+route `deprecation` metadata marks the operation deprecated.
+
+### Outcomes That Share a Status
+
+OpenAPI has one response per status, so outcomes that share a status are composed into one.
+The outcomes considered are the method's own `responses` and the `rejects` of every middleware
+in its chain. Composition never depends on the order they are written in:
+
+- Body outcomes compose when every one of them has a required property with a single
+  string, number, or boolean literal value (`z.literal(...)` or a one-value `z.enum([...])`)
+  and those values all differ. Values are compared as text, the way OpenAPI discriminator
+  values are, so `1` and `"1"` do not differ. Routa reads the property through component
+  references and intersections (`z.intersection()` or `.and()`). The response schema becomes a
+  `oneOf` of the outcome schemas, ordered by outcome name, with that property as
+  `discriminator.propertyName`. When several properties qualify, the alphabetically first
+  name is the discriminator.
+- When an outcome schema is a referenced component whose name differs from its discriminator
+  value, such as `Created` for `kind: "created"`, the discriminator gets a `mapping` from each
+  value, as text, to its component. Components are never renamed to match values.
+- Without such a property, `routa check` fails with `ROUTA_RESPONSE_STATUS_AMBIGUOUS`. Add a
+  literal discriminator or give each outcome its own status. Routa never falls back to
+  `anyOf`.
+- A body outcome and a bodyless outcome cannot share a status, and neither can two bodyless
+  outcomes; clients could not tell them apart.
+- A header declared by several of the outcomes must have the same schema, metadata included
+  (`ROUTA_RESPONSE_HEADER_INCOMPATIBLE`). Schemas are compared by content, so a component
+  reference and an equal inline schema agree. The header is projected once, as the first
+  outcome in name order writes it, and is `required` only when every outcome under the
+  status requires it.
+- A cookie identity listed by several of the outcomes must come from the same `createCookie`
+  handle (`ROUTA_RESPONSE_COOKIE_CONFLICT`). The `Set-Cookie` description lists it once, as
+  always set or cleared only when every outcome requires it. The `Set-Cookie` header is
+  `required` when every outcome requires some cookie, even when they require different ones.
+- The response description lists each outcome's description in outcome-name order, one
+  Markdown list item per outcome: ``- `created`: The project was created.``
+
+```ts title="src/routes/projects/route.ts"
+import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/projects")({
+	post: createRoute({
+		responses: {
+			created: { status: 201, schema: z.object({ kind: z.literal("created"), id: z.string() }) },
+			queued: { status: 201, schema: z.object({ kind: z.literal("queued"), ticket: z.number() }) },
+		},
+		run: ({ response }) => response.created({ kind: "created", id: "p_1" }),
+	}),
+});
+```
+
+The `201` response above documents `oneOf: [created, queued]` with
+`discriminator: { propertyName: "kind" }`.
 
 The document comes from source alone. Operations, parameters, request bodies, responses,
 components, `security`, and generated `operationId` values never come from

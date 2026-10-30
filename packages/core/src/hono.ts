@@ -99,7 +99,7 @@ export function createHonoApp(
 			options.lifecycleHeaders,
 			routeLogger,
 		);
-		assertUniqueMiddlewareRejects(contract, route.path, method);
+		assertUniqueOutcomeNames(contract, route.path, method);
 
 		const methods = methodsByPath.get(route.path) ?? new Set<string>();
 		methods.add(method);
@@ -209,7 +209,7 @@ function assertOutcomeDeclarations(
 		for (const [name, outcome] of Object.entries(item.rejects ?? {}) as Array<
 			[string, { status: number; schema?: unknown; headers?: unknown; cookies?: unknown }]
 		>) {
-			const problem = outcomeProblem(outcome, undefined, lifecycleOwned);
+			const problem = outcomeProblem(outcome, method, lifecycleOwned);
 
 			if (problem) {
 				throw new Error(`Middleware reject "${name}" on ${label} ${problem}`);
@@ -270,18 +270,22 @@ function outcomeProblem(
 }
 
 /**
- * Ensures middleware reject keys are unique across a route's middleware chain.
+ * Ensures every outcome that can end a route has its own name: route outcomes and the rejects of
+ * every middleware in its chain. The handler result names its outcome, so two producers sharing a
+ * name would leave Routa to choose one.
  *
- * @param contract - The route contract whose middleware rejects are checked
+ * @param contract - The route contract whose outcome names are checked
  * @param path - The route path, used in the error message
  * @param method - The HTTP method, used in the error message
  */
-function assertUniqueMiddlewareRejects(
+function assertUniqueOutcomeNames(
 	contract: RuntimeRouteContract,
 	path: string,
 	method: string,
 ): void {
-	const seen = new Map<string, string>();
+	const seen = new Map<string, string>(
+		Object.keys(contract.responses).map((type) => [type, "the route"]),
+	);
 
 	for (const [index, item] of (contract.middleware ?? []).entries()) {
 		const label = `middleware[${index}]`;
@@ -291,7 +295,7 @@ function assertUniqueMiddlewareRejects(
 
 			if (previous) {
 				throw new Error(
-					`Duplicate middleware reject key "${type}" on ${method} ${path} (${previous} and ${label}).`,
+					`Outcome "${type}" on ${method} ${path} is declared by ${previous} and by ${label}. Give each outcome its own name.`,
 				);
 			}
 
