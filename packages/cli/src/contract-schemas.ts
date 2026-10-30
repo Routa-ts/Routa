@@ -1002,13 +1002,14 @@ class SchemaProjector {
 				|| status === undefined
 				|| outcome.properties.some(
 					(property) =>
-						!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property),
+						(!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property))
+						|| ts.isComputedPropertyName(property.name),
 				)
 			) {
 				this.unsupported(
 					response,
 					context,
-					`${kind === "route" ? "route outcomes" : "middleware rejects"} need static status and schema properties without spreads`,
+					`${kind === "route" ? "route outcomes" : "middleware rejects"} need static status and schema properties without spreads or computed keys`,
 				);
 				continue;
 			}

@@ -503,7 +503,7 @@ export const Version = z.object({ version: z.string() });
 			[
 				"ROUTA_SCHEMA_UNSUPPORTED",
 				"src/routes/payloads/route.ts",
-				"Unsupported schema for OpenAPI (route outcomes need static status and schema properties without spreads): ok: { status: 200, ...payload }",
+				"Unsupported schema for OpenAPI (route outcomes need static status and schema properties without spreads or computed keys): ok: { status: 200, ...payload }",
 			],
 		]);
 	});

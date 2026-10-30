@@ -1,11 +1,20 @@
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 import { generateOpenApi } from "./openapi.js";
 import { validateProject } from "./project.js";
 
 type Json = Record<string, unknown>;
+
+const temporaryProjects = new Set<string>();
+
+afterEach(() => {
+	for (const cwd of temporaryProjects) {
+		rmSync(cwd, { recursive: true, force: true });
+	}
+	temporaryProjects.clear();
+});
 
 const created = `created: {
 			status: 201,
@@ -518,6 +527,66 @@ export const guard = createMiddleware({
 });
 `;
 
+	it.each(
+		["schema", "headers", "cookies"].flatMap((field) =>
+			["route", "middleware"].map((producer) => ({ field, producer })),
+		),
+	)("rejects a computed $field key on a $producer outcome", ({ field, producer }) => {
+		const expressions: Record<string, string> = {
+			schema: "z.object({ message: z.string() })",
+			headers: "z.object({ etag: z.string() })",
+			cookies: "[session]",
+		};
+		const outcome = `computed: { status: 401, ["${field}"]: ${expressions[field]} }`;
+		const imports = 'import { session } from "../../cookies";';
+		const cwd = project({
+			"src/cookies.ts": cookies,
+			"src/routes/projects/route.ts":
+				producer === "route" ? route(`ok: { status: 200 }, ${outcome}`, imports) : okRoute,
+			...(producer === "middleware"
+				? { "src/routes/projects/middleware.ts": guard(outcome, imports) }
+				: {}),
+		});
+		expect(errorsOf(cwd)).toEqual([expect.objectContaining({ code: "ROUTA_SCHEMA_UNSUPPORTED" })]);
+		expect(diagnosticsOf(generateOpenApi(cwd))).toEqual([
+			expect.objectContaining({ code: "ROUTA_SCHEMA_UNSUPPORTED" }),
+		]);
+	});
+
+	it("includes rejects from route-root and method middleware on one operation", () => {
+		const document = generateOpenApi(
+			project({
+				"src/cookies.ts": cookies,
+				"src/guards.ts": `import { createMiddleware } from "@routa-ts/core";
+import { session, theme } from "./cookies";
+export const rootGuard = createMiddleware({
+	rejects: { rootDenied: { status: 401, cookies: [session] } },
+	run: ({ next }) => next(),
+});
+export const methodGuard = createMiddleware({
+	rejects: { methodDenied: { status: 403, cookies: [theme] } },
+	run: ({ next }) => next(),
+});`,
+				"src/routes/projects/route.ts": route(
+					"ok: { status: 200 }",
+					'import { rootGuard, methodGuard } from "../../guards";',
+					{ rootMiddleware: "rootGuard", middleware: "methodGuard" },
+				),
+			}),
+		);
+		expect(diagnosticsOf(document)).toEqual([]);
+		const responses = (document as { paths: Record<string, Record<string, Json>> }).paths[
+			"/projects"
+		]!.get!.responses as Json;
+		expect(Object.keys(responses).sort()).toEqual(["200", "401", "403"]);
+		expect(
+			((responseOf(document, 401).headers as Json)["Set-Cookie"] as Json).description,
+		).toContain('"session"');
+		expect(
+			((responseOf(document, 403).headers as Json)["Set-Cookie"] as Json).description,
+		).toContain('"theme"');
+	});
+
 	it("documents reject headers, cookies, bodies, and descriptions like route outcomes", () => {
 		const document = generateOpenApi(
 			project({
@@ -815,6 +884,7 @@ export const theme = createCookie({ name: "theme", schema: z.string(), httpOnly:
 
 function project(files: Record<string, string>): string {
 	const cwd = mkdtempSync(join(tmpdir(), "routa-outcome-composition-"));
+	temporaryProjects.add(cwd);
 	const allFiles: Record<string, string> = {
 		"package.json": JSON.stringify({ type: "module" }),
 		"tsconfig.json": "{}",
@@ -835,13 +905,19 @@ function project(files: Record<string, string>): string {
 function route(
 	responses: string,
 	imports = "",
-	options: { method?: string; path?: string; middleware?: string; deprecation?: string } = {},
+	options: {
+		method?: string;
+		path?: string;
+		middleware?: string;
+		rootMiddleware?: string;
+		deprecation?: string;
+	} = {},
 ): string {
 	return `import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 ${imports}
 export default createRouteRoot(${JSON.stringify(options.path ?? "/projects")})({
-\t${options.method ?? "get"}: createRoute({
+${options.rootMiddleware ? `\tmiddleware: [${options.rootMiddleware}],\n` : ""}\t${options.method ?? "get"}: createRoute({
 ${options.middleware ? `\t\tmiddleware: [${options.middleware}],\n` : ""}${options.deprecation ? `\t\tdeprecation: ${options.deprecation},\n` : ""}\t\tresponses: { ${responses} },
 \t\trun: async () => ({}) as never,
 \t}),

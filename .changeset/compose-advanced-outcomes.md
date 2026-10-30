@@ -14,4 +14,6 @@ Compose outcomes that share a status, and give middleware rejects the full outco
 - TypeScript flags a route outcome named like a reject of the route's own `middleware`, and registration fails for any route outcome and reject, or two rejects, that share a name. The registration message changed from `Duplicate middleware reject key "…"` to `Outcome "…" on … is declared by … and by …`.
 - `MiddlewareNext` and `MiddlewareRunArgs` lost their unused `TRejects` type parameter.
 
+Computed property keys in outcome declarations now fail with `ROUTA_SCHEMA_UNSUPPORTED` instead of silently omitting contract fields from generated metadata. Use static property names for route outcomes and middleware rejects.
+
 Migration: give same-status outcomes a literal discriminator (for example `kind: z.literal("created")`) or distinct statuses. Remove route outcomes that redeclare a middleware reject, such as a route `unauthorized` outcome next to an auth middleware's `unauthorized` reject; the reject is already part of the operation. A middleware that read or changed the result of `await next()` must return that result unchanged; move response decisions into the handler or a reject that returns before `next()`. Drop the `TRejects` argument from explicit `MiddlewareNext<…>` and `MiddlewareRunArgs<…>` references.
