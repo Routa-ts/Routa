@@ -1783,7 +1783,17 @@ function exportedMiddlewareDeclarations(
 		}
 	}
 
-	return [...declarations, ...wildcard];
+	const exportedNames = new Set(declarations.map((item) => item.exportedName));
+	return [
+		...declarations,
+		...wildcard.filter((item) => {
+			if (exportedNames.has(item.exportedName)) {
+				return false;
+			}
+			exportedNames.add(item.exportedName);
+			return true;
+		}),
+	];
 }
 
 /**

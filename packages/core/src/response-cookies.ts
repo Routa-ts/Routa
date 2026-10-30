@@ -31,7 +31,8 @@ function isIsoDateTime(value: string): boolean {
 		number,
 		number,
 	];
-	const date = new Date(Date.UTC(year, month - 1, day));
+	const date = new Date(0);
+	date.setUTCFullYear(year, month - 1, day);
 	const offsetHour = match[7] === undefined ? 0 : Number(match[7]);
 	const offsetMinute = match[8] === undefined ? 0 : Number(match[8]);
 

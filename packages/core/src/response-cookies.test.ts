@@ -292,14 +292,15 @@ describe("response cookie rules", () => {
 			createCookie({ name: "a", schema: z.string(), httpOnly: true, sameSite: "lax", path: "/" });
 			// @ts-expect-error sameSite is required.
 			createCookie({ name: "a", schema: z.string(), httpOnly: true, secure: true, path: "/" });
-			// @ts-expect-error path is required.
-			createCookie({
+			const missingPath = {
 				name: "a",
 				schema: z.string(),
 				httpOnly: true,
 				secure: true,
 				sameSite: "lax",
-			});
+			} as const;
+			// @ts-expect-error path is required.
+			createCookie(missingPath);
 		});
 	});
 
@@ -307,6 +308,10 @@ describe("response cookie rules", () => {
 		typesOnly(() => {
 			// @ts-expect-error A cookie value is a string, number, or boolean.
 			createCookie({ ...base, name: "a", schema: z.object({ id: z.string() }) });
+			// @ts-expect-error An unconstrained any schema is not a scalar cookie schema.
+			createCookie({ ...base, name: "a", schema: z.any() });
+			// @ts-expect-error An unknown schema is not a scalar cookie schema.
+			createCookie({ ...base, name: "a", schema: z.unknown() });
 			// @ts-expect-error A cookie schema must not transform its value.
 			createCookie({ ...base, name: "a", schema: z.string().transform((value) => value.length) });
 			// @ts-expect-error A cookie schema must not default its value.

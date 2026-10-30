@@ -281,7 +281,9 @@ type HeadersProblem<THeaders> =
 
 type CookieValueProblem<TSchema> = TSchema extends z.ZodTypeAny
 	? unknown extends z.output<TSchema>
-		? unknown
+		? {
+				schema: "A cookie value must be a string, number, or boolean schema (or a literal or enum of them).";
+			}
 		: [z.output<TSchema>] extends [string | number | boolean]
 			? unknown
 			: {

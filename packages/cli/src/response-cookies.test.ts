@@ -429,6 +429,18 @@ describe("response cookie handle resolution", () => {
 		expect(setCookieOf(cwd)).toContain('"session"');
 	});
 
+	it("includes a middleware export only once when explicit and wildcard exports overlap", () => {
+		const cwd = project({
+			"src/guards.ts":
+				'import { createMiddleware } from "@routa-ts/core"; import { z } from "zod"; export const guard = createMiddleware({ provides: { session: z.string() }, rejects: { denied: { status: 401, schema: z.object({ message: z.string() }) } } });',
+			"src/routes/middleware.ts": 'export * from "../guards"; export { guard } from "../guards";',
+			"src/routes/items/route.ts": route("/items", "ok: { status: 200 }"),
+		});
+		expect(
+			validateProject(cwd, { write: false }).routes[0]?.middleware.map((item) => item.name),
+		).toEqual(["guard"]);
+	});
+
 	it("resolves late-exported declarations through named and wildcard barrels", () => {
 		for (const barrel of [
 			'export { session } from "./session";\n',
@@ -884,6 +896,17 @@ describe("response cookie rule parity", () => {
 		{ name: "maxAge zero", overrides: { maxAge: "0" }, accepted: true },
 		{ name: "negative maxAge", overrides: { maxAge: "-1" }, accepted: false },
 		{ name: "expires", overrides: { expires: '"2030-01-01T00:00:00.500+02:00"' }, accepted: true },
+		{ name: "year 0099 expires", overrides: { expires: '"0099-01-01T00:00:00Z"' }, accepted: true },
+		{
+			name: "year 0000 leap day",
+			overrides: { expires: '"0000-02-29T00:00:00Z"' },
+			accepted: true,
+		},
+		{
+			name: "year 0100 invalid leap day",
+			overrides: { expires: '"0100-02-29T00:00:00Z"' },
+			accepted: false,
+		},
 		{ name: "date-only expires", overrides: { expires: '"2030-01-01"' }, accepted: false },
 		{
 			name: "calendar-invalid expires",
