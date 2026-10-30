@@ -211,6 +211,16 @@
 				"responses": {
 					"201": {
 						"description": "Success",
+						"headers": {
+							"location": {
+								"required": true,
+								"description": "Path of the created user",
+								"schema": {
+									"type": "string",
+									"description": "Path of the created user"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -247,9 +257,16 @@
 				],
 				"properties": {
 					"ok": {
-						"type": "boolean"
+						"type": "boolean",
+						"description": "Whether the API is serving requests"
 					}
-				}
+				},
+				"title": "Status",
+				"examples": [
+					{
+						"ok": true
+					}
+				]
 			},
 			"ListUserPostsResponse": {
 				"type": "object",

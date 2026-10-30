@@ -39,6 +39,14 @@
 					},
 					"401": {
 						"description": "Unauthorized",
+						"headers": {
+							"Set-Cookie": {
+								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+								"schema": {
+									"type": "string"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -113,6 +121,14 @@
 					},
 					"401": {
 						"description": "Unauthorized",
+						"headers": {
+							"Set-Cookie": {
+								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+								"schema": {
+									"type": "string"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -189,6 +205,14 @@
 					},
 					"401": {
 						"description": "Unauthorized",
+						"headers": {
+							"Set-Cookie": {
+								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+								"schema": {
+									"type": "string"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -258,6 +282,14 @@
 					},
 					"401": {
 						"description": "Unauthorized",
+						"headers": {
+							"Set-Cookie": {
+								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+								"schema": {
+									"type": "string"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -328,6 +360,14 @@
 					},
 					"401": {
 						"description": "Unauthorized",
+						"headers": {
+							"Set-Cookie": {
+								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+								"schema": {
+									"type": "string"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -432,6 +472,14 @@
 					},
 					"401": {
 						"description": "Unauthorized",
+						"headers": {
+							"Set-Cookie": {
+								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+								"schema": {
+									"type": "string"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -493,6 +541,14 @@
 					},
 					"401": {
 						"description": "Unauthorized",
+						"headers": {
+							"Set-Cookie": {
+								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+								"schema": {
+									"type": "string"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -550,6 +606,67 @@
 							"application/json": {
 								"schema": {
 									"$ref": "#/components/schemas/Session"
+								}
+							}
+						}
+					}
+				}
+			},
+			"post": {
+				"operationId": "postAuthSession",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SignInBody"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "The token is valid, and the session cookies are set.",
+						"headers": {
+							"Set-Cookie": {
+								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600). It always sets or clears: \"session\"; \"signed_in\".",
+								"required": true,
+								"schema": {
+									"type": "string"
+								}
+							}
+						},
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Session"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "The token is not a valid demo session token.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SignInRejected"
+								}
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"operationId": "deleteAuthSession",
+				"responses": {
+					"204": {
+						"description": "The session cookies are cleared.",
+						"headers": {
+							"Set-Cookie": {
+								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600). It always sets or clears: \"session\"; \"signed_in\".",
+								"required": true,
+								"schema": {
+									"type": "string"
 								}
 							}
 						}
@@ -1080,6 +1197,29 @@
 						"type": "string"
 					},
 					"itemId": {
+						"type": "string"
+					}
+				}
+			},
+			"SignInBody": {
+				"type": "object",
+				"required": [
+					"token"
+				],
+				"properties": {
+					"token": {
+						"type": "string",
+						"description": "A demo token from `pnpm mint-session <userId>`"
+					}
+				}
+			},
+			"SignInRejected": {
+				"type": "object",
+				"required": [
+					"message"
+				],
+				"properties": {
+					"message": {
 						"type": "string"
 					}
 				}

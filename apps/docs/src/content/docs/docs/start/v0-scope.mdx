@@ -38,12 +38,13 @@ the complete list.
 | Area            | v0 behavior                                                                                                       |
 | --------------- | ----------------------------------------------------------------------------------------------------------------- |
 | Runtime         | Hono, served through `@hono/node-server`                                                                          |
-| Schemas         | Zod for inputs, middleware context, rejects, and responses                                                        |
+| Schemas         | Zod `^4.6.7` for inputs, middleware context, rejects, and responses, with `.describe()` and `.meta()` metadata    |
+| Responses       | Named outcomes with a status, an optional JSON body, typed headers, and `createCookie` set and clear effects      |
 | Routing         | Directory style, flat style, dynamic `$` segments, and `(group)` folders                                          |
 | Methods         | `get`, `post`, `put`, `patch`, `delete`, and explicit `head`; `OPTIONS` is automatic                              |
-| Middleware      | Typed `requires` / `provides` / `rejects`, folder inheritance, per-method chains                                  |
+| Middleware      | Typed `requires` / `provides` / `rejects`, folder inheritance, per-method chains; rejects are full outcomes       |
 | OpenAPI in      | Scaffolding source from `.yaml`, `.yml`, and `.json` documents                                                    |
-| OpenAPI out     | Generation from route contracts, drift checks, and breaking-change checks                                         |
+| OpenAPI out     | Generation from source alone, same-status composition, drift checks, and breaking-change checks                   |
 | Generated files | `.routa/routes.gen.ts`, `.routa/manifest.json`, `.routa/openapi-baseline.json`                                    |
 | CLI             | `create`, `scaffold`, `dev`, `start`, `check`, `generate`, `build`, `routes`, `openapi check`, `openapi breaking` |
 | Logging         | Backend-neutral `RoutaLogger` contract with a built-in console implementation                                     |
@@ -60,7 +61,11 @@ the complete list.
   implements authentication
 - Response caching, rate limiting, and broad observability features
 - A generated hosted API reference UI
-- Content types other than JSON at the request and response boundary
+- Content types other than JSON at the request and response boundary, and streams, files,
+  redirects, or raw `Response` objects
+- Multi-value application response headers
+- Custom bodies, headers, or cookies on the error responses Routa generates itself
+- A source setting for the OpenAPI `info` title, version, and `servers`
 
 ## Consequences
 

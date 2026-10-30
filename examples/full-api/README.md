@@ -37,6 +37,8 @@ Runtime configuration is executable and typed in `src/routa.ts`:
 | Zod parsing and coercion                                                | `verbose` uses `z.stringbool()`; scaffold query parameters generate boolean/number coercion          |
 | Global, group, segment, route, and method middleware                    | `src/routes/middleware.ts`, `(private)`, `admin`, tenant, and project contracts                      |
 | Middleware `requires`, `provides`, typed rejects, security, permissions | `src/middleware` and private route graph                                                             |
+| Response cookies set and cleared through `createCookie` handles         | `src/cookies.ts`; `POST` and `DELETE /auth/session`; the auth reject clears a stale session cookie   |
+| Bodyless outcomes                                                       | `DELETE /auth/session`, project `DELETE`, and showcase `HEAD` return `204` with no body              |
 | `Fields()` and `Sort()` query helpers                                   | `GET /tenants/:tenantId/projects`                                                                    |
 | Directory, flat, dynamic-flat, group, and dynamic-segment routing       | `status/route.ts`, `legacy.ts`, `legacy.$id.ts`, `(private)`, `$tenantId`                            |
 | Local and absolute-URL deprecation replacements                         | `/legacy` points to `/status`; `/legacy/:id` points to a reserved `.invalid` external URL            |
@@ -53,7 +55,7 @@ Runtime configuration is executable and typed in `src/routa.ts`:
 src/routes/
   middleware.ts
   status/route.ts
-  auth/session/route.ts
+  auth/session/route.ts                  # GET, POST sign-in, DELETE sign-out
   demo/route.ts
   logger-showcase/route.ts             # opt-in RoutaLogger capability exercise
   showcase/$itemId/route.ts              # GET, PUT, HEAD; OPTIONS is automatic
@@ -166,10 +168,21 @@ curl -s -i -H 'Accept: text/html' http://127.0.0.1:3000/showcase/item-1 # 406
 curl -s -i -X POST http://127.0.0.1:3000/showcase/item-1           # 405 + Allow
 ```
 
+Sign in and out with response cookies. Each cookie arrives as its own `Set-Cookie` field:
+
+```sh
+TOKEN=$(node scripts/mint-session.mjs acme:writer)
+curl -s -i -X POST -H 'Content-Type: application/json' \
+  -d "{\"token\":\"$TOKEN\"}" http://127.0.0.1:3000/auth/session   # 200 + session, signed_in
+curl -s -i -X DELETE http://127.0.0.1:3000/auth/session           # bodyless 204 clearing both
+curl -s -i -H 'Cookie: session=expired' \
+  http://127.0.0.1:3000/tenants/acme/projects                     # typed 401 clearing both
+```
+
 Middleware scopes, permissions, helpers, and bodyless DELETE:
 
 ```sh
-curl -s -i http://127.0.0.1:3000/tenants/acme/projects             # typed 401
+curl -s -i http://127.0.0.1:3000/tenants/acme/projects             # typed 401 clearing signed_in
 curl -s -H "Cookie: session=$WRITER" \
   'http://127.0.0.1:3000/tenants/acme/projects?fields=id,%20name&sort=-name'
 curl -s -i -X POST -H "Cookie: session=$SESSION" \
@@ -215,7 +228,7 @@ pnpm scaffold:update     # explicit --yes regeneration after reviewing the previ
 - `anyOf` unions and string `const` discriminants;
 - boolean and number wire-value coercion for query parameters.
 
-Routa deliberately rejects `oneOf`, `allOf`, OpenAPI 3.0 `nullable`, and other unsupported schema forms with scaffold diagnostics; this healthy fixture uses only supported public forms.
+Routa deliberately rejects `allOf`, a `oneOf` without a discriminator, OpenAPI 3.0 `nullable`, and other unsupported schema forms with scaffold diagnostics; this healthy fixture uses only supported public forms.
 
 Scaffold input also rejects explicit `OPTIONS` operations. The runtime derives OPTIONS from the generated application methods.
 
@@ -243,7 +256,7 @@ pnpm openapi:check
 pnpm openapi:breaking
 ```
 
-The baseline keeps component names and metadata stable while Routa regenerates paths, inputs, middleware security/permissions, deprecations, and response contracts from source.
+Routa generates the whole document from source, including components, metadata, and operation IDs. The baseline is only what `openapi:check` and `openapi:breaking` compare against.
 
 ## Deliberate scope
 

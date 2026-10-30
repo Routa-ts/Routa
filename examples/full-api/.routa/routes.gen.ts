@@ -1264,11 +1264,20 @@ export const routaRoutes = [
 		"file": "src/routes/auth/session/route.ts",
 		"path": "/auth/session",
 		"methods": [
-			"GET"
+			"GET",
+			"POST",
+			"DELETE"
 		],
 		"responses": {
 			"get": [
 				200
+			],
+			"post": [
+				200,
+				401
+			],
+			"delete": [
+				204
 			]
 		},
 		"inputs": {
@@ -1277,6 +1286,20 @@ export const routaRoutes = [
 				"query": false,
 				"headers": false,
 				"cookies": true,
+				"body": false
+			},
+			"post": {
+				"params": false,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": true
+			},
+			"delete": {
+				"params": false,
+				"query": false,
+				"headers": false,
+				"cookies": false,
 				"body": false
 			}
 		},
@@ -1314,6 +1337,70 @@ export const routaRoutes = [
 		],
 		"methodMiddleware": {
 			"get": [
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				}
+			],
+			"post": [
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				},
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withSession",
+					"requires": [
+						"requestId"
+					],
+					"provides": [
+						"session"
+					],
+					"providesTypes": {
+						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				}
+			],
+			"delete": [
 				{
 					"file": "src/routes/middleware.ts",
 					"name": "withRequest",

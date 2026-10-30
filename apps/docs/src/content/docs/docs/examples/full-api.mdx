@@ -6,27 +6,33 @@ description: A Routa example exercising middleware, groups, deprecation, and log
 import { Aside, CardGrid, FileTree, LinkCard } from "@astrojs/starlight/components";
 
 `examples/full-api` in the Routa repository exercises the whole public surface: layered
-middleware, route groups, tenant-scoped context, flat and directory routing, deprecation
-metadata, automatic `OPTIONS`, scaffold workflows, and a custom logger adapter.
+middleware, route groups, tenant-scoped context, flat and directory routing, response
+cookies, deprecation metadata, automatic `OPTIONS`, scaffold workflows, and a custom logger
+adapter.
 
 ```sh
 vp install --frozen-lockfile
 vp run prepare:local-cli
+export ROUTA_DEMO_SESSION_SECRET=dev-secret
 vp run --filter full-api dev
 ```
 
-The development server listens on `http://127.0.0.1:3000`.
+The development server listens on `http://127.0.0.1:3000`. It reads the demo session secret
+once at startup, so export it before you start the server.
 
 ## What Is Inside
 
 <FileTree>
 - src/
   - routa.ts host, port, logger, lifecycleHeaders
+  - cookies.ts `createCookie` handles
   - logger.ts optional Pino adapter
   - middleware/ application-owned middleware
   - routes/
     - middleware.ts `withRequest`, `withSession`
     - status/
+    - auth/
+      - session/ sign in and sign out with cookies
     - legacy.ts flat route with deprecation
     - legacy.$id.ts flat route with a dynamic segment
     - (private)/
@@ -67,12 +73,41 @@ declarative while the implementations live in application-owned modules.
 | File                                                   | Shows                                                                 |
 | ------------------------------------------------------ | --------------------------------------------------------------------- |
 | `src/routes/middleware.ts`                             | Root middleware applied to every route                                |
+| `src/cookies.ts`                                       | Shared `createCookie` handles with static security attributes         |
+| `src/routes/auth/session/route.ts`                     | Outcomes that set and clear cookies, including a bodyless `204`       |
+| `src/middleware/auth.ts`                               | A middleware reject with a body that also clears a cookie             |
 | `src/middleware/context.ts`                            | Middleware `input` reading headers and cookies                        |
 | `src/middleware/admin.ts`                              | `requires`, `provides`, `rejects`, and `openapi.permissions` together |
 | `src/routes/(private)/tenants/$tenantId/middleware.ts` | Context derived from a path parameter                                 |
 | `src/routes/legacy.ts`                                 | Deprecation metadata with a replacement                               |
 | `src/logger.ts`                                        | Adapting Pino to the `RoutaLogger` contract                           |
 | `src/routes/showcase/$itemId/route.ts`                 | Logging from a handler through `ctx.logger`                           |
+
+## Session Cookies
+
+`POST /auth/session` exchanges a demo token for two cookies: the `HttpOnly` session token and
+a `signed_in` hint that browser code can read. Each one arrives as its own `Set-Cookie`
+field. With the server running, mint a token and send it from a second terminal that uses
+the same secret:
+
+```sh
+cd examples/full-api
+export ROUTA_DEMO_SESSION_SECRET=dev-secret
+TOKEN=$(node scripts/mint-session.mjs acme:writer)
+curl -i -X POST -H 'Content-Type: application/json' \
+	-d "{\"token\":\"$TOKEN\"}" http://127.0.0.1:3000/auth/session
+```
+
+```txt
+HTTP/1.1 200 OK
+content-type: application/json; charset=utf-8
+set-cookie: session=demo-user%3Aacme%3Awriter.…; Path=/; Max-Age=3600; HttpOnly; Secure; SameSite=Lax
+set-cookie: signed_in=yes; Path=/; Max-Age=3600; Secure; SameSite=Lax
+```
+
+`DELETE /auth/session` answers a bodyless `204` that clears both. A request to a private
+route without a session that verifies gets the auth middleware's `401` reject, which clears
+the `signed_in` hint and any session cookie the request sent.
 
 ## The Logger Showcase
 

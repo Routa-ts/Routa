@@ -4,4 +4,6 @@
 
 import { z } from "zod";
 
-export const GetStatusResponse = z.object({ ok: z.boolean() });
+export const GetStatusResponse = z
+	.object({ ok: z.boolean().describe("Whether the API is serving requests") })
+	.meta({ title: "Status", examples: [{ ok: true }] });

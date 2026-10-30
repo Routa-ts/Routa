@@ -126,7 +126,7 @@ parses `input.params` through `GetUserParams` before `run` executes, so `input.p
 is a validated `string` rather than `string | undefined`.
 
 The handler returns `{ type, data }` where `type` is a key of `responses`. TypeScript
-rejects any other name, and at runtime Routa validates `data` against that outcome's
+rejects any other name. In `routa dev`, Routa also validates `data` against that outcome's
 schema before serializing it with the declared status.
 
 ## Troubleshooting

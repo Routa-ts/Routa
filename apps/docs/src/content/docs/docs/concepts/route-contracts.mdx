@@ -88,9 +88,16 @@ paths, and `run` never executes.
 
 ### `responses`
 
-A required map of outcome names to a status and a schema. Names are yours to choose;
-`success`, `notFound`, and `emailConflict` are conventions, not keywords. Every method
-must declare at least one outcome with a 2xx status.
+A required map of outcome names to outcomes. Names are yours to choose; `success`,
+`notFound`, and `emailConflict` are conventions, not keywords. Every method must declare
+at least one outcome with a 2xx status.
+
+Each outcome has a literal `status` and four optional fields: a `schema` for the JSON body,
+a `description` for OpenAPI, `headers` as a Zod object of response headers, and `cookies`
+listing the [cookie handles](/docs/concepts/schemas/#response-cookies) it may set or clear.
+An outcome without a `schema` is bodyless: its handler returns no `data`, and Routa sends an
+empty body. `204`, `205`, and `304` outcomes, and every outcome of a `HEAD` route, must be
+bodyless.
 
 ### `middleware`
 
@@ -102,11 +109,14 @@ declared here applies to this method only, in addition to anything inherited fro
 
 The handler receives `{ input, ctx, response }`. Return `response.success(data)` to
 choose an outcome named `success`. The methods come from this route's `responses` keys,
-and each method accepts the corresponding schema's output type. A method only builds a
-result; it does not send anything until you return that result from the handler.
+and each method accepts the corresponding schema's output type, followed by the outcome's
+headers when it declares any. A method only builds a result; it does not send anything
+until you return that result from the handler.
 
-You can also return `{ type, data }` directly. Results may contain only those two fields;
-Routa rejects extra fields so that responses stay describable in OpenAPI. See
+You can also return `{ type, data, headers, cookies }` directly, with `data`, `headers`,
+and `cookies` only when the outcome declares a schema, headers, or cookies. Routa rejects
+any other field so that responses stay describable in OpenAPI. Builders do not take
+cookies, so return the object when an outcome sets one. See
 [ResponseBuilders](/docs/reference/core/#responsebuilders) for the type signature.
 
 ## Handler Context

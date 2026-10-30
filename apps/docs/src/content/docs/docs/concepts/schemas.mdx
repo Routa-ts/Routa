@@ -82,10 +82,13 @@ parsed values become downstream context. See
 ## How Schemas Become OpenAPI
 
 Routa reads schemas statically from source. It never imports or runs your modules to
-generate OpenAPI, so every schema a route uses must be written where Routa can read it:
-in the route's sibling `schemas.ts`, in the route file itself, or, for middleware
-`rejects`, in the file that declares the middleware. An identifier imported from anywhere
-else fails `routa check` with `ROUTA_SCHEMA_UNRESOLVED`.
+generate OpenAPI. A schema can live in the route's sibling `schemas.ts`, in the route file
+itself, in the file that declares a middleware, or in any module those files import by
+name through a relative path. Routa follows named imports, aliases, and
+`export { ... } from` or `export * from` re-exports to the `const` that declares the
+schema, then reads it in that file. A schema imported from a package or through a
+tsconfig path alias, or one returned by your own function, fails `routa check` with
+`ROUTA_SCHEMA_UNRESOLVED` or `ROUTA_SCHEMA_UNSUPPORTED`.
 
 Composition follows Zod's meaning, not a fixed keyword:
 
@@ -286,7 +289,8 @@ as `in` or `operationId`, `ROUTA_SCHEMA_META_COMPUTED` for values computed at ru
 
 Route-local schemas in a sibling `schemas.ts` are the default, and scaffolding generates
 them that way. When an OpenAPI document declares reusable `components.schemas`, scaffolding
-generates a shared module instead and references it from each route.
+writes each one into the `schemas.ts` of every route that uses it. Equal copies share one
+component, so you can keep them or move a shared schema into one module and import it.
 
 Exported schema names must be unique within a `schemas.ts` file. Routa reports
 `ROUTA_DUPLICATE_SCHEMA_NAME` for repeats. Prefer contract-purpose names like
