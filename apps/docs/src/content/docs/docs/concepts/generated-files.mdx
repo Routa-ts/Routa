@@ -43,7 +43,11 @@ what lets a `deprecation.replacement` pointing at a local path be checked in the
 When `src/routa.ts` declares [application services](/docs/concepts/services/), the file
 also exports `routaApplicationServices`, the contract's sorted service names, and
 `RoutaApplicationServices`, a type-only reference to the contract that types
-`ctx.services`. Projects without services get neither.
+`ctx.services`. A route file that declares [route-file or method
+services](/docs/concepts/services/#route-file-and-method-services) adds their contracts to its
+`routaRoutes` entry and `services` to its handler context, and the file exports
+`RoutaFactoryCtxByPath`, the context each request factory receives. Projects without services
+get none of these.
 
 Refresh it after adding, moving, or removing a route file, changing which methods a route
 declares, or changing middleware layout:

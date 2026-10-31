@@ -1,0 +1,13 @@
+---
+"@routa-ts/core": minor
+"@routa-ts/cli": minor
+---
+
+Add route-file and method services, built once per request.
+
+- A route root and an inline `createRoute` accept `services`, declared with the same `defineServices` helper as application services: `const defineOrdersServices = defineServices<OrdersServices>();`, then `services: defineOrdersServices(factory)`. A request factory receives `{ ctx, onCleanup }`. `ctx` holds the context of the middleware before it, the services of earlier scopes, and the request logger, and no request input. TypeScript types each factory's `ctx` by where it runs, so a route-file factory cannot read its own services or its file's middleware context, and one method never sees another method's services.
+- For each request, Routa runs filesystem middleware, the route file's factory, the route file's middleware, the matched method's factory, the method's middleware, and the handler. Each stage keeps its own frozen `ctx.services`: middleware that reads it after `await next()` still sees only the services it started with. Concurrent requests get their own instances.
+- Routa releases request services after the response is serialized and the middleware chain has unwound, method services first, then route-file services, each in reverse registration order, before it returns the response. A cleanup failure is logged as `services.cleanup_failed` and keeps the response. A factory failure or a mapping with the wrong names runs that factory's cleanup, skips the rest of the chain, releases the scopes already built, and returns the standard `500` problem without exposing the error. `dispose()` waits for active requests to finish their cleanup before releasing application services.
+- `routa check` and `routa generate` read request contracts from source without importing route files. `.routa/routes.gen.ts` adds a `services` entry to the route's `routaRoutes` item, types the handler's `ctx.services` per method, and exports `RoutaFactoryCtxByPath` for factory contexts. Routes without request services get unchanged output. Service contracts never reach OpenAPI.
+- Service names must be unique across the application, route-file, and method scopes one request combines. `routa check` reports `ROUTA_SERVICES_DUPLICATE`, and registration rejects a collision at runtime. Unrelated route files and methods may reuse a name. `ROUTA_SERVICES_UNRESOLVED` and the contract diagnostics also cover route-file and method declarations.
+- `HonoRoute` gains `services: { routeFile?, method? }`, each a `RequestServicesDeclaration` with its `factory`, `names`, and `after`, the number of middleware that run before it.

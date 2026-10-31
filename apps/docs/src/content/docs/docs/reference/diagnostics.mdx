@@ -303,7 +303,7 @@ locally or imported. Routa would otherwise miss the context the middleware provi
 ### `ROUTA_CONTEXT_RESERVED`
 
 A middleware provides `services` or passes it to `next()`. Routa reserves `ctx.services`
-for [application services](/docs/concepts/services/).
+for injected [services](/docs/concepts/services/).
 
 **Fix:** rename the context key. When the value is an application dependency, declare it
 as an application service instead.
@@ -312,8 +312,9 @@ as an application service instead.
 
 ### `ROUTA_SERVICES_UNRESOLVED`
 
-The `services` option in `src/routa.ts` is not built through a `defineServices` helper that
-Routa can follow, such as a bare function or a call to another helper.
+A `services` value is not built through a `defineServices` helper that Routa can follow, such
+as a bare function or a call to another helper. Routa reads `services` in `src/routa.ts`, on a
+route root, and on an inline `createRoute`.
 
 **Fix:** declare `const defineAppServices = defineServices<AppServices>();` and set
 `services: defineAppServices(factory)`, or write `defineServices<AppServices>()(factory)`.
@@ -347,6 +348,14 @@ signature, a computed name, type parameters, or an `extends` clause, or it is no
 type.
 
 **Fix:** list each service directly as a required, plainly named property.
+
+### `ROUTA_SERVICES_DUPLICATE`
+
+Two scopes that run in one request declare the same service name: the application and a route
+file, or a method and the application or its route file. One would hide the other in
+`ctx.services`.
+
+**Fix:** rename one of the services. Unrelated route files and methods may reuse a name.
 
 ## Deprecation
 
