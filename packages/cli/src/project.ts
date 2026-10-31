@@ -37,6 +37,7 @@ import {
 	routeServices,
 	type ServiceContractMetadata,
 } from "./services.js";
+import { testingModuleSource } from "./testing-module.js";
 import * as ts from "./typescript.js";
 import { runTypeScript } from "./typescript-runner.js";
 
@@ -139,7 +140,8 @@ export default route({
  *
  * @param cwd - The project root directory
  * @param options - Validation options
- * @param options.write - When `true` (default), write `.routa/routes.gen.ts` after a clean validation
+ * @param options.write - When `true` (default), write `.routa/routes.gen.ts` and
+ *   `.routa/testing.gen.ts` after a clean validation
  * @returns The discovered routes and any validation diagnostics
  */
 export function validateProject(
@@ -186,7 +188,7 @@ function validateProjectInSession(
 	];
 
 	if (write && diagnostics.length === 0) {
-		writeRoutesMetadata(cwd, routes, services.services);
+		writeGeneratedState(cwd, routes, services.services);
 	}
 
 	return {
@@ -259,7 +261,7 @@ export function runProjectGenerate(cwd = process.cwd()): {
 
 	return {
 		code: 0,
-		stdout: `Generated .routa/routes.gen.ts for ${validation.routes.length} route file(s).\n`,
+		stdout: `Generated .routa/routes.gen.ts and .routa/testing.gen.ts for ${validation.routes.length} route file(s).\n`,
 	};
 }
 
@@ -3448,20 +3450,23 @@ ${servicesSource}${routeContextTypes(orderedRoutes, services !== undefined)}
 }
 
 /**
- * Writes generated route metadata to `.routa/routes.gen.ts`.
+ * Writes the generated project state: route metadata to `.routa/routes.gen.ts` and the test
+ * application module to `.routa/testing.gen.ts`. Unchanged files are not rewritten.
  *
  * @param cwd - The project root directory.
  * @param routes - The discovered route metadata to serialize.
  * @param services - The application service contract, when `src/routa.ts` declares one.
  */
-function writeRoutesMetadata(
+function writeGeneratedState(
 	cwd: string,
 	routes: RouteMetadata[],
 	services: ServiceContractMetadata | undefined,
 ): void {
-	const file = join(cwd, ".routa/routes.gen.ts");
-	const source = routesMetadataSource(routes, services);
+	writeGeneratedFile(join(cwd, ".routa/routes.gen.ts"), routesMetadataSource(routes, services));
+	writeGeneratedFile(join(cwd, ".routa/testing.gen.ts"), testingModuleSource(routes, services));
+}
 
+function writeGeneratedFile(file: string, source: string): void {
 	if (existsSync(file) && readFileSync(file, "utf8") === source) {
 		return;
 	}
