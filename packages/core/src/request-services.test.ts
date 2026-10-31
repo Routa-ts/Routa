@@ -338,6 +338,74 @@ describe("request-scoped service failures and cleanup", () => {
 		await app.dispose();
 	});
 
+	it("treats a factory's client-looking error as an internal failure", async () => {
+		const { events, logger } = recordingLogger();
+		const app = await createApplication(
+			[
+				route(
+					{
+						services: {
+							method: scope(["unit"], 0, () => {
+								z.object({ apiKey: z.string({ error: "secret config missing" }) }).parse({});
+								return { unit: 1 };
+							}),
+						},
+					},
+					() => "unreachable",
+				),
+			],
+			{ logger },
+		);
+
+		const response = await request(app);
+		const body = await response.text();
+
+		expect(response.status).toBe(500);
+		expect(body).not.toContain("secret config missing");
+		expect(JSON.parse(body)).toMatchObject({ title: "Internal Server Error" });
+		const logged = events.find((event) => event.event === "http.error")?.data;
+		expect(logged).toMatchObject({ status: 500, name: "ZodError" });
+		expect(logged?.error).toContain("secret config missing");
+		expect(logged?.stack).toEqual(expect.any(String));
+		await app.dispose();
+	});
+
+	it("releases a failed factory's partial cleanup after the chain unwinds, with the built scopes", async () => {
+		const order: string[] = [];
+		const app = await createApplication([
+			route(
+				{
+					middleware: [
+						createMiddleware({
+							run: async ({ next }) => {
+								try {
+									return await next({});
+								} finally {
+									order.push("middleware finally");
+								}
+							},
+						}) as AnyMiddlewareContract,
+					],
+					services: {
+						routeFile: scope(["a"], 0, ({ onCleanup }) => {
+							onCleanup(() => order.push("route cleanup"));
+							return { a: 1 };
+						}),
+						method: scope(["b"], 1, ({ onCleanup }) => {
+							onCleanup(() => order.push("method cleanup"));
+							throw new Error("method factory failed");
+						}),
+					},
+				},
+				() => "unreachable",
+			),
+		]);
+
+		expect((await request(app)).status).toBe(500);
+		expect(order).toEqual(["middleware finally", "method cleanup", "route cleanup"]);
+		await app.dispose();
+	});
+
 	it("rejects a mapping whose names differ from the contract, after running its cleanup", async () => {
 		const { events, logger } = recordingLogger();
 		let cleaned = 0;
