@@ -1192,6 +1192,63 @@ export default createRouteRoot("/orders")({
 		]);
 	});
 
+	it("warns when a spread or computed key on a route root or method may hide services", () => {
+		const cwd = servicesProject({
+			"src/routes/orders/route.ts": `import { createRoute, createRouteRoot, defineServices } from "@routa-ts/core";
+import { z } from "zod";
+
+export interface OrdersServices {
+\torders: string;
+}
+
+export interface CheckoutServices {
+\tcheckout: string;
+}
+
+export interface PlacedServices {
+\tplaced: string;
+}
+
+const key = "services";
+const extra = () => ({});
+
+export default createRouteRoot("/orders")({
+\t...{ services: defineServices<OrdersServices>()(() => ({ orders: "" })) },
+\tget: createRoute({
+\t\t[key]: defineServices<CheckoutServices>()(() => ({ checkout: "" })),
+\t\tresponses: { ok: { status: 200, schema: z.string() } },
+\t\trun: () => ({ type: "ok", data: "" }),
+\t}),
+\tpost: createRoute({
+\t\t...extra(),
+\t\tservices: defineServices<PlacedServices>()(() => ({ placed: "" })),
+\t\tresponses: { ok: { status: 200, schema: z.string() } },
+\t\trun: () => ({ type: "ok", data: "" }),
+\t}),
+});
+`,
+		});
+		const validation = validateProject(cwd, { write: false });
+
+		expect(validation.diagnostics).toEqual([]);
+		expect(
+			validation.warnings.map(({ code, severity, message }) => ({ code, severity, message })),
+		).toEqual([
+			{
+				code: "ROUTA_SERVICES_SPREAD_UNRESOLVED",
+				severity: "warning",
+				message:
+					"Route-file services in src/routes/orders/route.ts may sit in a spread or computed key that cannot be statically read.",
+			},
+			{
+				code: "ROUTA_SERVICES_SPREAD_UNRESOLVED",
+				severity: "warning",
+				message:
+					"GET services in src/routes/orders/route.ts may sit in a spread or computed key that cannot be statically read.",
+			},
+		]);
+	});
+
 	it("reports route-file and method services it cannot follow", () => {
 		const cwd = servicesProject({
 			"src/routes/orders/route.ts": `import { createRoute, createRouteRoot, defineServices } from "@routa-ts/core";

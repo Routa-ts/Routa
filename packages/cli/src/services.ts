@@ -103,7 +103,18 @@ export function routeServices(
 	const services: RouteServicesMetadata = {};
 	const diagnostics: Diagnostic[] = [];
 	const read = (object: ts.ObjectLiteralExpression, label: string, example: string) => {
-		const node = servicesValue(object);
+		const { node, hidden } = servicesValue(object);
+
+		if (hidden) {
+			diagnostics.push({
+				code: "ROUTA_SERVICES_SPREAD_UNRESOLVED",
+				severity: "warning",
+				message: `${label} in ${file} may sit in a spread or computed key that cannot be statically read.`,
+				file,
+				suggestion:
+					"Declare services as a visible services member, after any spread. Startup rejects services that routa generate could not read.",
+			});
+		}
 
 		if (!node) {
 			return undefined;
@@ -247,24 +258,28 @@ function objectServices(
 /**
  * Finds the value of a route root's or method's `services` member, including one written as
  * `["services"]`. A member Routa cannot read, such as a getter or a computed key, yields the
- * member itself, which `declaredContract` reports as unresolved instead of ignoring it.
+ * member itself, which `declaredContract` reports as unresolved instead of ignoring it. A spread
+ * or a computed key that is not a literal may also hold `services`; `hidden` reports one that
+ * no visible member follows.
  */
-function servicesValue(object: ts.ObjectLiteralExpression): ts.Node | undefined {
+function servicesValue(object: ts.ObjectLiteralExpression): { node?: ts.Node; hidden: boolean } {
+	let found: { node?: ts.Node; hidden: boolean } = { hidden: false };
+
 	for (const property of object.properties) {
 		if (ts.isSpreadAssignment(property)) {
-			continue;
-		}
-
-		if (ts.isComputedPropertyName(property.name)) {
+			found = { ...found, hidden: true };
+		} else if (ts.isComputedPropertyName(property.name)) {
 			const key = property.name.expression;
-
-			if (ts.isStringLiteralLike(key) && key.text === "services") {
-				return property;
-			}
+			found =
+				ts.isStringLiteralLike(key) && key.text === "services"
+					? { node: property, hidden: false }
+					: { ...found, hidden: true };
 		} else if (propertyName(property.name) === "services") {
-			return memberValue(property);
+			found = { node: memberValue(property), hidden: false };
 		}
 	}
+
+	return found;
 }
 
 /**

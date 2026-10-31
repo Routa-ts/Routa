@@ -334,6 +334,10 @@ never checked.
 or spread a `const` object literal declared locally or imported. When the unread part holds
 only tuning values, accept the warning.
 
+A route root or an inline `createRoute` object with a spread or a non-literal computed key, and
+no visible `services` member after it, reports the same warning for that scope. Declare its
+`services` as a visible member after any spread.
+
 ### `ROUTA_SERVICES_CONTRACT_UNRESOLVED`
 
 The contract passed to `defineServices` is an inline type, cannot be found, or is not

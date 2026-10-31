@@ -162,9 +162,10 @@ function validateProjectInSession(
 		lifecycleHeaders: lifecycleHeadersEnabled(cwd, parser),
 	});
 	const services = applicationServices(cwd, parser);
+	const discoveryWarnings = discovery.diagnostics.filter((item) => item.severity === "warning");
 	const diagnostics = [
 		...projectStructureDiagnostics(cwd),
-		...discovery.diagnostics,
+		...discovery.diagnostics.filter((item) => item.severity !== "warning"),
 		...services.diagnostics,
 		...runResultShapeDiagnostics(cwd, parser),
 		...duplicateRouteDiagnostics(routes),
@@ -183,7 +184,12 @@ function validateProjectInSession(
 		writeRoutesMetadata(cwd, routes, services.services);
 	}
 
-	return { routes, diagnostics, warnings: [...services.warnings, ...schemas.warnings], schemas };
+	return {
+		routes,
+		diagnostics,
+		warnings: [...services.warnings, ...discoveryWarnings, ...schemas.warnings],
+		schemas,
+	};
 }
 
 /**
