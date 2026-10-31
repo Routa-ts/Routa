@@ -22,7 +22,7 @@ import {
 	stubEmptyRouteFiles,
 	validateProject,
 } from "./project.js";
-import { loadRoutes } from "./runtime.js";
+import { createProjectApplication } from "./runtime.js";
 import { shouldUseColor } from "./ui.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -622,7 +622,7 @@ export default route({
 			"withRouteCtx",
 		]);
 
-		const routes = await loadRoutes(cwd);
+		const routes = (await createProjectApplication(cwd, cwd, "dev")).routes;
 		const getRoute = routes.find((route) => route.method === "get");
 		const postRoute = routes.find((route) => route.method === "post");
 
@@ -695,7 +695,7 @@ export default createRouteRoot("/users")({
 			].get.responses,
 		).toHaveProperty("409.content.application/json.schema.properties.message");
 
-		const routes = await loadRoutes(cwd);
+		const routes = (await createProjectApplication(cwd, cwd, "dev")).routes;
 
 		expect(routes[0]?.contract.middleware).toHaveLength(2);
 	});
@@ -948,7 +948,7 @@ export default createRouteRoot("/users")({
 `,
 		);
 
-		await expect(loadRoutes(cwd)).rejects.toThrow(
+		await expect(createProjectApplication(cwd, cwd, "dev")).rejects.toThrow(
 			"Middleware withTenant was not exported by src/routes/middleware.ts.",
 		);
 	});
