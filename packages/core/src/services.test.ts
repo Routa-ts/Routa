@@ -188,6 +188,7 @@ describe("application service cleanup", () => {
 		const released: string[] = [];
 		const app = await createApplication([], {
 			services: declaration(["cache", "db"], async ({ onCleanup }) => {
+				await Promise.resolve();
 				onCleanup(() => {
 					released.push("db");
 				});
@@ -521,7 +522,7 @@ describe("reserved ctx.services (runtime)", () => {
 
 			for (const path of ["/next", "/write", "/context"]) {
 				const response = await app.fetch(new Request(`http://localhost${path}`));
-				expect(response.status, path).toBe(500);
+				expect({ path, status: response.status }).toEqual({ path, status: 500 });
 			}
 			await app.dispose();
 		}

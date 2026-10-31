@@ -553,24 +553,17 @@ export type InferInput<TInput extends RouteInput | undefined> = {
 
 export type InferResponse<TResponses extends RouteResponses> = RouteRunResult<TResponses>;
 
-/** The application service contract `routa generate` read from `src/routa.ts`, if any. */
-type RegisteredServicesContext = Register extends {
-	applicationServices: infer TServices;
-}
-	? { readonly services: Readonly<TServices> }
-	: unknown;
-
 /**
  * Framework-owned values available to every route handler.
  *
  * `logger` is always present. When logging is disabled in Routa configuration,
  * it is a no-op logger so handlers do not need configuration-dependent guards.
- * `services` exists only when `src/routa.ts` configures application services, and exposes the
- * declared service contract, not the factory's implementations.
+ * `services` exists only when `src/routa.ts` configures application services. Its type is the
+ * service contract `routa generate` read from source, not the factory's implementations.
  */
-export type RoutaRouteContext = {
-	readonly logger: RoutaLogger;
-} & RegisteredServicesContext;
+export type RoutaRouteContext = Register extends { applicationServices: infer TServices }
+	? { readonly logger: RoutaLogger; readonly services: Readonly<TServices> }
+	: { readonly logger: RoutaLogger };
 
 export type RouteHandlerArgs<
 	TInput extends RouteInput | undefined,
