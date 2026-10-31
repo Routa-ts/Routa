@@ -432,7 +432,8 @@ export default createRouta({
 	services: defineAppServices(async ({ onCleanup }) => {
 		const pool = await createPool(process.env.DATABASE_URL);
 		const cache = await connectCache(process.env.CACHE_URL).catch(async (error: unknown) => {
-			await pool.end();
+			// Keep the connection error primary even when ending the pool fails too.
+			await pool.end().catch((cleanupError: unknown) => console.error(cleanupError));
 			throw error;
 		});
 
