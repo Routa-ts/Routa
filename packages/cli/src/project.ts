@@ -28,6 +28,11 @@ import {
 	projectContractSchemas,
 } from "./contract-schemas.js";
 import { operationId, toOpenApiPath } from "./operation-id.js";
+import {
+	type ApplicationServicesMetadata,
+	applicationServices,
+	contractTypeReference,
+} from "./services.js";
 import * as ts from "./typescript.js";
 import { runTypeScript } from "./typescript-runner.js";
 
@@ -152,9 +157,11 @@ function validateProjectInSession(
 	const schemas = projectContractSchemas(cwd, routes, parser, {
 		lifecycleHeaders: lifecycleHeadersEnabled(cwd, parser),
 	});
+	const services = applicationServices(cwd, parser);
 	const diagnostics = [
 		...projectStructureDiagnostics(cwd),
 		...discovery.diagnostics,
+		...services.diagnostics,
 		...runResultShapeDiagnostics(cwd, parser),
 		...duplicateRouteDiagnostics(routes),
 		...duplicateOperationIdDiagnostics(routes),
@@ -167,7 +174,7 @@ function validateProjectInSession(
 	];
 
 	if (write && diagnostics.length === 0) {
-		writeRoutesMetadata(cwd, routes);
+		writeRoutesMetadata(cwd, routes, services.services);
 	}
 
 	return { routes, diagnostics, warnings: schemas.warnings, schemas };
@@ -1675,9 +1682,9 @@ function parseMiddlewareFile(
  * Reads what a declaration's initializer declares, such as the object it passes to its factory,
  * or `undefined` when the declaration is not the kind being looked for.
  */
-type DeclarationReader<T> = (expression: ts.Expression) => T | undefined;
+export type DeclarationReader<T> = (expression: ts.Expression) => T | undefined;
 
-type ModuleDeclaration<T = ts.ObjectLiteralExpression> = {
+export type ModuleDeclaration<T = ts.ObjectLiteralExpression> = {
 	/** The file that declares the value. */
 	file: string;
 	/** The declared variable name in `file`. */
@@ -1816,7 +1823,7 @@ function exportedDeclarations<T>(
  * @param sourceFile - The parsed TypeScript source file.
  * @returns A map from local import names to the resolved module file and imported name.
  */
-function namedImportMap(
+export function namedImportMap(
 	cwd: string,
 	file: string,
 	sourceFile: ts.SourceFile,
@@ -1909,17 +1916,33 @@ export function cookieDeclaration(
 	name: string,
 	parser: ts.SourceFileParser,
 ): ModuleDeclaration | undefined {
+	return boundDeclaration(cwd, file, name, parser, createCookieObject);
+}
+
+/**
+ * Finds the `const` declaration a module binds to a name, whether the module declares it or
+ * imports it, and reads it. Imports follow relative modules and re-export chains.
+ *
+ * @param file - The module that uses the name, relative to `cwd`
+ * @param name - The local name in `file`
+ * @returns The declaring file, declared name, and what `read` read, or `undefined`
+ */
+export function boundDeclaration<T>(
+	cwd: string,
+	file: string,
+	name: string,
+	parser: ts.SourceFileParser,
+	read: DeclarationReader<T>,
+): ModuleDeclaration<T> | undefined {
 	const sourceFile = parseTypeScriptFile(join(cwd, file), parser);
-	const local = variableDeclarations(sourceFile, false, createCookieObject).find(
-		(item) => item.name === name,
-	);
+	const local = variableDeclarations(sourceFile, false, read).find((item) => item.name === name);
 
 	if (local) {
 		return { file, name, exportedName: name, contract: local.contract };
 	}
 
 	const source = namedImportMap(cwd, file, sourceFile).get(name);
-	return source && exportedDeclaration(cwd, source, parser, createCookieObject);
+	return source && exportedDeclaration(cwd, source, parser, read);
 }
 
 /**
@@ -2639,7 +2662,7 @@ function inputAccessPath(expression: ts.Expression): string | undefined {
  * @param file - The file path to read and parse.
  * @returns The parsed TypeScript source file.
  */
-function parseTypeScriptFile(file: string, parser: ts.SourceFileParser): ts.SourceFile {
+export function parseTypeScriptFile(file: string, parser: ts.SourceFileParser): ts.SourceFile {
 	return parser.createSourceFile(file, readFileSync(file, "utf8"));
 }
 
@@ -3031,15 +3054,26 @@ function isExternalApiUrl(value: string): boolean {
  * same structure.
  *
  * @param routes - The route metadata to serialize.
+ * @param services - The application service contract, when `src/routa.ts` declares one.
  * @returns The generated TypeScript source.
  */
-export function routesMetadataSource(routes: RouteMetadata[]): string {
+export function routesMetadataSource(
+	routes: RouteMetadata[],
+	services?: ApplicationServicesMetadata,
+): string {
 	const orderedRoutes = [...routes].sort(
 		(left, right) => compareText(left.path, right.path) || compareText(left.file, right.file),
 	);
+	const servicesSource = services
+		? `export const routaApplicationServices = ${JSON.stringify(services.names, null, "\t")} as const;
+
+export type RoutaApplicationServices = ${contractTypeReference(services)};
+
+`
+		: "";
 	return `${generatedHeader}export const routaRoutes = ${JSON.stringify(orderedRoutes, null, "\t")} as const;
 
-${routeContextTypes(orderedRoutes)}
+${servicesSource}${routeContextTypes(orderedRoutes, services !== undefined)}
 `;
 }
 
@@ -3048,10 +3082,15 @@ ${routeContextTypes(orderedRoutes)}
  *
  * @param cwd - The project root directory.
  * @param routes - The discovered route metadata to serialize.
+ * @param services - The application service contract, when `src/routa.ts` declares one.
  */
-function writeRoutesMetadata(cwd: string, routes: RouteMetadata[]): void {
+function writeRoutesMetadata(
+	cwd: string,
+	routes: RouteMetadata[],
+	services: ApplicationServicesMetadata | undefined,
+): void {
 	const file = join(cwd, ".routa/routes.gen.ts");
-	const source = routesMetadataSource(routes);
+	const source = routesMetadataSource(routes, services);
 
 	if (existsSync(file) && readFileSync(file, "utf8") === source) {
 		return;
@@ -3066,7 +3105,7 @@ function writeRoutesMetadata(cwd: string, routes: RouteMetadata[]): void {
  *
  * @returns Generated source text for per-route context types, route-to-method context maps, and the `@routa-ts/core` module augmentation.
  */
-function routeContextTypes(routes: RouteMetadata[]): string {
+function routeContextTypes(routes: RouteMetadata[], services: boolean): string {
 	const ctxTypes = routes
 		.map((route) => {
 			const typeName = routeCtxTypeName(route);
@@ -3084,7 +3123,11 @@ function routeContextTypes(routes: RouteMetadata[]): string {
 		.join("\n")}\n};`;
 	const ctxByKey = `export type RoutaCtxByKey = ${ctxByKeyType(routes)};`;
 
-	return `${ctxTypes}\n\n${ctxMap}\n\n${ctxByKey}\n\ndeclare module "@routa-ts/core" {\n\texport interface Register {\n\t\trouteCtxByPath: RoutaRouteCtxByPath;\n\t\tctxByKey: RoutaCtxByKey;\n\t}\n}`;
+	const servicesRegistration = services
+		? "\t\tapplicationServices: RoutaApplicationServices;\n"
+		: "";
+
+	return `${ctxTypes}\n\n${ctxMap}\n\n${ctxByKey}\n\ndeclare module "@routa-ts/core" {\n\texport interface Register {\n\t\trouteCtxByPath: RoutaRouteCtxByPath;\n\t\tctxByKey: RoutaCtxByKey;\n${servicesRegistration}\t}\n}`;
 }
 
 /**
