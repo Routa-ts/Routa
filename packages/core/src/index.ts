@@ -476,36 +476,57 @@ export type MiddlewareRunArgs<
 	TRequires extends readonly RegisteredCtxKey[],
 	TProvides extends MiddlewareProvidesSpec,
 	TInput extends RouteInput | undefined,
+	TServices extends object | undefined = undefined,
 > = {
 	input: InferInput<TInput>;
-	ctx: RequiredMiddlewareCtx<TRequires>;
+	ctx: RequiredMiddlewareCtx<TRequires> & MiddlewareServicesCtx<TServices>;
 	next: MiddlewareNext<TProvides>;
 };
+
+/** Middleware declared with a requirement interface sees exactly that interface as `ctx.services`. */
+type MiddlewareServicesCtx<TServices> = TServices extends object
+	? { readonly services: Readonly<TServices> }
+	: unknown;
 
 export type MiddlewareRun<
 	TRequires extends readonly RegisteredCtxKey[],
 	TProvides extends MiddlewareProvidesSpec,
 	TRejects extends MiddlewareRejectsSpec,
 	TInput extends RouteInput | undefined,
+	TServices extends object | undefined = undefined,
 > = (
-	args: MiddlewareRunArgs<TRequires, TProvides, TInput>,
+	args: MiddlewareRunArgs<TRequires, TProvides, TInput, TServices>,
 ) => MaybePromise<MiddlewareRejectResult<NoInfer<TRejects>> | MiddlewareContinuation>;
+
+/** The type of `requiresServices` in a middleware declared without a requirement interface. */
+type UntypedServiceRequirements = {
+	readonly "Declare service requirements with createMiddleware<Requirements>()({ requiresServices, ... }).": never;
+};
 
 export type MiddlewareContract<
 	TRequires extends readonly RegisteredCtxKey[] = readonly RegisteredCtxKey[],
 	TProvides extends MiddlewareProvidesSpec = Record<never, never>,
 	TRejects extends MiddlewareRejectsSpec = Record<never, never>,
 	TInput extends RouteInput | undefined = RouteInput | undefined,
+	TServices extends object | undefined = undefined,
 > = {
 	requires?: TRequires;
+	/**
+	 * The services the middleware needs, which Routa checks are available wherever it runs. Only
+	 * the helper `createMiddleware<Requirements>()` declares them, and they must list exactly the
+	 * requirement interface's names.
+	 */
+	requiresServices?: TServices extends object
+		? readonly (keyof TServices & string)[]
+		: UntypedServiceRequirements;
 	provides?: TProvides;
 	rejects?: TRejects;
 	input?: TInput;
 	openapi?: MiddlewareOpenApi;
-	run?: MiddlewareRun<TRequires, TProvides, TRejects, TInput>;
+	run?: MiddlewareRun<TRequires, TProvides, TRejects, TInput, TServices>;
 };
 
-export type AnyMiddlewareContract = Omit<MiddlewareContract<any, any, any, any>, "run"> & {
+export type AnyMiddlewareContract = Omit<MiddlewareContract<any, any, any, any, any>, "run"> & {
 	run?: (args: any) => unknown;
 };
 
@@ -524,7 +545,7 @@ type RequiredMiddlewareCtx<TRequires extends readonly string[]> = {
 };
 
 export type MiddlewareProvides<TMiddleware extends readonly AnyMiddlewareContract[]> =
-	TMiddleware[number] extends MiddlewareContract<any, infer TProvides>
+	TMiddleware[number] extends MiddlewareContract<any, infer TProvides, any, any, any>
 		? MiddlewareProvidesKeys<TProvides>
 		: never;
 
@@ -536,7 +557,7 @@ type UnionToIntersection<T> = (T extends unknown ? (value: T) => void : never) e
 
 export type InferMiddlewareCtx<TMiddleware extends readonly AnyMiddlewareContract[]> =
 	UnionToIntersection<
-		TMiddleware[number] extends MiddlewareContract<any, infer TProvides>
+		TMiddleware[number] extends MiddlewareContract<any, infer TProvides, any, any, any>
 			? MiddlewareProvidedCtx<TProvides>
 			: unknown
 	>;
@@ -904,6 +925,19 @@ export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPa
 }
 
 /**
+ * Fixes the requirement interface for middleware that needs injected services. Name the result
+ * and reuse it: `const defineCacheMiddleware = createMiddleware<CacheRequirements>();`, then
+ * `defineCacheMiddleware({ requiresServices: ["cache"], ... })`. The callback sees
+ * `CacheRequirements` as `ctx.services`, and `routa check` verifies that every placement provides
+ * compatible services before the middleware runs.
+ *
+ * @returns A helper that checks a contract against the requirement interface and returns it
+ *   unchanged
+ */
+export function createMiddleware<
+	TServices extends object & ServiceContractRules<TServices> = never,
+>(): MiddlewareHelper<TServices>;
+/**
  * Preserves a middleware contract's type information.
  *
  * @param contract - The middleware contract to preserve
@@ -919,6 +953,34 @@ export function createMiddleware<
 		readonly rejects?: ResponseChecks<NoInfer<TRejects>>;
 		readonly provides?: ReservedContextChecks<NoInfer<TProvides>>;
 	},
-): MiddlewareContract<TRequires, TProvides, TRejects, TInput> {
-	return contract;
+): MiddlewareContract<TRequires, TProvides, TRejects, TInput>;
+export function createMiddleware(contract?: AnyMiddlewareContract): unknown {
+	return contract ?? ((helperContract: AnyMiddlewareContract) => helperContract);
 }
+
+/**
+ * Checks a middleware contract against one requirement interface. It infers `requires`,
+ * `provides`, `rejects`, and `input` as {@link createMiddleware} does, and `requiresServices`
+ * must list exactly the interface's names.
+ */
+export type MiddlewareHelper<TServices extends object> = <
+	const TRequires extends readonly RegisteredCtxKey[] = readonly RegisteredCtxKey[],
+	const TProvides extends MiddlewareProvidesSpec = Record<never, never>,
+	const TRejects extends MiddlewareRejectsSpec = Record<never, never>,
+	const TInput extends RouteInput | undefined = undefined,
+	const TNames extends readonly (keyof TServices & string)[] = readonly (keyof TServices
+		& string)[],
+>(
+	contract: MiddlewareContract<TRequires, TProvides, TRejects, TInput, TServices> & {
+		readonly requiresServices: TNames & RequirementListChecks<TServices, NoInfer<TNames>>;
+		readonly rejects?: ResponseChecks<NoInfer<TRejects>>;
+		readonly provides?: ReservedContextChecks<NoInfer<TProvides>>;
+	},
+) => MiddlewareContract<TRequires, TProvides, TRejects, TInput, TServices>;
+
+/** Fails a `requiresServices` list that leaves out a name the requirement interface declares. */
+type RequirementListChecks<TServices, TNames extends readonly unknown[]> = {
+	readonly [
+		K in Exclude<keyof TServices, TNames[number]> as `requiresServices must list "${K & string}".`
+	]: never;
+};

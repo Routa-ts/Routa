@@ -33,6 +33,11 @@ export type HonoRoute<TCtx = unknown> = {
 	 * middleware that precede it; its services join `ctx.services` for the rest of the chain.
 	 */
 	services?: RouteServices;
+	/**
+	 * The names messages use for each middleware in `contract.middleware`, in chain order, such as
+	 * the export names `routa generate` read. Middleware without a name is called `middleware[i]`.
+	 */
+	middlewareNames?: readonly string[];
 };
 
 /** The request-scoped services one route method combines: its route file's, then its own. */
@@ -225,6 +230,8 @@ function honoApp(
 			createContext: route.createContext,
 			services,
 			requestServices: requestScopes(route.services, routeKey),
+			route: routeKey,
+			middlewareNames: route.middlewareNames,
 		});
 
 		app.on(honoMethod, route.path, async (context, next) => {

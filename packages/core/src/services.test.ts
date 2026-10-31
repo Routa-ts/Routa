@@ -468,6 +468,118 @@ describe("reserved ctx.services (types)", () => {
 	});
 });
 
+describe("middleware service requirements (types)", () => {
+	interface Cache {
+		get(key: string): string | undefined;
+	}
+	interface Clock {
+		now(): number;
+	}
+	interface CacheRequirements {
+		cache: Cache;
+		clock: Clock;
+	}
+
+	it("types ctx.services as the requirement interface and keeps the contract's inference", () => {
+		typesOnly(() => {
+			const defineCacheMiddleware = createMiddleware<CacheRequirements>();
+
+			const withCache = defineCacheMiddleware({
+				requiresServices: ["cache", "clock"],
+				input: { query: z.object({ key: z.string().transform((key) => key.length) }) },
+				provides: { cached: z.string() },
+				rejects: { stale: { status: 503, schema: z.object({ at: z.number() }) } },
+				run: ({ ctx, input, next }) => {
+					expectType<number>(input.query.key);
+					expectType<string | undefined>(ctx.services.cache.get("k"));
+					expectType<number>(ctx.services.clock.now());
+					// @ts-expect-error Callbacks see only the requirement interface.
+					void ctx.services.db;
+					// @ts-expect-error Service references are readonly.
+					ctx.services.cache = { get: () => "replaced" };
+					const at = ctx.services.clock.now();
+					return at > 0 ? next({ cached: "hit" }) : { type: "stale", data: { at } };
+				},
+			});
+			createMiddleware<CacheRequirements>()({
+				requiresServices: ["clock", "cache"],
+				run: ({ next }) => next(),
+			});
+
+			createRoute({
+				middleware: [withCache],
+				responses: { ok: { status: 200, schema: z.string() } },
+				run: ({ ctx }) => ({ type: "ok", data: ctx.cached }),
+			});
+			createRoute({
+				middleware: [withCache],
+				responses: {
+					ok: { status: 200, schema: z.string() },
+					// @ts-expect-error The helper's rejects still reserve their names.
+					stale: { status: 500 },
+				},
+				run: ({ ctx }) => ({ type: "ok", data: ctx.cached }),
+			});
+		});
+	});
+
+	it("rejects a requiresServices list that differs from the requirement interface", () => {
+		typesOnly(() => {
+			const defineCacheMiddleware = createMiddleware<CacheRequirements>();
+
+			defineCacheMiddleware({
+				// @ts-expect-error Every required service must be listed.
+				requiresServices: ["cache"],
+				run: ({ next }) => next(),
+			});
+			defineCacheMiddleware({
+				// @ts-expect-error Only required services may be listed.
+				requiresServices: ["cache", "clock", "db"],
+				run: ({ next }) => next(),
+			});
+			// @ts-expect-error The helper form needs its requiresServices list.
+			defineCacheMiddleware({ run: ({ next }) => next() });
+			createMiddleware({
+				// @ts-expect-error The direct form declares no service requirements.
+				requiresServices: ["cache"],
+				run: ({ next }) => next(),
+			});
+			createMiddleware({
+				run: ({ ctx, next }) => {
+					// @ts-expect-error The direct form has no typed ctx.services.
+					void ctx.services.cache;
+					return next();
+				},
+			});
+
+			// @ts-expect-error A requirement interface lists required services only.
+			createMiddleware<{ cache?: Cache }>();
+			// @ts-expect-error A requirement interface names each service.
+			createMiddleware<Record<string, Cache>>();
+		});
+	});
+
+	it("keeps reserved ctx.services checks on the helper form", () => {
+		typesOnly(() => {
+			const defineCacheMiddleware = createMiddleware<CacheRequirements>();
+
+			defineCacheMiddleware({
+				requiresServices: ["cache", "clock"],
+				provides: {
+					// @ts-expect-error ctx.services is reserved for injected services.
+					services: z.object({ db: z.string() }),
+				},
+			});
+			defineCacheMiddleware({
+				requiresServices: ["cache", "clock"],
+				run: ({ next }) =>
+					// @ts-expect-error A next() payload cannot claim services.
+					next({ services: { db: "fake" } }),
+			});
+		});
+	});
+});
+
 describe("reserved ctx.services (runtime)", () => {
 	const ok = (middleware: AnyMiddlewareContract[], run = () => "handled") =>
 		createRoute({
@@ -573,3 +685,5 @@ describe("reserved ctx.services (runtime)", () => {
 		await app.dispose();
 	});
 });
+
+function expectType<T>(_value: T): void {}

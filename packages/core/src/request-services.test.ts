@@ -570,6 +570,120 @@ describe("request-scoped service failures and cleanup", () => {
 	});
 });
 
+describe("middleware service requirements (runtime)", () => {
+	interface CacheRequirements {
+		cache: { get(): string };
+	}
+
+	/** Middleware requiring `cache` that counts its callback invocations. */
+	const requiresCache = (counter: { runs: number }) =>
+		createMiddleware<CacheRequirements>()({
+			requiresServices: ["cache"],
+			provides: { cached: z.string() },
+			run: ({ ctx, next }) => {
+				counter.runs += 1;
+				return next({ cached: ctx.services.cache.get() });
+			},
+		});
+
+	it("runs middleware whose required services its stage provides", async () => {
+		const counter = { runs: 0 };
+		const app = await createApplication([
+			route(
+				{
+					middleware: [observe("fs", []), requiresCache(counter)],
+					services: {
+						routeFile: scope(["cache", "extra"], 1, () => ({
+							cache: { get: () => "hit" },
+							extra: 1,
+						})),
+					},
+				},
+				(ctx) => ctx.cached,
+			),
+		]);
+
+		expect(await (await request(app)).json()).toBe("hit");
+		expect(counter.runs).toBe(1);
+		await app.dispose();
+	});
+
+	it("stops before a middleware whose required service its stage lacks, and hides why", async () => {
+		const events: RoutaLogEvent[] = [];
+		const logger = createLogger({ sink: (event) => events.push(event) });
+		const counter = { runs: 0 };
+		const ran: string[] = [];
+		const app = await createApplication(
+			[
+				{
+					...route(
+						{
+							middleware: [
+								passThrough({ before: () => ran.push("earlier") }),
+								requiresCache(counter),
+								passThrough({ before: () => ran.push("later") }),
+							],
+							// The cache arrives only after the middleware that requires it.
+							services: {
+								routeFile: scope(["cache"], 2, ({ onCleanup }) => {
+									onCleanup(() => ran.push("released"));
+									return { cache: { get: () => "late" } };
+								}),
+							},
+						},
+						() => ran.push("handler"),
+					),
+					middlewareNames: ["withRequest", "withCache", "withAudit"],
+				},
+			],
+			{ logger, services: appServices(["db"], () => ({ db: {} })) },
+		);
+
+		const response = await request(app);
+
+		expect(response.status).toBe(500);
+		expect(await response.json()).toEqual({
+			type: "https://routa-ts.dev/problems/internal",
+			title: "Internal Server Error",
+			status: 500,
+		});
+		expect(counter.runs).toBe(0);
+		// The failure skips the later middleware, the later factory, and the handler.
+		expect(ran).toEqual(["earlier"]);
+		expect(events.find((event) => event.event === "http.error")?.data).toMatchObject({
+			method: "GET",
+			path: "/orders",
+			status: 500,
+			error:
+				'Middleware withCache on GET /orders requires service "cache", but ctx.services does not provide it where the middleware runs. Declare "cache" in a services scope that runs before the middleware.',
+		});
+		await app.dispose();
+	});
+
+	it("checks requirements that bypassed the types, naming middleware by position", async () => {
+		const events: RoutaLogEvent[] = [];
+		let runs = 0;
+		const bypass = createMiddleware({
+			requiresServices: ["cache"] as any,
+			run: ({ next }) => {
+				runs += 1;
+				return next();
+			},
+		});
+		const app = createHonoApp([route({ method: "post", middleware: [bypass] }, () => "handled")], {
+			logger: createLogger({ sink: (event) => events.push(event) }),
+		});
+
+		const response = await app.request("http://localhost/orders", { method: "POST" });
+
+		expect(response.status).toBe(500);
+		expect(runs).toBe(0);
+		expect(events.find((event) => event.event === "http.error")?.data?.error).toMatch(
+			/^Middleware middleware\[0\] on POST \/orders requires service "cache"/,
+		);
+	});
+});
+
 describe("request-scoped service registration", () => {
 	it("rejects a name that combined scopes both declare, and allows unrelated reuse", async () => {
 		const unit = scope(["unit"], 0, () => ({ unit: 1 }));
