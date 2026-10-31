@@ -115,8 +115,9 @@ export default createRouta({
 ## Contract Rules
 
 A service contract is an exported `interface`, or an exported `type` alias of an object
-type, whose members are all required and plainly named. It may live in any project module,
-and every binding between `services:` and `defineServices` may be a local `const` or a
+type, whose members are all required and plainly named. Interfaces that share its name in
+one module merge into one contract, as TypeScript merges them. It may live in any project
+module, and every binding between `services:` and `defineServices` may be a local `const` or a
 relative import, including re-exports. Routa reports a declaration it cannot follow instead
 of guessing:
 

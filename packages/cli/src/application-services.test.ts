@@ -202,6 +202,39 @@ export default createRouta({
 		);
 	}, 30_000);
 
+	it("reads every service of a contract merged across interface declarations", async () => {
+		const cwd = servicesProject({
+			"src/services.ts": `import { defineServices } from "@routa-ts/core";
+
+export interface AppServices {
+\tclock: { now(): string };
+}
+
+export interface AppServices {
+\tdb: { name: string };
+}
+
+export const defineAppServices = defineServices<AppServices>();
+`,
+			"src/routa.ts": `import { createRouta } from "@routa-ts/core";
+import { defineAppServices } from "./services.js";
+
+export default createRouta({
+\tservices: defineAppServices(() => ({ clock: { now: () => "" }, db: { name: "orders" } })),
+});
+`,
+			"src/routes/status/route.ts": statusRoute,
+		});
+
+		expect((await run(["generate"], { cwd })).code).toBe(0);
+		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
+			'export const routaApplicationServices = [\n\t"clock",\n\t"db"\n] as const;',
+		);
+
+		const { application } = await createProjectApplication(cwd, cwd, "dev");
+		await application.dispose();
+	});
+
 	it("reports services declarations it cannot follow", () => {
 		for (const services of [
 			"async () => ({ clock: {} })",
