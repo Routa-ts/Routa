@@ -169,6 +169,7 @@ function validateProjectInSession(
 		...missingSuccessResponseDiagnostics(routes),
 		...duplicateSchemaDiagnostics(cwd, parser),
 		...middlewareOrderDiagnostics(routes),
+		...middlewareContextDiagnostics(routes),
 		...middlewareRejectStatusDiagnostics(routes),
 		...schemas.diagnostics,
 	];
@@ -1674,7 +1675,7 @@ function parseMiddlewareFile(
 	const sourceFile = parseTypeScriptFile(join(cwd, file), parser);
 
 	return exportedDeclarations(cwd, file, sourceFile, parser, createMiddlewareObject).map((block) =>
-		middlewareMetadata(file, block.exportedName, block.contract, block.file),
+		middlewareMetadata(cwd, parser, file, block.exportedName, block.contract, block.file),
 	);
 }
 
@@ -1885,7 +1886,7 @@ function exportedDeclaration<T>(
  */
 const middlewareContracts = new WeakMap<
 	MiddlewareMetadata,
-	{ file: string; contract: ts.ObjectLiteralExpression }
+	{ file: string; contract: ts.ObjectLiteralExpression; providesUnresolved: boolean }
 >();
 
 /**
@@ -1897,7 +1898,9 @@ const middlewareContracts = new WeakMap<
  */
 export function middlewareContract(
 	middleware: MiddlewareMetadata,
-): { file: string; contract: ts.ObjectLiteralExpression } | undefined {
+):
+	| { file: string; contract: ts.ObjectLiteralExpression; providesUnresolved: boolean }
+	| undefined {
 	return middlewareContracts.get(middleware);
 }
 
@@ -2010,7 +2013,7 @@ function parseRouteFileMiddleware(
 		const metadata = middlewareExpressionMetadata(expression, middlewareByName);
 
 		if (metadata) {
-			return middlewareMetadata(routeFile, metadata.name, metadata.contract, routeFile);
+			return middlewareMetadata(cwd, parser, routeFile, metadata.name, metadata.contract, routeFile);
 		}
 
 		const unwrapped = unwrapExpression(expression);
@@ -2026,7 +2029,14 @@ function parseRouteFileMiddleware(
 			return;
 		}
 
-		return middlewareMetadata(routeFile, unwrapped.text, declaration.contract, declaration.file);
+		return middlewareMetadata(
+			cwd,
+			parser,
+			routeFile,
+			unwrapped.text,
+			declaration.contract,
+			declaration.file,
+		);
 	};
 
 	for (const property of objectProperties(routeConfig)) {
@@ -2114,12 +2124,14 @@ function stringArrayProperty(source: ts.ObjectLiteralExpression, property: strin
  * @returns Middleware metadata including its source file, name, required context keys, provided context keys and types, and rejected keys.
  */
 function middlewareMetadata(
+	cwd: string,
+	parser: ts.SourceFileParser,
 	file: string,
 	name: string,
 	contract: ts.ObjectLiteralExpression,
 	declarationFile: string,
 ): MiddlewareMetadata {
-	const provides = middlewareProvides(contract);
+	const provides = middlewareProvides(cwd, declarationFile, contract, parser);
 	const inferred = middlewareNextProvidesTypes(contract);
 	const metadata: MiddlewareMetadata = {
 		file,
@@ -2137,7 +2149,11 @@ function middlewareMetadata(
 		permissions: middlewarePermissions(contract),
 	};
 
-	middlewareContracts.set(metadata, { file: declarationFile, contract });
+	middlewareContracts.set(metadata, {
+		file: declarationFile,
+		contract,
+		providesUnresolved: provides.unresolved,
+	});
 	return metadata;
 }
 
@@ -2224,33 +2240,56 @@ function middlewareRejects(contract: ts.ObjectLiteralExpression): MiddlewareReje
 /**
  * Extracts the context keys and value types provided by a middleware contract.
  *
- * @param contract - The middleware contract object.
- * @returns The provided keys and their inferred types.
+ * `provides` may be an object literal or a `const` object literal it names, declared locally or
+ * imported. Anything else, including spreads and computed keys, is reported as unresolved rather
+ * than read as providing nothing.
+ *
+ * @param file - The module that declares the contract, relative to `cwd`
+ * @returns The provided keys, their inferred types, and whether the declaration could be read
  */
-function middlewareProvides(contract: ts.ObjectLiteralExpression): {
+function middlewareProvides(
+	cwd: string,
+	file: string,
+	contract: ts.ObjectLiteralExpression,
+	parser: ts.SourceFileParser,
+): {
 	keys: string[];
 	types: Record<string, string>;
+	unresolved: boolean;
 } {
-	const item = objectProperty(contract, "provides");
+	const value = propertyValue(contract, "provides");
 
-	if (!item) {
-		return { keys: [], types: {} };
+	if (!value) {
+		return { keys: [], types: {}, unresolved: false };
 	}
 
-	const expression = unwrapExpression(item.initializer);
+	const expression = unwrapExpression(value);
+	const provides = ts.isIdentifier(expression)
+		? boundDeclaration(cwd, file, expression.text, parser, objectLiteral)?.contract
+		: objectLiteral(expression);
+	const entries = provides?.properties.map((property) => {
+		const name =
+			ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)
+				? propertyName(property.name)
+				: undefined;
 
-	if (!ts.isObjectLiteralExpression(expression)) {
-		return { keys: [], types: {} };
-	}
-
-	const entries = objectProperties(expression).flatMap((property) => {
-		const name = propertyName(property.name);
-		return name ? [[name, zodType(property.initializer)] as const] : [];
+		return name === undefined
+			? undefined
+			: ([
+					name,
+					ts.isPropertyAssignment(property) ? zodType(property.initializer) : "unknown",
+				] as const);
 	});
 
+	if (!entries || entries.some((entry) => entry === undefined)) {
+		return { keys: [], types: {}, unresolved: true };
+	}
+
+	const resolved = entries as ReadonlyArray<readonly [string, string]>;
 	return {
-		keys: entries.map(([key]) => key),
-		types: Object.fromEntries(entries),
+		keys: resolved.map(([key]) => key),
+		types: Object.fromEntries(resolved),
+		unresolved: false,
 	};
 }
 
@@ -2899,6 +2938,87 @@ function middlewareOrderDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 	}
 
 	return diagnostics;
+}
+
+/**
+ * Reports middleware context Routa cannot accept: `ctx.services`, which it reserves for injected
+ * services, whether provided or passed to `next()`, and `provides` it cannot read from source.
+ *
+ * @param routes - Route metadata whose middleware chains are checked, each contract once
+ */
+function middlewareContextDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
+	const diagnostics: Diagnostic[] = [];
+	const seen = new Set<ts.ObjectLiteralExpression>();
+
+	for (const route of routes) {
+		for (const item of [route.middleware, ...Object.values(route.methodMiddleware)].flat()) {
+			const source = middlewareContract(item);
+
+			if (!source || seen.has(source.contract)) {
+				continue;
+			}
+
+			seen.add(source.contract);
+			const report = (code: string, message: string, suggestion: string) =>
+				diagnostics.push({ code, severity: "error", message, file: source.file, suggestion });
+			const reserved =
+				"Rename the context key. To share an application dependency, declare it as an application service.";
+
+			if (source.providesUnresolved) {
+				report(
+					"ROUTA_MIDDLEWARE_PROVIDES_UNRESOLVED",
+					`Middleware ${item.name} declares provides that cannot be statically read.`,
+					"Declare provides as an object literal, or a const object literal it names, with a plain key for each schema and no spreads.",
+				);
+			}
+
+			if (item.provides.includes("services")) {
+				report(
+					"ROUTA_CONTEXT_RESERVED",
+					`Middleware ${item.name} provides ctx.services, which Routa reserves for injected services.`,
+					reserved,
+				);
+			}
+
+			if (nextPayloadKeys(source.contract).includes("services")) {
+				report(
+					"ROUTA_CONTEXT_RESERVED",
+					`Middleware ${item.name} passes ctx.services to next(), which Routa reserves for injected services.`,
+					reserved,
+				);
+			}
+		}
+	}
+
+	return diagnostics;
+}
+
+/** The keys of every object literal a middleware's `run` passes to `next()`. */
+function nextPayloadKeys(contract: ts.ObjectLiteralExpression): string[] {
+	const run = propertyValue(contract, "run");
+	const keys: string[] = [];
+	const visit = (node: ts.Node): void => {
+		if (ts.isCallExpression(node) && callName(node) === "next") {
+			for (const property of objectLiteral(node.arguments[0])?.properties ?? []) {
+				const name =
+					ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)
+						? propertyName(property.name)
+						: undefined;
+
+				if (name !== undefined) {
+					keys.push(name);
+				}
+			}
+		}
+
+		ts.forEachChild(node, visit);
+	};
+
+	if (run) {
+		visit(run);
+	}
+
+	return keys;
 }
 
 function middlewareRejectStatusDiagnostics(routes: RouteMetadata[]): Diagnostic[] {

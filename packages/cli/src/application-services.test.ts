@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vite-plus/test";
 import { run } from "./index.js";
+import { validateProject } from "./project.js";
 import { createProjectApplication } from "./runtime.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -86,6 +87,117 @@ export default createRouta({
 	}, 30_000);
 });
 
+const statusRoute = `import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/status")({
+\tget: createRoute({
+\t\tresponses: { ok: { status: 200, schema: z.object({ ok: z.boolean() }) } },
+\t\trun: () => ({ type: "ok", data: { ok: true } }),
+\t}),
+});
+`;
+
+const middlewareFile = (body: string) => `import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+
+${body}`;
+
+function diagnosticCodes(cwd: string): string[] {
+	return validateProject(cwd, { write: false }).diagnostics.map((item) => item.code);
+}
+
+describe("reserved ctx.services (routa check)", () => {
+	it("reports middleware that provides services, literally or through a named binding", () => {
+		for (const body of [
+			"export const withDb = createMiddleware({ provides: { services: z.object({ db: z.string() }) } });\n",
+			"const provides = { services: z.object({ db: z.string() }) };\n\nexport const withDb = createMiddleware({ provides });\n",
+			'import { dbProvides } from "../provides.js";\n\nexport const withDb = createMiddleware({ provides: dbProvides });\n',
+		]) {
+			const cwd = servicesProject({
+				"src/provides.ts":
+					'import { z } from "zod";\n\nexport const dbProvides = { services: z.object({ db: z.string() }) };\n',
+				"src/routes/middleware.ts": middlewareFile(body),
+				"src/routes/status/route.ts": statusRoute,
+			});
+			const diagnostics = validateProject(cwd, { write: false }).diagnostics;
+
+			expect(diagnostics).toEqual([
+				{
+					code: "ROUTA_CONTEXT_RESERVED",
+					severity: "error",
+					message:
+						"Middleware withDb provides ctx.services, which Routa reserves for injected services.",
+					file: "src/routes/middleware.ts",
+					suggestion:
+						"Rename the context key. To share an application dependency, declare it as an application service.",
+				},
+			]);
+		}
+	});
+
+	it("reports middleware that passes services to next()", () => {
+		const cwd = servicesProject({
+			"src/routes/middleware.ts": middlewareFile(
+				"export const withDb = createMiddleware({ run: ({ next }) => next({ services: { db: 'fake' } }) });\n",
+			),
+			"src/routes/status/route.ts": statusRoute,
+		});
+
+		expect(validateProject(cwd, { write: false }).diagnostics).toMatchObject([
+			{
+				code: "ROUTA_CONTEXT_RESERVED",
+				message:
+					"Middleware withDb passes ctx.services to next(), which Routa reserves for injected services.",
+			},
+		]);
+	});
+
+	it("reads named provides bindings into generated context", () => {
+		const cwd = servicesProject({
+			"src/provides.ts":
+				'import { z } from "zod";\n\nexport const userProvides = { user: z.object({ id: z.string() }) };\n',
+			"src/routes/middleware.ts": middlewareFile(
+				'import { userProvides } from "../provides.js";\n\nexport const withUser = createMiddleware({ provides: userProvides });\n',
+			),
+			"src/routes/status/route.ts": statusRoute,
+		});
+		const inline = servicesProject({
+			"src/routes/middleware.ts": middlewareFile(
+				"export const withUser = createMiddleware({ provides: { user: z.object({ id: z.string() }) } });\n",
+			),
+			"src/routes/status/route.ts": statusRoute,
+		});
+		const { routes, diagnostics } = validateProject(cwd, { write: false });
+
+		expect(diagnostics).toEqual([]);
+		expect(routes[0]?.ctx).toEqual(["user"]);
+		expect(routes).toEqual(validateProject(inline, { write: false }).routes);
+	});
+
+	it("reports provides declarations it cannot read instead of treating them as empty", () => {
+		for (const provides of ["makeProvides()", "{ ...base, user: z.string() }", "{ [key]: z.string() }"]) {
+			const cwd = servicesProject({
+				"src/routes/middleware.ts": middlewareFile(
+					`const key = "user";\nconst base = {};\nconst makeProvides = () => ({ user: z.string() });\n\nexport const withUser = createMiddleware({ provides: ${provides} });\n`,
+				),
+				"src/routes/status/route.ts": statusRoute,
+			});
+
+			expect(validateProject(cwd, { write: false }).diagnostics, provides).toEqual([
+				{
+					code: "ROUTA_MIDDLEWARE_PROVIDES_UNRESOLVED",
+					severity: "error",
+					message: "Middleware withUser declares provides that cannot be statically read.",
+					file: "src/routes/middleware.ts",
+					suggestion:
+						"Declare provides as an object literal, or a const object literal it names, with a plain key for each schema and no spreads.",
+				},
+			]);
+		}
+	});
+});
+
 /** A Routa project whose TypeScript resolves `@routa-ts/core` to this checkout's source. */
 function servicesProject(files: Record<string, string>): string {
 	const cwd = mkdtempSync(join(tmpdir(), "routa-services-"));
@@ -110,6 +222,7 @@ function servicesProject(files: Record<string, string>): string {
 			},
 			include: ["src/**/*.ts", ".routa/**/*.ts"],
 		}),
+		"src/routa.ts": 'import { createRouta } from "@routa-ts/core";\n\nexport default createRouta({});\n',
 		...files,
 	};
 
