@@ -20,6 +20,13 @@ import {
 
 export { isBodylessStatus };
 export type { ApplicationServicesDeclaration, RequestServicesDeclaration };
+export {
+	createProjectApplication,
+	type CreateProjectApplicationOptions,
+	type ProjectApplication,
+	type ProjectModuleLoader,
+	type ServiceReplacements,
+} from "./project.js";
 
 type RuntimeMode = "dev" | "start";
 
