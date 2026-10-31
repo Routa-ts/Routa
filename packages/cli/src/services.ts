@@ -65,7 +65,7 @@ export function applicationServices(
 						{
 							code: "ROUTA_SERVICES_SPREAD_UNRESOLVED",
 							severity: "warning",
-							message: `The createRouta config in ${configFile} has a spread or computed key that cannot be statically read, so application services inside it cannot be read.`,
+							message: `The createRouta config in ${configFile} has a spread, computed key, or config argument that cannot be statically read, so application services inside it cannot be read.`,
 							file: configFile,
 							suggestion:
 								"Declare application services as a visible services member of the createRouta object, or spread a const object literal. Startup rejects services that routa generate could not read.",
@@ -115,12 +115,14 @@ function servicesDeclaration(cwd: string, parser: ts.SourceFileParser): Services
 		}
 
 		if (ts.isCallExpression(node) && callName(node.expression) === "createRouta") {
-			const config = objectLiteral(node.arguments[0]);
-			const member = config && objectServices(cwd, configFile, config, parser, 0);
+			// The config argument is read like a spread: an object literal or a `const` binding to one.
+			const argument = node.arguments[0];
+			const config = argument && spreadObject(cwd, configFile, argument, parser, 0);
+			const member = config
+				? objectServices(cwd, config.file, config.object, parser, 1)
+				: { hidden: argument !== undefined };
 
-			if (member) {
-				found = { declaration: member.declaration, hidden: found.hidden || member.hidden };
-			}
+			found = { declaration: member.declaration, hidden: found.hidden || member.hidden };
 
 			if (found.declaration) {
 				return;

@@ -259,6 +259,15 @@ import { serviceConfig } from "./config.js";
 export default createRouta({ port: 3000, ...serviceConfig });
 `,
 			},
+			{
+				"src/routa.ts": `import { createRouta } from "@routa-ts/core";
+import { defineAppServices } from "./services.js";
+
+const config = { port: 3000, services: ${factory} };
+
+export default createRouta(config);
+`,
+			},
 		]) {
 			const cwd = servicesProject({
 				"src/services.ts": clockContract,
@@ -285,7 +294,7 @@ export default createRouta({ port: 3000, ...serviceConfig });
 			code: "ROUTA_SERVICES_SPREAD_UNRESOLVED",
 			severity: "warning",
 			message:
-				"The createRouta config in src/routa.ts has a spread or computed key that cannot be statically read, so application services inside it cannot be read.",
+				"The createRouta config in src/routa.ts has a spread, computed key, or config argument that cannot be statically read, so application services inside it cannot be read.",
 			file: "src/routa.ts",
 			suggestion:
 				"Declare application services as a visible services member of the createRouta object, or spread a const object literal. Startup rejects services that routa generate could not read.",
@@ -295,6 +304,8 @@ export default createRouta({ port: 3000, ...serviceConfig });
 			["{ ...makeConfig() }", [warning]],
 			['{ [key]: "127.0.0.1" }', [warning]],
 			["{ ...tuning }", []],
+			["makeConfig()", [warning]],
+			["tuning", []],
 			[
 				"{ ...makeConfig(), services: defineAppServices(() => ({ clock: { now: () => '' } })) }",
 				[],
