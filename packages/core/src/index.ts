@@ -527,15 +527,24 @@ export type InferInput<TInput extends RouteInput | undefined> = {
 
 export type InferResponse<TResponses extends RouteResponses> = RouteRunResult<TResponses>;
 
+/** The application service contract `routa generate` read from `src/routa.ts`, if any. */
+type RegisteredServicesContext = Register extends {
+	applicationServices: infer TServices;
+}
+	? { readonly services: Readonly<TServices> }
+	: unknown;
+
 /**
  * Framework-owned values available to every route handler.
  *
  * `logger` is always present. When logging is disabled in Routa configuration,
  * it is a no-op logger so handlers do not need configuration-dependent guards.
+ * `services` exists only when `src/routa.ts` configures application services, and exposes the
+ * declared service contract, not the factory's implementations.
  */
 export type RoutaRouteContext = {
 	readonly logger: RoutaLogger;
-};
+} & RegisteredServicesContext;
 
 export type RouteHandlerArgs<
 	TInput extends RouteInput | undefined,
@@ -629,6 +638,44 @@ type RegisteredRouteCtxByPath = Register extends {
 		: Record<string, Partial<Record<HttpMethod, unknown>>>
 	: Record<string, Partial<Record<HttpMethod, unknown>>>;
 
+/**
+ * Registers a callback that releases a resource the factory acquired. Routa awaits callbacks one
+ * at a time, in reverse registration order, and attempts every one even when an earlier one fails.
+ */
+export type OnCleanup = (callback: () => unknown) => void;
+
+/** What an application services factory receives. */
+export type ApplicationServicesContext = {
+	/** The configured Routa logger, or a no-op logger when logging is disabled. */
+	readonly logger: RoutaLogger;
+	readonly onCleanup: OnCleanup;
+};
+
+/**
+ * Builds one application instance's services. It runs once, before the application accepts
+ * requests, and returns exactly the services its contract names.
+ */
+export type ApplicationServicesFactory<TServices extends object = object> = (
+	context: ApplicationServicesContext,
+) => MaybePromise<TServices>;
+
+/** The names a contract declares optional. */
+type OptionalServiceNames<TServices> = {
+	[K in keyof TServices]-?: {} extends Pick<TServices, K> ? K : never;
+}[keyof TServices];
+
+/**
+ * A service contract names a fixed set of required services, so `routa generate` can read the
+ * names and Routa can check that a factory returns exactly them.
+ */
+type ServiceContractRules<TServices> = string extends keyof TServices
+	? {
+			readonly "A service contract names each service. Remove the index signature.": never;
+		}
+	: {
+			readonly [K in OptionalServiceNames<TServices>]: `Service "${K & string}" is optional. A service contract lists required services only.`;
+		};
+
 export type RoutaConfig = {
 	host?: string;
 	port?: number;
@@ -636,6 +683,11 @@ export type RoutaConfig = {
 	lifecycleHeaders?: boolean;
 	/** Defaults to `"development"`, which skips response schema parsing during `routa start`. */
 	responseValidation?: ResponseValidation;
+	/**
+	 * The application services factory, declared with {@link defineServices} so `routa generate`
+	 * can read its contract. Handlers receive its services as `ctx.services`.
+	 */
+	services?: ApplicationServicesFactory;
 };
 
 /**
@@ -648,6 +700,20 @@ export function createRouta<const TConfig extends RoutaConfig>(
 	config: TConfig,
 ): TConfig & RoutaConfig {
 	return config;
+}
+
+/**
+ * Fixes the service contract for a services factory. Name the result and reuse it:
+ * `const defineAppServices = defineServices<AppServices>();`, then
+ * `services: defineAppServices(factory)` in `createRouta`. Consumers see `AppServices`, not the
+ * factory's implementations.
+ *
+ * @returns A helper that checks a factory against the contract and returns it unchanged
+ */
+export function defineServices<
+	TServices extends object & ServiceContractRules<TServices> = never,
+>(): (factory: ApplicationServicesFactory<TServices>) => ApplicationServicesFactory<TServices> {
+	return (factory) => factory;
 }
 
 /**
