@@ -40,7 +40,13 @@ export default defineConfig({
 	lint: frameworkConfig.lint,
 	fmt: frameworkConfig.fmt,
 	pack: {
-		entry: ["src/index.ts", "src/hono.ts", "src/logger.ts", "src/query/helpers.ts"],
+		entry: [
+			"src/index.ts",
+			"src/hono.ts",
+			"src/logger.ts",
+			"src/query/helpers.ts",
+			"src/testing.ts",
+		],
 		unbundle: true,
 		fixedExtension: false,
 		target: "node24",

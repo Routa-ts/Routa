@@ -1,14 +1,14 @@
 ---
 title: Testing
-description: Test Routa route contracts, handlers, and the running HTTP boundary.
+description: Test Routa schemas, handlers, and the whole application in memory with replaced services.
 ---
 
 import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
 import PackageManagers from "@components/PackageManagers.astro";
 
 New Routa projects ship with Vitest, a `test` script, and a starter test beside the
-generated `/status` route. This guide covers the three levels worth testing and where
-Routa's own checks already cover you.
+generated `/status` route. This guide covers the three levels worth testing, how to replace
+services in an in-memory test application, and where Routa's own checks already cover you.
 
 ## Before You Start
 
@@ -55,18 +55,24 @@ Routa's own checks already cover you.
    });
    ```
 
-4. Test the full boundary when middleware, parsing, and serialization all matter. Build
-   the Hono app from your routes and use its `fetch`.
+4. Test the full application when routing, middleware, parsing, services, and
+   serialization all matter. Import `createTestApp` from the generated
+   `.routa/testing.gen.js`. It builds an isolated, in-memory instance of your project, with
+   no network listener and no app argument, and `request` sends a request through it.
 
-   ```ts title="src/routes/users/route.http.test.ts"
-   import { createHonoApp } from "@routa-ts/core/hono";
-   import { describe, expect, it } from "vitest";
-   import route from "./route.js";
-
-   const app = createHonoApp([{ method: "post", path: "/users", contract: route.post }]);
+   ```ts title="src/users.test.ts"
+   import { afterEach, describe, expect, it } from "vitest";
+   import { createTestApp } from "../.routa/testing.gen.js";
 
    describe("POST /users", () => {
+   	let app: Awaited<ReturnType<typeof createTestApp>> | undefined;
+
+   	afterEach(async () => {
+   		await app?.dispose();
+   	});
+
    	it("rejects a body that fails validation", async () => {
+   		app = await createTestApp();
    		const response = await app.request("/users", {
    			method: "POST",
    			headers: { "content-type": "application/json" },
@@ -77,6 +83,100 @@ Routa's own checks already cover you.
    	});
    });
    ```
+
+   Without options, `createTestApp` runs your production
+   [service factories](/docs/concepts/services/). A path passed to `request` resolves
+   against `http://localhost`; a `URL` or `Request` works too.
+
+5. Replace services with test doubles. Write the doubles in an ordinary file, and annotate
+   each factory with the generated `ServicesFactory` type for its scope. TypeScript then
+   checks the factory against the scope's contract and the context it receives, so you do
+   not repeat either interface. This example uses the `AppServices`, `OrdersServices`, and
+   `CheckoutServices` contracts from [Services](/docs/concepts/services/).
+
+   ```ts title="src/testing/fakes.ts"
+   import type { OrderBook, Receipts } from "../orders/services.js";
+   import type { ServicesFactory } from "../../.routa/testing.gen.js";
+
+   export class MemoryOrderBook implements OrderBook {
+   	readonly placed: Array<{ id: string; total: number }> = [];
+
+   	constructor(readonly owner: string) {}
+
+   	async list() {
+   		return this.placed;
+   	}
+
+   	async place(total: number) {
+   		const order = { id: `order-${this.placed.length + 1}`, total };
+   		this.placed.push(order);
+   		return order;
+   	}
+   }
+
+   export const sentReceipts: string[] = [];
+
+   const receipts: Receipts = {
+   	send: (orderId) => sentReceipts.push(orderId),
+   };
+
+   export const testAppServices: ServicesFactory<"application"> = () => ({
+   	clock: { now: () => new Date("2030-01-01T00:00:00.000Z") },
+   	users: { find: async (id) => ({ id, name: "Ada" }) },
+   });
+
+   export const testOrdersServices: ServicesFactory<"/orders"> = ({ ctx }) => ({
+   	orders: new MemoryOrderBook(ctx.auth.userId),
+   });
+
+   export const testCheckoutServices: ServicesFactory<"POST /orders"> = ({ onCleanup }) => {
+   	onCleanup(() => sentReceipts.splice(0));
+   	return { receipts };
+   };
+   ```
+
+   Pass a lone application factory, or replace route-file and method scopes by path:
+
+   ```ts title="src/orders.test.ts"
+   import { expect, it } from "vitest";
+   import { createTestApp } from "../.routa/testing.gen.js";
+   import { testAppServices, testCheckoutServices } from "./testing/fakes.js";
+
+   it("serves the users route with test application services", async () => {
+   	const app = await createTestApp(testAppServices);
+
+   	try {
+   		expect((await app.request("/users/u1")).status).toBe(200);
+   	} finally {
+   		await app.dispose();
+   	}
+   });
+
+   it("places an order with a test receipt outbox", async () => {
+   	const app = await createTestApp({
+   		services: testAppServices,
+   		routes: {
+   			"/orders": { methods: { post: { services: testCheckoutServices } } },
+   		},
+   	});
+
+   	try {
+   		const response = await app.request("/orders", {
+   			method: "POST",
+   			headers: { "content-type": "application/json" },
+   			body: JSON.stringify({ total: 12 }),
+   		});
+
+   		expect(response.status).toBe(201);
+   	} finally {
+   		await app.dispose();
+   	}
+   });
+   ```
+
+   In the second test the route file's production factory still runs, and it receives the
+   test `clock` through `ctx.services`. Only the scopes you name are replaced. To replace the
+   route file's factory too, add `services: testOrdersServices` beside `methods`.
 
 </Steps>
 
@@ -117,20 +217,75 @@ Run those as part of the same pipeline:
 test
 openapi:check`} />
 
+## Replacing Services
+
+Each entry in `createTestApp` options replaces one scope's whole factory before the
+application is built:
+
+- `services` replaces the application factory. Passing a factory directly is the same.
+- `routes["/orders"].services` replaces the route file's factory.
+- `routes["/orders"].methods.post.services` replaces the method's factory.
+
+A replacement returns the scope's complete contract, as the original does. Routa checks its
+names at runtime exactly as in production. The original factory of a replaced scope never
+runs, so it acquires nothing. Omitted scopes keep their production factories and receive the
+services of earlier scopes, including replacements, through `ctx`.
+
+TypeScript rejects a path no route file declares, a method the route file does not declare,
+a route or method that declares no services, and a factory that returns an incomplete or
+wrong contract. When a call slips past the types, for example through a cast,
+`createTestApp` rejects an unknown path, method, or scope, or a value that is not a factory,
+before any factory runs:
+
+```txt
+TypeError: Cannot replace services for GET /orders: it declares none.
+```
+
+A replacement's returned names are checked only when it runs: at construction for the
+application scope, and on a matching request for a route or method scope, which then
+responds with `500`. Routa never checks service members at runtime.
+
+Importing `.routa/testing.gen.js` imports none of your modules and runs no factory. Your
+modules load when you call `createTestApp`, so their own import-time effects still run then.
+Plain imports are not replaced; inject a dependency as a service when a test needs to swap
+it.
+
+## Cleanup and Disposal
+
+Each test application has its own factory calls and cleanup. Two applications built in the
+same test share nothing Routa owns. Each factory that runs, original or replacement,
+registers cleanup for the resources it acquired, and Routa releases them on the same
+schedule as in production:
+
+- When a factory fails, Routa releases the cleanup it already registered, and
+  `createTestApp` rejects with the factory's error.
+- `request` settles after the request's method and route-file services are released.
+- `dispose()` stops accepting requests, waits for accepted requests and their cleanup, then
+  releases application services in reverse registration order. A `request` after disposal
+  starts rejects.
+- Repeated and concurrent `dispose()` calls share one outcome. When a cleanup callback
+  fails, `dispose()` rejects with an `AggregateError` after attempting every callback.
+
+`dispose()` sets no deadline and cancels nothing. A request or cleanup callback that never
+settles keeps it pending, and your test runner's timeout reports the hang. Always await
+`dispose()`, in a `finally` block or an `afterEach` hook.
+
 ## Troubleshooting
 
-| Problem                                  | Fix                                                                                                                               |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Imports fail with `ERR_MODULE_NOT_FOUND` | Use `.js` extensions in relative imports. Generated projects are ESM.                                                             |
-| A handler test cannot construct `ctx`    | Pass the keys the route's middleware provides, plus a logger. `createLogger({ enabled: false })` keeps test output clean.         |
-| A handler reads `ctx.services`           | Pass `services` in `ctx` with test implementations of the contract, or build the app with `createApplication` and a test factory. |
-| Type errors on `route.get.run`           | Metadata is stale. Run `routa generate`.                                                                                          |
-| Vitest picks up files under `.routa/`    | Generated metadata contains no tests; narrow `include` in the Vitest config if a glob is too broad.                               |
+| Problem                                   | Fix                                                                                                                       |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Imports fail with `ERR_MODULE_NOT_FOUND`  | Use `.js` extensions in relative imports. Generated projects are ESM.                                                     |
+| A handler test cannot construct `ctx`     | Pass the keys the route's middleware provides, plus a logger. `createLogger({ enabled: false })` keeps test output clean. |
+| A handler reads `ctx.services`            | Pass `services` in `ctx` with test implementations of the contract, or replace the scope's factory in `createTestApp`.    |
+| Type errors on `route.get.run`            | Metadata is stale. Run `routa generate`.                                                                                  |
+| `.routa/testing.gen.ts does not list ...` | You added a route or middleware file since the last generation. Run `routa generate`.                                     |
+| Vitest picks up files under `.routa/`     | Generated metadata contains no tests; narrow `include` in the Vitest config if a glob is too broad.                       |
 
 <Aside type="caution" title="v0 status">
-	Schema, handler, and HTTP-boundary testing are implemented with public APIs in v0. A
-	dedicated Routa test-helper package is deferred; the examples above use only Vitest,
-	`createHonoApp`, and route modules.
+	Schema, handler, and in-memory application testing with `createTestApp` and service
+	replacement are implemented. A typed test client, a test mode option, and runner
+	integrations are not implemented yet; `createTestApp` uses `dev` mode and works with any
+	runner.
 </Aside>
 
 ## Next Steps
@@ -143,8 +298,8 @@ openapi:check`} />
 	/>
 	<LinkCard
 		title="Core reference"
-		href="/docs/reference/core/"
-		description="Signatures for createHonoApp and createLogger."
+		href="/docs/reference/core/#createtestapplication"
+		description="The test application createTestApp returns."
 	/>
 	<LinkCard
 		title="Runtime behavior"

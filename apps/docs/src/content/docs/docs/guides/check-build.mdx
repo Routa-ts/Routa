@@ -56,12 +56,12 @@ Routa build passed for 4 route file(s).
 
 ## What Each Command Does
 
-| Command          | Validates | Writes `routes.gen.ts` | Runs TypeScript |
-| ---------------- | --------- | ---------------------- | --------------- |
-| `routa check`    | Yes       | On success             | `tsc --noEmit`  |
-| `routa generate` | Yes       | On success             | No              |
-| `routa build`    | Yes       | On success             | `tsc` with emit |
-| `routa routes`   | Yes       | On success             | No              |
+| Command          | Validates | Writes `routes.gen.ts` and `testing.gen.ts` | Runs TypeScript |
+| ---------------- | --------- | ------------------------------------------- | --------------- |
+| `routa check`    | Yes       | On success                                  | `tsc --noEmit`  |
+| `routa generate` | Yes       | On success                                  | No              |
+| `routa build`    | Yes       | On success                                  | `tsc` with emit |
+| `routa routes`   | Yes       | On success                                  | No              |
 
 Validation is the same in all four. It covers project structure, route discovery,
 duplicate paths, missing 2xx responses, duplicate schema names, handler result shapes,
@@ -70,7 +70,8 @@ middleware ordering, middleware reject statuses, and deprecation replacement tar
 
 ## In Continuous Integration
 
-Because a successful validation rewrites `.routa/routes.gen.ts`, treat a dirty working
+Because a successful validation rewrites `.routa/routes.gen.ts` and `.routa/testing.gen.ts`,
+treat a dirty working
 tree after generation as a failure. That catches a commit where source and metadata
 disagree:
 
@@ -96,7 +97,7 @@ test -z "$(git ls-files --others --exclude-standard -- .routa)"
 
 <Aside type="caution" title="v0 status">
 	Validation, metadata generation, TypeScript checks, builds, and route-table output are
-	implemented in v0. These commands refresh `.routa/routes.gen.ts` after a clean
+	implemented in v0. These commands refresh `.routa/routes.gen.ts` and `.routa/testing.gen.ts` after a clean
 	validation, so CI must compare the generated diff.
 </Aside>
 

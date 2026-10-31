@@ -27,6 +27,7 @@ checks, the runtime, and CI agree on the contract without re-deriving it.
       - route.test.ts
 - .routa/
   - routes.gen.ts
+  - testing.gen.ts
   - manifest.json
   - openapi-baseline.json
 - openapi.yaml
@@ -65,6 +66,12 @@ Middleware that applies to every route in that folder and below. A `middleware.t
 Generated route metadata: paths, methods, middleware chains, provided context keys, reject
 outcomes, groups, and segments. It also augments core types so `createRouteRoot("/users")`
 knows the context available at that path.
+
+### `.routa/testing.gen.ts`
+
+The generated `createTestApp`, which builds an in-memory instance of your project for
+tests, and the factory types for any services you declare. See
+[Testing](/docs/guides/testing/).
 
 ### `.routa/manifest.json`
 
