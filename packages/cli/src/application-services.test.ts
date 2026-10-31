@@ -297,7 +297,7 @@ export default createRouta(config);
 				"The createRouta config in src/routa.ts has a spread, computed key, or config argument that cannot be statically read, so application services inside it cannot be read.",
 			file: "src/routa.ts",
 			suggestion:
-				"Declare application services as a visible services member of the createRouta object, or spread a const object literal. Startup rejects services that routa generate could not read.",
+				"Declare application services as a visible services member of the createRouta object, after any spread, or spread a const object literal. Startup rejects services that routa generate could not read.",
 		};
 
 		for (const [config, warnings] of [
@@ -309,6 +309,10 @@ export default createRouta(config);
 			[
 				"{ ...makeConfig(), services: defineAppServices(() => ({ clock: { now: () => '' } })) }",
 				[],
+			],
+			[
+				"{ services: defineAppServices(() => ({ clock: { now: () => '' } })), ...makeConfig() }",
+				[warning],
 			],
 		] as const) {
 			const cwd = servicesProject({

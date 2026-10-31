@@ -321,15 +321,16 @@ Each binding must be a `const` declaration or a relative import.
 
 ### `ROUTA_SERVICES_SPREAD_UNRESOLVED`
 
-Warning. The `createRouta` config in `src/routa.ts` has no visible `services` member, but it
-has a spread, computed key, or config argument that Routa cannot read, such as
-`...makeConfig()` or `createRouta(makeConfig())`. Services inside it never reach generated
-metadata, so `routa dev` and `routa start` refuse to start
-with them.
+Warning. The `createRouta` config in `src/routa.ts` has a spread, computed key, or config
+argument that Routa cannot read, such as `...makeConfig()` or `createRouta(makeConfig())`, and
+no visible `services` member after it. Services inside it never reach generated metadata. When
+there is no visible `services` member, `routa dev` and `routa start` refuse to start. When the
+unread part follows a visible `services` member, it may replace that factory with one Routa
+never checked.
 
-**Fix:** declare `services` as a member of the `createRouta` object, or pass or spread a
-`const` object literal declared locally or imported. When the unread part holds only tuning
-values, accept the warning.
+**Fix:** declare `services` as a member of the `createRouta` object after any spread, or pass
+or spread a `const` object literal declared locally or imported. When the unread part holds
+only tuning values, accept the warning.
 
 ### `ROUTA_SERVICES_CONTRACT_UNRESOLVED`
 

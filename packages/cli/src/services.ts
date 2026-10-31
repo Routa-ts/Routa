@@ -55,24 +55,22 @@ export function applicationServices(
 	}
 
 	const { declaration, hidden } = servicesDeclaration(cwd, parser);
+	// Tuning values may be runtime expressions, so a config Routa cannot read is not an error.
+	const warnings: Diagnostic[] = hidden
+		? [
+				{
+					code: "ROUTA_SERVICES_SPREAD_UNRESOLVED",
+					severity: "warning",
+					message: `The createRouta config in ${configFile} has a spread, computed key, or config argument that cannot be statically read, so application services inside it cannot be read.`,
+					file: configFile,
+					suggestion:
+						"Declare application services as a visible services member of the createRouta object, after any spread, or spread a const object literal. Startup rejects services that routa generate could not read.",
+				},
+			]
+		: [];
 
 	if (!declaration) {
-		// Tuning values may be runtime expressions, so a config Routa cannot read is not an error.
-		return {
-			diagnostics: [],
-			warnings: hidden
-				? [
-						{
-							code: "ROUTA_SERVICES_SPREAD_UNRESOLVED",
-							severity: "warning",
-							message: `The createRouta config in ${configFile} has a spread, computed key, or config argument that cannot be statically read, so application services inside it cannot be read.`,
-							file: configFile,
-							suggestion:
-								"Declare application services as a visible services member of the createRouta object, or spread a const object literal. Startup rejects services that routa generate could not read.",
-						},
-					]
-				: [],
-		};
+		return { diagnostics: [], warnings };
 	}
 
 	const contract = ts.isExpression(declaration.node)
@@ -91,17 +89,17 @@ export function applicationServices(
 						"Declare `const defineAppServices = defineServices<AppServices>();` and set `services: defineAppServices(factory)`, or write `services: defineServices<AppServices>()(factory)`. Each binding must be a const declaration or a relative import.",
 				},
 			],
-			warnings: [],
+			warnings,
 		};
 	}
 
-	return { ...serviceContract(cwd, contract.file, contract.type, parser), warnings: [] };
+	return { ...serviceContract(cwd, contract.file, contract.type, parser), warnings };
 }
 
 type ServicesMember = {
 	/** The `services` member's value, and the module it is written in. */
 	declaration?: { file: string; node: ts.Node } | undefined;
-	/** Whether a spread or computed key Routa cannot read may hold `services`. */
+	/** Whether a spread, computed key, or argument Routa cannot read may hold `services`, after any visible member. */
 	hidden: boolean;
 };
 
@@ -158,10 +156,9 @@ function objectServices(
 			const member = spread
 				? objectServices(cwd, spread.file, spread.object, parser, depth + 1)
 				: { hidden: true };
-			found = {
-				declaration: member.declaration ?? found.declaration,
-				hidden: found.hidden || member.hidden,
-			};
+			found = member.declaration
+				? member
+				: { declaration: found.declaration, hidden: found.hidden || member.hidden };
 		} else if (ts.isComputedPropertyName(property.name)) {
 			found = { ...found, hidden: true };
 		} else if (propertyName(property.name) === "services") {
@@ -170,7 +167,8 @@ function objectServices(
 				: ts.isShorthandPropertyAssignment(property)
 					? property.name
 					: property;
-			found = { ...found, declaration: { file, node } };
+			// A visible member replaces whatever an earlier unreadable part held.
+			found = { declaration: { file, node }, hidden: false };
 		}
 	}
 
