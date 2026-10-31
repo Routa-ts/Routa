@@ -139,15 +139,11 @@ function assertReplacements(replacements: ServiceReplacements, metadata: Metadat
 		}
 
 		assertKeys(route, ["services", "methods"], `routes[${JSON.stringify(path)}]`);
-
-		for (const [method, scope] of Object.entries(route.methods ?? {})) {
-			assertKeys(scope, ["services"], `routes[${JSON.stringify(path)}].methods.${method}`);
-		}
-
 		replace(`route file ${path}`, route.services, declared.services?.routeFile?.names);
 
 		for (const [method, scope] of Object.entries(route.methods ?? {})) {
 			const label = `${method.toUpperCase()} ${path}`;
+			assertKeys(scope, ["services"], `routes[${JSON.stringify(path)}].methods.${method}`);
 
 			if (method !== method.toLowerCase() || !declared.methods.includes(method.toUpperCase())) {
 				throw new TypeError(
