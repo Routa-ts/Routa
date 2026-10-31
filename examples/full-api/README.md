@@ -38,6 +38,9 @@ Runtime configuration is executable and typed in `src/routa.ts`:
 | Global, group, segment, route, and method middleware                    | `src/routes/middleware.ts`, `(private)`, `admin`, tenant, and project contracts                      |
 | Middleware `requires`, `provides`, typed rejects, security, permissions | `src/middleware` and private route graph                                                             |
 | Typed application services                                              | `src/services.ts` declares `AppServices`; project routes call `ctx.services.projects`                |
+| Route-file and method services                                          | The projects route file builds `tenantProjects` per request; its `POST` adds `audit` with cleanup    |
+| Middleware service requirements                                         | `withProjectList` in `src/middleware/projects.ts` requires `tenantProjects` on the projects `GET`    |
+| Generated test application                                              | `.routa/testing.gen.ts` exports `createTestApp` and a `ServicesFactory` type per services scope      |
 | Response cookies set and cleared through `createCookie` handles         | `src/cookies.ts`; `POST` and `DELETE /auth/session`; the auth reject clears a stale session cookie   |
 | Bodyless outcomes                                                       | `DELETE /auth/session`, project `DELETE`, and showcase `HEAD` return `204` with no body              |
 | `Fields()` and `Sort()` query helpers                                   | `GET /tenants/:tenantId/projects`                                                                    |
