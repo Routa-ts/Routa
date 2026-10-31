@@ -17,6 +17,16 @@ on:
         required: false
         type: number
         default: 1
+      capture-report:
+        description: Expose this command's job summary for the PR report comment.
+        required: false
+        type: boolean
+        default: false
+
+    outputs:
+      report:
+        description: JSON-encoded job summary, bounded for a PR comment.
+        value: ${{ jobs.run.outputs.report }}
 
 permissions:
   contents: read
@@ -26,6 +36,8 @@ jobs:
     name: Run
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
+    outputs:
+      report: ${{ steps.command.outputs.report }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -44,6 +56,29 @@ jobs:
         run: vp install --frozen-lockfile
 
       - name: Run command
+        id: command
         env:
           JOB_COMMAND: ${{ inputs.command }}
-        run: sh -eu -c "$JOB_COMMAND"
+          CAPTURE_REPORT: ${{ inputs.capture-report }}
+        run: |
+          status=0
+          sh -eu -c "$JOB_COMMAND" || status=$?
+          if [ "$CAPTURE_REPORT" = "true" ]; then
+            python3 - <<'PYTHON'
+          import json
+          import os
+          from pathlib import Path
+
+          summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          summary = summary_path.read_text(encoding="utf-8") if summary_path.exists() else ""
+          # Leave room for both reports and links within GitHub's comment limit.
+          if len(summary) > 24000:
+              summary = summary[:24000]
+              if summary.count("```") % 2:
+                  summary += "\n```"
+              summary += "\n\nReport truncated. See the full Actions summary."
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("report=" + json.dumps(summary, ensure_ascii=False) + "\n")
+          PYTHON
+          fi
+          exit "$status"

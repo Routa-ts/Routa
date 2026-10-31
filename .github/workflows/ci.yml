@@ -84,11 +84,12 @@ jobs:
     uses: ./.github/workflows/node-vp-job.yml
     with:
       fetch-depth: 0
+      capture-report: true
       # Findings land in the job summary and never fail the job yet. Exit 1 is a failing
       # verdict; anything higher means the audit itself could not run.
       command: |
         status=0
-        vp exec fallow audit --base "origin/$GITHUB_BASE_REF" --format github-summary --quiet >> "$GITHUB_STEP_SUMMARY" || status=$?
+        vp exec fallow audit --base "origin/$GITHUB_BASE_REF" --format github-summary --quiet >> "$GITHUB_STEP_SUMMARY" 2>&1 || status=$?
         [ "$status" -le 1 ]
 
   mutation:
@@ -97,14 +98,91 @@ jobs:
     with:
       fetch-depth: 0
       timeout-minutes: 30
+      capture-report: true
       # Mutates only code this pull request changed. Surviving mutants never fail the job.
       command: |
         vp run build:packages
         vp exec node scripts/link-local-cli.mjs --root "$GITHUB_WORKSPACE"
+        status=0
         for root in packages/core packages/cli; do
           {
             printf '### Mutation report: %s\n\n```text\n' "$root"
-            vp exec fallow mutation --root "$root" --base "origin/$GITHUB_BASE_REF" --time-budget 10m --quiet
+            vp exec fallow mutation --root "$root" --base "origin/$GITHUB_BASE_REF" --time-budget 10m --quiet || status=$?
             printf '```\n\n'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY" 2>&1
         done
+        exit "$status"
+
+  fallow-comment:
+    name: Post Fallow results
+    needs: [fallow-audit, mutation]
+    # Forks and Dependabot receive read-only tokens. Their reports stay in Actions.
+    if: >-
+      always() && !cancelled() &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      pull-requests: write
+    steps:
+      # No checkout or PR code runs with the comment token. Reports are only data.
+      - name: Create or update results comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
+          AUDIT_REPORT: ${{ needs.fallow-audit.outputs.report }}
+          AUDIT_RESULT: ${{ needs.fallow-audit.result }}
+          MUTATION_REPORT: ${{ needs.mutation.outputs.report }}
+          MUTATION_RESULT: ${{ needs.mutation.result }}
+        shell: python
+        run: |
+          import json
+          import os
+          import subprocess
+
+          def api(path, method="GET", body=None):
+              command = ["gh", "api", path, "--method", method]
+              if body is not None:
+                  command += ["--input", "-"]
+              result = subprocess.run(
+                  command, input=json.dumps(body) if body is not None else None,
+                  text=True, capture_output=True, check=True,
+              )
+              return json.loads(result.stdout)
+
+          marker = "<!-- routa-fallow-results -->"
+          run_url = os.environ["RUN_URL"]
+          sections = [
+              marker, "## Fallow results",
+              f"Commit `{os.environ['HEAD_SHA']}` · [Full reports and logs]({run_url})",
+              "Report-only findings do not block merging.",
+          ]
+          for key, title in [("AUDIT", "Audit"), ("MUTATION", "Mutation testing")]:
+              report = json.loads(os.environ[key + "_REPORT"] or '""')
+              status = os.environ[key + "_RESULT"]
+              sections += [
+                  f"### {title}: {status}",
+                  report or "No report was produced. Check the Actions logs for setup errors or a timeout.",
+              ]
+          body = "\n\n".join(sections)
+          repository = os.environ["GH_REPO"]
+          endpoint = f"repos/{repository}/issues/{os.environ['PR_NUMBER']}/comments"
+          page = 1
+          existing = None
+          while True:
+              comments = api(f"{endpoint}?per_page=100&page={page}")
+              existing = next((comment for comment in comments
+                  if comment["user"]["login"] == "github-actions[bot]"
+                  and comment["body"].startswith(marker)), None)
+              if existing is not None or len(comments) < 100:
+                  break
+              page += 1
+          if existing is not None:
+              comment = api(f"repos/{repository}/issues/comments/{existing['id']}", "PATCH", {"body": body})
+          else:
+              comment = api(endpoint, "POST", {"body": body})
+          print(f"Fallow results: {comment['html_url']}")
