@@ -313,8 +313,9 @@ as an application service instead.
 ### `ROUTA_SERVICES_UNRESOLVED`
 
 A `services` value is not built through a `defineServices` helper that Routa can follow, such
-as a bare function or a call to another helper. Routa reads `services` in `src/routa.ts`, on a
-route root, and on an inline `createRoute`.
+as a bare function or a call to another helper, or a route root or inline `createRoute` writes
+`services` as a getter, a method, or a computed key. Routa reads `services` in `src/routa.ts`,
+on a route root, and on an inline `createRoute`, including the shorthand `{ services }`.
 
 **Fix:** declare `const defineAppServices = defineServices<AppServices>();` and set
 `services: defineAppServices(factory)`, or write `defineServices<AppServices>()(factory)`.
