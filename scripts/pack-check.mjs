@@ -60,6 +60,33 @@ export default createRouteRoot("/session")({
 });
 `;
 
+/** A consumer test that imports the generated test application module. */
+const testAppConsumerTest = `import { expect, it } from "vitest";
+import { createTestApp } from "../../../.routa/testing.gen.js";
+
+it("serves GET /status in memory", async () => {
+	const app = await createTestApp();
+
+	try {
+		const response = await app.request("/status");
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({ ok: true });
+	} finally {
+		await app.dispose();
+	}
+});
+`;
+
+const compiledTestAppCheck = `const { createTestApp } = await import("./dist/.routa/testing.gen.js");
+const app = await createTestApp();
+const response = await app.request("/status");
+const body = await response.json();
+await app.dispose();
+if (response.status !== 200 || body.ok !== true) {
+	throw new Error(\`Compiled test application got \${response.status} \${JSON.stringify(body)}.\`);
+}
+`;
+
 run("vp", ["run", "build:packages"], root);
 mkdirSync(packDir, { recursive: true });
 writeFileSync(
@@ -171,8 +198,17 @@ for (const [zodVersion, label] of zodVersions) {
 		throw new Error(`Expected zod ${zodVersion} (${label}), but installed ${installedZod}.`);
 	}
 
+	const scaffoldedTesting = readFileSync(join(appDir, ".routa/testing.gen.ts"), "utf8");
+	writeFileSync(join(appDir, "src/routes/status/app.test.ts"), testAppConsumerTest);
 	run("vp", ["exec", "routa", "check"], appDir);
+
+	if (readFileSync(join(appDir, ".routa/testing.gen.ts"), "utf8") !== scaffoldedTesting) {
+		throw new Error("routa check rewrote the .routa/testing.gen.ts that create-routa-ts wrote.");
+	}
+
 	run("vp", ["exec", "routa", "build"], appDir);
+	// The compiled test application module serves a request without a listener.
+	run("node", ["--input-type=module", "--eval", compiledTestAppCheck], appDir);
 	run("vp", ["run", "test"], appDir);
 	run("vp", ["exec", "routa", "openapi", "check"], appDir);
 	// The starter has no response headers or cookies, so prove them through the packed

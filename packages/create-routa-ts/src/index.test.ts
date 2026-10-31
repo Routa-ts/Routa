@@ -46,6 +46,7 @@ describe("create-routa-ts", () => {
 		expect(result.files).toContain(".routa/manifest.json");
 		expect(result.files).toContain(".routa/openapi-baseline.json");
 		expect(result.files).toContain(".routa/routes.gen.ts");
+		expect(result.files).toContain(".routa/testing.gen.ts");
 		expect(existsSync(join(cwd, "my-api/src/index.ts"))).toBe(false);
 		expect(existsSync(join(cwd, "my-api/src/routes/status/route.ts"))).toBe(true);
 		expect(existsSync(join(cwd, "my-api/openapi.yaml"))).toBe(true);
@@ -57,6 +58,9 @@ describe("create-routa-ts", () => {
 			'"operationId": "getStatus"',
 		);
 		expect(readFileSync(join(cwd, "my-api/.routa/routes.gen.ts"), "utf8")).toContain('"/status"');
+		expect(readFileSync(join(cwd, "my-api/.routa/testing.gen.ts"), "utf8")).toContain(
+			'"src/routes/status/route.ts": () => import("../src/routes/status/route.js"),',
+		);
 		const packageJson = readFileSync(join(cwd, "my-api/package.json"), "utf8");
 		expect(packageJson).toContain('"dev": "routa dev"');
 		expect(packageJson).toContain('"start": "routa start"');
