@@ -154,7 +154,7 @@ services?: ApplicationServicesFactory
 The application services factory, declared through a `defineServices` helper. Routa runs it
 once before the server listens and passes its services to handlers as `ctx.services`.
 Omit it to keep every dependency a plain import. See
-[Application services](/docs/concepts/services/) for the contract rules, cleanup, and
+[Services](/docs/concepts/services/) for the contract rules, cleanup, and
 failure behavior.
 
 ```ts title="src/routa.ts"
