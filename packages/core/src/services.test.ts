@@ -530,6 +530,26 @@ describe("reserved ctx.services (runtime)", () => {
 		expect(handled).toBe(0);
 	});
 
+	it("fails a request whose middleware writes ctx.services after next()", async () => {
+		const writesLater = createMiddleware({
+			run: async ({ ctx, next }) => {
+				const result = await next();
+				(ctx as Record<string, unknown>).services = { db: "fake" };
+				return result;
+			},
+		});
+
+		for (const options of [{}, withServices]) {
+			const app = await createApplication(
+				[{ method: "get", path: "/", contract: ok([writesLater], () => "handled") }],
+				options,
+			);
+
+			expect((await app.fetch(new Request("http://localhost/"))).status).toBe(500);
+			await app.dispose();
+		}
+	});
+
 	it("keeps the handler's ctx.services fixed", async () => {
 		const app = await createApplication(
 			[
