@@ -97,6 +97,7 @@ export default defineConfig({
 						{ label: "Schemas", slug: "docs/concepts/schemas" },
 						{ label: "OpenAPI", slug: "docs/concepts/openapi" },
 						{ label: "Middleware", slug: "docs/concepts/middleware" },
+						{ label: "Application services", slug: "docs/concepts/services" },
 						{ label: "Generated files", slug: "docs/concepts/generated-files" },
 					],
 				},

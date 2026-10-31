@@ -292,6 +292,49 @@ another array or computes an entry.
 **Fix:** list each middleware as a direct identifier of a `createMiddleware` export.
 Unresolvable middleware would run without contract checks, so Routa refuses it.
 
+### `ROUTA_MIDDLEWARE_PROVIDES_UNRESOLVED`
+
+A middleware `provides` is something `routa check` cannot read, such as a function call, a
+spread, or a computed key.
+
+**Fix:** declare `provides` as an object literal, or name a `const` object literal declared
+locally or imported. Routa would otherwise miss the context the middleware provides.
+
+### `ROUTA_CONTEXT_RESERVED`
+
+A middleware provides `services` or passes it to `next()`. Routa reserves `ctx.services`
+for [application services](/docs/concepts/services/).
+
+**Fix:** rename the context key. When the value is an application dependency, declare it
+as an application service instead.
+
+## Services
+
+### `ROUTA_SERVICES_UNRESOLVED`
+
+The `services` option in `src/routa.ts` is not built through a `defineServices` helper that
+Routa can follow, such as a bare function or a call to another helper.
+
+**Fix:** declare `const defineAppServices = defineServices<AppServices>();` and set
+`services: defineAppServices(factory)`, or write `defineServices<AppServices>()(factory)`.
+Each binding must be a `const` declaration or a relative import.
+
+### `ROUTA_SERVICES_CONTRACT_UNRESOLVED`
+
+The contract passed to `defineServices` is an inline type, cannot be found, or is not
+exported, so generated types cannot reference it.
+
+**Fix:** declare the contract as an exported `interface` in a project module and pass its
+name.
+
+### `ROUTA_SERVICES_CONTRACT_UNSUPPORTED`
+
+The contract is not a fixed set of required services: it has an optional member, an index
+signature, a computed name, type parameters, or an `extends` clause, or it is not an object
+type.
+
+**Fix:** list each service directly as a required, plainly named property.
+
 ## Deprecation
 
 ### `ROUTA_DEPRECATION_REPLACEMENT_ROUTE_NOT_FOUND`
@@ -454,14 +497,18 @@ missing. Routa refuses to overwrite or remove it because local edits may be lost
 Some conditions fail without a `ROUTA_*` code because they are detected at registration or
 in the OpenAPI commands rather than during route validation:
 
-| Message                                                           | Meaning                                                    |
-| ----------------------------------------------------------------- | ---------------------------------------------------------- |
-| `Missing .routa/openapi-baseline.json. Run routa scaffold first.` | No accepted contract exists yet                            |
-| `Regeneration requires preview or confirmation.`                  | Scaffolding again without `--preview` or `--yes`           |
-| `Outcome "…" on … is declared by … and by …`                      | A route outcome and a reject, or two rejects, share a name |
-| `Duplicate route registration: …`                                 | The same method and path registered twice at runtime       |
-| `Middleware requires ctx.… but it was not provided.`              | A required context key was missing at request time         |
-| `Missing compiled runtime output for …`                           | `routa start` without a current `routa build`              |
+| Message                                                                 | Meaning                                                    |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `Missing .routa/openapi-baseline.json. Run routa scaffold first.`       | No accepted contract exists yet                            |
+| `Regeneration requires preview or confirmation.`                        | Scaffolding again without `--preview` or `--yes`           |
+| `Outcome "…" on … is declared by … and by …`                            | A route outcome and a reject, or two rejects, share a name |
+| `Duplicate route registration: …`                                       | The same method and path registered twice at runtime       |
+| `Middleware requires ctx.… but it was not provided.`                    | A required context key was missing at request time         |
+| `… provides ctx.services, which Routa reserves …`                       | A `provides` schema cast past TypeScript names `services`  |
+| `src/routa.ts configures services that routa generate could not read …` | A spread or computed config hides `services`               |
+| `.routa/routes.gen.ts declares application services, but …`             | Metadata is stale after removing `services`; regenerate    |
+| `The application services factory must return exactly …`                | The factory returned missing or extra service names        |
+| `Missing compiled runtime output for …`                                 | `routa start` without a current `routa build`              |
 
 <Aside type="note" title="Generated documents carry diagnostics">
 	When OpenAPI generation runs against a project that does not validate, the output
