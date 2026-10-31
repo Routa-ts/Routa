@@ -2,9 +2,12 @@ import { existsSync } from "node:fs";
 import { join, sep } from "node:path";
 import {
 	callName,
+	createRouteObject,
 	objectLiteral,
+	objectProperties,
 	propertyName,
 	resolveImportFile,
+	routeConfigObject,
 	unwrapExpression,
 } from "./ast.js";
 import { compareText } from "./contract-schemas.js";
@@ -16,14 +19,20 @@ import {
 } from "./project.js";
 import * as ts from "./typescript.js";
 
-/** The application service contract `src/routa.ts` declares, read from source. */
-export type ApplicationServicesMetadata = {
+/** A service contract one scope declares, read from source. */
+export type ServiceContractMetadata = {
 	/** The module that exports the contract, relative to the project root. */
 	file: string;
 	/** The name that module exports the contract under. */
 	name: string;
 	/** The contract's service names, sorted. */
 	names: string[];
+};
+
+/** The service contracts a route file declares: its own, and each method's. */
+export type RouteServicesMetadata = {
+	routeFile?: ServiceContractMetadata;
+	methods?: Record<string, ServiceContractMetadata>;
 };
 
 const configFile = "src/routa.ts";
@@ -46,7 +55,7 @@ export function applicationServices(
 	cwd: string,
 	parser: ts.SourceFileParser,
 ): {
-	services?: ApplicationServicesMetadata;
+	services?: ServiceContractMetadata;
 	diagnostics: Diagnostic[];
 	warnings: Diagnostic[];
 } {
@@ -73,6 +82,80 @@ export function applicationServices(
 		return { diagnostics: [], warnings };
 	}
 
+	return {
+		...declaredContract(cwd, declaration, parser, `Application services in ${configFile}`, "App"),
+		warnings,
+	};
+}
+
+/**
+ * Reads the service contracts a route file declares on its route root and on each inline
+ * `createRoute` method, in the same forms as application services, without executing the file.
+ *
+ * @param file - The route file, relative to `cwd`
+ */
+export function routeServices(
+	cwd: string,
+	file: string,
+	parser: ts.SourceFileParser,
+): { services?: RouteServicesMetadata; diagnostics: Diagnostic[] } {
+	const routeConfig = routeConfigObject(parseTypeScriptFile(join(cwd, file), parser));
+	const services: RouteServicesMetadata = {};
+	const diagnostics: Diagnostic[] = [];
+	const read = (property: ts.PropertyAssignment, label: string, example: string) => {
+		const declared = declaredContract(
+			cwd,
+			{ file, node: property.initializer },
+			parser,
+			`${label} in ${file}`,
+			example,
+		);
+		diagnostics.push(...declared.diagnostics);
+		return declared.services;
+	};
+
+	for (const property of routeConfig ? objectProperties(routeConfig) : []) {
+		const key = propertyName(property.name);
+
+		if (key === "services") {
+			const contract = read(property, "Route-file services", "Orders");
+
+			if (contract) {
+				services.routeFile = contract;
+			}
+
+			continue;
+		}
+
+		const method = key && createRouteObject(property.initializer);
+		const declaration =
+			method && objectProperties(method).find((item) => propertyName(item.name) === "services");
+		const contract = declaration && read(declaration, `${key.toUpperCase()} services`, "Checkout");
+
+		if (contract) {
+			services.methods = { ...services.methods, [key as string]: contract };
+		}
+	}
+
+	return {
+		...(services.routeFile || services.methods ? { services } : {}),
+		diagnostics,
+	};
+}
+
+/**
+ * Follows one scope's `services` value to its contract.
+ *
+ * @param label - Names the declaration in messages, such as `Application services in src/routa.ts`
+ * @param example - The contract name prefix the suggestion uses, such as `App`
+ */
+function declaredContract(
+	cwd: string,
+	declaration: { file: string; node: ts.Node },
+	parser: ts.SourceFileParser,
+	label: string,
+	example: string,
+): { services?: ServiceContractMetadata; diagnostics: Diagnostic[] } {
 	const contract = ts.isExpression(declaration.node)
 		? factoryContract(cwd, declaration.file, declaration.node, parser, 0)
 		: undefined;
@@ -83,17 +166,15 @@ export function applicationServices(
 				{
 					code: "ROUTA_SERVICES_UNRESOLVED",
 					severity: "error",
-					message: `Application services in ${configFile} cannot be statically resolved to a service contract.`,
-					file: configFile,
-					suggestion:
-						"Declare `const defineAppServices = defineServices<AppServices>();` and set `services: defineAppServices(factory)`, or write `services: defineServices<AppServices>()(factory)`. Each binding must be a const declaration or a relative import.",
+					message: `${label} cannot be statically resolved to a service contract.`,
+					file: declaration.file,
+					suggestion: `Declare \`const define${example}Services = defineServices<${example}Services>();\` and set \`services: define${example}Services(factory)\`, or write \`services: defineServices<${example}Services>()(factory)\`. Each binding must be a const declaration or a relative import.`,
 				},
 			],
-			warnings,
 		};
 	}
 
-	return { ...serviceContract(cwd, contract.file, contract.type, parser), warnings };
+	return serviceContract(cwd, contract.file, contract.type, parser);
 }
 
 type ServicesMember = {
@@ -267,7 +348,7 @@ function serviceContract(
 	file: string,
 	type: ts.TypeNode,
 	parser: ts.SourceFileParser,
-): { services?: ApplicationServicesMetadata; diagnostics: Diagnostic[] } {
+): { services?: ServiceContractMetadata; diagnostics: Diagnostic[] } {
 	const unresolved = (message: string, suggestion: string) => ({
 		diagnostics: [
 			{
@@ -531,7 +612,7 @@ function contractMembers(declaration: ContractDeclaration): {
  * The type reference generated metadata uses for a contract: a type-only import from
  * `.routa/routes.gen.ts`, so nothing executes when the metadata loads.
  */
-export function contractTypeReference(services: ApplicationServicesMetadata): string {
+export function contractTypeReference(services: ServiceContractMetadata): string {
 	const file = services.file.split(sep).join("/").replace(/\.ts$/, ".js");
 	return `import(${JSON.stringify(`../${file}`)}).${services.name}`;
 }

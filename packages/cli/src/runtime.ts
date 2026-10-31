@@ -117,31 +117,38 @@ export async function createProjectApplication(
 	const metadata = await loadMetadata(cwd, runtimeRoot);
 	const config = await loadRoutaConfig(cwd, runtimeRoot);
 	const logger = config.logger === false ? undefined : (config.logger ?? createLogger());
-	const services = servicesDeclaration(config.services, metadata.routaApplicationServices);
+	const services = pairServices(config.services, metadata.routaApplicationServices, {
+		file: "src/routa.ts",
+		scope: "application services",
+		declare: "Declare services in the createRouta object with defineServices<Contract>()",
+	});
 	const application = await createApplication(routes, {
 		runtimeMode,
 		...(logger && { logger }),
 		...(config.lifecycleHeaders !== undefined && { lifecycleHeaders: config.lifecycleHeaders }),
 		...(config.responseValidation && { responseValidation: config.responseValidation }),
-		...(services && { services }),
+		...(services && { services: services as ApplicationServicesDeclaration }),
 	});
 
 	return { application, config, logger, routes };
 }
 
 /**
- * Pairs the configured services factory with the names `routa generate` read for its contract.
+ * Pairs a configured services factory with the names `routa generate` read for its contract.
  *
- * @throws When only one side declares application services, or `services` is not a function
+ * @param where - The module that configures the factory, the scope's name in messages, and how
+ *   to declare it
+ * @throws When only one side declares the services, or `services` is not a function
  */
-function servicesDeclaration(
+function pairServices(
 	factory: unknown,
 	names: readonly string[] | undefined,
-): ApplicationServicesDeclaration | undefined {
+	where: { file: string; scope: string; declare: string },
+): { factory: (context: never) => unknown; names: readonly string[] } | undefined {
 	if (factory === undefined) {
 		if (names) {
 			throw new Error(
-				".routa/routes.gen.ts declares application services, but src/routa.ts configures none. Run routa generate.",
+				`.routa/routes.gen.ts declares ${where.scope}, but ${where.file} configures none. Run routa generate.`,
 			);
 		}
 
@@ -150,17 +157,17 @@ function servicesDeclaration(
 
 	if (typeof factory !== "function") {
 		throw new TypeError(
-			"src/routa.ts configures services that are not a factory. Declare them with services: defineAppServices(factory).",
+			`${where.file} configures ${where.scope === "application services" ? "services" : where.scope} that are not a factory. Declare them with services: defineAppServices(factory).`,
 		);
 	}
 
 	if (!names) {
 		throw new Error(
-			"src/routa.ts configures services that routa generate could not read from source, so Routa cannot check them. Declare services in the createRouta object with defineServices<Contract>(), then run routa generate.",
+			`${where.file} configures ${where.scope === "application services" ? "services" : where.scope} that routa generate could not read from source, so Routa cannot check them. ${where.declare}, then run routa generate.`,
 		);
 	}
 
-	return { factory: factory as ApplicationServicesDeclaration["factory"], names };
+	return { factory: factory as (context: never) => unknown, names };
 }
 
 /**
@@ -198,6 +205,7 @@ export async function loadRoutes(cwd: string, runtimeRoot = cwd): Promise<HonoRo
 		)) as {
 			default?: Record<string, HonoRoute["contract"]> & {
 				middleware?: readonly NonNullable<HonoRoute["contract"]["middleware"]>[number][];
+				services?: unknown;
 			};
 		};
 		const routeConfig = routeModule.default;
@@ -205,6 +213,12 @@ export async function loadRoutes(cwd: string, runtimeRoot = cwd): Promise<HonoRo
 		if (!routeConfig) {
 			throw new Error(`Route file ${route.file} does not export a default route config.`);
 		}
+
+		const routeFileServices = pairServices(routeConfig.services, route.services?.routeFile?.names, {
+			file: route.file,
+			scope: "route-file services",
+			declare: "Declare them on the route root with defineServices<Contract>()",
+		});
 
 		for (const method of route.methods) {
 			const key = method.toLowerCase();
@@ -214,24 +228,43 @@ export async function loadRoutes(cwd: string, runtimeRoot = cwd): Promise<HonoRo
 				throw new Error(`Route file ${route.file} is missing ${method} contract.`);
 			}
 
+			// Metadata is loaded from a generated file, so guard shapes written
+			// by older generators that omitted middleware fields.
+			const fileMiddleware = await loadFileMiddleware(
+				cwd,
+				runtimeRoot,
+				route.file,
+				route.methodMiddleware?.[key] ?? route.middleware ?? [],
+			);
+			const routeMiddleware = routeConfig.middleware ?? [];
+			const methodServices = pairServices(
+				contract.services,
+				route.services?.methods?.[key]?.names,
+				{
+					file: route.file,
+					scope: `${method} services`,
+					declare: `Declare them on the inline createRoute for ${method} with defineServices<Contract>()`,
+				},
+			);
+
 			routes.push({
 				method: key as HonoRoute["method"],
 				path: route.path,
 				contract: {
 					...contract,
-					middleware: [
-						// Metadata is loaded from a generated file, so guard shapes written
-						// by older generators that omitted middleware fields.
-						...(await loadFileMiddleware(
-							cwd,
-							runtimeRoot,
-							route.file,
-							route.methodMiddleware?.[key] ?? route.middleware ?? [],
-						)),
-						...(routeConfig.middleware ?? []),
-						...(contract.middleware ?? []),
-					],
+					middleware: [...fileMiddleware, ...routeMiddleware, ...(contract.middleware ?? [])],
 				},
+				...((routeFileServices || methodServices) && {
+					services: <NonNullable<HonoRoute["services"]>>{
+						// The route file's factory follows the filesystem middleware; the method's also
+						// follows the route file's own.
+						routeFile: routeFileServices && { ...routeFileServices, after: fileMiddleware.length },
+						method: methodServices && {
+							...methodServices,
+							after: fileMiddleware.length + routeMiddleware.length,
+						},
+					},
+				}),
 			});
 		}
 	}
