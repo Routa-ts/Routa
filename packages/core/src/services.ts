@@ -1,4 +1,4 @@
-import type { ApplicationServicesFactory, OnCleanup } from "./index.js";
+import type { ApplicationServicesFactory, OnCleanup, RequestServicesFactory } from "./index.js";
 import type { RoutaLogger } from "./logger.js";
 
 /** A frozen service mapping, as handlers receive it on `ctx.services`. */
@@ -9,6 +9,18 @@ export type ApplicationServicesDeclaration = {
 	readonly factory: ApplicationServicesFactory;
 	/** The contract's service names, which `routa generate` reads from source. */
 	readonly names: readonly string[];
+};
+
+/** A route-file or method services factory, the names its contract declares, and where it runs. */
+export type RequestServicesDeclaration = {
+	readonly factory: RequestServicesFactory;
+	/** The contract's service names, which `routa generate` reads from source. */
+	readonly names: readonly string[];
+	/**
+	 * How many middleware at the start of the route's chain run before the factory: the filesystem
+	 * middleware for route-file services, and those plus the route file's for method services.
+	 */
+	readonly after: number;
 };
 
 /** The cleanup callbacks one service scope registered, released at most once. */
@@ -64,20 +76,24 @@ async function runCleanup(callbacks: ReadonlyArray<() => unknown>): Promise<void
 }
 
 /**
- * Runs an application services factory and checks that it returned exactly the declared services.
+ * Runs a services factory and checks that it returned exactly the declared services.
  *
  * When the factory or the check fails, the callbacks it already registered run, and the original
  * failure is rethrown. Cleanup failures on that path are logged, never thrown, so they cannot
  * replace the construction error.
+ *
+ * @param factory - Calls the scope's factory with its context and `onCleanup`
+ * @param label - Names the factory in messages, such as `application services factory`
  */
 export async function constructServices(
-	declaration: ApplicationServicesDeclaration,
+	factory: (onCleanup: OnCleanup) => unknown,
+	names: readonly string[],
+	label: string,
 	scope: CleanupScope,
 	logger: RoutaLogger,
 ): Promise<ServiceMapping> {
 	try {
-		const services = await declaration.factory({ logger, onCleanup: scope.onCleanup });
-		return exactServices(services, declaration.names);
+		return exactServices(await factory(scope.onCleanup), names, label);
 	} catch (error) {
 		await scope.release().catch((cleanupError: unknown) => logCleanupFailure(logger, cleanupError));
 		throw error;
@@ -103,12 +119,12 @@ export function logCleanupFailure(logger: RoutaLogger, error: unknown): void {
  *
  * @throws {TypeError} When the result is not an object, or its names differ from the declared ones
  */
-function exactServices(value: unknown, names: readonly string[]): ServiceMapping {
+function exactServices(value: unknown, names: readonly string[], label: string): ServiceMapping {
 	const declared = quotedList(names);
 
 	if (typeof value !== "object" || value === null || Array.isArray(value)) {
 		throw new TypeError(
-			`The application services factory must return an object with the declared services (${declared}), received ${value === null ? "null" : Array.isArray(value) ? "an array" : typeof value}.`,
+			`The ${label} must return an object with the declared services (${declared}), received ${value === null ? "null" : Array.isArray(value) ? "an array" : typeof value}.`,
 		);
 	}
 
@@ -122,7 +138,7 @@ function exactServices(value: unknown, names: readonly string[]): ServiceMapping
 		];
 
 		throw new TypeError(
-			`The application services factory must return exactly the declared services (${declared}): ${problems.join("; ")}.`,
+			`The ${label} must return exactly the declared services (${declared}): ${problems.join("; ")}.`,
 		);
 	}
 
