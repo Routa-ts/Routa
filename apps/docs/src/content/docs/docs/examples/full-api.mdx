@@ -1,14 +1,14 @@
 ---
 title: Full API
-description: A Routa example exercising middleware, groups, deprecation, and logging.
+description: A Routa example exercising middleware, services, groups, deprecation, and logging.
 ---
 
 import { Aside, CardGrid, FileTree, LinkCard } from "@astrojs/starlight/components";
 
 `examples/full-api` in the Routa repository exercises the whole public surface: layered
-middleware, route groups, tenant-scoped context, flat and directory routing, response
-cookies, deprecation metadata, automatic `OPTIONS`, scaffold workflows, and a custom logger
-adapter.
+middleware, route groups, tenant-scoped context, typed services, flat and directory routing,
+response cookies, deprecation metadata, automatic `OPTIONS`, scaffold workflows, and a custom
+logger adapter.
 
 ```sh
 vp install --frozen-lockfile
@@ -27,6 +27,7 @@ once at startup, so export it before you start the server.
   - routa.ts host, port, logger, lifecycleHeaders
   - cookies.ts `createCookie` handles
   - logger.ts optional Pino adapter
+  - services.ts service contracts and the application factory
   - middleware/ application-owned middleware
   - routes/
     - middleware.ts `withRequest`, `withSession`
@@ -44,7 +45,7 @@ once at startup, so export it before you start the server.
       - tenants/
         - $tenantId/
           - middleware.ts `withTenant`
-          - projects/
+          - projects/ route-file and method services
     - showcase/
       - $itemId/
         - route.ts
@@ -80,8 +81,29 @@ declarative while the implementations live in application-owned modules.
 | `src/middleware/admin.ts`                              | `requires`, `provides`, `rejects`, and `openapi.permissions` together |
 | `src/routes/(private)/tenants/$tenantId/middleware.ts` | Context derived from a path parameter                                 |
 | `src/routes/legacy.ts`                                 | Deprecation metadata with a replacement                               |
+| `src/services.ts`                                      | Service contracts, their named helpers, and the application factory   |
+| `src/middleware/projects.ts`                           | `withProjectList`, a middleware that requires a service               |
 | `src/logger.ts`                                        | Adapting Pino to the `RoutaLogger` contract                           |
 | `src/routes/showcase/$itemId/route.ts`                 | Logging from a handler through `ctx.logger`                           |
+
+## Services
+
+The project routes read their data through [services](/docs/concepts/services/) at all
+three scopes, each declared through a named helper from `src/services.ts`:
+
+| Scope       | Declared in                                  | Service          | Built                     |
+| ----------- | -------------------------------------------- | ---------------- | ------------------------- |
+| Application | `src/routa.ts`, `services: appServices`      | `projects`       | Once, before listening    |
+| Route file  | The `/tenants/:tenantId/projects` route root | `tenantProjects` | Once per projects request |
+| Method      | That file's `post`                           | `audit`          | Once per `POST` request   |
+
+The route file's factory reads `ctx.tenant`, which filesystem middleware resolved, and
+`ctx.services.projects` to bind the catalog to one tenant. The `POST` factory registers an
+`onCleanup` callback that logs the projects the request created, after the response is
+serialized. `withProjectList` declares `ProjectListRequirements`, the slice of
+`tenantProjects` it calls, and runs as `GET` method middleware, where the route file's
+services already exist. The generated `.routa/testing.gen.ts` exports `createTestApp` and a
+`ServicesFactory` type for each of the three scopes.
 
 ## Session Cookies
 
