@@ -173,7 +173,9 @@ export default createRouteRoot("/users")({});
 		const result = await run(["generate"], { cwd });
 
 		expect(result.code).toBe(0);
-		expect(result.stdout).toContain("Generated .routa/routes.gen.ts and .routa/testing.gen.ts for 1 route file(s).");
+		expect(result.stdout).toContain(
+			"Generated .routa/routes.gen.ts and .routa/testing.gen.ts for 1 route file(s).",
+		);
 		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain('"/users"');
 		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
 			"src/routes/(private)/middleware.ts",
