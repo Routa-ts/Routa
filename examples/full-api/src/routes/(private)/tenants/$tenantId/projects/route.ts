@@ -5,6 +5,11 @@ import {
 	withProjectScope,
 } from "../../../../../middleware/projects.js";
 import {
+	defineProjectRouteServices,
+	defineProjectWriteServices,
+	ProjectAudit,
+} from "../../../../../services.js";
+import {
 	CreateProjectBody,
 	CreateProjectParams,
 	CreateProjectResponse,
@@ -17,6 +22,17 @@ import {
 const route = createRouteRoot("/tenants/:tenantId/projects");
 
 export default route({
+	// Runs per request, after the filesystem middleware resolved ctx.tenant.
+	services: defineProjectRouteServices(({ ctx }) => {
+		const tenant = { id: ctx.tenant.id, name: ctx.tenant.name };
+
+		return {
+			tenantProjects: {
+				list: (status, label) => ctx.services.projects.list(tenant, status, label),
+				create: (name) => ctx.services.projects.create(tenant.id, name),
+			},
+		};
+	}),
 	middleware: [withProjectScope],
 	get: createRoute({
 		middleware: [withProjectListMode],
@@ -32,8 +48,7 @@ export default route({
 			},
 		},
 		run: ({ ctx, input }) => {
-			const projects = ctx.services.projects.list(
-				{ id: ctx.projectScope.tenantId, name: ctx.tenant.name },
+			const projects = ctx.services.tenantProjects.list(
 				ctx.projectListMode.status,
 				ctx.projectListMode.label,
 			);
@@ -63,6 +78,12 @@ export default route({
 		},
 	}),
 	post: createRoute({
+		// Runs per POST request, after withProjectScope; logs what it recorded once the response is ready.
+		services: defineProjectWriteServices(({ ctx, onCleanup }) => {
+			const audit = new ProjectAudit();
+			onCleanup(() => audit.flush(ctx.logger));
+			return { audit };
+		}),
 		middleware: [withProjectPermissions],
 		input: {
 			params: CreateProjectParams,
@@ -75,10 +96,10 @@ export default route({
 			},
 		},
 		run: ({ ctx, input }) => {
-			return {
-				type: "success",
-				data: ctx.services.projects.create(ctx.projectScope.tenantId, input.body.name),
-			};
+			const project = ctx.services.tenantProjects.create(input.body.name);
+			ctx.services.audit.record(project);
+
+			return { type: "success", data: project };
 		},
 	}),
 });

@@ -1612,6 +1612,24 @@ export const routaRoutes = [
 				}
 			]
 		},
+		"services": {
+			"routeFile": {
+				"file": "src/services.ts",
+				"name": "ProjectRouteServices",
+				"names": [
+					"tenantProjects"
+				]
+			},
+			"methods": {
+				"post": {
+					"file": "src/services.ts",
+					"name": "ProjectWriteServices",
+					"names": [
+						"audit"
+					]
+				}
+			}
+		},
 		"ctx": [
 			"auth",
 			"projectListMode",
@@ -2680,6 +2698,7 @@ export type RoutaRouteCtxByPath = {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "services": Readonly<RoutaApplicationServices & import("../src/services.js").ProjectRouteServices>;
 		};
 		post: {
 			"auth": {
@@ -2702,6 +2721,7 @@ export type RoutaRouteCtxByPath = {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "services": Readonly<RoutaApplicationServices & import("../src/services.js").ProjectRouteServices & import("../src/services.js").ProjectWriteServices>;
 		};
 		put: {
 			"auth": {
@@ -2720,6 +2740,7 @@ export type RoutaRouteCtxByPath = {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "services": Readonly<RoutaApplicationServices & import("../src/services.js").ProjectRouteServices>;
 		};
 		patch: {
 			"auth": {
@@ -2738,6 +2759,7 @@ export type RoutaRouteCtxByPath = {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "services": Readonly<RoutaApplicationServices & import("../src/services.js").ProjectRouteServices>;
 		};
 		delete: {
 			"auth": {
@@ -2756,6 +2778,7 @@ export type RoutaRouteCtxByPath = {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "services": Readonly<RoutaApplicationServices & import("../src/services.js").ProjectRouteServices>;
 		};
 		head: {
 			"auth": {
@@ -2774,6 +2797,7 @@ export type RoutaRouteCtxByPath = {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "services": Readonly<RoutaApplicationServices & import("../src/services.js").ProjectRouteServices>;
 		};
 	};
 	"/tenants/:tenantId/projects/:projectId": {
@@ -2896,6 +2920,45 @@ export type RoutaRouteCtxByPath = {
 	};
 };
 
+export type RoutaFactoryCtxByPath = {
+	"/tenants/:tenantId/projects": {
+		routeFile: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+			readonly "services": Readonly<RoutaApplicationServices>;
+		};
+		post: {
+			"auth": {
+				readonly "userId": string;
+			};
+			"projectScope": {
+				readonly "tenantId": string;
+				readonly "canWrite": boolean;
+			};
+			"requestId": string;
+			"session": {
+				readonly "authenticated": boolean;
+				readonly "userId"?: string | undefined;
+			};
+			"tenant": {
+				readonly "id": string;
+				readonly "name": string;
+			};
+			readonly "services": Readonly<RoutaApplicationServices & import("../src/services.js").ProjectRouteServices>;
+		};
+	};
+};
+
 export type RoutaCtxByKey = {
 	"admin": {
 		readonly "role": "owner";
@@ -2931,5 +2994,6 @@ declare module "@routa-ts/core" {
 		routeCtxByPath: RoutaRouteCtxByPath;
 		ctxByKey: RoutaCtxByKey;
 		applicationServices: RoutaApplicationServices;
+		factoryCtxByPath: RoutaFactoryCtxByPath;
 	}
 }
