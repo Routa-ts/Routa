@@ -545,6 +545,38 @@ export default createRouta({
 			blocker.close();
 		}
 	});
+
+	it("releases services and keeps the listener failure primary when the port is invalid", async () => {
+		const key = `routa-listen-invalid-${Math.random()}`;
+		const cwd = servicesProject({
+			"src/services.ts": clockContract,
+			"src/routa.ts": `import { createLogger, createRouta } from "@routa-ts/core";
+import { defineAppServices } from "./services.js";
+
+const observed = (globalThis as any)[${JSON.stringify(key)}];
+
+export default createRouta({
+\tport: -1,
+\tlogger: createLogger({ sink: (event) => observed.events.push(event.event) }),
+\tservices: defineAppServices(({ onCleanup }) => {
+\t\tonCleanup(() => {
+\t\t\tobserved.events.push("clock released");
+\t\t\tthrow new Error("release failed");
+\t\t});
+\t\treturn { clock: { now: () => "" } };
+\t}),
+});
+`,
+			"src/routes/status/route.ts": statusRoute,
+		});
+		const record = observed(key);
+
+		expect((await run(["generate"], { cwd })).code).toBe(0);
+		await expect(startRuntime(cwd, cwd, "start")).rejects.toMatchObject({
+			code: "ERR_SOCKET_BAD_PORT",
+		});
+		expect(record.events).toEqual(["clock released", "services.cleanup_failed"]);
+	});
 });
 
 const statusRoute = `import { createRoute, createRouteRoot } from "@routa-ts/core";

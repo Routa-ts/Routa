@@ -169,6 +169,8 @@ Cleanup runs once per application instance:
   rethrows the original error.
 - When the server fails to listen, for example because the port is taken, Routa logs
   `api.start_failed`, releases the services, and exits with code `1`.
+- When a listen option is invalid, for example a port out of range, Routa releases the
+  services and fails startup with the listener's error.
 - `createApplication(...).dispose()` waits for accepted requests to settle, then runs the
   callbacks.
 

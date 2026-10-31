@@ -47,6 +47,7 @@ export type ProjectApplication = {
  * @param cwd - The working directory that contains the Routa project files.
  * @param runtimeRoot - The directory containing source or compiled runtime modules.
  * @param runtimeMode - The explicit `dev` or `start` command mode.
+ * @throws When the services factory fails, or the listen options are invalid
  */
 export async function startRuntime(
 	cwd: string,
@@ -60,22 +61,8 @@ export async function startRuntime(
 	);
 	const hostname = process.env.HOST ?? config.host ?? "127.0.0.1";
 	const port = Number(process.env.PORT ?? config.port ?? 3000);
-	const server = serve({ fetch: application.fetch, hostname, port }, () => {
-		logger?.info("api.started", "Routa API started.", {
-			host: hostname,
-			port,
-			routes: routes.length,
-		});
-	});
-
-	server.once("error", (error) => {
-		logger?.error("api.start_failed", "Routa API failed to start.", {
-			error: error instanceof Error ? error.message : String(error),
-			host: hostname,
-			port,
-		});
-		process.exitCode = 1;
-		// No request was accepted, so the services can be released now.
+	// No request was accepted when the listener fails, so the services can be released at once.
+	const release = () =>
 		application.dispose().catch((cleanupError: unknown) => {
 			logger?.error("services.cleanup_failed", "Application service cleanup failed.", {
 				failures: (cleanupError instanceof AggregateError
@@ -84,6 +71,30 @@ export async function startRuntime(
 				).map((failure: unknown) => (failure instanceof Error ? failure.message : String(failure))),
 			});
 		});
+	let server: ReturnType<typeof serve>;
+
+	try {
+		server = serve({ fetch: application.fetch, hostname, port }, () => {
+			logger?.info("api.started", "Routa API started.", {
+				host: hostname,
+				port,
+				routes: routes.length,
+			});
+		});
+	} catch (error) {
+		// An invalid listen option, such as a port out of range, throws before listening.
+		await release();
+		throw error;
+	}
+
+	server.once("error", (error) => {
+		logger?.error("api.start_failed", "Routa API failed to start.", {
+			error: error instanceof Error ? error.message : String(error),
+			host: hostname,
+			port,
+		});
+		process.exitCode = 1;
+		void release();
 	});
 }
 
