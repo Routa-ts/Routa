@@ -37,6 +37,7 @@ Runtime configuration is executable and typed in `src/routa.ts`:
 | Zod parsing and coercion                                                | `verbose` uses `z.stringbool()`; scaffold query parameters generate boolean/number coercion          |
 | Global, group, segment, route, and method middleware                    | `src/routes/middleware.ts`, `(private)`, `admin`, tenant, and project contracts                      |
 | Middleware `requires`, `provides`, typed rejects, security, permissions | `src/middleware` and private route graph                                                             |
+| Typed application services                                              | `src/services.ts` declares `AppServices`; project routes call `ctx.services.projects`                |
 | Response cookies set and cleared through `createCookie` handles         | `src/cookies.ts`; `POST` and `DELETE /auth/session`; the auth reject clears a stale session cookie   |
 | Bodyless outcomes                                                       | `DELETE /auth/session`, project `DELETE`, and showcase `HEAD` return `204` with no body              |
 | `Fields()` and `Sort()` query helpers                                   | `GET /tenants/:tenantId/projects`                                                                    |
