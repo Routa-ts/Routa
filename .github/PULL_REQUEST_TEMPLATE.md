@@ -6,10 +6,16 @@
 
 ## Evidence
 
-<!-- Use real observations for before/after evidence. A failing test is useful when one exists. -->
+<!-- Show the change instead of describing it. Run the base branch and this branch, and paste what each produces verbatim: the code a developer writes, HTTP responses, `routa check` or compiler output, generated files, or a test that fails before and passes after. Mark any shortening with "…". -->
 
-- Before: <Observed behavior or failing check.>
-- After: <Observed behavior or passing check.>
+**Before** (base branch):
+
+<Code and the output it produces.>
+
+**After** (this branch):
+
+<The same code or request, and the new output.>
+
 - Verification: `vp run verify`: <result>, plus relevant checks.
 - Documentation: <Updated pages, or why no update is needed.>
 - Changeset: <Added changeset, or why none is needed.>

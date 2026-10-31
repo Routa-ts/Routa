@@ -100,6 +100,8 @@ against the isolated baseline and environment adjustments recorded there.
 - Branch from the latest `main`.
 - Keep PRs focused on one problem.
 - Add or update tests for behavior changes.
+- Show before-and-after evidence as real code and captured output, in the format
+  `.github/PULL_REQUEST_TEMPLATE.md` lays out.
 - Update docs when public behavior changes.
 - Add a changeset when a publishable package changes user-facing behavior.
 
