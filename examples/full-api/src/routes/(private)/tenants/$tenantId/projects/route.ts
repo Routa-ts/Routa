@@ -1,5 +1,6 @@
 import { createRoute, createRouteRoot } from "@routa-ts/core";
 import {
+	withProjectList,
 	withProjectListMode,
 	withProjectPermissions,
 	withProjectScope,
@@ -35,7 +36,8 @@ export default route({
 	}),
 	middleware: [withProjectScope],
 	get: createRoute({
-		middleware: [withProjectListMode],
+		// withProjectList requires tenantProjects, which the route file's factory builds before it runs.
+		middleware: [withProjectListMode, withProjectList],
 		input: {
 			params: ListProjectsParams,
 			query: ListProjectsQuery,
@@ -48,12 +50,7 @@ export default route({
 			},
 		},
 		run: ({ ctx, input }) => {
-			const projects = ctx.services.tenantProjects.list(
-				ctx.projectListMode.status,
-				ctx.projectListMode.label,
-			);
-
-			const sorted = [...projects].sort((left, right) => {
+			const sorted = [...ctx.projectList].sort((left, right) => {
 				const sort = input.query.sort;
 				if (!sort) {
 					return 0;

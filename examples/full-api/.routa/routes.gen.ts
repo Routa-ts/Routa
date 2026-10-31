@@ -1493,6 +1493,29 @@ export const routaRoutes = [
 					"rejects": [],
 					"security": [],
 					"permissions": []
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/projects/route.ts",
+					"name": "withProjectList",
+					"requires": [
+						"projectListMode"
+					],
+					"requiresServices": {
+						"file": "src/middleware/projects.ts",
+						"name": "ProjectListRequirements",
+						"names": [
+							"tenantProjects"
+						]
+					},
+					"provides": [
+						"projectList"
+					],
+					"providesTypes": {
+						"projectList": "Array<{\n\treadonly \"id\": string;\n\treadonly \"tenantId\": string;\n\treadonly \"name\": string;\n\treadonly \"status\": \"active\" | \"archived\";\n}>"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
 				}
 			],
 			"post": [
@@ -1632,6 +1655,7 @@ export const routaRoutes = [
 		},
 		"ctx": [
 			"auth",
+			"projectList",
 			"projectListMode",
 			"projectPermissions",
 			"projectScope",
@@ -2190,6 +2214,7 @@ export type StatusCtx = {
 
 export type TenantsTenantIdProjectsCtx = {
 	"auth": unknown;
+	"projectList": unknown;
 	"projectListMode": unknown;
 	"projectPermissions": unknown;
 	"projectScope": unknown;
@@ -2681,6 +2706,12 @@ export type RoutaRouteCtxByPath = {
 			"auth": {
 				readonly "userId": string;
 			};
+			"projectList": Array<{
+				readonly "id": string;
+				readonly "tenantId": string;
+				readonly "name": string;
+				readonly "status": "active" | "archived";
+			}>;
 			"projectListMode": {
 				readonly "status": "active" | "archived";
 				readonly "label": string;
@@ -2959,6 +2990,16 @@ export type RoutaFactoryCtxByPath = {
 	};
 };
 
+/**
+ * Each middleware that requires services, checked against the services available where it runs.
+ * TypeScript reports a placement whose services do not satisfy the middleware's requirements.
+ */
+export type RoutaServiceRequirementChecks = [
+	RoutaServicesSatisfy<"withProjectList on GET /tenants/:tenantId/projects", Readonly<RoutaApplicationServices & import("../src/services.js").ProjectRouteServices>, import("../src/middleware/projects.js").ProjectListRequirements>,
+];
+
+type RoutaServicesSatisfy<_TPlacement extends string, TAvailable extends TRequired, TRequired> = TAvailable;
+
 export type RoutaCtxByKey = {
 	"admin": {
 		readonly "role": "owner";
@@ -2966,6 +3007,12 @@ export type RoutaCtxByKey = {
 	"auth": {
 		readonly "userId": string;
 	};
+	"projectList": Array<{
+		readonly "id": string;
+		readonly "tenantId": string;
+		readonly "name": string;
+		readonly "status": "active" | "archived";
+	}>;
 	"projectListMode": {
 		readonly "status": "active" | "archived";
 		readonly "label": string;
