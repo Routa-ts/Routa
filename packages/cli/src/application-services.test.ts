@@ -235,6 +235,97 @@ export default createRouta({
 		await application.dispose();
 	});
 
+	it("reads services from a spread of a const object literal, local or imported", async () => {
+		const factory = 'defineAppServices(() => ({ clock: { now: () => "" } }))';
+
+		for (const files of <Record<string, string>[]>[
+			{
+				"src/routa.ts": `import { createRouta } from "@routa-ts/core";
+import { defineAppServices } from "./services.js";
+
+const extra = { services: ${factory} };
+
+export default createRouta({ ...extra });
+`,
+			},
+			{
+				"src/config.ts": `import { defineAppServices } from "./services.js";
+
+export const serviceConfig = { services: ${factory} };
+`,
+				"src/routa.ts": `import { createRouta } from "@routa-ts/core";
+import { serviceConfig } from "./config.js";
+
+export default createRouta({ port: 3000, ...serviceConfig });
+`,
+			},
+		]) {
+			const cwd = servicesProject({
+				"src/services.ts": clockContract,
+				"src/routes/status/route.ts": statusRoute,
+				...files,
+			});
+
+			expect(validateProject(cwd, { write: false })).toMatchObject({
+				diagnostics: [],
+				warnings: [],
+			});
+			expect((await run(["generate"], { cwd })).code).toBe(0);
+			expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
+				'export const routaApplicationServices = [\n\t"clock"\n] as const;',
+			);
+
+			const { application } = await createProjectApplication(cwd, cwd, "dev");
+			await application.dispose();
+		}
+	});
+
+	it("warns when a spread or computed key it cannot read may hide services", () => {
+		const warning = {
+			code: "ROUTA_SERVICES_SPREAD_UNRESOLVED",
+			severity: "warning",
+			message:
+				"The createRouta config in src/routa.ts has a spread or computed key that cannot be statically read, so application services inside it cannot be read.",
+			file: "src/routa.ts",
+			suggestion:
+				"Declare application services as a visible services member of the createRouta object, or spread a const object literal. Startup rejects services that routa generate could not read.",
+		};
+
+		for (const [config, warnings] of [
+			["{ ...makeConfig() }", [warning]],
+			['{ [key]: "127.0.0.1" }', [warning]],
+			["{ ...tuning }", []],
+			[
+				"{ ...makeConfig(), services: defineAppServices(() => ({ clock: { now: () => '' } })) }",
+				[],
+			],
+		] as const) {
+			const cwd = servicesProject({
+				"src/services.ts": clockContract,
+				"src/routa.ts": `import { createRouta } from "@routa-ts/core";
+import { defineAppServices } from "./services.js";
+
+const key = "host";
+const tuning = { port: 3000 };
+const makeConfig = () => ({ port: 3000 });
+
+export default createRouta(${config});
+`,
+			});
+			const validation = validateProject(cwd, { write: false });
+
+			expect({
+				config,
+				diagnostics: validation.diagnostics,
+				warnings: validation.warnings,
+			}).toEqual({
+				config,
+				diagnostics: [],
+				warnings,
+			});
+		}
+	});
+
 	it("reports services declarations it cannot follow", () => {
 		for (const services of [
 			"async () => ({ clock: {} })",
@@ -476,9 +567,9 @@ describe("application services at startup", () => {
 			"src/routa.ts": `import { createRouta } from "@routa-ts/core";
 import { defineAppServices } from "./services.js";
 
-const extra = { services: defineAppServices(() => ({ clock: { now: () => "" } })) };
+const config = () => ({ services: defineAppServices(() => ({ clock: { now: () => "" } })) });
 
-export default createRouta({ ...extra });
+export default createRouta({ ...config() });
 `,
 			"src/routes/status/route.ts": statusRoute,
 		});

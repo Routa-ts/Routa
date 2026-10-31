@@ -39,25 +39,44 @@ const maxBindingDepth = 8;
  * `services: defineServices<AppServices>()(factory)`. Each binding along the way may be a local
  * `const` or a relative import. A declaration Routa cannot follow is an error, not an empty set.
  *
- * @returns The contract metadata when services are declared, and diagnostics for declarations
- *   Routa cannot read
+ * @returns The contract metadata when services are declared, diagnostics for declarations Routa
+ *   cannot read, and a warning when an unreadable spread or computed key may hide `services`
  */
 export function applicationServices(
 	cwd: string,
 	parser: ts.SourceFileParser,
-): { services?: ApplicationServicesMetadata; diagnostics: Diagnostic[] } {
+): {
+	services?: ApplicationServicesMetadata;
+	diagnostics: Diagnostic[];
+	warnings: Diagnostic[];
+} {
 	if (!existsSync(join(cwd, configFile))) {
-		return { diagnostics: [] };
+		return { diagnostics: [], warnings: [] };
 	}
 
-	const declaration = servicesDeclaration(parseTypeScriptFile(join(cwd, configFile), parser));
+	const { declaration, hidden } = servicesDeclaration(cwd, parser);
 
 	if (!declaration) {
-		return { diagnostics: [] };
+		// Tuning values may be runtime expressions, so a config Routa cannot read is not an error.
+		return {
+			diagnostics: [],
+			warnings: hidden
+				? [
+						{
+							code: "ROUTA_SERVICES_SPREAD_UNRESOLVED",
+							severity: "warning",
+							message: `The createRouta config in ${configFile} has a spread or computed key that cannot be statically read, so application services inside it cannot be read.`,
+							file: configFile,
+							suggestion:
+								"Declare application services as a visible services member of the createRouta object, or spread a const object literal. Startup rejects services that routa generate could not read.",
+						},
+					]
+				: [],
+		};
 	}
 
-	const contract = ts.isExpression(declaration)
-		? factoryContract(cwd, configFile, declaration, parser, 0)
+	const contract = ts.isExpression(declaration.node)
+		? factoryContract(cwd, declaration.file, declaration.node, parser, 0)
 		: undefined;
 
 	if (!contract) {
@@ -72,34 +91,38 @@ export function applicationServices(
 						"Declare `const defineAppServices = defineServices<AppServices>();` and set `services: defineAppServices(factory)`, or write `services: defineServices<AppServices>()(factory)`. Each binding must be a const declaration or a relative import.",
 				},
 			],
+			warnings: [],
 		};
 	}
 
-	return serviceContract(cwd, contract.file, contract.type, parser);
+	return { ...serviceContract(cwd, contract.file, contract.type, parser), warnings: [] };
 }
 
+type ServicesMember = {
+	/** The `services` member's value, and the module it is written in. */
+	declaration?: { file: string; node: ts.Node } | undefined;
+	/** Whether a spread or computed key Routa cannot read may hold `services`. */
+	hidden: boolean;
+};
+
 /** Finds the `services` member of the `createRouta({ ... })` call in `src/routa.ts`. */
-function servicesDeclaration(sourceFile: ts.SourceFile): ts.Node | undefined {
-	let declaration: ts.Node | undefined;
+function servicesDeclaration(cwd: string, parser: ts.SourceFileParser): ServicesMember {
+	let found: ServicesMember = { hidden: false };
 
 	const visit = (node: ts.Node): void => {
-		if (declaration) {
+		if (found.declaration) {
 			return;
 		}
 
 		if (ts.isCallExpression(node) && callName(node.expression) === "createRouta") {
 			const config = objectLiteral(node.arguments[0]);
-			const member = config?.properties.find(
-				(property) =>
-					!ts.isSpreadAssignment(property) && propertyName(property.name) === "services",
-			);
+			const member = config && objectServices(cwd, configFile, config, parser, 0);
 
 			if (member) {
-				declaration = ts.isPropertyAssignment(member)
-					? member.initializer
-					: ts.isShorthandPropertyAssignment(member)
-						? member.name
-						: member;
+				found = { declaration: member.declaration, hidden: found.hidden || member.hidden };
+			}
+
+			if (found.declaration) {
 				return;
 			}
 		}
@@ -107,8 +130,73 @@ function servicesDeclaration(sourceFile: ts.SourceFile): ts.Node | undefined {
 		ts.forEachChild(node, visit);
 	};
 
-	visit(sourceFile);
-	return declaration;
+	visit(parseTypeScriptFile(join(cwd, configFile), parser));
+	return found;
+}
+
+/**
+ * Reads `services` from a config object in source order, so a later member replaces an earlier
+ * one as it does at runtime. A spread of an object literal, or of a `const` object literal
+ * declared locally or imported, is read like members written in place.
+ *
+ * @param file - The module containing `object`, relative to `cwd`
+ */
+function objectServices(
+	cwd: string,
+	file: string,
+	object: ts.ObjectLiteralExpression,
+	parser: ts.SourceFileParser,
+	depth: number,
+): ServicesMember {
+	let found: ServicesMember = { hidden: false };
+
+	for (const property of object.properties) {
+		if (ts.isSpreadAssignment(property)) {
+			const spread = spreadObject(cwd, file, property.expression, parser, depth);
+			const member = spread
+				? objectServices(cwd, spread.file, spread.object, parser, depth + 1)
+				: { hidden: true };
+			found = {
+				declaration: member.declaration ?? found.declaration,
+				hidden: found.hidden || member.hidden,
+			};
+		} else if (ts.isComputedPropertyName(property.name)) {
+			found = { ...found, hidden: true };
+		} else if (propertyName(property.name) === "services") {
+			const node = ts.isPropertyAssignment(property)
+				? property.initializer
+				: ts.isShorthandPropertyAssignment(property)
+					? property.name
+					: property;
+			found = { ...found, declaration: { file, node } };
+		}
+	}
+
+	return found;
+}
+
+/** Follows a spread expression to the object literal it spreads, when it is a `const` binding. */
+function spreadObject(
+	cwd: string,
+	file: string,
+	expression: ts.Expression,
+	parser: ts.SourceFileParser,
+	depth: number,
+): { file: string; object: ts.ObjectLiteralExpression } | undefined {
+	const node = unwrapExpression(expression);
+
+	if (depth > maxBindingDepth) {
+		return;
+	}
+
+	if (ts.isObjectLiteralExpression(node)) {
+		return { file, object: node };
+	}
+
+	if (ts.isIdentifier(node)) {
+		const bound = boundDeclaration(cwd, file, node.text, parser, objectLiteral);
+		return bound && { file: bound.file, object: bound.contract };
+	}
 }
 
 /**
