@@ -1898,9 +1898,7 @@ const middlewareContracts = new WeakMap<
  */
 export function middlewareContract(
 	middleware: MiddlewareMetadata,
-):
-	| { file: string; contract: ts.ObjectLiteralExpression; providesUnresolved: boolean }
-	| undefined {
+): { file: string; contract: ts.ObjectLiteralExpression; providesUnresolved: boolean } | undefined {
 	return middlewareContracts.get(middleware);
 }
 
@@ -2013,7 +2011,14 @@ function parseRouteFileMiddleware(
 		const metadata = middlewareExpressionMetadata(expression, middlewareByName);
 
 		if (metadata) {
-			return middlewareMetadata(cwd, parser, routeFile, metadata.name, metadata.contract, routeFile);
+			return middlewareMetadata(
+				cwd,
+				parser,
+				routeFile,
+				metadata.name,
+				metadata.contract,
+				routeFile,
+			);
 		}
 
 		const unwrapped = unwrapExpression(expression);
