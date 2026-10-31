@@ -565,13 +565,22 @@ export type RoutaRouteContext = Register extends { applicationServices: infer TS
 	? { readonly logger: RoutaLogger; readonly services: Readonly<TServices> }
 	: { readonly logger: RoutaLogger };
 
+/**
+ * The framework-owned values a handler receives. A route whose generated context declares
+ * `services` combines its route-file and method services with the application's, so that
+ * declaration replaces the application-only mapping.
+ */
+type HandlerFrameworkContext<TCtx> = TCtx extends { readonly services: infer TServices }
+	? { readonly logger: RoutaLogger; readonly services: TServices }
+	: RoutaRouteContext;
+
 export type RouteHandlerArgs<
 	TInput extends RouteInput | undefined,
 	TCtx,
 	TResponses extends RouteResponses = RouteResponses,
 > = {
 	input: InferInput<TInput>;
-	ctx: Omit<TCtx, keyof RoutaRouteContext> & RoutaRouteContext;
+	ctx: Omit<TCtx, keyof RoutaRouteContext> & HandlerFrameworkContext<TCtx>;
 	response: ResponseBuilders<TResponses>;
 };
 
@@ -588,10 +597,16 @@ export type RouteContract<
 	TResponses extends RouteResponses,
 	TCtx,
 	TMiddleware extends readonly AnyMiddlewareContract[] = readonly AnyMiddlewareContract[],
+	TFactoryCtx = Record<string, unknown>,
 > = {
 	input?: TInput;
 	responses: TResponses;
 	middleware?: TMiddleware;
+	/**
+	 * The method's services, declared with {@link defineServices}. The factory runs once per
+	 * request to this method, after the route file's middleware and before the method's.
+	 */
+	services?: RequestServicesFactory<object, TFactoryCtx>;
 	deprecation?: RouteDeprecation;
 	run: RouteRun<TInput, TResponses, TCtx>;
 };
@@ -600,24 +615,49 @@ export type AnyRouteContract = {
 	input?: RouteInput;
 	responses: RouteResponses;
 	middleware?: readonly AnyMiddlewareContract[];
+	services?: (context: any) => unknown;
 	deprecation?: RouteDeprecation;
 	run: (args: any) => unknown;
 };
 
-export type ContextualRouteContract<TCtx> = RouteContract<
+export type ContextualRouteContract<TCtx, TFactoryCtx = Record<string, unknown>> = RouteContract<
 	any,
 	any,
 	TCtx,
-	readonly AnyMiddlewareContract[]
+	readonly AnyMiddlewareContract[],
+	TFactoryCtx
 >;
 
-export type RouteRootConfigForCtx<TCtxByMethod extends Partial<Record<HttpMethod, unknown>>> = {
+/**
+ * A route file's configuration. `TFactoryCtxByScope` holds the context each services factory
+ * receives: `routeFile` for the route file's, and each method's name for that method's.
+ */
+export type RouteRootConfigForCtx<
+	TCtxByMethod extends Partial<Record<HttpMethod, unknown>>,
+	TFactoryCtxByScope = {},
+> = {
 	middleware?: readonly AnyMiddlewareContract[];
+	/**
+	 * The route file's services, declared with {@link defineServices}. The factory runs once per
+	 * request to any of the file's methods, after filesystem middleware and before the file's own.
+	 */
+	services?: RequestServicesFactory<object, FactoryCtx<TFactoryCtxByScope, "routeFile">>;
 } & {
-	[K in HttpMethod]?: ContextualRouteContract<CtxForMethod<TCtxByMethod, K>>;
+	[K in HttpMethod]?: ContextualRouteContract<
+		CtxForMethod<TCtxByMethod, K>,
+		FactoryCtx<TFactoryCtxByScope, K>
+	>;
 };
 
-type NoExtraRouteKeys<TConfig> = Record<Exclude<keyof TConfig, HttpMethod | "middleware">, never>;
+/** The context a scope's services factory receives, as `routa generate` wrote it. */
+type FactoryCtx<TFactoryCtxByScope, TScope extends string> = TScope extends keyof TFactoryCtxByScope
+	? TFactoryCtxByScope[TScope]
+	: Record<string, unknown>;
+
+type NoExtraRouteKeys<TConfig> = Record<
+	Exclude<keyof TConfig, HttpMethod | "middleware" | "services">,
+	never
+>;
 
 type MethodOutcomeProblem<TMethod, TOutcome> = TMethod extends "head"
 	? TOutcome extends { readonly schema: unknown }
@@ -649,6 +689,12 @@ type CtxForMethod<TCtxByMethod, TMethod extends HttpMethod> = TMethod extends ke
 // Augmented by generated .routa/routes.gen.ts files.
 export interface Register {}
 
+type RegisteredFactoryCtxByPath = Register extends {
+	factoryCtxByPath: infer TFactoryCtxByPath;
+}
+	? TFactoryCtxByPath
+	: {};
+
 type RegisteredRouteCtxByPath = Register extends {
 	routeCtxByPath: infer TRouteCtxByPath;
 }
@@ -677,6 +723,25 @@ export type ApplicationServicesContext = {
 export type ApplicationServicesFactory<TServices extends object = object> = (
 	context: ApplicationServicesContext,
 ) => MaybePromise<TServices>;
+
+/**
+ * What a route-file or method services factory receives. `ctx` holds the context the middleware
+ * before the factory provided, the services of earlier scopes, and the request logger. It carries
+ * no request or handler input.
+ */
+export type RequestServicesContext<TCtx = Record<string, unknown>> = {
+	readonly ctx: Readonly<Omit<TCtx, "logger">> & { readonly logger: RoutaLogger };
+	readonly onCleanup: OnCleanup;
+};
+
+/**
+ * Builds one request's route-file or method services. It runs once for each request the scope
+ * applies to, and returns exactly the services its contract names.
+ */
+export type RequestServicesFactory<
+	TServices extends object = object,
+	TCtx = Record<string, unknown>,
+> = (context: RequestServicesContext<TCtx>) => MaybePromise<TServices>;
 
 /** The names a contract declares optional. */
 type OptionalServiceNames<TServices> = {
@@ -726,16 +791,26 @@ export function createRouta<const TConfig extends RoutaConfig>(
 /**
  * Fixes the service contract for a services factory. Name the result and reuse it:
  * `const defineAppServices = defineServices<AppServices>();`, then
- * `services: defineAppServices(factory)` in `createRouta`. Consumers see `AppServices`, not the
- * factory's implementations.
+ * `services: defineAppServices(factory)` in `createRouta`, a route root, or `createRoute`.
+ * Consumers see `AppServices`, not the factory's implementations.
  *
- * @returns A helper that checks a factory against the contract and returns it unchanged
+ * @returns A helper that checks a factory against the contract and returns it unchanged. The
+ *   factory's argument is typed by where the helper's result is placed.
  */
 export function defineServices<
 	TServices extends object & ServiceContractRules<TServices> = never,
->(): (factory: ApplicationServicesFactory<TServices>) => ApplicationServicesFactory<TServices> {
+>(): ServicesHelper<TServices> {
 	return (factory) => factory;
 }
+
+/**
+ * Checks a services factory against one contract. `TContext` comes from where the result is
+ * placed: application services receive {@link ApplicationServicesContext}, route-file and method
+ * services a {@link RequestServicesContext}.
+ */
+export type ServicesHelper<TServices extends object> = <TContext = ApplicationServicesContext>(
+	factory: (context: TContext) => MaybePromise<TServices>,
+) => (context: TContext) => MaybePromise<TServices>;
 
 /**
  * Declares a response cookie handle. `handle.set(value)` and `handle.clear()` return effects; an
@@ -763,12 +838,13 @@ export function createRoute<
 	const TResponses extends RouteResponses,
 	const TMiddleware extends readonly AnyMiddlewareContract[] = readonly AnyMiddlewareContract[],
 	TCtx = InferMiddlewareCtx<TMiddleware>,
+	TFactoryCtx = Record<string, unknown>,
 >(
-	contract: RouteContract<TInput, TResponses, TCtx, TMiddleware> & {
+	contract: RouteContract<TInput, TResponses, TCtx, TMiddleware, TFactoryCtx> & {
 		readonly responses: ResponseChecks<NoInfer<TResponses>>
 			& OutcomeNameChecks<NoInfer<TResponses>, NoInfer<TMiddleware>>;
 	},
-): RouteContract<TInput, NoInfer<TResponses>, TCtx, TMiddleware> {
+): RouteContract<TInput, NoInfer<TResponses>, TCtx, TMiddleware, TFactoryCtx> {
 	return contract;
 }
 
@@ -785,10 +861,14 @@ export function createRoute<
  */
 export function createRouteRootFactory<
 	TCtxByPath extends Record<string, Partial<Record<HttpMethod, unknown>>>,
+	TFactoryCtxByPath = {},
 >() {
 	return function createRouteRoot<const TPath extends keyof TCtxByPath & string>(_path: TPath) {
 		return function routeRoot<
-			const TConfig extends RouteRootConfigForCtx<TCtxByPath[TPath]>
+			const TConfig extends RouteRootConfigForCtx<
+				TCtxByPath[TPath],
+				FactoryCtxByScope<TFactoryCtxByPath, TPath>
+			>
 				& NoExtraRouteKeys<TConfig>
 				& MethodRules<TConfig>,
 		>(config: TConfig): TConfig {
@@ -796,6 +876,11 @@ export function createRouteRootFactory<
 		};
 	};
 }
+
+type FactoryCtxByScope<
+	TFactoryCtxByPath,
+	TPath extends string,
+> = TPath extends keyof TFactoryCtxByPath ? TFactoryCtxByPath[TPath] : {};
 
 /**
  * Creates a route definition factory for a specific path.
@@ -807,7 +892,10 @@ export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPa
 	_path: TPath,
 ) {
 	return function routeRoot<
-		const TConfig extends RouteRootConfigForCtx<RegisteredRouteCtxByPath[TPath]>
+		const TConfig extends RouteRootConfigForCtx<
+			RegisteredRouteCtxByPath[TPath],
+			FactoryCtxByScope<RegisteredFactoryCtxByPath, TPath>
+		>
 			& NoExtraRouteKeys<TConfig>
 			& MethodRules<TConfig>,
 	>(config: TConfig): TConfig {

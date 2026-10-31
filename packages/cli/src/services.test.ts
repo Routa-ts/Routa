@@ -887,3 +887,504 @@ function servicesProject(files: Record<string, string>): string {
 
 	return cwd;
 }
+
+const ordersServices = `import { defineServices } from "@routa-ts/core";
+
+export interface OrdersServices {
+\torders: { opened(): string; count(): number };
+}
+
+export interface CheckoutServices {
+\tcheckout: { total(): string };
+}
+
+export const defineOrdersServices = defineServices<OrdersServices>();
+export const defineCheckoutServices = defineServices<CheckoutServices>();
+`;
+
+const scopedOrdersRoute = `import { createMiddleware, createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+import { defineCheckoutServices, defineOrdersServices } from "../../orders/services.js";
+
+const withTenant = createMiddleware({
+\tprovides: { tenant: z.string() },
+\trun: ({ next }) => next({ tenant: "acme" }),
+});
+
+export default createRouteRoot("/orders")({
+\tmiddleware: [withTenant],
+\tservices: defineOrdersServices(({ ctx }) => {
+\t\t// Type assertions only; never called.
+\t\tconst typeChecks = () => {
+\t\t\t// @ts-expect-error Route-file middleware runs after the route-file factory.
+\t\t\tvoid ctx.tenant;
+\t\t\t// @ts-expect-error Route-file services are not available to their own factory.
+\t\t\tvoid ctx.services.orders;
+\t\t};
+\t\tvoid typeChecks;
+\t\tconst opened = \`\${ctx.requestId}@\${ctx.services.clock.now()}\`;
+\t\treturn { orders: { opened: () => opened, count: () => 2 } };
+\t}),
+\tget: createRoute({
+\t\tresponses: { ok: { status: 200, schema: z.object({ opened: z.string(), count: z.number() }) } },
+\t\trun: ({ ctx }) => {
+\t\t\t// Type assertions only; never called.
+\t\t\tconst typeChecks = () => {
+\t\t\t\t// @ts-expect-error Another method's services stay with that method.
+\t\t\t\tvoid ctx.services.checkout;
+\t\t\t};
+\t\t\tvoid typeChecks;
+\t\t\treturn {
+\t\t\t\ttype: "ok",
+\t\t\t\tdata: { opened: ctx.services.orders.opened(), count: ctx.services.orders.count() },
+\t\t\t};
+\t\t},
+\t}),
+\tpost: createRoute({
+\t\tservices: defineCheckoutServices(({ ctx }) => {
+\t\t\t// Type assertions only; never called.
+\t\t\tconst typeChecks = () => {
+\t\t\t\t// @ts-expect-error Method services are not available to their own factory.
+\t\t\t\tvoid ctx.services.checkout;
+\t\t\t};
+\t\t\tvoid typeChecks;
+\t\t\tconst total = \`\${ctx.tenant}:\${ctx.services.orders.count()}\`;
+\t\t\treturn { checkout: { total: () => total } };
+\t\t}),
+\t\tresponses: { ok: { status: 200, schema: z.object({ total: z.string(), at: z.string() }) } },
+\t\trun: ({ ctx }) => ({
+\t\t\ttype: "ok",
+\t\t\tdata: { total: ctx.services.checkout.total(), at: ctx.services.clock.now() },
+\t\t}),
+\t}),
+});
+`;
+
+/** A project with application services, filesystem middleware, and request-scoped services. */
+function scopedServicesProject(files: Record<string, string> = {}): string {
+	return servicesProject({
+		"src/services.ts": clockContract,
+		"src/routa.ts": `import { createRouta } from "@routa-ts/core";
+import { defineAppServices } from "./services.js";
+
+export default createRouta({
+\tservices: defineAppServices(() => ({ clock: { now: () => "noon" } })),
+});
+`,
+		"src/routes/middleware.ts": middlewareFile(`export const withRequest = createMiddleware({
+\tprovides: { requestId: z.string() },
+\trun: ({ next }) => next({ requestId: "req-1" }),
+});
+`),
+		"src/orders/services.ts": ordersServices,
+		"src/routes/orders/route.ts": scopedOrdersRoute,
+		...files,
+	});
+}
+
+describe("request-scoped services", () => {
+	it("types, generates, and serves route-file and method services", async () => {
+		const cwd = scopedServicesProject();
+
+		const check = await run(["check"], { cwd });
+
+		expectPassed(check);
+		const generated = readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8");
+		const orders = 'import("../src/orders/services.js").OrdersServices';
+		const checkout = 'import("../src/orders/services.js").CheckoutServices';
+		expect(generated).toContain(`\t\t"services": {
+			"routeFile": {
+				"file": "src/orders/services.ts",
+				"name": "OrdersServices",
+				"names": [
+					"orders"
+				]
+			},
+			"methods": {
+				"post": {
+					"file": "src/orders/services.ts",
+					"name": "CheckoutServices",
+					"names": [
+						"checkout"
+					]
+				}
+			}
+		},`);
+		expect(generated).toContain(`export type RoutaFactoryCtxByPath = {
+	"/orders": {
+		routeFile: {
+			"requestId": string;
+			readonly "services": Readonly<RoutaApplicationServices>;
+		};
+		post: {
+			"requestId": string;
+			"tenant": string;
+			readonly "services": Readonly<RoutaApplicationServices & ${orders}>;
+		};
+	};
+};`);
+		expect(generated).toContain(`		get: {
+			"requestId": string;
+			"tenant": string;
+			readonly "services": Readonly<RoutaApplicationServices & ${orders}>;
+		};
+		post: {
+			"requestId": string;
+			"tenant": string;
+			readonly "services": Readonly<RoutaApplicationServices & ${orders} & ${checkout}>;
+		};`);
+		expect(generated).toContain("\t\tfactoryCtxByPath: RoutaFactoryCtxByPath;\n");
+
+		const { application } = await createProjectApplication(cwd, cwd, "dev");
+		const get = await application.fetch(new Request("http://localhost/orders"));
+		const post = await application.fetch(
+			new Request("http://localhost/orders", { method: "POST" }),
+		);
+
+		expect(await get.json()).toEqual({ opened: "req-1@noon", count: 2 });
+		expect(await post.json()).toEqual({ total: "acme:2", at: "noon" });
+		await application.dispose();
+	}, 30_000);
+
+	it("reads the inline helper form with a contract the route file exports", async () => {
+		const cwd = servicesProject({
+			"src/routes/reports/route.ts": `import { createRoute, createRouteRoot, defineServices } from "@routa-ts/core";
+import { z } from "zod";
+
+export interface ReportsServices {
+\treports: { title(): string };
+}
+
+export default createRouteRoot("/reports")({
+\tservices: defineServices<ReportsServices>()(({ onCleanup }) => {
+\t\tonCleanup(() => {});
+\t\treturn { reports: { title: () => "weekly" } };
+\t}),
+\tget: createRoute({
+\t\tresponses: { ok: { status: 200, schema: z.string() } },
+\t\trun: ({ ctx }) => ({ type: "ok", data: ctx.services.reports.title() }),
+\t}),
+});
+`,
+		});
+
+		expectPassed(await run(["check"], { cwd }));
+		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
+			'readonly "services": Readonly<import("../src/routes/reports/route.js").ReportsServices>;',
+		);
+
+		const { application } = await createProjectApplication(cwd, cwd, "dev");
+		expect(await (await application.fetch(new Request("http://localhost/reports"))).json()).toBe(
+			"weekly",
+		);
+		await application.dispose();
+	}, 30_000);
+
+	it("reads shorthand services on a route root and on a method", async () => {
+		const cwd = servicesProject({
+			"src/routes/reports/route.ts": `import {
+\tcreateRoute,
+\tcreateRouteRoot,
+\tdefineServices,
+\ttype RequestServicesContext,
+} from "@routa-ts/core";
+import { z } from "zod";
+
+export interface ReportsServices {
+\treports: { title(): string };
+}
+
+// A factory outside the route has no placement, so it names its context.
+const services = defineServices<ReportsServices>()((_: RequestServicesContext) => ({ reports: { title: () => "weekly" } }));
+
+export default createRouteRoot("/reports")({
+\tservices,
+\tget: createRoute({
+\t\tresponses: { ok: { status: 200, schema: z.string() } },
+\t\trun: ({ ctx }) => ({ type: "ok", data: ctx.services.reports.title() }),
+\t}),
+});
+`,
+			"src/routes/exports/route.ts": `import {
+\tcreateRoute,
+\tcreateRouteRoot,
+\tdefineServices,
+\ttype RequestServicesContext,
+} from "@routa-ts/core";
+import { z } from "zod";
+
+export interface ExportServices {
+\texporter: { format(): string };
+}
+
+// A factory outside the route has no placement, so it names its context.
+const services = defineServices<ExportServices>()((_: RequestServicesContext) => ({ exporter: { format: () => "csv" } }));
+
+export default createRouteRoot("/exports")({
+\tget: createRoute({
+\t\tservices,
+\t\tresponses: { ok: { status: 200, schema: z.string() } },
+\t\trun: ({ ctx }) => ({ type: "ok", data: ctx.services.exporter.format() }),
+\t}),
+});
+`,
+		});
+
+		expectPassed(await run(["check"], { cwd }));
+		const generated = readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8");
+		expect(generated).toContain(
+			'readonly "services": Readonly<import("../src/routes/reports/route.js").ReportsServices>;',
+		);
+		expect(generated).toContain(
+			'readonly "services": Readonly<import("../src/routes/exports/route.js").ExportServices>;',
+		);
+
+		const { application } = await createProjectApplication(cwd, cwd, "dev");
+		const fetchJson = async (path: string) =>
+			(await application.fetch(new Request(`http://localhost${path}`))).json();
+		expect(await fetchJson("/reports")).toBe("weekly");
+		expect(await fetchJson("/exports")).toBe("csv");
+		await application.dispose();
+	}, 30_000);
+
+	it("reports services members it cannot read instead of ignoring them", () => {
+		const cwd = servicesProject({
+			"src/routes/orders/route.ts": `import { createRoute, createRouteRoot, defineServices } from "@routa-ts/core";
+import { z } from "zod";
+
+export interface OrdersServices {
+\torders: string;
+}
+
+export interface CheckoutServices {
+\tcheckout: string;
+}
+
+export default createRouteRoot("/orders")({
+\tget services() {
+\t\treturn defineServices<OrdersServices>()(() => ({ orders: "" }));
+\t},
+\tget: createRoute({
+\t\t["services"]: defineServices<CheckoutServices>()(() => ({ checkout: "" })),
+\t\tresponses: { ok: { status: 200, schema: z.string() } },
+\t\trun: () => ({ type: "ok", data: "" }),
+\t}),
+});
+`,
+		});
+
+		expect(
+			validateProject(cwd, { write: false }).diagnostics.map(({ code, message }) => ({
+				code,
+				message,
+			})),
+		).toEqual([
+			{
+				code: "ROUTA_SERVICES_UNRESOLVED",
+				message:
+					"Route-file services in src/routes/orders/route.ts cannot be statically resolved to a service contract.",
+			},
+			{
+				code: "ROUTA_SERVICES_UNRESOLVED",
+				message:
+					"GET services in src/routes/orders/route.ts cannot be statically resolved to a service contract.",
+			},
+		]);
+	});
+
+	it("warns when a spread or computed key on a route root or method may hide services", () => {
+		const cwd = servicesProject({
+			"src/routes/orders/route.ts": `import { createRoute, createRouteRoot, defineServices } from "@routa-ts/core";
+import { z } from "zod";
+
+export interface OrdersServices {
+\torders: string;
+}
+
+export interface CheckoutServices {
+\tcheckout: string;
+}
+
+export interface PlacedServices {
+\tplaced: string;
+}
+
+const key = "services";
+const extra = () => ({});
+
+export default createRouteRoot("/orders")({
+\t...{ services: defineServices<OrdersServices>()(() => ({ orders: "" })) },
+\tget: createRoute({
+\t\t[key]: defineServices<CheckoutServices>()(() => ({ checkout: "" })),
+\t\tresponses: { ok: { status: 200, schema: z.string() } },
+\t\trun: () => ({ type: "ok", data: "" }),
+\t}),
+\tpost: createRoute({
+\t\t...extra(),
+\t\tservices: defineServices<PlacedServices>()(() => ({ placed: "" })),
+\t\tresponses: { ok: { status: 200, schema: z.string() } },
+\t\trun: () => ({ type: "ok", data: "" }),
+\t}),
+});
+`,
+		});
+		const validation = validateProject(cwd, { write: false });
+
+		expect(validation.diagnostics).toEqual([]);
+		expect(
+			validation.warnings.map(({ code, severity, message }) => ({ code, severity, message })),
+		).toEqual([
+			{
+				code: "ROUTA_SERVICES_SPREAD_UNRESOLVED",
+				severity: "warning",
+				message:
+					"Route-file services in src/routes/orders/route.ts may sit in a spread or computed key that cannot be statically read.",
+			},
+			{
+				code: "ROUTA_SERVICES_SPREAD_UNRESOLVED",
+				severity: "warning",
+				message:
+					"GET services in src/routes/orders/route.ts may sit in a spread or computed key that cannot be statically read.",
+			},
+		]);
+	});
+
+	it("reports route-file and method services it cannot follow", () => {
+		const cwd = servicesProject({
+			"src/routes/orders/route.ts": `import { createRoute, createRouteRoot, defineServices } from "@routa-ts/core";
+import { z } from "zod";
+
+const makeServices = () => () => ({});
+
+export default createRouteRoot("/orders")({
+\tservices: makeServices(),
+\tget: createRoute({
+\t\tservices: defineServices<{ checkout: string }>()(() => ({ checkout: "" })),
+\t\tresponses: { ok: { status: 200, schema: z.string() } },
+\t\trun: () => ({ type: "ok", data: "" }),
+\t}),
+});
+`,
+		});
+
+		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([
+			{
+				code: "ROUTA_SERVICES_UNRESOLVED",
+				severity: "error",
+				message:
+					"Route-file services in src/routes/orders/route.ts cannot be statically resolved to a service contract.",
+				file: "src/routes/orders/route.ts",
+				routePath: "/orders",
+				suggestion:
+					"Declare `const defineOrdersServices = defineServices<OrdersServices>();` and set `services: defineOrdersServices(factory)`, or write `services: defineServices<OrdersServices>()(factory)`. Each binding must be a const declaration or a relative import.",
+			},
+			{
+				code: "ROUTA_SERVICES_CONTRACT_UNRESOLVED",
+				severity: "error",
+				message: "Service contract { checkout: string } is not a named interface or type.",
+				file: "src/routes/orders/route.ts",
+				routePath: "/orders",
+				suggestion:
+					"Declare the contract as an exported interface and pass its name: defineServices<AppServices>().",
+			},
+		]);
+	});
+
+	it("reports a name that scopes combined for one request both declare", () => {
+		const cwd = scopedServicesProject({
+			"src/orders/services.ts": ordersServices.replace(
+				"checkout: { total(): string };",
+				"checkout: { total(): string };\n\torders: { opened(): string; count(): number };\n\tclock: { now(): string };",
+			),
+		});
+
+		expect(
+			validateProject(cwd, { write: false }).diagnostics.map((item) => [item.code, item.message]),
+		).toEqual([
+			[
+				"ROUTA_SERVICES_DUPLICATE",
+				'Service "clock" is declared by the application services in src/routa.ts and by the POST services, which run in one request.',
+			],
+			[
+				"ROUTA_SERVICES_DUPLICATE",
+				'Service "orders" is declared by the route file\'s services and by the POST services, which run in one request.',
+			],
+		]);
+	});
+
+	it("allows unrelated route files and methods to reuse a name with different types", async () => {
+		const unit = (type: string, value: string) => `createRoute({
+\t\tservices: defineServices<{ unit: ${type} }>()(() => ({ unit: ${value} })),
+\t\tresponses: { ok: { status: 200, schema: z.string() } },
+\t\trun: ({ ctx }) => ({ type: "ok", data: typeof ctx.services.unit }),
+\t})`;
+		const cwd = servicesProject({
+			"src/units.ts": `export interface NumberUnit {\n\tunit: number;\n}\n\nexport interface TextUnit {\n\tunit: string;\n}\n`,
+			"src/routes/units/route.ts": `import { createRoute, createRouteRoot, defineServices } from "@routa-ts/core";
+import { z } from "zod";
+import type { NumberUnit, TextUnit } from "../../units.js";
+
+export default createRouteRoot("/units")({
+\tget: ${unit("NumberUnit", "1").replace("{ unit: NumberUnit }", "NumberUnit")},
+\tpost: ${unit("TextUnit", '"one"').replace("{ unit: TextUnit }", "TextUnit")},
+});
+`,
+		});
+
+		expectPassed(await run(["check"], { cwd }));
+
+		const { application } = await createProjectApplication(cwd, cwd, "dev");
+		const request = (method: string) =>
+			application.fetch(new Request("http://localhost/units", { method }));
+		expect(await (await request("GET")).json()).toBe("number");
+		expect(await (await request("POST")).json()).toBe("string");
+		await application.dispose();
+	}, 30_000);
+
+	it("generates without executing route files or request factories", async () => {
+		const sentinel = join(mkdtempSync(join(tmpdir(), "routa-services-sentinel-")), "executed");
+		const cwd = scopedServicesProject({
+			"src/routes/orders/route.ts": `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(sentinel)}, "module");\n${scopedOrdersRoute}`,
+		});
+
+		const generate = await run(["generate"], { cwd });
+
+		expect(generate.stderr ?? "").toBe("");
+		expect(generate.code).toBe(0);
+		expect(existsSync(sentinel)).toBe(false);
+	});
+
+	it("leaves OpenAPI unchanged when a route adopts request-scoped services", () => {
+		const document = generateOpenApi(scopedServicesProject());
+		const plain = generateOpenApi(
+			scopedServicesProject({
+				"src/routes/orders/route.ts": scopedOrdersRoute
+					.replace(/\tservices: defineOrdersServices\([\s\S]*?\n\t\}\),\n/, "")
+					.replace(/\t\tservices: defineCheckoutServices\([\s\S]*?\n\t\t\}\),\n/, ""),
+			}),
+		);
+
+		expect(document).toEqual(plain);
+		expect(JSON.stringify(document)).not.toMatch(/services|checkout|OrdersServices/i);
+	});
+
+	it("refuses request services that routa generate could not read, or no longer finds", async () => {
+		const withoutCheckout = scopedOrdersRoute.replace(
+			/\t\tservices: defineCheckoutServices\([\s\S]*?\n\t\t\}\),\n/,
+			"",
+		);
+		const generatedThen = async (generated: string, served: string) => {
+			const cwd = scopedServicesProject({ "src/routes/orders/route.ts": generated });
+			expect((await run(["generate"], { cwd })).code).toBe(0);
+			writeFileSync(join(cwd, "src/routes/orders/route.ts"), served);
+			return createProjectApplication(cwd, cwd, "dev");
+		};
+
+		await expect(generatedThen(scopedOrdersRoute, withoutCheckout)).rejects.toThrow(
+			".routa/routes.gen.ts declares POST services, but src/routes/orders/route.ts configures none. Run routa generate.",
+		);
+		await expect(generatedThen(withoutCheckout, scopedOrdersRoute)).rejects.toThrow(
+			"src/routes/orders/route.ts configures POST services that routa generate could not read from source",
+		);
+	});
+});

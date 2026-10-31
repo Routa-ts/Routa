@@ -29,9 +29,11 @@ import {
 } from "./contract-schemas.js";
 import { operationId, toOpenApiPath } from "./operation-id.js";
 import {
-	type ApplicationServicesMetadata,
 	applicationServices,
 	contractTypeReference,
+	type RouteServicesMetadata,
+	routeServices,
+	type ServiceContractMetadata,
 } from "./services.js";
 import * as ts from "./typescript.js";
 import { runTypeScript } from "./typescript-runner.js";
@@ -53,6 +55,8 @@ export type RouteMetadata = {
 	inputs: Record<string, RouteMethodInputMetadata>;
 	middleware: MiddlewareMetadata[];
 	methodMiddleware: Record<string, MiddlewareMetadata[]>;
+	/** The service contracts the route file declares, when it declares any. */
+	services?: RouteServicesMetadata;
 	deprecations?: Record<string, RouteDeprecationMetadata | undefined>;
 	ctx: string[];
 	groups: string[];
@@ -158,9 +162,10 @@ function validateProjectInSession(
 		lifecycleHeaders: lifecycleHeadersEnabled(cwd, parser),
 	});
 	const services = applicationServices(cwd, parser);
+	const discoveryWarnings = discovery.diagnostics.filter((item) => item.severity === "warning");
 	const diagnostics = [
 		...projectStructureDiagnostics(cwd),
-		...discovery.diagnostics,
+		...discovery.diagnostics.filter((item) => item.severity !== "warning"),
 		...services.diagnostics,
 		...runResultShapeDiagnostics(cwd, parser),
 		...duplicateRouteDiagnostics(routes),
@@ -171,6 +176,7 @@ function validateProjectInSession(
 		...middlewareOrderDiagnostics(routes),
 		...middlewareContextDiagnostics(routes),
 		...middlewareRejectStatusDiagnostics(routes),
+		...serviceCollisionDiagnostics(routes, services.services),
 		...schemas.diagnostics,
 	];
 
@@ -178,7 +184,12 @@ function validateProjectInSession(
 		writeRoutesMetadata(cwd, routes, services.services);
 	}
 
-	return { routes, diagnostics, warnings: [...services.warnings, ...schemas.warnings], schemas };
+	return {
+		routes,
+		diagnostics,
+		warnings: [...services.warnings, ...discoveryWarnings, ...schemas.warnings],
+		schemas,
+	};
 }
 
 /**
@@ -980,6 +991,8 @@ function discoverRoutes(cwd: string, parser: ts.SourceFileParser): RouteDiscover
 		}
 
 		const contract = parsed.contract;
+		const services = routeServices(cwd, relativeFile, parser);
+		diagnostics.push(...services.diagnostics.map((item) => ({ ...item, routePath: path })));
 		const ctx = Array.from(
 			new Set([
 				...middleware.flatMap((item) => item.provides),
@@ -1030,6 +1043,7 @@ function discoverRoutes(cwd: string, parser: ts.SourceFileParser): RouteDiscover
 					: {}),
 				middleware,
 				methodMiddleware,
+				...(services.services && { services: services.services }),
 				ctx,
 				groups,
 				segments,
@@ -3060,6 +3074,56 @@ function middlewareRejectStatusDiagnostics(routes: RouteMetadata[]): Diagnostic[
  * @param routes - The discovered route metadata to inspect.
  * @returns Diagnostics for each duplicate route path.
  */
+/**
+ * Reports a service name that more than one scope combined for a request declares: the
+ * application, the route file, and one method. Unrelated route files and methods may reuse names.
+ */
+function serviceCollisionDiagnostics(
+	routes: RouteMetadata[],
+	application: ServiceContractMetadata | undefined,
+): Diagnostic[] {
+	type Scope = { owner: string; contract: ServiceContractMetadata };
+	const diagnostics: Diagnostic[] = [];
+
+	for (const route of routes) {
+		const { routeFile, methods = {} } = route.services ?? {};
+		const applicationScope: Scope[] = application
+			? [{ owner: "the application services in src/routa.ts", contract: application }]
+			: [];
+		const routeFileScope: Scope[] = routeFile
+			? [{ owner: "the route file's services", contract: routeFile }]
+			: [];
+		const scopes = [
+			...routeFileScope.map((scope) => ({ ...scope, earlier: applicationScope })),
+			...Object.entries(methods).map(([method, contract]) => ({
+				owner: `the ${method.toUpperCase()} services`,
+				contract,
+				earlier: [...applicationScope, ...routeFileScope],
+			})),
+		];
+
+		for (const { owner, contract, earlier } of scopes) {
+			for (const name of contract.names) {
+				const first = earlier.find((scope) => scope.contract.names.includes(name));
+
+				if (first) {
+					diagnostics.push({
+						code: "ROUTA_SERVICES_DUPLICATE",
+						severity: "error",
+						message: `Service "${name}" is declared by ${first.owner} and by ${owner}, which run in one request.`,
+						file: route.file,
+						routePath: route.path,
+						suggestion:
+							"Rename one of the services. Services combined for one request need distinct names; unrelated route files and methods may reuse a name.",
+					});
+				}
+			}
+		}
+	}
+
+	return diagnostics;
+}
+
 function duplicateRouteDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 	const seen = new Map<string, RouteMetadata>();
 	const diagnostics: Diagnostic[] = [];
@@ -3184,7 +3248,7 @@ function isExternalApiUrl(value: string): boolean {
  */
 export function routesMetadataSource(
 	routes: RouteMetadata[],
-	services?: ApplicationServicesMetadata,
+	services?: ServiceContractMetadata,
 ): string {
 	const orderedRoutes = [...routes].sort(
 		(left, right) => compareText(left.path, right.path) || compareText(left.file, right.file),
@@ -3212,7 +3276,7 @@ ${servicesSource}${routeContextTypes(orderedRoutes, services !== undefined)}
 function writeRoutesMetadata(
 	cwd: string,
 	routes: RouteMetadata[],
-	services: ApplicationServicesMetadata | undefined,
+	services: ServiceContractMetadata | undefined,
 ): void {
 	const file = join(cwd, ".routa/routes.gen.ts");
 	const source = routesMetadataSource(routes, services);
@@ -3230,7 +3294,7 @@ function writeRoutesMetadata(
  *
  * @returns Generated source text for per-route context types, route-to-method context maps, and the `@routa-ts/core` module augmentation.
  */
-function routeContextTypes(routes: RouteMetadata[], services: boolean): string {
+function routeContextTypes(routes: RouteMetadata[], application: boolean): string {
 	const ctxTypes = routes
 		.map((route) => {
 			const typeName = routeCtxTypeName(route);
@@ -3244,15 +3308,63 @@ function routeContextTypes(routes: RouteMetadata[], services: boolean): string {
 		.join("\n\n");
 
 	const ctxMap = `export type RoutaRouteCtxByPath = {\n${routes
-		.map((route) => `\t${JSON.stringify(route.path)}: ${routeMethodCtxMap(route)};`)
+		.map((route) => `\t${JSON.stringify(route.path)}: ${routeMethodCtxMap(route, application)};`)
 		.join("\n")}\n};`;
 	const ctxByKey = `export type RoutaCtxByKey = ${ctxByKeyType(routes)};`;
+	const scoped = routes.filter((route) => route.services);
+	const factoryCtx =
+		scoped.length > 0
+			? `\n\nexport type RoutaFactoryCtxByPath = {\n${scoped
+					.map((route) => `\t${JSON.stringify(route.path)}: ${factoryCtxMap(route, application)};`)
+					.join("\n")}\n};`
+			: "";
 
-	const servicesRegistration = services
-		? "\t\tapplicationServices: RoutaApplicationServices;\n"
-		: "";
+	const servicesRegistration = `${
+		application ? "\t\tapplicationServices: RoutaApplicationServices;\n" : ""
+	}${scoped.length > 0 ? "\t\tfactoryCtxByPath: RoutaFactoryCtxByPath;\n" : ""}`;
 
-	return `${ctxTypes}\n\n${ctxMap}\n\n${ctxByKey}\n\ndeclare module "@routa-ts/core" {\n\texport interface Register {\n\t\trouteCtxByPath: RoutaRouteCtxByPath;\n\t\tctxByKey: RoutaCtxByKey;\n${servicesRegistration}\t}\n}`;
+	return `${ctxTypes}\n\n${ctxMap}${factoryCtx}\n\n${ctxByKey}\n\ndeclare module "@routa-ts/core" {\n\texport interface Register {\n\t\trouteCtxByPath: RoutaRouteCtxByPath;\n\t\tctxByKey: RoutaCtxByKey;\n${servicesRegistration}\t}\n}`;
+}
+
+/**
+ * Builds the context each of a route file's services factories receives: the context of the
+ * middleware before it and the services of earlier scopes. The route file's factory follows the
+ * filesystem middleware; each method's follows the route file's own middleware too.
+ */
+function factoryCtxMap(route: RouteMetadata, application: boolean): string {
+	const { routeFile, methods = {} } = route.services ?? {};
+	const filesystem = route.middleware.filter((item) => item.file !== route.file);
+	const entries = [
+		...(routeFile
+			? [`\t\trouteFile: ${ctxObjectType(filesystem, servicesType(application, []))};`]
+			: []),
+		...Object.keys(methods)
+			.sort(compareText)
+			.map(
+				(method) =>
+					`\t\t${method}: ${ctxObjectType(route.middleware, servicesType(application, [routeFile]))};`,
+			),
+	];
+
+	return `{\n${entries.join("\n")}\n\t}`;
+}
+
+/**
+ * The type of a `ctx.services` mapping that combines scopes, or `undefined` when none applies.
+ *
+ * @param application - Whether the project declares application services
+ * @param scopes - The route-file and method contracts, in the order they run
+ */
+function servicesType(
+	application: boolean,
+	scopes: ReadonlyArray<ServiceContractMetadata | undefined>,
+): string | undefined {
+	const parts = [
+		...(application ? ["RoutaApplicationServices"] : []),
+		...scopes.flatMap((scope) => (scope ? [contractTypeReference(scope)] : [])),
+	];
+
+	return parts.length > 0 ? `Readonly<${parts.join(" & ")}>` : undefined;
 }
 
 /**
@@ -3292,25 +3404,43 @@ function ctxByKeyType(routes: RouteMetadata[]): string {
  * @param route - The route metadata to describe.
  * @returns A TypeScript object type mapping each HTTP method to its context type.
  */
-function routeMethodCtxMap(route: RouteMetadata): string {
+function routeMethodCtxMap(route: RouteMetadata, application: boolean): string {
 	const methods: string[] = [];
 
 	for (const method of ["get", "post", "put", "patch", "delete", "head"]) {
-		methods.push(`\t\t${method}: ${routeCtxTypeNameForMiddleware(route, method)};`);
+		methods.push(`\t\t${method}: ${routeCtxTypeNameForMiddleware(route, method, application)};`);
 	}
 
 	return `{\n${methods.join("\n")}\n\t}`;
 }
 
 /**
- * Builds the context type for a route method's middleware chain.
+ * Builds the context type for a route method's middleware chain. A route file that declares
+ * services also types the handler's `ctx.services`, combining every scope the method runs.
  *
  * @param route - The route metadata to inspect
  * @param method - The HTTP method whose middleware chain is used when present
  * @returns A TypeScript object type for the middleware-provided context keys
  */
-function routeCtxTypeNameForMiddleware(route: RouteMetadata, method: string): string {
+function routeCtxTypeNameForMiddleware(
+	route: RouteMetadata,
+	method: string,
+	application: boolean,
+): string {
 	const chain = route.methodMiddleware[method] ?? route.middleware;
+	const services =
+		route.services
+		&& servicesType(application, [route.services.routeFile, route.services.methods?.[method]]);
+
+	return ctxObjectType(chain, services);
+}
+
+/**
+ * Builds a context object type from the keys a middleware chain provides, and a `services` type.
+ *
+ * @returns A TypeScript object type nested two levels deep in the generated map
+ */
+function ctxObjectType(chain: readonly MiddlewareMetadata[], services: string | undefined): string {
 	const ctx = new Map<string, string>();
 
 	for (const middleware of chain) {
@@ -3319,14 +3449,16 @@ function routeCtxTypeNameForMiddleware(route: RouteMetadata, method: string): st
 		}
 	}
 
-	if (ctx.size === 0) {
+	if (ctx.size === 0 && !services) {
 		return "{ readonly __empty?: never }";
 	}
 
-	return `{\n${Array.from(ctx.entries())
-		.sort(([left], [right]) => compareText(left, right))
-		.map(([key, type]) => `\t\t\t${JSON.stringify(key)}: ${indentType(type, 3)};`)
-		.join("\n")}\n\t\t}`;
+	return `{\n${[
+		...Array.from(ctx.entries())
+			.sort(([left], [right]) => compareText(left, right))
+			.map(([key, type]) => `\t\t\t${JSON.stringify(key)}: ${indentType(type, 3)};`),
+		...(services ? [`\t\t\treadonly "services": ${services};`] : []),
+	].join("\n")}\n\t\t}`;
 }
 
 /**

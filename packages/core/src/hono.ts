@@ -4,6 +4,7 @@ import { createLogger, type RoutaLogger } from "./logger.js";
 import {
 	createRequestExecutor,
 	isBodylessStatus,
+	type RequestScope,
 	type RuntimeRouteContract,
 } from "./request-execution.js";
 import { cookieDeclarationProblem, cookieScopeWarnings } from "./response-cookies.js";
@@ -13,11 +14,12 @@ import {
 	constructServices,
 	createCleanupScope,
 	logCleanupFailure,
+	type RequestServicesDeclaration,
 	type ServiceMapping,
 } from "./services.js";
 
 export { isBodylessStatus };
-export type { ApplicationServicesDeclaration };
+export type { ApplicationServicesDeclaration, RequestServicesDeclaration };
 
 type RuntimeMode = "dev" | "start";
 
@@ -26,6 +28,17 @@ export type HonoRoute<TCtx = unknown> = {
 	path: string;
 	contract: AnyRouteContract;
 	createContext?: () => TCtx | Promise<TCtx>;
+	/**
+	 * The route file's and the method's services. Each factory runs once per request, after the
+	 * middleware that precede it; its services join `ctx.services` for the rest of the chain.
+	 */
+	services?: RouteServices;
+};
+
+/** The request-scoped services one route method combines: its route file's, then its own. */
+export type RouteServices = {
+	readonly routeFile?: RequestServicesDeclaration | undefined;
+	readonly method?: RequestServicesDeclaration | undefined;
 };
 
 export type CreateHonoAppOptions = {
@@ -73,7 +86,15 @@ export async function createApplication(
 	const { services: declaration, ...appOptions } = options;
 	const logger = appOptions.logger ?? createLogger({ enabled: false });
 	const scope = createCleanupScope();
-	const services = declaration && (await constructServices(declaration, scope, logger));
+	const services =
+		declaration
+		&& (await constructServices(
+			(onCleanup) => declaration.factory({ logger, onCleanup }),
+			declaration.names,
+			"application services factory",
+			scope,
+			logger,
+		));
 	let app: Hono;
 
 	try {
@@ -189,6 +210,7 @@ function honoApp(
 		);
 		assertUniqueOutcomeNames(contract, route.path, method);
 		assertReservedContext(contract, routeKey);
+		assertRouteServices(route, routeKey, services);
 
 		const methods = methodsByPath.get(route.path) ?? new Set<string>();
 		methods.add(method);
@@ -202,6 +224,7 @@ function honoApp(
 			requestLogger: options.logger,
 			createContext: route.createContext,
 			services,
+			requestServices: requestScopes(route.services, routeKey),
 		});
 
 		app.on(honoMethod, route.path, async (context, next) => {
@@ -370,6 +393,67 @@ function assertReservedContext(contract: RuntimeRouteContract, label: string): v
 				`middleware[${index}] on ${label} provides ctx.services, which Routa reserves for injected services. Rename the provided key.`,
 			);
 		}
+	}
+}
+
+/** Orders a route's request-scoped factories as they run: route file, then method. */
+function requestScopes(services: RouteServices | undefined, label: string): RequestScope[] {
+	const { routeFile, method } = services ?? {};
+	return [
+		...(routeFile ? [{ ...routeFile, label: `route-file services factory for ${label}` }] : []),
+		...(method ? [{ ...method, label: `method services factory for ${label}` }] : []),
+	];
+}
+
+/**
+ * Rejects request-scoped services that cannot be combined for one request: a factory placed
+ * outside the middleware chain, method services placed before route-file services, or a service
+ * name that more than one combined scope declares. Unrelated routes and methods may reuse names.
+ */
+function assertRouteServices(
+	route: HonoRoute,
+	label: string,
+	application: ServiceMapping | undefined,
+): void {
+	const chain = route.contract.middleware?.length ?? 0;
+	const { routeFile, method } = route.services ?? {};
+	const owners = new Map(
+		Object.keys(application ?? {}).map((name) => [name, "application services"]),
+	);
+
+	for (const [scope, declaration] of [
+		["route-file services", routeFile],
+		["method services", method],
+	] as const) {
+		if (!declaration) {
+			continue;
+		}
+
+		if (
+			!Number.isInteger(declaration.after)
+			|| declaration.after < 0
+			|| declaration.after > chain
+		) {
+			throw new Error(
+				`The ${scope} on ${label} run after ${declaration.after} middleware, but the route has ${chain}.`,
+			);
+		}
+
+		for (const name of declaration.names) {
+			const owner = owners.get(name);
+
+			if (owner) {
+				throw new Error(
+					`Service "${name}" on ${label} is declared by ${owner} and by ${scope}. Services combined for one request need distinct names.`,
+				);
+			}
+
+			owners.set(name, scope);
+		}
+	}
+
+	if (routeFile && method && method.after < routeFile.after) {
+		throw new Error(`The method services on ${label} cannot run before its route-file services.`);
 	}
 }
 

@@ -9,7 +9,14 @@ import {
 	serializeCookieEffect,
 } from "./response-cookies.js";
 import { lifecycleHeaders, resolveHeaders, serializeHeaders } from "./response-headers.js";
-import type { ServiceMapping } from "./services.js";
+import {
+	type CleanupScope,
+	createCleanupScope,
+	exactServices,
+	logCleanupFailure,
+	type RequestServicesDeclaration,
+	type ServiceMapping,
+} from "./services.js";
 
 type RuntimeResult = {
 	type: string;
@@ -72,44 +79,82 @@ type RequestExecutorOptions = {
 	createContext?: (() => unknown | Promise<unknown>) | undefined;
 	/** The application instance's services, exposed as `ctx.services`. */
 	services?: ServiceMapping | undefined;
+	/** The route file's, then the method's, request-scoped services. */
+	requestServices?: readonly RequestScope[] | undefined;
+};
+
+/** A request-scoped services factory, with the name messages use for it. */
+export type RequestScope = RequestServicesDeclaration & { readonly label: string };
+
+/**
+ * The context one part of the chain sees, and the services it was given. Each request-scoped
+ * services factory starts a new stage, so earlier middleware keep the services they started with.
+ */
+type Stage = {
+	readonly ctx: Record<string, unknown>;
+	readonly services: ServiceMapping | undefined;
 };
 
 type RequestExecutor = (request: Request, params: Record<string, string>) => Promise<Response>;
 
-/** Prepares a route's execution pipeline independently of Hono registration. */
+/**
+ * Prepares a route's execution pipeline independently of Hono registration.
+ *
+ * Request-scoped services are released after the response is prepared and the chain has unwound:
+ * method services first, then route-file services, each in reverse registration order. Cleanup
+ * failures are logged and never replace the response.
+ */
 export function createRequestExecutor(
 	contract: RuntimeRouteContract,
 	options: RequestExecutorOptions,
 ): RequestExecutor {
-	return async (request, params) => {
-		try {
-			if (!acceptsJson(request)) {
-				return new Response("Not Acceptable", { status: 406 });
-			}
-
-			const inputReader = new RequestInputReader(request, params);
-			const input = await inputReader.parse(contract.input);
-			const ctx = toRecord(options.createContext ? await options.createContext() : {});
-			const lifecycle = lifecycleHeaders(contract.deprecation, options.lifecycleHeaders);
-
-			assertNoServices(ctx, "createContext() returned");
-			exposeServices(ctx, options.services);
-
-			return await runWithMiddleware(
-				contract,
-				input,
-				ctx,
-				inputReader,
-				options.logger,
-				options.services,
-				(produced) =>
-					finalizeResponse(validateResult(produced, options.validateResponses), lifecycle),
-			);
-		} catch (error) {
-			const response = errorResponse(error);
-			logRequestError(options.requestLogger, request, error, response);
-			return response;
+	const execute = async (
+		request: Request,
+		params: Record<string, string>,
+		constructed: CleanupScope[],
+	): Promise<Response> => {
+		if (!acceptsJson(request)) {
+			return new Response("Not Acceptable", { status: 406 });
 		}
+
+		const inputReader = new RequestInputReader(request, params);
+		const input = await inputReader.parse(contract.input);
+		const ctx = toRecord(options.createContext ? await options.createContext() : {});
+		const lifecycle = lifecycleHeaders(contract.deprecation, options.lifecycleHeaders);
+
+		assertNoServices(ctx, "createContext() returned");
+		exposeServices(ctx, options.services);
+
+		return await runWithMiddleware(
+			contract,
+			input,
+			{ ctx, services: options.services },
+			inputReader,
+			options.logger,
+			{ scopes: options.requestServices ?? [], constructed },
+			(produced) =>
+				finalizeResponse(validateResult(produced, options.validateResponses), lifecycle),
+		);
+	};
+
+	return async (request, params) => {
+		const constructed: CleanupScope[] = [];
+		let response: Response;
+
+		try {
+			response = await execute(request, params, constructed);
+		} catch (error) {
+			response = errorResponse(error);
+			logRequestError(options.requestLogger, request, error, response);
+		}
+
+		for (const scope of constructed.reverse()) {
+			await scope
+				.release()
+				.catch((cleanupError: unknown) => logCleanupFailure(options.logger, cleanupError));
+		}
+
+		return response;
 	};
 }
 /**
@@ -118,10 +163,16 @@ export function createRequestExecutor(
  * Middleware either returns one of its own rejects, ending the request, or calls `next()` and
  * returns its result unchanged. A middleware that returns anything else after `next()` fails, so
  * no middleware can change or add to the selected outcome's response. Context updates passed to
- * `next()` are merged into the shared context object.
+ * `next()` are merged into the context of every stage so far, so earlier middleware see them as
+ * before.
  *
  * `ctx.services` is reserved for injected services: it cannot be passed to `next()`, written, or
- * replaced, and the handler receives the application's own mapping.
+ * replaced. A request-scoped services factory runs when the chain reaches its position, receives
+ * the context so far, and starts a new stage whose `ctx.services` adds its services. Earlier
+ * stages keep their own mapping, even after `next()` resolves. A factory failure ends the chain
+ * there, so later factories, middleware, and the handler never run, and the request fails as an
+ * internal server error whatever the factory threw. Its scope is registered for cleanup before
+ * the factory runs, so cleanup it already registered is released with the other scopes.
  *
  * The response is fixed where its outcome is selected: `select` validates and serializes the
  * result before the chain unwinds, so later changes to objects the result shared with application
@@ -129,24 +180,55 @@ export function createRequestExecutor(
  *
  * @param contract - The route contract to execute
  * @param routeInput - Parsed input passed to the final handler
- * @param ctx - Shared context object available to middleware and the final handler
+ * @param first - The context and services the first middleware sees
  * @param inputReader - Reader used to parse middleware-specific input
- * @param services - The application services the handler receives as `ctx.services`
+ * @param requestServices - The request-scoped factories, and the cleanup scopes of those started
  * @param select - Turns the result that ends the request into its response
  * @returns The response of the selected outcome
  */
 async function runWithMiddleware(
 	contract: RuntimeRouteContract,
 	routeInput: Record<string, unknown>,
-	ctx: Record<string, unknown>,
+	first: Stage,
 	inputReader: RequestInputReader,
 	logger: RoutaLogger,
-	services: ServiceMapping | undefined,
+	requestServices: { scopes: readonly RequestScope[]; constructed: CleanupScope[] },
 	select: (produced: ProducedResult) => Response,
 ): Promise<Response> {
 	const middleware = contract.middleware ?? [];
 
-	async function dispatch(index: number): Promise<Response> {
+	async function startStage(scope: RequestScope, stage: Stage): Promise<Stage> {
+		assertServicesKept(stage);
+		const earlier = withoutServices(stage.ctx);
+		const factoryCtx = { ...earlier, logger };
+		exposeServices(factoryCtx, stage.services);
+		Object.freeze(factoryCtx);
+
+		// Registered before the factory runs, so a failed factory's partial cleanup is released
+		// with the other scopes once the chain has unwound.
+		const cleanup = createCleanupScope();
+		requestServices.constructed.push(cleanup);
+		let mapping: ServiceMapping;
+		try {
+			const value = await scope.factory({ ctx: factoryCtx, onCleanup: cleanup.onCleanup });
+			mapping = exactServices(value, scope.names, scope.label);
+		} catch (error) {
+			throw new RequestServicesError(error);
+		}
+
+		const services = Object.freeze({ ...stage.services, ...mapping });
+		exposeServices(earlier, services);
+		return { ctx: earlier, services };
+	}
+
+	async function dispatch(index: number, stages: readonly Stage[]): Promise<Response> {
+		for (const scope of requestServices.scopes) {
+			if (scope.after === index) {
+				stages = [...stages, await startStage(scope, stages.at(-1) as Stage)];
+			}
+		}
+
+		const { ctx, services } = stages.at(-1) as Stage;
 		const item = middleware[index];
 
 		if (!item) {
@@ -156,9 +238,7 @@ async function runWithMiddleware(
 			for (const [type, outcome] of Object.entries(contract.responses)) {
 				response[type] = (...args) => buildResult(type, outcome, args);
 			}
-			if (ctx.services !== services) {
-				assertNoServices(ctx, "Middleware wrote");
-			}
+			assertServicesKept({ ctx, services });
 			const handlerCtx = { ...ctx, logger };
 			exposeServices(handlerCtx, services);
 			const result = await contract.run({
@@ -180,7 +260,7 @@ async function runWithMiddleware(
 		}
 
 		if (!item.run) {
-			return await dispatch(index + 1);
+			return await dispatch(index + 1, stages);
 		}
 
 		assertMiddlewareRequires(item.requires, ctx);
@@ -206,17 +286,16 @@ async function runWithMiddleware(
 
 				nextCalled = true;
 				assertNoServices(providedCtx, "Middleware passed next()");
-				Object.assign(ctx, parseMiddlewareProvides(item.provides, providedCtx));
-				downstream = await dispatch(index + 1);
+				const provided = parseMiddlewareProvides(item.provides, providedCtx);
+				for (const stage of stages) {
+					Object.assign(stage.ctx, provided);
+				}
+				downstream = await dispatch(index + 1, stages);
 				return continuation;
 			},
 		});
 
-		// Without application services the key has no guard, so a write that bypassed the types,
-		// before or after next(), is caught when the middleware returns.
-		if (ctx.services !== services) {
-			assertNoServices(ctx, "Middleware wrote");
-		}
+		assertServicesKept({ ctx, services });
 
 		if (nextCalled) {
 			if (!downstream || result !== continuation) {
@@ -240,7 +319,22 @@ async function runWithMiddleware(
 		throw new InvalidHandlerOutputError("Middleware returned invalid output.");
 	}
 
-	return await dispatch(0);
+	return await dispatch(0, [first]);
+}
+
+/**
+ * Fails when middleware wrote `ctx.services`. Without services the key has no guard, so a write
+ * that bypassed the types, before or after `next()`, is caught here.
+ */
+function assertServicesKept(stage: Stage): void {
+	if (stage.ctx.services !== stage.services) {
+		assertNoServices(stage.ctx, "Middleware wrote");
+	}
+}
+
+/** Copies a context without its `services`, which each stage exposes for itself. */
+function withoutServices(ctx: Record<string, unknown>): Record<string, unknown> {
+	return Object.fromEntries(Object.entries(ctx).filter(([key]) => key !== "services"));
 }
 
 /**
@@ -984,6 +1078,10 @@ function logRequestError(
  * @returns An object containing error details, or a stringified error value for non-`Error` inputs
  */
 function errorLogData(error: unknown): Record<string, unknown> {
+	if (error instanceof RequestServicesError) {
+		return errorLogData(error.cause);
+	}
+
 	if (error instanceof Error) {
 		return {
 			error: error.message,
@@ -1003,3 +1101,14 @@ function errorLogData(error: unknown): Record<string, unknown> {
 class InvalidJsonBodyError extends Error {}
 
 class UnsupportedMediaTypeError extends Error {}
+
+/**
+ * A request services factory failed. `errorResponse` maps it to the generic `500` problem whatever
+ * the factory threw, so a `ZodError` or similar never reads as a client error or reaches the client.
+ * The original error is logged.
+ */
+class RequestServicesError extends Error {
+	constructor(cause: unknown) {
+		super("Request services construction failed.", { cause });
+	}
+}

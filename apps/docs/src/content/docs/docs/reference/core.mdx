@@ -53,19 +53,24 @@ See [Configuration](/docs/reference/configuration/) for environment precedence.
 ## `defineServices`
 
 ```ts
-function defineServices<TServices>(): (
-	factory: ApplicationServicesFactory<TServices>,
-) => ApplicationServicesFactory<TServices>
+function defineServices<TServices>(): ServicesHelper<TServices>
+
+type ServicesHelper<TServices> = <TContext = ApplicationServicesContext>(
+	factory: (context: TContext) => TServices | Promise<TServices>,
+) => (context: TContext) => TServices | Promise<TServices>
 ```
 
 Fixes a service contract and returns a helper that checks a factory against it and returns
 the factory unchanged. `TServices` must name each service as a required property; optional
-services and index signatures are type errors.
+services and index signatures are type errors. Where you place the helper's result types
+the factory's argument: `createRouta({ services })` passes an `ApplicationServicesContext`,
+and a route root's or `createRoute`'s `services` passes a `RequestServicesContext`.
 
-| Factory argument | Type          | Purpose                                                        |
-| ---------------- | ------------- | -------------------------------------------------------------- |
-| `logger`         | `RoutaLogger` | The configured logger, or a no-op logger when logging is off   |
-| `onCleanup`      | `OnCleanup`   | Registers a callback that releases a resource the factory owns |
+| Factory argument | Type          | Purpose                                                                   |
+| ---------------- | ------------- | ------------------------------------------------------------------------- |
+| `logger`         | `RoutaLogger` | Application factories: the configured logger, or a no-op logger           |
+| `ctx`            | `object`      | Request factories: earlier middleware context, earlier services, `logger` |
+| `onCleanup`      | `OnCleanup`   | Registers a callback that releases a resource the factory owns            |
 
 The factory may be sync or async and returns exactly the contract's services.
 
@@ -82,7 +87,7 @@ export const appServices = defineAppServices(() => ({ clock: { now: () => new Da
 
 `routa check` reports `ROUTA_SERVICES_UNRESOLVED`, `ROUTA_SERVICES_CONTRACT_UNRESOLVED`, or
 `ROUTA_SERVICES_CONTRACT_UNSUPPORTED` for a declaration it cannot read. See
-[Application services](/docs/concepts/services/).
+[Services](/docs/concepts/services/).
 
 ## `createRoute`
 
@@ -101,6 +106,7 @@ declared outcomes.
 | `input`       | `{ params?, query?, headers?, cookies?, body? }` of Zod schemas                     | No       |
 | `responses`   | `Record<string, { status; description?; schema?; headers?; cookies? }>`             | Yes      |
 | `middleware`  | `readonly MiddlewareContract[]`                                                     | No       |
+| `services`    | A `defineServices` helper result, run once per request to this method               | No       |
 | `deprecation` | `{ sunset?: string; replacement?: string }`                                         | No       |
 | `run`         | `({ input, ctx, response }) => { type, data, headers, cookies }` or a promise of it | Yes      |
 
@@ -220,8 +226,10 @@ function createRouteRoot<const TPath extends RegisteredRoutePath>(
 ```
 
 Binds a file to a URL path and returns the helper used as the file's default export. The
-returned helper accepts `get`, `post`, `put`, `patch`, `delete`, `head`, and `middleware`,
-and rejects every other key. `options` is never accepted.
+returned helper accepts `get`, `post`, `put`, `patch`, `delete`, `head`, `middleware`, and
+`services`, and rejects every other key. `options` is never accepted. `services` takes a
+`defineServices` helper result that runs once per request to any of the file's methods; see
+[route-file and method services](/docs/concepts/services/#route-file-and-method-services).
 
 ```ts title="src/routes/users/$userId/route.ts"
 import { createRoute, createRouteRoot } from "@routa-ts/core";
@@ -393,6 +401,7 @@ call it directly in tests.
 | `routes[].path`              | `string`                    | Hono path with `:name` parameters                   |
 | `routes[].contract`          | `AnyRouteContract`          | The `createRoute` result                            |
 | `routes[].createContext`     | `() => object`              | Optional base context, must return a plain object   |
+| `routes[].services`          | `RouteServices`             | Optional `routeFile` and `method` request services  |
 | `options.logger`             | `RoutaLogger`               | Enables `http.request` and `http.error` logging     |
 | `options.lifecycleHeaders`   | `boolean`                   | Emit `Deprecation`, `Sunset`, and `Link`            |
 | `options.responseValidation` | `"development" \| "always"` | Response schema policy; defaults to `"development"` |
@@ -401,6 +410,12 @@ call it directly in tests.
 Registration throws for an explicitly declared `options` method, a duplicate
 method-and-path pair, a `GET` or `HEAD` contract declaring a body, and duplicate reject
 keys within one chain.
+
+Each `RouteServices` entry is a `RequestServicesDeclaration`: the `factory`, its contract's
+`names`, and `after`, the number of middleware at the start of the route's chain that run
+before the factory. Registration also throws when `after` falls outside the chain, when
+method services run before route-file services, or when the application, route-file, and
+method services share a name.
 
 ```ts
 import { createHonoApp } from "@routa-ts/core/hono";
@@ -589,6 +604,7 @@ type UsersRouteConfig = RouteRootConfigForCtx<{
 `RouteRun`, `RouteHandlerArgs`, `ResponseBuilders`, `RoutaResult`, `RouteRunResult`, `InferInput`,
 `InferResponse`, `SchemaInput`, `SchemaOutput`, `RoutaRouteContext`, `RoutaConfig`,
 `ResponseValidation`, `ApplicationServicesFactory`, `ApplicationServicesContext`, `OnCleanup`,
+`RequestServicesFactory`, `RequestServicesContext`, `ServicesHelper`,
 `RouteDeprecation`, `RouteDeprecationReplacement`, `RegisteredRoutePath`,
 `ExternalApiUrl`, `ContextualRouteContract`, `RouteRootConfigForCtx`, `MiddlewareContract`,
 `AnyMiddlewareContract`, `MiddlewareRun`,
@@ -598,7 +614,8 @@ type UsersRouteConfig = RouteRootConfigForCtx<{
 `CookieHandle`, `CookieEffect`, `CookieSameSite`, `RequiredCookie`, `AnyCookie`, and `Register`.
 
 From `@routa-ts/core/hono`: `HonoRoute`, `CreateHonoAppOptions`, `CreateApplicationOptions`,
-`ApplicationServicesDeclaration`, `RoutaApplication`. From
+`ApplicationServicesDeclaration`, `RequestServicesDeclaration`, `RouteServices`,
+`RoutaApplication`. From
 `@routa-ts/core/logger`: `RoutaLogger`, `RoutaLogLevel`, `RoutaLogLevelWithSilent`,
 `RoutaLogEvent`, `RoutaLogData`, `CreateLoggerOptions`.
 

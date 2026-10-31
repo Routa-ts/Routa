@@ -1,15 +1,17 @@
 ---
-title: Application Services
-description: Typed application-owned dependencies that Routa constructs once and hands to handlers as ctx.services.
+title: Services
+description: Typed application-owned dependencies that Routa constructs per application or per request and hands to handlers as ctx.services.
 ---
 
 import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
 
-Application services are dependencies your application owns, such as a database client, a
-clock, or a repository, that Routa constructs once per application instance and passes to
-every handler as `ctx.services`. Handlers depend on an interface you declare, so you can
-change the implementation without touching a route. Services are optional: plain imports
-keep working, and a project without services has no `ctx.services` at all.
+Services are dependencies your application owns, such as a database client, a clock, or a
+repository, that Routa constructs and passes to handlers as `ctx.services`. Application
+services are built once per application instance. A route file or a single method can add
+request services, built once for each request it handles. Handlers depend on interfaces you
+declare, so you can change an implementation without touching a route. Services are
+optional: plain imports keep working, and a project without services has no `ctx.services`
+at all.
 
 ```ts title="src/services.ts"
 import { defineServices } from "@routa-ts/core";
@@ -112,13 +114,124 @@ export default createRouta({
 });
 ```
 
+## Route-File and Method Services
+
+A route file can declare services on its route root, and a method on its `createRoute`. Use
+the same `defineServices` helper. Routa runs these factories once for each request the scope
+handles, so they can hold per-request state or build on what middleware resolved.
+
+```ts title="src/orders/services.ts"
+import { defineServices } from "@routa-ts/core";
+
+export interface OrderBook {
+	list(): Promise<Array<{ id: string; total: number }>>;
+	place(total: number): Promise<{ id: string; total: number }>;
+}
+
+export interface Receipts {
+	send(orderId: string): void;
+}
+
+/** Services every request to the orders route file receives. */
+export interface OrdersServices {
+	orders: OrderBook;
+}
+
+/** Services only POST /orders receives. */
+export interface CheckoutServices {
+	receipts: Receipts;
+}
+
+export const defineOrdersServices = defineServices<OrdersServices>();
+export const defineCheckoutServices = defineServices<CheckoutServices>();
+```
+
+```ts title="src/routes/orders/route.ts"
+import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+import { openOrderBook } from "../../orders/book.js";
+import { createReceiptOutbox } from "../../orders/receipts.js";
+import { defineCheckoutServices, defineOrdersServices } from "../../orders/services.js";
+
+const Order = z.object({ id: z.string(), total: z.number() });
+
+export default createRouteRoot("/orders")({
+	services: defineOrdersServices(({ ctx }) => ({
+		orders: openOrderBook(ctx.auth.userId, ctx.services.clock),
+	})),
+	get: createRoute({
+		responses: { success: { status: 200, schema: z.array(Order) } },
+		run: async ({ ctx, response }) => response.success(await ctx.services.orders.list()),
+	}),
+	post: createRoute({
+		services: defineCheckoutServices(({ ctx, onCleanup }) => {
+			const receipts = createReceiptOutbox(ctx.logger);
+			onCleanup(() => receipts.flush());
+			return { receipts };
+		}),
+		input: { body: z.object({ total: z.number() }) },
+		responses: { created: { status: 201, schema: Order } },
+		run: async ({ ctx, input, response }) => {
+			const order = await ctx.services.orders.place(input.body.total);
+			ctx.services.receipts.send(order.id);
+			return response.created(order);
+		},
+	}),
+});
+```
+
+The example assumes a filesystem `middleware.ts` that provides `ctx.auth`, and the
+`AppServices` contract above.
+
+A request factory receives `{ ctx, onCleanup }`. `ctx` holds the context the middleware
+before it provided, the services of earlier scopes, and the request `logger`. It holds no
+request input, so read input through middleware. For one request, Routa runs:
+
+1. Filesystem middleware, which sees application services.
+2. The route file's factory.
+3. The route file's `middleware`, which sees application and route-file services.
+4. The method's factory, for the matched method only.
+5. The method's `middleware`, and then the handler, which see every scope.
+
+Each step's types follow that order. A route-file factory cannot read its own services or
+the context its file's middleware provides, and `GET /orders` never sees `receipts`. Each
+stage keeps its own `ctx.services`: a filesystem middleware that reads `ctx.services` after
+`await next()` still sees only application services. Each mapping is frozen, and concurrent
+requests get their own instances.
+
+Service names must be unique across the scopes one request combines: the application, the
+route file, and the matched method. `routa check` reports `ROUTA_SERVICES_DUPLICATE` for a
+collision, and route registration rejects one that skipped the check. Unrelated route files
+and methods may reuse a name with a different interface.
+
+Every `.ts` file under `src/routes` is a route, so declare request contracts in the route
+file itself, exported, or in a module outside `src/routes`. `routa generate` adds the
+contracts to the route's `routaRoutes` entry, types the handler's `ctx.services` per method,
+and writes `RoutaFactoryCtxByPath`, the context each request factory receives:
+
+```ts title=".routa/routes.gen.ts"
+export type RoutaFactoryCtxByPath = {
+	"/orders": {
+		routeFile: {
+			"auth": { readonly "userId": string };
+			readonly "services": Readonly<RoutaApplicationServices>;
+		};
+		post: {
+			"auth": { readonly "userId": string };
+			readonly "services": Readonly<RoutaApplicationServices & import("../src/orders/services.js").OrdersServices>;
+		};
+	};
+};
+```
+
 ## Contract Rules
 
 A service contract is an exported `interface`, or an exported `type` alias of an object
 type, whose members are all required and plainly named. Interfaces that share its name in
 one module merge into one contract, as TypeScript merges them. It may live in any project
 module, and every binding between `services:` and `defineServices` may be a local `const` or a
-relative import, including re-exports. Routa reports a declaration it cannot follow instead
+relative import, including re-exports. Route files declare request services on the route root
+object or on an inline `createRoute`. Routa reports a declaration it cannot follow instead
 of guessing:
 
 | Problem                                                             | Diagnostic                            |
@@ -126,6 +239,7 @@ of guessing:
 | `services` is not built through a `defineServices` helper           | `ROUTA_SERVICES_UNRESOLVED`           |
 | The contract is inline, missing, or not exported                    | `ROUTA_SERVICES_CONTRACT_UNRESOLVED`  |
 | An optional or computed member, an index signature, or an `extends` | `ROUTA_SERVICES_CONTRACT_UNSUPPORTED` |
+| Scopes that run in one request declare the same name                | `ROUTA_SERVICES_DUPLICATE`            |
 
 TypeScript rejects optional services and index signatures in `defineServices<...>()` too.
 Declare `services` in the `createRouta` object itself, or in a `const` object literal,
@@ -180,6 +294,30 @@ A cleanup failure never replaces a startup error. Routa logs it as
 `services.cleanup_failed`. `dispose()` rejects with an `AggregateError` of the failures
 after every callback has been attempted.
 
+### Request Cleanup
+
+Request factories register cleanup the same way. Routa releases a request's services once,
+after the response is ready:
+
+1. The handler or a middleware reject selects the outcome, and Routa validates and
+   serializes the response.
+2. The middleware chain unwinds.
+3. Routa releases the method's services, then the route file's, each in reverse
+   registration order.
+4. Routa returns the prepared response.
+
+A request cleanup failure is logged as `services.cleanup_failed` and never changes the
+response. Application services stay available throughout, and `dispose()` waits for active
+requests to finish their cleanup before releasing application services.
+
+When a request factory throws or returns the wrong names, Routa skips every later factory,
+middleware, and the handler, and responds with the standard `500` problem, whatever the
+factory threw. A `ZodError` from a factory is an internal failure, not a validation error.
+The error is logged as `http.error` and never reaches the client. A middleware reject also
+skips later factories. Either way, Routa releases the scopes the request started, including
+the callbacks a failed factory registered, after the chain unwinds and in the same order. It
+does not retry a factory or substitute a service.
+
 ## Reserved `ctx.services`
 
 Routa reserves `ctx.services` in every project, including projects without services.
@@ -223,10 +361,11 @@ Your application owns the services, their configuration, the resources they acqu
 those resources are released, and every business decision the services make. Service
 contracts never appear in OpenAPI, and adopting services does not change any HTTP response.
 
-<Aside type="caution" title="Partial: application scope only">
-	Application services, their cleanup, and the reserved `ctx.services` are implemented.
-	Route-file and method services, middleware service requirements, a generated test
-	application, and graceful shutdown are not. `routa dev` and `routa start` do not yet run
+<Aside type="caution" title="Partial: no middleware requirements or test application yet">
+	Application, route-file, and method services, their cleanup, and the reserved
+	`ctx.services` are implemented. Middleware cannot yet declare the services it requires, so
+	it reads `ctx.services` without typed access. A generated test application and graceful
+	shutdown are not implemented. `routa dev` and `routa start` do not yet run application
 	cleanup when the process receives `SIGINT` or `SIGTERM`.
 </Aside>
 
@@ -241,7 +380,7 @@ contracts never appear in OpenAPI, and adopting services does not change any HTT
 	<LinkCard
 		title="Core reference"
 		href="/docs/reference/core/#defineservices"
-		description="defineServices and createApplication signatures."
+		description="defineServices, createApplication, and HonoRoute services."
 	/>
 	<LinkCard
 		title="Testing"
