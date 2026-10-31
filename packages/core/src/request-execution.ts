@@ -212,6 +212,12 @@ async function runWithMiddleware(
 			},
 		});
 
+		// Without application services the key has no guard, so a write that bypassed the types,
+		// before or after next(), is caught when the middleware returns.
+		if (ctx.services !== services) {
+			assertNoServices(ctx, "Middleware wrote");
+		}
+
 		if (nextCalled) {
 			if (!downstream || result !== continuation) {
 				throw new InvalidHandlerOutputError(
