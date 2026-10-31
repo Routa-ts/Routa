@@ -178,7 +178,11 @@ function declaredContract(
 		};
 	}
 
-	return serviceContract(cwd, contract.file, contract.type, parser);
+	return serviceContract(cwd, contract.file, contract.type, parser, {
+		noun: "Service contract",
+		subject: "the contract",
+		usage: "defineServices<AppServices>()",
+	});
 }
 
 type ServicesMember = {
@@ -346,16 +350,36 @@ function factoryContract(
 		return;
 	}
 
-	return helperContract(cwd, file, node.expression, parser, depth + 1);
+	return helperContract(cwd, file, node.expression, parser, depth + 1, "defineServices");
 }
 
-/** Follows a services helper, such as `defineAppServices`, to its `defineServices<Contract>()` call. */
+/**
+ * Follows a middleware helper, such as `defineCacheMiddleware`, to its
+ * `createMiddleware<Requirements>()` call, or reads that call when the callee is the call itself.
+ *
+ * @param file - The module containing `callee`, relative to `cwd`
+ * @returns The requirement type node and the module it appears in
+ */
+export function middlewareRequirement(
+	cwd: string,
+	file: string,
+	callee: ts.Expression,
+	parser: ts.SourceFileParser,
+): { file: string; type: ts.TypeNode } | undefined {
+	return helperContract(cwd, file, callee, parser, 0, "createMiddleware");
+}
+
+/**
+ * Follows a helper, such as `defineAppServices`, to the `factory<Contract>()` call that made it:
+ * `defineServices` for services, `createMiddleware` for middleware requirements.
+ */
 function helperContract(
 	cwd: string,
 	file: string,
 	expression: ts.Expression,
 	parser: ts.SourceFileParser,
 	depth: number,
+	factory: "defineServices" | "createMiddleware",
 ): { file: string; type: ts.TypeNode } | undefined {
 	const node = unwrapExpression(expression);
 
@@ -365,12 +389,12 @@ function helperContract(
 
 	if (ts.isIdentifier(node)) {
 		const bound = boundDeclaration(cwd, file, node.text, parser, (initializer) => initializer);
-		return bound && helperContract(cwd, bound.file, bound.contract, parser, depth + 1);
+		return bound && helperContract(cwd, bound.file, bound.contract, parser, depth + 1, factory);
 	}
 
 	if (
 		!ts.isCallExpression(node)
-		|| callName(node) !== "defineServices"
+		|| callName(node) !== factory
 		|| node.arguments.length > 0
 		|| node.typeArguments?.length !== 1
 	) {
@@ -380,12 +404,34 @@ function helperContract(
 	return { file, type: node.typeArguments[0] as ts.TypeNode };
 }
 
-/** Resolves a contract type to its exported declaration and reads its service names. */
+/**
+ * Resolves a middleware's requirement interface and reads its service names. It follows the
+ * rules of a service contract, and reports the same diagnostics.
+ */
+export function requirementContract(
+	cwd: string,
+	requirement: { file: string; type: ts.TypeNode },
+	parser: ts.SourceFileParser,
+): { services?: ServiceContractMetadata; diagnostics: Diagnostic[] } {
+	return serviceContract(cwd, requirement.file, requirement.type, parser, {
+		noun: "Service requirement",
+		subject: "the requirement",
+		usage: "createMiddleware<CacheRequirements>()",
+	});
+}
+
+/**
+ * Resolves a contract type to its exported declaration and reads its service names.
+ *
+ * @param kind - Names the type in messages, such as `Service contract` and `the contract`, and
+ *   the call it is passed to
+ */
 function serviceContract(
 	cwd: string,
 	file: string,
 	type: ts.TypeNode,
 	parser: ts.SourceFileParser,
+	kind: { noun: string; subject: string; usage: string },
 ): { services?: ServiceContractMetadata; diagnostics: Diagnostic[] } {
 	const unresolved = (message: string, suggestion: string) => ({
 		diagnostics: [
@@ -401,8 +447,8 @@ function serviceContract(
 
 	if (!ts.isTypeReferenceNode(type) || !ts.isIdentifier(type.typeName) || type.typeArguments) {
 		return unresolved(
-			`Service contract ${type.getText()} is not a named interface or type.`,
-			"Declare the contract as an exported interface and pass its name: defineServices<AppServices>().",
+			`${kind.noun} ${type.getText()} is not a named interface or type.`,
+			`Declare ${kind.subject} as an exported interface and pass its name: ${kind.usage}.`,
 		);
 	}
 
@@ -411,14 +457,14 @@ function serviceContract(
 
 	if (!declaration) {
 		return unresolved(
-			`Service contract ${name} cannot be resolved to an interface or object type.`,
-			"Declare the contract in a project module, or import it through a relative import.",
+			`${kind.noun} ${name} cannot be resolved to an interface or object type.`,
+			`Declare ${kind.subject} in a project module, or import it through a relative import.`,
 		);
 	}
 
 	if (!declaration.exportedName) {
 		return unresolved(
-			`Service contract ${name} in ${declaration.file} is not exported, so generated types cannot reference it.`,
+			`${kind.noun} ${name} in ${declaration.file} is not exported, so generated types cannot reference it.`,
 			`Export ${name} from ${declaration.file}.`,
 		);
 	}
@@ -431,7 +477,7 @@ function serviceContract(
 				{
 					code: "ROUTA_SERVICES_CONTRACT_UNSUPPORTED",
 					severity: "error",
-					message: `Service contract ${name} ${members.problems.join("; ")}.`,
+					message: `${kind.noun} ${name} ${members.problems.join("; ")}.`,
 					file: declaration.file,
 					suggestion:
 						"Declare each service as a required property with a plain name, directly in an interface or object type, without index signatures or extends.",

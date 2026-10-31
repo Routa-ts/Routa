@@ -289,8 +289,10 @@ handler concern, not a reject.
 A middleware reference could not be resolved statically, usually because the array spreads
 another array or computes an entry.
 
-**Fix:** list each middleware as a direct identifier of a `createMiddleware` export.
-Unresolvable middleware would run without contract checks, so Routa refuses it.
+**Fix:** list each middleware as a direct identifier of a `createMiddleware` export, or of a
+typed helper's, such as `defineRateLimitMiddleware({ ... })` where the helper is a `const` or
+relative import bound to `createMiddleware<Requirements>()`. Unresolvable middleware would run
+without contract checks, so Routa refuses it.
 
 ### `ROUTA_MIDDLEWARE_PROVIDES_UNRESOLVED`
 
@@ -340,17 +342,18 @@ no visible `services` member after it, reports the same warning for that scope. 
 
 ### `ROUTA_SERVICES_CONTRACT_UNRESOLVED`
 
-The contract passed to `defineServices` is an inline type, cannot be found, or is not
-exported, so generated types cannot reference it.
+The contract passed to `defineServices`, or the requirement interface passed to
+`createMiddleware<Requirements>()`, is an inline type, cannot be found, or is not exported, so
+generated types cannot reference it.
 
-**Fix:** declare the contract as an exported `interface` in a project module and pass its
-name.
+**Fix:** declare the contract or requirement as an exported `interface` in a project module
+and pass its name.
 
 ### `ROUTA_SERVICES_CONTRACT_UNSUPPORTED`
 
-The contract is not a fixed set of required services: it has an optional member, an index
-signature, a computed name, type parameters, or an `extends` clause, or it is not an object
-type.
+The contract or requirement interface is not a fixed set of required services: it has an
+optional member, an index signature, a computed name, type parameters, or an `extends` clause,
+or it is not an object type.
 
 **Fix:** list each service directly as a required, plainly named property.
 
@@ -361,6 +364,24 @@ file, or a method and the application or its route file. One would hide the othe
 `ctx.services`.
 
 **Fix:** rename one of the services. Unrelated route files and methods may reuse a name.
+
+### `ROUTA_SERVICES_UNAVAILABLE`
+
+A middleware's `requiresServices` names a service that no scope declares before the
+middleware runs on that route. Filesystem middleware sees application services, route-file
+middleware also sees the route file's services, and method middleware also sees the method's.
+A service that only a later factory of the same request builds is still unavailable, and the
+message names that factory.
+
+```txt
+ROUTA_SERVICES_UNAVAILABLE: src/routes/middleware.ts: Filesystem middleware withRateLimit requires service "limiter", which /orders does not provide before it runs. The route file's services declare it, but their factory runs after this middleware.
+Suggestion: Filesystem middleware sees only application services. Declare "limiter" in the application services, or move the middleware into a route file or method that declares it.
+```
+
+**Fix:** declare the service in a scope that runs before the middleware, or move the
+middleware to a placement that has it. A service that exists with an incompatible type is a
+TypeScript error at that placement's line in `.routa/routes.gen.ts`; see
+[Valid and Invalid Placements](/docs/concepts/services/#valid-and-invalid-placements).
 
 ## Deprecation
 
@@ -531,6 +552,7 @@ in the OpenAPI commands rather than during route validation:
 | `Outcome "…" on … is declared by … and by …`                            | A route outcome and a reject, or two rejects, share a name |
 | `Duplicate route registration: …`                                       | The same method and path registered twice at runtime       |
 | `Middleware requires ctx.… but it was not provided.`                    | A required context key was missing at request time         |
+| `Middleware … on … requires service "…", but ctx.services does not …`   | A required service was missing at request time             |
 | `… provides ctx.services, which Routa reserves …`                       | A `provides` schema cast past TypeScript names `services`  |
 | `src/routa.ts configures services that routa generate could not read …` | A spread or computed config hides `services`               |
 | `.routa/routes.gen.ts declares application services, but …`             | Metadata is stale after removing `services`; regenerate    |

@@ -299,16 +299,19 @@ export default route({
 function createMiddleware<TRequires, TProvides, TRejects, TInput>(
 	contract: MiddlewareContract<TRequires, TProvides, TRejects, TInput>,
 ): MiddlewareContract<TRequires, TProvides, TRejects, TInput>
+
+function createMiddleware<Requirements>(): MiddlewareHelper<Requirements>
 ```
 
-| Field      | Type                                                                    | Purpose                                 |
-| ---------- | ----------------------------------------------------------------------- | --------------------------------------- |
-| `requires` | `readonly string[]`                                                     | Context keys that must already exist    |
-| `provides` | `Record<string, ZodType>`                                               | Context keys this middleware adds       |
-| `rejects`  | `Record<string, { status; description?; schema?; headers?; cookies? }>` | Early responses it can return           |
-| `input`    | Same shape as a route `input`                                           | Request data the middleware needs       |
-| `openapi`  | `{ security?, permissions? }`                                           | Metadata emitted into generated OpenAPI |
-| `run`      | `({ input, ctx, next }) => …`                                           | The implementation                      |
+| Field              | Type                                                                    | Purpose                                        |
+| ------------------ | ----------------------------------------------------------------------- | ---------------------------------------------- |
+| `requires`         | `readonly string[]`                                                     | Context keys that must already exist           |
+| `requiresServices` | `readonly (keyof Requirements)[]`                                       | Helper form only: every requirement name, once |
+| `provides`         | `Record<string, ZodType>`                                               | Context keys this middleware adds              |
+| `rejects`          | `Record<string, { status; description?; schema?; headers?; cookies? }>` | Early responses it can return                  |
+| `input`            | Same shape as a route `input`                                           | Request data the middleware needs              |
+| `openapi`          | `{ security?, permissions? }`                                           | Metadata emitted into generated OpenAPI        |
+| `run`              | `({ input, ctx, next }) => …`                                           | The implementation                             |
 
 `run` either returns one of its own reject outcomes or returns `next(providedCtx)`. `next()`
 resolves to an opaque `MiddlewareContinuation`, the outcome the rest of the chain selected;
@@ -322,6 +325,15 @@ must reject the request instead.
 schema, or a value other than `next()`'s result returned after calling it, produces an
 `Invalid handler output` response. Reject statuses must be 4xx or 5xx.
 
+Called with only a type argument, `createMiddleware<Requirements>()` returns a
+`MiddlewareHelper`. The helper takes the same contract plus `requiresServices`, which must list
+exactly the interface's names, and types the callback's `ctx.services` as
+`Readonly<Requirements>`. `Requirements` follows the service contract rules: required, plainly
+named members and no index signature. The direct form has no typed `ctx.services` and rejects
+`requiresServices`. A middleware whose required service is missing from its stage's
+`ctx.services` at request time fails with the standard `500` problem before its callback runs;
+see [Middleware Service Requirements](/docs/concepts/services/#middleware-service-requirements).
+
 ```ts
 import { randomUUID } from "node:crypto";
 import { createMiddleware } from "@routa-ts/core";
@@ -330,6 +342,24 @@ import { z } from "zod";
 export const withRequestId = createMiddleware({
 	provides: { requestId: z.string().uuid() },
 	run: ({ next }) => next({ requestId: randomUUID() }),
+});
+```
+
+```ts
+import { createMiddleware } from "@routa-ts/core";
+
+export interface ClockRequirements {
+	clock: { now(): Date };
+}
+
+const defineClockMiddleware = createMiddleware<ClockRequirements>();
+
+export const withClock = defineClockMiddleware({
+	requiresServices: ["clock"],
+	run: ({ ctx, next }) => {
+		ctx.services.clock.now();
+		return next();
+	},
 });
 ```
 
@@ -402,6 +432,7 @@ call it directly in tests.
 | `routes[].contract`          | `AnyRouteContract`          | The `createRoute` result                            |
 | `routes[].createContext`     | `() => object`              | Optional base context, must return a plain object   |
 | `routes[].services`          | `RouteServices`             | Optional `routeFile` and `method` request services  |
+| `routes[].middlewareNames`   | `readonly string[]`         | Names each middleware of the chain in messages      |
 | `options.logger`             | `RoutaLogger`               | Enables `http.request` and `http.error` logging     |
 | `options.lifecycleHeaders`   | `boolean`                   | Emit `Deprecation`, `Sunset`, and `Link`            |
 | `options.responseValidation` | `"development" \| "always"` | Response schema policy; defaults to `"development"` |
@@ -416,6 +447,10 @@ Each `RouteServices` entry is a `RequestServicesDeclaration`: the `factory`, its
 before the factory. Registration also throws when `after` falls outside the chain, when
 method services run before route-file services, or when the application, route-file, and
 method services share a name.
+
+`middlewareNames` lists a name for each entry of `contract.middleware`, in order. The CLI
+runtime passes the export names `routa generate` read. A middleware without a name appears in
+messages as `middleware[i]`.
 
 ```ts
 import { createHonoApp } from "@routa-ts/core/hono";
@@ -604,7 +639,7 @@ type UsersRouteConfig = RouteRootConfigForCtx<{
 `RouteRun`, `RouteHandlerArgs`, `ResponseBuilders`, `RoutaResult`, `RouteRunResult`, `InferInput`,
 `InferResponse`, `SchemaInput`, `SchemaOutput`, `RoutaRouteContext`, `RoutaConfig`,
 `ResponseValidation`, `ApplicationServicesFactory`, `ApplicationServicesContext`, `OnCleanup`,
-`RequestServicesFactory`, `RequestServicesContext`, `ServicesHelper`,
+`RequestServicesFactory`, `RequestServicesContext`, `ServicesHelper`, `MiddlewareHelper`,
 `RouteDeprecation`, `RouteDeprecationReplacement`, `RegisteredRoutePath`,
 `ExternalApiUrl`, `ContextualRouteContract`, `RouteRootConfigForCtx`, `MiddlewareContract`,
 `AnyMiddlewareContract`, `MiddlewareRun`,

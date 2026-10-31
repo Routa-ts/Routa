@@ -63,7 +63,8 @@ export type RuntimeRouteContract = AnyRouteContract & {
 	middleware?: readonly RuntimeMiddlewareContract[];
 };
 
-type RuntimeMiddlewareContract = MiddlewareContract & {
+type RuntimeMiddlewareContract = Omit<MiddlewareContract, "requiresServices"> & {
+	requiresServices?: readonly string[];
 	run?: (args: {
 		input: Record<string, unknown>;
 		ctx: Record<string, unknown>;
@@ -81,6 +82,10 @@ type RequestExecutorOptions = {
 	services?: ServiceMapping | undefined;
 	/** The route file's, then the method's, request-scoped services. */
 	requestServices?: readonly RequestScope[] | undefined;
+	/** Names the route in messages, such as `GET /orders`. */
+	route?: string | undefined;
+	/** Names each middleware in messages, such as `withCache`, in chain order. */
+	middlewareNames?: readonly string[] | undefined;
 };
 
 /** A request-scoped services factory, with the name messages use for it. */
@@ -132,6 +137,8 @@ export function createRequestExecutor(
 			inputReader,
 			options.logger,
 			{ scopes: options.requestServices ?? [], constructed },
+			(index) =>
+				`${options.middlewareNames?.[index] ?? `middleware[${index}]`}${options.route ? ` on ${options.route}` : ""}`,
 			(produced) =>
 				finalizeResponse(validateResult(produced, options.validateResponses), lifecycle),
 		);
@@ -183,6 +190,7 @@ export function createRequestExecutor(
  * @param first - The context and services the first middleware sees
  * @param inputReader - Reader used to parse middleware-specific input
  * @param requestServices - The request-scoped factories, and the cleanup scopes of those started
+ * @param label - Names the middleware at an index, and its route, in messages
  * @param select - Turns the result that ends the request into its response
  * @returns The response of the selected outcome
  */
@@ -193,6 +201,7 @@ async function runWithMiddleware(
 	inputReader: RequestInputReader,
 	logger: RoutaLogger,
 	requestServices: { scopes: readonly RequestScope[]; constructed: CleanupScope[] },
+	label: (index: number) => string,
 	select: (produced: ProducedResult) => Response,
 ): Promise<Response> {
 	const middleware = contract.middleware ?? [];
@@ -264,6 +273,7 @@ async function runWithMiddleware(
 		}
 
 		assertMiddlewareRequires(item.requires, ctx);
+		assertMiddlewareServices(item.requiresServices, services, label(index));
 
 		let nextCalled = false;
 		let downstream: Response | undefined;
@@ -443,6 +453,29 @@ function assertMiddlewareRequires(
 		if (!(key in ctx)) {
 			throw new Error(`Middleware requires ctx.${key}, but it was not provided.`);
 		}
+	}
+}
+
+/**
+ * Ensures the services a middleware requires are on its stage's `ctx.services` before it runs.
+ * Only names are checked, not the services' members. `routa check` reports the same placement
+ * problem from source; this covers metadata or contracts that bypassed it.
+ *
+ * @param requires - The services the middleware declares in `requiresServices`
+ * @param services - The services its stage exposes
+ * @param label - Names the middleware and its route in the message
+ */
+function assertMiddlewareServices(
+	requires: readonly string[] | undefined,
+	services: ServiceMapping | undefined,
+	label: string,
+): void {
+	const missing = (requires ?? []).find((name) => !services || !Object.hasOwn(services, name));
+
+	if (missing !== undefined) {
+		throw new Error(
+			`Middleware ${label} requires service ${JSON.stringify(missing)}, but ctx.services does not provide it where the middleware runs. Declare ${JSON.stringify(missing)} in a services scope that runs before the middleware.`,
+		);
 	}
 }
 

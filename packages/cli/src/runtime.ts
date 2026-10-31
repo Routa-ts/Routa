@@ -232,13 +232,10 @@ export async function loadRoutes(cwd: string, runtimeRoot = cwd): Promise<HonoRo
 
 			// Metadata is loaded from a generated file, so guard shapes written
 			// by older generators that omitted middleware fields.
-			const fileMiddleware = await loadFileMiddleware(
-				cwd,
-				runtimeRoot,
-				route.file,
-				route.methodMiddleware?.[key] ?? route.middleware ?? [],
-			);
+			const chainMetadata = route.methodMiddleware?.[key] ?? route.middleware ?? [];
+			const fileMiddleware = await loadFileMiddleware(cwd, runtimeRoot, route.file, chainMetadata);
 			const routeMiddleware = routeConfig.middleware ?? [];
+			const middleware = [...fileMiddleware, ...routeMiddleware, ...(contract.middleware ?? [])];
 			const methodServices = pairServices(
 				contract.services,
 				route.services?.methods?.[key]?.names,
@@ -252,10 +249,12 @@ export async function loadRoutes(cwd: string, runtimeRoot = cwd): Promise<HonoRo
 			routes.push({
 				method: key as HonoRoute["method"],
 				path: route.path,
-				contract: {
-					...contract,
-					middleware: [...fileMiddleware, ...routeMiddleware, ...(contract.middleware ?? [])],
-				},
+				contract: { ...contract, middleware },
+				// The metadata lists the same chain in the same order unless it is stale, when
+				// messages fall back to positions instead of naming the wrong middleware.
+				...(chainMetadata.length === middleware.length && {
+					middlewareNames: chainMetadata.map((item) => item.name),
+				}),
 				...((routeFileServices || methodServices) && {
 					services: <NonNullable<HonoRoute["services"]>>{
 						// The route file's factory follows the filesystem middleware; the method's also
