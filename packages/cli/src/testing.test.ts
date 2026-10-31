@@ -352,6 +352,44 @@ describe("generated test applications", () => {
 		expect(events).toEqual([]);
 	}, 30_000);
 
+	it("types a separately declared production factory with the generated contract type", async () => {
+		const cwd = scopedProject({
+			"src/reports/services.ts": `import { defineServices } from "@routa-ts/core";
+import type { ServicesFactory } from "../../.routa/testing.gen.js";
+
+export interface ReportsServices {
+\treports: { title(): string };
+}
+
+export const defineReportsServices = defineServices<ReportsServices>();
+
+// Declared apart from its route, so it names its scope's factory type.
+export const reportsServices: ServicesFactory<"/reports"> = ({ ctx }) => ({
+\treports: { title: () => \`weekly for \${ctx.requestId} at \${ctx.services.clock.now()}\` },
+});
+`,
+			"src/routes/reports/route.ts": `import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+import { defineReportsServices, reportsServices } from "../../reports/services.js";
+
+export default createRouteRoot("/reports")({
+\tservices: defineReportsServices(reportsServices),
+\tget: createRoute({
+\t\tresponses: { ok: { status: 200, schema: z.string() } },
+\t\trun: ({ ctx }) => ({ type: "ok", data: ctx.services.reports.title() }),
+\t}),
+});
+`,
+		});
+		expectPassed(await run(["check"], { cwd }));
+		resetEvents();
+		const { createTestApp } = await importTesting(cwd);
+		const app = await createTestApp();
+
+		expect(await (await app.request("/reports")).json()).toBe("weekly for req-1 at production");
+		await app.dispose();
+	}, 30_000);
+
 	describe("lifecycle", () => {
 		type OnCleanup = (callback: () => unknown) => void;
 		type Factory = (context: { onCleanup: OnCleanup }) => unknown;
