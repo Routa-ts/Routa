@@ -155,15 +155,17 @@ function pairServices(
 		return undefined;
 	}
 
+	const configured = where.scope === "application services" ? "services" : where.scope;
+
 	if (typeof factory !== "function") {
 		throw new TypeError(
-			`${where.file} configures ${where.scope === "application services" ? "services" : where.scope} that are not a factory. Declare them with services: defineAppServices(factory).`,
+			`${where.file} configures ${configured} that are not a factory. ${where.declare}.`,
 		);
 	}
 
 	if (!names) {
 		throw new Error(
-			`${where.file} configures ${where.scope === "application services" ? "services" : where.scope} that routa generate could not read from source, so Routa cannot check them. ${where.declare}, then run routa generate.`,
+			`${where.file} configures ${configured} that routa generate could not read from source, so Routa cannot check them. ${where.declare}, then run routa generate.`,
 		);
 	}
 
