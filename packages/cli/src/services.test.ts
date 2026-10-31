@@ -1627,6 +1627,38 @@ export const withLedger = createMiddleware<LedgerRequirements>()({
 		]);
 	});
 
+	it("reports helper-form middleware that claims ctx.services", () => {
+		const cwd = requirementsProject({
+			"src/routes/middleware.ts": `import { z } from "zod";
+import { defineClockMiddleware } from "../requirements.js";
+
+export const withTime = defineClockMiddleware({
+\trequiresServices: ["clock"],
+\tprovides: { services: z.string() },
+\trun: ({ next }) => next({ services: "fake" }),
+});
+`,
+		});
+
+		expect(
+			validateProject(cwd, { write: false }).diagnostics.map(({ code, message }) => ({
+				code,
+				message,
+			})),
+		).toEqual([
+			{
+				code: "ROUTA_CONTEXT_RESERVED",
+				message:
+					"Middleware withTime provides ctx.services, which Routa reserves for injected services.",
+			},
+			{
+				code: "ROUTA_CONTEXT_RESERVED",
+				message:
+					"Middleware withTime passes ctx.services to next(), which Routa reserves for injected services.",
+			},
+		]);
+	});
+
 	it("reports requirement interfaces it cannot resolve or read", () => {
 		const diagnostics = (requirement: string, declarations = "") =>
 			validateProject(

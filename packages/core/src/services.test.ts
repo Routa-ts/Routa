@@ -503,7 +503,22 @@ describe("middleware service requirements (types)", () => {
 			});
 			createMiddleware<CacheRequirements>()({
 				requiresServices: ["clock", "cache"],
-				run: ({ next }) => next(),
+				requires: ["tenant"],
+				run: ({ ctx, next }) => {
+					void ctx.tenant;
+					// @ts-expect-error Only the required context is visible, as with the direct form.
+					void ctx.requestId;
+					return next();
+				},
+			});
+			createMiddleware({
+				requires: ["tenant"],
+				run: ({ ctx, next }) => {
+					void ctx.tenant;
+					// @ts-expect-error Only the required context is visible.
+					void ctx.requestId;
+					return next();
+				},
 			});
 
 			createRoute({
