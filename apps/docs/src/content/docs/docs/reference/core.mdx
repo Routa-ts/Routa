@@ -12,12 +12,12 @@ than bundled.
 
 <PackageManagers type="add" args="@routa-ts/core hono zod" />
 
-| Entry point                    | Contents                                                                                                              |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| `@routa-ts/core`               | `createRouta`, `createRoute`, `createRouteRoot`, `createRouteRootFactory`, `createMiddleware`, and the contract types |
-| `@routa-ts/core/hono`          | `createHonoApp`, `isBodylessStatus`                                                                                   |
-| `@routa-ts/core/logger`        | `createLogger` and the logger types                                                                                   |
-| `@routa-ts/core/query/helpers` | `Sort`, `Fields`                                                                                                      |
+| Entry point                    | Contents                                                                                                                                |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `@routa-ts/core`               | `createRouta`, `defineServices`, `createRoute`, `createRouteRoot`, `createRouteRootFactory`, `createMiddleware`, and the contract types |
+| `@routa-ts/core/hono`          | `createHonoApp`, `createApplication`, `isBodylessStatus`                                                                                |
+| `@routa-ts/core/logger`        | `createLogger` and the logger types                                                                                                     |
+| `@routa-ts/core/query/helpers` | `Sort`, `Fields`                                                                                                                        |
 
 ## `createRouta`
 
@@ -28,13 +28,14 @@ function createRouta<const TConfig extends RoutaConfig>(config: TConfig): TConfi
 Preserves an application configuration object with Routa's typing. Export the result as
 the default export of `src/routa.ts`, which the runtime imports at boot.
 
-| Option               | Type                        | Default                 |
-| -------------------- | --------------------------- | ----------------------- |
-| `host`               | `string`                    | `"127.0.0.1"`           |
-| `port`               | `number`                    | `3000`                  |
-| `logger`             | `RoutaLogger \| false`      | Built-in console logger |
-| `lifecycleHeaders`   | `boolean`                   | `false`                 |
-| `responseValidation` | `"development" \| "always"` | `"development"`         |
+| Option               | Type                         | Default                 |
+| -------------------- | ---------------------------- | ----------------------- |
+| `host`               | `string`                     | `"127.0.0.1"`           |
+| `port`               | `number`                     | `3000`                  |
+| `logger`             | `RoutaLogger \| false`       | Built-in console logger |
+| `lifecycleHeaders`   | `boolean`                    | `false`                 |
+| `responseValidation` | `"development" \| "always"`  | `"development"`         |
+| `services`           | `ApplicationServicesFactory` | None                    |
 
 ```ts title="src/routa.ts"
 import { createRouta } from "@routa-ts/core";
@@ -48,6 +49,40 @@ export default createRouta({
 ```
 
 See [Configuration](/docs/reference/configuration/) for environment precedence.
+
+## `defineServices`
+
+```ts
+function defineServices<TServices>(): (
+	factory: ApplicationServicesFactory<TServices>,
+) => ApplicationServicesFactory<TServices>
+```
+
+Fixes a service contract and returns a helper that checks a factory against it and returns
+the factory unchanged. `TServices` must name each service as a required property; optional
+services and index signatures are type errors.
+
+| Factory argument | Type          | Purpose                                                        |
+| ---------------- | ------------- | -------------------------------------------------------------- |
+| `logger`         | `RoutaLogger` | The configured logger, or a no-op logger when logging is off   |
+| `onCleanup`      | `OnCleanup`   | Registers a callback that releases a resource the factory owns |
+
+The factory may be sync or async and returns exactly the contract's services.
+
+```ts title="src/services.ts"
+import { defineServices } from "@routa-ts/core";
+
+export interface AppServices {
+	clock: { now(): Date };
+}
+
+export const defineAppServices = defineServices<AppServices>();
+export const appServices = defineAppServices(() => ({ clock: { now: () => new Date() } }));
+```
+
+`routa check` reports `ROUTA_SERVICES_UNRESOLVED`, `ROUTA_SERVICES_CONTRACT_UNRESOLVED`, or
+`ROUTA_SERVICES_CONTRACT_UNSUPPORTED` for a declaration it cannot read. See
+[Application services](/docs/concepts/services/).
 
 ## `createRoute`
 
@@ -374,6 +409,50 @@ import route from "./routes/users/route.js";
 const app = createHonoApp([{ method: "post", path: "/users", contract: route.post }]);
 ```
 
+## `createApplication`
+
+```ts
+function createApplication(
+	routes: readonly HonoRoute[],
+	options?: CreateApplicationOptions,
+): Promise<RoutaApplication>
+```
+
+Creates one application instance. It runs the services factory once, checks the returned
+names, and registers the routes with the services exposed as `ctx.services`. `routa dev` and
+`routa start` call it for you.
+
+| Option             | Type                         | Purpose                                                          |
+| ------------------ | ---------------------------- | ---------------------------------------------------------------- |
+| `services.factory` | `ApplicationServicesFactory` | The factory from `createRouta`                                   |
+| `services.names`   | `readonly string[]`          | The contract's names, as generated in `routaApplicationServices` |
+| Every other option | `CreateHonoAppOptions`       | Same as `createHonoApp`                                          |
+
+The instance has two members:
+
+| Member    | Type                                      | Behavior                                                                                                                                                          |
+| --------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fetch`   | `(request: Request) => Promise<Response>` | Handles one request. Rejects once disposal has started                                                                                                            |
+| `dispose` | `() => Promise<void>`                     | Stops accepting requests, waits for accepted ones, then runs cleanup once. Repeated calls share one outcome; rejects with an `AggregateError` when cleanup failed |
+
+`dispose` sets no deadline: a request or callback that never settles keeps it pending.
+
+```ts
+import { createApplication } from "@routa-ts/core/hono";
+import route from "./routes/time/route.js";
+
+const app = await createApplication([{ method: "get", path: "/time", contract: route.get }], {
+	services: { names: ["clock"], factory: () => ({ clock: { now: () => new Date(0) } }) },
+});
+
+const response = await app.fetch(new Request("http://localhost/time"));
+await app.dispose();
+```
+
+It rejects with the factory's error after running the factory's registered cleanup, with a
+`TypeError` when the returned names differ from `services.names`, and with any
+`createHonoApp` registration error after releasing the services.
+
 ## `isBodylessStatus`
 
 ```ts
@@ -509,7 +588,8 @@ type UsersRouteConfig = RouteRootConfigForCtx<{
 `HttpMethod`, `RouteInput`, `RouteOutcome`, `RouteResponses`, `OutcomeResult`, `ResponseChecks`, `RouteContract`, `AnyRouteContract`,
 `RouteRun`, `RouteHandlerArgs`, `ResponseBuilders`, `RoutaResult`, `RouteRunResult`, `InferInput`,
 `InferResponse`, `SchemaInput`, `SchemaOutput`, `RoutaRouteContext`, `RoutaConfig`,
-`ResponseValidation`, `RouteDeprecation`, `RouteDeprecationReplacement`, `RegisteredRoutePath`,
+`ResponseValidation`, `ApplicationServicesFactory`, `ApplicationServicesContext`, `OnCleanup`,
+`RouteDeprecation`, `RouteDeprecationReplacement`, `RegisteredRoutePath`,
 `ExternalApiUrl`, `ContextualRouteContract`, `RouteRootConfigForCtx`, `MiddlewareContract`,
 `AnyMiddlewareContract`, `MiddlewareRun`,
 `MiddlewareRunArgs`, `MiddlewareNext`, `MiddlewareContinuation`, `MiddlewareProvidesSpec`, `MiddlewareProvidesKeys`,
@@ -517,7 +597,8 @@ type UsersRouteConfig = RouteRootConfigForCtx<{
 `MiddlewareRejectResult`, `MiddlewareOpenApi`, `InferMiddlewareCtx`, `CookieConfig`,
 `CookieHandle`, `CookieEffect`, `CookieSameSite`, `RequiredCookie`, `AnyCookie`, and `Register`.
 
-From `@routa-ts/core/hono`: `HonoRoute`, `CreateHonoAppOptions`. From
+From `@routa-ts/core/hono`: `HonoRoute`, `CreateHonoAppOptions`, `CreateApplicationOptions`,
+`ApplicationServicesDeclaration`, `RoutaApplication`. From
 `@routa-ts/core/logger`: `RoutaLogger`, `RoutaLogLevel`, `RoutaLogLevelWithSilent`,
 `RoutaLogEvent`, `RoutaLogData`, `CreateLoggerOptions`.
 

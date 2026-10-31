@@ -8,8 +8,16 @@ import {
 } from "./request-execution.js";
 import { cookieDeclarationProblem, cookieScopeWarnings } from "./response-cookies.js";
 import { headerDeclarationProblem, lifecycleOwnedHeaders } from "./response-headers.js";
+import {
+	type ApplicationServicesDeclaration,
+	constructServices,
+	createCleanupScope,
+	logCleanupFailure,
+	type ServiceMapping,
+} from "./services.js";
 
 export { isBodylessStatus };
+export type { ApplicationServicesDeclaration };
 
 type RuntimeMode = "dev" | "start";
 
@@ -29,6 +37,78 @@ export type CreateHonoAppOptions = {
 	runtimeMode?: RuntimeMode;
 };
 
+export type CreateApplicationOptions = CreateHonoAppOptions & {
+	/** The `services` factory from `createRouta` and the names its contract declares. */
+	services?: ApplicationServicesDeclaration;
+};
+
+/** One application instance: its routes, its application services, and their cleanup. */
+export type RoutaApplication = {
+	/** Handles one request. Rejects once disposal has started. */
+	readonly fetch: (request: Request) => Promise<Response>;
+	/**
+	 * Stops accepting requests, waits for accepted ones to settle, then releases application
+	 * services once. Repeated and concurrent calls share one outcome. It rejects, after every
+	 * cleanup callback has been attempted, when any of them failed. It sets no deadline: a request
+	 * or callback that never settles keeps disposal pending.
+	 */
+	readonly dispose: () => Promise<void>;
+};
+
+/**
+ * Creates an application instance: it runs the application services factory once, then
+ * registers the routes with the services exposed as `ctx.services`.
+ *
+ * A factory failure rejects with the factory's error after the cleanup it registered has run.
+ * A route registration failure releases the constructed services and rejects with the
+ * registration error. Cleanup failures on these paths are logged and never replace the error.
+ *
+ * @param routes - Route definitions to register
+ * @returns The application instance, once its services are constructed
+ */
+export async function createApplication(
+	routes: readonly HonoRoute[],
+	options: CreateApplicationOptions = {},
+): Promise<RoutaApplication> {
+	const { services: declaration, ...appOptions } = options;
+	const logger = appOptions.logger ?? createLogger({ enabled: false });
+	const scope = createCleanupScope();
+	const services = declaration && (await constructServices(declaration, scope, logger));
+	let app: Hono;
+
+	try {
+		app = honoApp(routes, appOptions, services);
+	} catch (error) {
+		await scope.release().catch((cleanupError: unknown) => logCleanupFailure(logger, cleanupError));
+		throw error;
+	}
+
+	const accepted = new Set<Promise<Response>>();
+	let disposal: Promise<void> | undefined;
+
+	return Object.freeze({
+		fetch: async (request: Request) => {
+			if (disposal) {
+				throw new Error("This Routa application is being disposed, so it accepts no new requests.");
+			}
+
+			const response = Promise.resolve(app.fetch(request));
+			accepted.add(response);
+
+			try {
+				return await response;
+			} finally {
+				accepted.delete(response);
+			}
+		},
+		dispose: () =>
+			(disposal ??= (async () => {
+				await Promise.allSettled(accepted);
+				await scope.release();
+			})()),
+	});
+}
+
 /**
  * Creates a Hono app for the provided routes.
  *
@@ -38,6 +118,14 @@ export type CreateHonoAppOptions = {
 export function createHonoApp(
 	routes: readonly HonoRoute[],
 	options: CreateHonoAppOptions = {},
+): Hono {
+	return honoApp(routes, options, undefined);
+}
+
+function honoApp(
+	routes: readonly HonoRoute[],
+	options: CreateHonoAppOptions,
+	services: ServiceMapping | undefined,
 ): Hono {
 	const app = new Hono();
 	const methodsByPath = new Map<string, Set<string>>();
@@ -100,6 +188,7 @@ export function createHonoApp(
 			routeLogger,
 		);
 		assertUniqueOutcomeNames(contract, route.path, method);
+		assertReservedContext(contract, routeKey);
 
 		const methods = methodsByPath.get(route.path) ?? new Set<string>();
 		methods.add(method);
@@ -112,6 +201,7 @@ export function createHonoApp(
 			lifecycleHeaders: options.lifecycleHeaders,
 			requestLogger: options.logger,
 			createContext: route.createContext,
+			services,
 		});
 
 		app.on(honoMethod, route.path, async (context, next) => {
@@ -267,6 +357,20 @@ function outcomeProblem(
 	}
 
 	return undefined;
+}
+
+/**
+ * Rejects middleware that provides `ctx.services`, which Routa reserves for injected services.
+ * TypeScript and `routa check` report the same rule; this covers contracts typed through `any`.
+ */
+function assertReservedContext(contract: RuntimeRouteContract, label: string): void {
+	for (const [index, item] of (contract.middleware ?? []).entries()) {
+		if (item.provides && Object.hasOwn(item.provides, "services")) {
+			throw new Error(
+				`middleware[${index}] on ${label} provides ctx.services, which Routa reserves for injected services. Rename the provided key.`,
+			);
+		}
+	}
 }
 
 /**

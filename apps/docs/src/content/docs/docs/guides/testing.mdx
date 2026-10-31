@@ -119,12 +119,13 @@ openapi:check`} />
 
 ## Troubleshooting
 
-| Problem                                  | Fix                                                                                                                       |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Imports fail with `ERR_MODULE_NOT_FOUND` | Use `.js` extensions in relative imports. Generated projects are ESM.                                                     |
-| A handler test cannot construct `ctx`    | Pass the keys the route's middleware provides, plus a logger. `createLogger({ enabled: false })` keeps test output clean. |
-| Type errors on `route.get.run`           | Metadata is stale. Run `routa generate`.                                                                                  |
-| Vitest picks up files under `.routa/`    | Generated metadata contains no tests; narrow `include` in the Vitest config if a glob is too broad.                       |
+| Problem                                  | Fix                                                                                                                               |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Imports fail with `ERR_MODULE_NOT_FOUND` | Use `.js` extensions in relative imports. Generated projects are ESM.                                                             |
+| A handler test cannot construct `ctx`    | Pass the keys the route's middleware provides, plus a logger. `createLogger({ enabled: false })` keeps test output clean.         |
+| A handler reads `ctx.services`           | Pass `services` in `ctx` with test implementations of the contract, or build the app with `createApplication` and a test factory. |
+| Type errors on `route.get.run`           | Metadata is stale. Run `routa generate`.                                                                                          |
+| Vitest picks up files under `.routa/`    | Generated metadata contains no tests; narrow `include` in the Vitest config if a glob is too broad.                               |
 
 <Aside type="caution" title="v0 status">
 	Schema, handler, and HTTP-boundary testing are implemented with public APIs in v0. A

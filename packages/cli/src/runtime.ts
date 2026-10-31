@@ -3,50 +3,89 @@
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { serve } from "@hono/node-server";
-import { createHonoApp, type HonoRoute } from "@routa-ts/core/hono";
+import {
+	type ApplicationServicesDeclaration,
+	createApplication,
+	type HonoRoute,
+	type RoutaApplication,
+} from "@routa-ts/core/hono";
 import { createLogger } from "@routa-ts/core/logger";
 import type { MiddlewareMetadata, RouteMetadata } from "./project.js";
+
+type RoutaLogger = ReturnType<typeof createLogger>;
 
 type RoutaConfig = {
 	host?: string;
 	port?: number;
-	logger?: ReturnType<typeof createLogger> | false;
+	logger?: RoutaLogger | false;
 	lifecycleHeaders?: boolean;
 	responseValidation?: "development" | "always";
+	services?: unknown;
 };
 
 type RuntimeMode = "dev" | "start";
 
+type MetadataModule = {
+	routaRoutes: readonly RouteMetadata[];
+	routaApplicationServices?: readonly string[];
+};
+
+/** A project's application instance, with the configuration and logger it was built from. */
+export type ProjectApplication = {
+	application: RoutaApplication;
+	config: RoutaConfig;
+	logger: RoutaLogger | undefined;
+	routes: readonly HonoRoute[];
+};
+
 /**
  * Starts the Routa API server for a working directory.
+ *
+ * Application services are constructed before the server listens. When the listener fails to
+ * start, the services are released and the listener failure stays the reported error.
  *
  * @param cwd - The working directory that contains the Routa project files.
  * @param runtimeRoot - The directory containing source or compiled runtime modules.
  * @param runtimeMode - The explicit `dev` or `start` command mode.
+ * @throws When the services factory fails, or the listen options are invalid
  */
 export async function startRuntime(
 	cwd: string,
 	runtimeRoot: string,
 	runtimeMode: RuntimeMode,
 ): Promise<void> {
-	const routes = await loadRoutes(cwd, runtimeRoot);
-	const routa = await loadRoutaConfig(cwd, runtimeRoot);
-	const logger = routa.logger === false ? undefined : (routa.logger ?? createLogger());
-	const app = createHonoApp(routes, {
+	const { application, config, logger, routes } = await createProjectApplication(
+		cwd,
+		runtimeRoot,
 		runtimeMode,
-		...(logger && { logger }),
-		...(routa.lifecycleHeaders !== undefined && { lifecycleHeaders: routa.lifecycleHeaders }),
-		...(routa.responseValidation && { responseValidation: routa.responseValidation }),
-	});
-	const hostname = process.env.HOST ?? routa.host ?? "127.0.0.1";
-	const port = Number(process.env.PORT ?? routa.port ?? 3000);
-	const server = serve({ fetch: app.fetch, hostname, port }, () => {
-		logger?.info("api.started", "Routa API started.", {
-			host: hostname,
-			port,
-			routes: routes.length,
+	);
+	const hostname = process.env.HOST ?? config.host ?? "127.0.0.1";
+	const port = Number(process.env.PORT ?? config.port ?? 3000);
+	// No request was accepted when the listener fails, so the services can be released at once.
+	const release = () =>
+		application.dispose().catch((cleanupError: unknown) => {
+			logger?.error("services.cleanup_failed", "Application service cleanup failed.", {
+				failures: (cleanupError instanceof AggregateError
+					? cleanupError.errors
+					: [cleanupError]
+				).map((failure: unknown) => (failure instanceof Error ? failure.message : String(failure))),
+			});
 		});
-	});
+	let server: ReturnType<typeof serve>;
+
+	try {
+		server = serve({ fetch: application.fetch, hostname, port }, () => {
+			logger?.info("api.started", "Routa API started.", {
+				host: hostname,
+				port,
+				routes: routes.length,
+			});
+		});
+	} catch (error) {
+		// An invalid listen option, such as a port out of range, throws before listening.
+		await release();
+		throw error;
+	}
 
 	server.once("error", (error) => {
 		logger?.error("api.start_failed", "Routa API failed to start.", {
@@ -55,7 +94,73 @@ export async function startRuntime(
 			port,
 		});
 		process.exitCode = 1;
+		void release();
 	});
+}
+
+/**
+ * Builds a project's application instance without listening: it loads the generated route
+ * metadata, route modules, and `src/routa.ts`, then constructs the application services.
+ *
+ * @param cwd - The working directory that contains the Routa project files.
+ * @param runtimeRoot - The directory containing source or compiled runtime modules.
+ * @param runtimeMode - The explicit `dev` or `start` command mode.
+ * @throws When `src/routa.ts` and the generated metadata disagree about application services,
+ *   or when the services factory fails
+ */
+export async function createProjectApplication(
+	cwd: string,
+	runtimeRoot: string,
+	runtimeMode: RuntimeMode,
+): Promise<ProjectApplication> {
+	const routes = await loadRoutes(cwd, runtimeRoot);
+	const metadata = await loadMetadata(cwd, runtimeRoot);
+	const config = await loadRoutaConfig(cwd, runtimeRoot);
+	const logger = config.logger === false ? undefined : (config.logger ?? createLogger());
+	const services = servicesDeclaration(config.services, metadata.routaApplicationServices);
+	const application = await createApplication(routes, {
+		runtimeMode,
+		...(logger && { logger }),
+		...(config.lifecycleHeaders !== undefined && { lifecycleHeaders: config.lifecycleHeaders }),
+		...(config.responseValidation && { responseValidation: config.responseValidation }),
+		...(services && { services }),
+	});
+
+	return { application, config, logger, routes };
+}
+
+/**
+ * Pairs the configured services factory with the names `routa generate` read for its contract.
+ *
+ * @throws When only one side declares application services, or `services` is not a function
+ */
+function servicesDeclaration(
+	factory: unknown,
+	names: readonly string[] | undefined,
+): ApplicationServicesDeclaration | undefined {
+	if (factory === undefined) {
+		if (names) {
+			throw new Error(
+				".routa/routes.gen.ts declares application services, but src/routa.ts configures none. Run routa generate.",
+			);
+		}
+
+		return undefined;
+	}
+
+	if (typeof factory !== "function") {
+		throw new TypeError(
+			"src/routa.ts configures services that are not a factory. Declare them with services: defineAppServices(factory).",
+		);
+	}
+
+	if (!names) {
+		throw new Error(
+			"src/routa.ts configures services that routa generate could not read from source, so Routa cannot check them. Declare services in the createRouta object with defineServices<Contract>(), then run routa generate.",
+		);
+	}
+
+	return { factory: factory as ApplicationServicesDeclaration["factory"], names };
 }
 
 /**
@@ -84,11 +189,7 @@ async function loadRoutaConfig(cwd: string, runtimeRoot: string): Promise<RoutaC
  * @throws If a route file does not export a default route config or is missing a required method contract
  */
 export async function loadRoutes(cwd: string, runtimeRoot = cwd): Promise<HonoRoute[]> {
-	const metadataModule = (await import(
-		pathToFileURL(runtimePath(cwd, runtimeRoot, ".routa/routes.gen.ts")).href
-	)) as {
-		routaRoutes: readonly RouteMetadata[];
-	};
+	const metadataModule = await loadMetadata(cwd, runtimeRoot);
 	const routes: HonoRoute[] = [];
 
 	for (const route of metadataModule.routaRoutes) {
@@ -136,6 +237,12 @@ export async function loadRoutes(cwd: string, runtimeRoot = cwd): Promise<HonoRo
 	}
 
 	return routes;
+}
+
+async function loadMetadata(cwd: string, runtimeRoot: string): Promise<MetadataModule> {
+	return (await import(
+		pathToFileURL(runtimePath(cwd, runtimeRoot, ".routa/routes.gen.ts")).href
+	)) as MetadataModule;
 }
 
 /**
