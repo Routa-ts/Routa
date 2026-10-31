@@ -88,6 +88,11 @@ for (const packageName of packages) {
 	if (packageJson.includes("workspace:")) {
 		throw new Error(`${packageName} tarball contains a workspace: dependency.`);
 	}
+
+	// Lint the published metadata, then resolve the types the way Node ESM and bundlers do.
+	// The packages are ESM-only, so attw skips the CommonJS resolutions.
+	run("vp", ["exec", "publint", "run", tarball, "--strict"], root);
+	run("vp", ["exec", "attw", tarball, "--profile", "esm-only", "--format", "ascii"], root);
 }
 
 const cliTarballFiles = run("tar", ["-tf", tarballs.get("@routa-ts/cli")], root);

@@ -67,7 +67,18 @@ export default defineConfig({
 			{
 				files: ["packages/*/src/**/*.ts"],
 				excludeFiles: ["**/*.test.ts"],
-				rules: { "dependency-checks/no-extraneous-dependencies": "error" },
+				rules: {
+					"dependency-checks/no-extraneous-dependencies": "error",
+					// Committed Routa state must not depend on the host locale (ADR-0003).
+					"no-restricted-properties": [
+						"error",
+						...["localeCompare", "toLocaleLowerCase", "toLocaleUpperCase"].map((property) => ({
+							property,
+							message:
+								"This depends on the host locale. Compare by code units (`compareText`) or use toLowerCase/toUpperCase.",
+						})),
+					],
+				},
 			},
 			{
 				files: ["**/*.test.ts"],

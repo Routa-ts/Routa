@@ -102,10 +102,7 @@ export function objectLiteral(node: ts.Node | undefined): ts.ObjectLiteralExpres
 /**
  * Finds the initializer for a local variable binding.
  */
-export function localInitializer(
-	sourceFile: ts.SourceFile,
-	name: string,
-): ts.Expression | undefined {
+function localInitializer(sourceFile: ts.SourceFile, name: string): ts.Expression | undefined {
 	for (const statement of sourceFile.statements) {
 		if (!ts.isVariableStatement(statement)) {
 			continue;

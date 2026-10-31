@@ -37,7 +37,14 @@ metadata, example contracts, scaffold diagnostics, and packed-package validation
   also runs TypeScript against explicit source and test programs, plus Astro checks.
 - `vp run test` runs all framework tests with the Vitest version bundled with Vite Plus.
   Tests always execute. Use `vp exec --filter @routa-ts/core vp test watch` while working
-  on one package.
+  on one package. Each package fails below its branch-coverage floor, set in its
+  `vite.config.ts` one point under the measured value. Raise the floor when tests improve it.
+- `vp run typecheck` holds package source to `exactOptionalPropertyTypes` and
+  `noUncheckedIndexedAccess`. Test programs turn both off, so type tests compile the way a
+  generated project does.
+- Committed Routa state must not depend on the machine's locale, so Oxlint rejects
+  `localeCompare`, `toLocaleLowerCase`, and `toLocaleUpperCase` in package source. Sort
+  names with the CLI's `compareText`, which compares UTF-16 code units.
 - `vp run build:packages` builds the three published packages with `vp pack` and caches
   their `dist` outputs. Source, manifests, lockfile, and build-config changes invalidate
   the cache. The CLI also fingerprints core and creator outputs; task dependencies
@@ -63,6 +70,18 @@ Vite Plus package configs preserve the published `.js` entry points, including t
 CLI's spawned `runtime.js`. Declaration generation uses the existing TypeScript 7
 compiler through tsdown's experimental native API integration. Explicit TypeScript
 checks and `vp run pack:check` validate the resulting declarations and installed packages.
+Pack check also runs `publint --strict` and `attw --profile esm-only` on each tarball.
+
+Pull requests to `main` also get two [Fallow](https://docs.fallow.tools/) reports in their
+job summaries and one PR comment that updates on each run. The comment includes the
+commit, job results, and a link to the full reports. Long reports are shortened in the
+comment. Fork and Dependabot PRs keep reports in Actions because their tokens cannot
+write comments. Neither report blocks a merge yet. The audit lists dead code, complexity,
+duplication, and import cycles in changed files. The mutation report changes the core and
+CLI code the pull request touched and lists the changes no test catches. `.fallowrc.jsonc`
+declares the files Routa loads by convention. Run them locally with `vp exec fallow audit`
+and `vp exec fallow mutation --root packages/core`. The measurements behind these checks
+are in [Code-quality tooling for Routa](docs/quality-tooling-research.md).
 
 This tooling is for developing Routa itself. Generated projects keep their existing
 TypeScript, Biome, and Vitest scripts and dependency ranges. Astro keeps its own Vite

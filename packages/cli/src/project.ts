@@ -22,7 +22,11 @@ import {
 	routeConfigObject,
 	unwrapExpression,
 } from "./ast.js";
-import { type ContractSchemaProjection, projectContractSchemas } from "./contract-schemas.js";
+import {
+	compareText,
+	type ContractSchemaProjection,
+	projectContractSchemas,
+} from "./contract-schemas.js";
 import { operationId, toOpenApiPath } from "./operation-id.js";
 import * as ts from "./typescript.js";
 import { runTypeScript } from "./typescript-runner.js";
@@ -31,7 +35,7 @@ export type Diagnostic = {
 	code: string;
 	severity: "error" | "warning";
 	message: string;
-	file?: string;
+	file?: string | undefined;
 	routePath?: string;
 	suggestion?: string;
 };
@@ -176,8 +180,8 @@ function validateProjectInSession(
  */
 export function runProjectCheck(cwd = process.cwd()): {
 	code: number;
-	stdout?: string;
-	stderr?: string;
+	stdout?: string | undefined;
+	stderr?: string | undefined;
 } {
 	const validation = validateProject(cwd);
 	const warnings = validation.warnings.length > 0 ? [formatDiagnostics(validation.warnings)] : [];
@@ -217,8 +221,8 @@ export function runProjectCheck(cwd = process.cwd()): {
  */
 export function runProjectGenerate(cwd = process.cwd()): {
 	code: number;
-	stdout?: string;
-	stderr?: string;
+	stdout?: string | undefined;
+	stderr?: string | undefined;
 } {
 	const validation = validateProject(cwd);
 
@@ -242,8 +246,8 @@ export function runProjectGenerate(cwd = process.cwd()): {
  */
 export function runProjectBuild(cwd = process.cwd()): {
 	code: number;
-	stdout?: string;
-	stderr?: string;
+	stdout?: string | undefined;
+	stderr?: string | undefined;
 } {
 	const validation = validateProject(cwd);
 
@@ -273,7 +277,7 @@ export function runProjectBuild(cwd = process.cwd()): {
 export function runProjectRoutes(
 	argv: readonly string[] = [],
 	cwd = process.cwd(),
-): { code: number; stdout?: string; stderr?: string } {
+): { code: number; stdout?: string | undefined; stderr?: string | undefined } {
 	const format = routeReferenceFormat(argv);
 
 	if (!format) {
@@ -311,7 +315,7 @@ export function runProjectRoutes(
 export function runProjectDev(
 	argv: readonly string[] = [],
 	cwd = process.cwd(),
-): { code: number; stdout?: string; stderr?: string } {
+): { code: number; stdout?: string | undefined; stderr?: string | undefined } {
 	return runProjectServer("dev", argv, cwd);
 }
 
@@ -345,7 +349,7 @@ export function runProjectDevProcess(argv: readonly string[] = [], cwd = process
 export function runProjectStart(
 	argv: readonly string[] = [],
 	cwd = process.cwd(),
-): { code: number; stdout?: string; stderr?: string } {
+): { code: number; stdout?: string | undefined; stderr?: string | undefined } {
 	return runProjectServer("start", argv, cwd);
 }
 
@@ -361,7 +365,7 @@ function runProjectServer(
 	mode: "dev" | "start",
 	argv: readonly string[],
 	cwd: string,
-): { code: number; stdout?: string; stderr?: string } {
+): { code: number; stdout?: string | undefined; stderr?: string | undefined } {
 	const result = prepareProjectServer(mode, argv, cwd);
 
 	if (result.code !== 0 || result.print) {
@@ -383,8 +387,8 @@ function runProjectServer(
 
 type PreparedServer = {
 	code: number;
-	stdout?: string;
-	stderr?: string;
+	stdout?: string | undefined;
+	stderr?: string | undefined;
 	runtimeFile: string;
 	runtimeRoot: string;
 	useTsx: boolean;
@@ -508,7 +512,10 @@ function validateRuntimeOutput(
  *
  * @param result - The command output to write.
  */
-function writeCommandResult(result: { stdout?: string; stderr?: string }): void {
+function writeCommandResult(result: {
+	stdout?: string | undefined;
+	stderr?: string | undefined;
+}): void {
 	if (result.stdout) {
 		process.stdout.write(result.stdout);
 	}
@@ -775,7 +782,7 @@ function routeReference(routes: readonly RouteMetadata[]): RouteReference {
 	return {
 		routes: [...routes]
 			.sort(
-				(left, right) => left.path.localeCompare(right.path) || left.file.localeCompare(right.file),
+				(left, right) => compareText(left.path, right.path) || compareText(left.file, right.file),
 			)
 			.map((route) => ({
 				path: route.path,
@@ -783,7 +790,7 @@ function routeReference(routes: readonly RouteMetadata[]): RouteReference {
 				groups: route.groups,
 				segments: route.segments,
 				methods: [...route.methods]
-					.sort((left, right) => left.localeCompare(right))
+					.sort(compareText)
 					.map((method) => routeReferenceMethod(route, method)),
 			})),
 	};
@@ -895,7 +902,7 @@ function uniqueRejects(rejects: readonly MiddlewareRejectMetadata[]): Middleware
 		unique.set(reject.type, reject);
 	}
 
-	return Array.from(unique.values()).sort((left, right) => left.type.localeCompare(right.type));
+	return Array.from(unique.values()).sort((left, right) => compareText(left.type, right.type));
 }
 
 type RouteDiscovery = {
@@ -1077,7 +1084,7 @@ function parseRouteContract(
 			responseTypes: string[];
 			outcomes: ResponseOutcomeDeclaration[];
 			inputs: RouteMethodInputMetadata;
-			deprecation?: RouteDeprecationMetadata;
+			deprecation?: RouteDeprecationMetadata | undefined;
 		}
 	>;
 } {
@@ -1088,7 +1095,7 @@ function parseRouteContract(
 			responseTypes: string[];
 			outcomes: ResponseOutcomeDeclaration[];
 			inputs: RouteMethodInputMetadata;
-			deprecation?: RouteDeprecationMetadata;
+			deprecation?: RouteDeprecationMetadata | undefined;
 		}
 	> = {};
 	const sourceFile = parseTypeScriptFile(file, parser);
@@ -1243,7 +1250,7 @@ function responseTypeKeys(routeContract: ts.ObjectLiteralExpression): string[] {
 /** A named route outcome as written in source. `status` is set only for a numeric literal. */
 type ResponseOutcomeDeclaration = {
 	name: string;
-	status?: number;
+	status?: number | undefined;
 	hasSchema: boolean;
 };
 
@@ -1458,6 +1465,7 @@ function runResultShapeDiagnosticsForFile(
 			ts.isCallExpression(node)
 			&& (callName(node.expression) === "createRoute"
 				|| callName(node.expression) === "createMiddleware")
+			&& node.arguments[0] !== undefined
 			&& ts.isObjectLiteralExpression(node.arguments[0])
 		) {
 			const contract = node.arguments[0];
@@ -2271,12 +2279,7 @@ function middlewareNextContext(
 			return;
 		}
 
-		if (
-			ts.isCallExpression(node)
-			&& callName(node) === "next"
-			&& node.arguments.length > 0
-			&& ts.isExpression(node.arguments[0])
-		) {
+		if (ts.isCallExpression(node) && callName(node) === "next" && node.arguments[0] !== undefined) {
 			context = objectLiteral(node.arguments[0]);
 			return;
 		}
@@ -2374,7 +2377,11 @@ function zodType(expression: ts.Expression): string {
 		return `Array<${unwrapped.arguments[0] ? zodType(unwrapped.arguments[0]) : "unknown"}>`;
 	}
 
-	if (call === "enum" && ts.isArrayLiteralExpression(unwrapped.arguments[0])) {
+	if (
+		call === "enum"
+		&& unwrapped.arguments[0] !== undefined
+		&& ts.isArrayLiteralExpression(unwrapped.arguments[0])
+	) {
 		const values = unwrapped.arguments[0].elements.flatMap((element) => {
 			const value = unwrapExpression(element);
 			return ts.isStringLiteralLike(value) ? [JSON.stringify(value.text)] : [];
@@ -2554,8 +2561,8 @@ function parseObjectType(type: string): Record<string, string> | undefined {
 	}
 
 	const result: Record<string, string> = {};
-	for (const match of trimmed.matchAll(/readonly "([^"]+)"\??: ([^;]+);/g)) {
-		result[match[1]] = match[2];
+	for (const [, name, value] of trimmed.matchAll(/readonly "([^"]+)"\??: ([^;]+);/g)) {
+		result[name!] = value!;
 	}
 
 	return result;
@@ -3027,9 +3034,12 @@ function isExternalApiUrl(value: string): boolean {
  * @returns The generated TypeScript source.
  */
 export function routesMetadataSource(routes: RouteMetadata[]): string {
-	return `${generatedHeader}export const routaRoutes = ${JSON.stringify(routes, null, "\t")} as const;
+	const orderedRoutes = [...routes].sort(
+		(left, right) => compareText(left.path, right.path) || compareText(left.file, right.file),
+	);
+	return `${generatedHeader}export const routaRoutes = ${JSON.stringify(orderedRoutes, null, "\t")} as const;
 
-${routeContextTypes(routes)}
+${routeContextTypes(orderedRoutes)}
 `;
 }
 
@@ -3103,7 +3113,7 @@ function ctxByKeyType(routes: RouteMetadata[]): string {
 	}
 
 	return `{\n${Array.from(ctx.entries())
-		.sort(([left], [right]) => left.localeCompare(right))
+		.sort(([left], [right]) => compareText(left, right))
 		.map(([key, type]) => `\t${JSON.stringify(key)}: ${indentType(type, 1)};`)
 		.join("\n")}\n}`;
 }
@@ -3146,7 +3156,7 @@ function routeCtxTypeNameForMiddleware(route: RouteMetadata, method: string): st
 	}
 
 	return `{\n${Array.from(ctx.entries())
-		.sort(([left], [right]) => left.localeCompare(right))
+		.sort(([left], [right]) => compareText(left, right))
 		.map(([key, type]) => `\t\t\t${JSON.stringify(key)}: ${indentType(type, 3)};`)
 		.join("\n")}\n\t\t}`;
 }

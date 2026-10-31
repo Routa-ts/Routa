@@ -65,7 +65,7 @@ export type CookieEntry = {
  * TypeScript and `routa check` report the same rules earlier. `createCookie` throws this message so
  * hand-built configurations stay honest.
  */
-export function cookieConfigProblem(config: Partial<CookieConfig>): string | undefined {
+function cookieConfigProblem(config: Partial<CookieConfig>): string | undefined {
 	const { name, domain, path, maxAge, expires } = config;
 
 	if (typeof name !== "string" || !cookieNamePattern.test(name)) {
@@ -154,8 +154,9 @@ export function defineCookie<const TConfig extends CookieConfig>(config: TConfig
 		);
 	}
 
+	const base: CookieConfig = config;
 	const handle: AnyCookie = Object.freeze({
-		...config,
+		...base,
 		set: (value: unknown) => Object.freeze({ kind: "set" as const, cookie: handle, value }),
 		clear: () => Object.freeze({ kind: "clear" as const, cookie: handle }),
 	});
@@ -164,12 +165,12 @@ export function defineCookie<const TConfig extends CookieConfig>(config: TConfig
 	return handle;
 }
 
-export function isCookieHandle(value: unknown): value is AnyCookie {
+function isCookieHandle(value: unknown): value is AnyCookie {
 	return typeof value === "object" && value !== null && handles.has(value);
 }
 
 /** The cookie identity: name, domain, and path. Domain compares without case or a leading dot. */
-export function cookieIdentity(cookie: Pick<CookieConfig, "name" | "domain" | "path">): string {
+function cookieIdentity(cookie: Pick<CookieConfig, "name" | "domain" | "path">): string {
 	const domain = (cookie.domain ?? "").toLowerCase().replace(/^\./, "");
 	return `${cookie.name}\0${domain}\0${cookie.path}`;
 }

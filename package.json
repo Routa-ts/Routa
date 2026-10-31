@@ -36,6 +36,10 @@
 		"yaml": "2.9.1",
 		"@astrojs/compiler-rs": "0.5.2",
 		"eslint-plugin-import-x": "4.17.1",
-		"eslint-plugin-no-secrets": "2.3.3"
+		"eslint-plugin-no-secrets": "2.3.3",
+		"@arethetypeswrong/cli": "0.18.5",
+		"@vitest/coverage-v8": "5.0.5",
+		"fallow": "3.36.0",
+		"publint": "0.3.25"
 	}
 }

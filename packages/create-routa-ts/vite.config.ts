@@ -26,6 +26,17 @@ export default defineConfig({
 			},
 		},
 	},
+	test: {
+		coverage: {
+			provider: "v8",
+			include: ["src/**/*.ts"],
+			exclude: ["src/**/*.test.ts"],
+			reporter: ["text-summary"],
+			// One point under the measured branch coverage, because a few branches depend on how
+			// the tests are launched. Raise it when tests improve.
+			thresholds: { branches: 60 },
+		},
+	},
 	lint: frameworkConfig.lint,
 	fmt: frameworkConfig.fmt,
 	pack: {

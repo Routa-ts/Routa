@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { run } from "./index.js";
 import { generateOpenApi } from "./openapi.js";
 import {
+	routesMetadataSource,
 	runtimeArgs,
 	sourceSnapshot,
 	sourceSnapshotChanged,
@@ -775,6 +776,81 @@ export default createRouteRoot("/users")({
 			reference.routes[0].methods[0].middleware.map((item: { name: string }) => item.name),
 		).toEqual(["withSession", "requireAuth"]);
 	});
+
+	it("orders generated metadata by code units, not by the host locale", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-code-unit-order-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/middleware.ts"),
+			`import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+
+export const withNames = createMiddleware({
+\tprovides: { alpha: z.string(), Zeta: z.string() },
+\trejects: {
+\t\talpha: { status: 403, schema: z.object({ message: z.string() }) },
+\t\tZeta: { status: 401, schema: z.object({ message: z.string() }) },
+\t},
+});
+`,
+		);
+
+		for (const name of ["alpha", "Zeta"]) {
+			mkdirSync(join(cwd, "src/routes", name), { recursive: true });
+			writeFileSync(
+				join(cwd, "src/routes", name, "route.ts"),
+				`import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/${name}")({
+\tget: createRoute({
+\t\tresponses: { success: { status: 200, schema: z.unknown() } },
+\t\trun: () => ({ type: "success", data: null }),
+\t}),
+});
+`,
+			);
+		}
+
+		expect((await run(["generate"], { cwd })).code).toBe(0);
+		const reference = JSON.parse(
+			(await run(["routes", "--format", "json"], { cwd })).stdout ?? "{}",
+		);
+		const metadata = readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8");
+
+		const routes = validateProject(cwd).routes;
+		const originalOrder = routes.map((route) => route.file);
+		expect(routesMetadataSource(routes)).toBe(routesMetadataSource([...routes].reverse()));
+		expect(routes.map((route) => route.file)).toEqual(originalOrder);
+		const samePath = routes.map((route) => ({ ...route, path: "/same" }));
+		expect(routesMetadataSource(samePath)).toBe(routesMetadataSource([...samePath].reverse()));
+		expect(metadata.indexOf('"path": "/Zeta"')).toBeLessThan(metadata.indexOf('"path": "/alpha"'));
+
+		// Every locale's collation puts "alpha" first; code units put "Z" (U+005A) before "a".
+		expect(reference.routes.map((route: { path: string }) => route.path)).toEqual([
+			"/Zeta",
+			"/alpha",
+		]);
+		expect(reference.routes[0].methods[0].ctx).toEqual(["Zeta", "alpha"]);
+		expect(
+			reference.routes[0].methods[0].rejects.map((reject: { type: string }) => reject.type),
+		).toEqual(["Zeta", "alpha"]);
+		const ctxTypes = metadata
+			.split(/^export type /m)
+			.slice(1)
+			.filter((type) => type.includes('"alpha": '));
+		expect(ctxTypes.map((type) => type.slice(0, type.indexOf(" ")))).toEqual([
+			"ZetaCtx",
+			"AlphaCtx",
+			"RoutaRouteCtxByPath",
+			"RoutaCtxByKey",
+		]);
+		for (const type of ctxTypes) {
+			expect(type.indexOf('"Zeta": ')).toBeGreaterThan(-1);
+			expect(type.indexOf('"Zeta": ')).toBeLessThan(type.indexOf('"alpha": '));
+		}
+	}, 15_000);
 
 	it("prints a Markdown route reference by default", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-routes-markdown-"));

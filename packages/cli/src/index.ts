@@ -19,8 +19,8 @@ import { createUi, shouldUseColor, type Ui } from "./ui.js";
 
 export type CommandResult = {
 	code: number;
-	stdout?: string;
-	stderr?: string;
+	stdout?: string | undefined;
+	stderr?: string | undefined;
 };
 
 function helpText(ui: Ui): string {

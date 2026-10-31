@@ -1,9 +1,10 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type {
-	ProjectedOperation,
-	ProjectedResponse,
-	ProjectedResponseCookie,
+import {
+	compareText,
+	type ProjectedOperation,
+	type ProjectedResponse,
+	type ProjectedResponseCookie,
 } from "./contract-schemas.js";
 import { operationId, toOpenApiPath } from "./operation-id.js";
 import { type MiddlewareMetadata, validateProject } from "./project.js";
@@ -37,8 +38,8 @@ type OpenApiLike = {
  */
 export function runOpenApiCheck(cwd = process.cwd()): {
 	code: number;
-	stdout?: string;
-	stderr?: string;
+	stdout?: string | undefined;
+	stderr?: string | undefined;
 } {
 	const baseline = readBaseline(cwd);
 
@@ -74,7 +75,7 @@ export function runOpenApiCheck(cwd = process.cwd()): {
 export function runOpenApiBreaking(
 	argv: readonly string[],
 	cwd = process.cwd(),
-): { code: number; stdout?: string; stderr?: string } {
+): { code: number; stdout?: string | undefined; stderr?: string | undefined } {
 	const baseline = readBaseline(cwd);
 
 	if (!baseline) {
@@ -452,7 +453,7 @@ function isObjectSchema(value: unknown): value is {
  * @returns The parameter names found in `:name` segments.
  */
 function pathParams(path: string): string[] {
-	return Array.from(path.matchAll(/:([^/]+)/g)).map((match) => match[1]);
+	return Array.from(path.matchAll(/:([^/]+)/g), ([, name]) => name!);
 }
 
 /**
@@ -532,7 +533,7 @@ function comparableSecurity(security: unknown): string {
 			.map((requirement) =>
 				JSON.stringify(
 					Object.entries(requirement ?? {})
-						.sort(([left], [right]) => left.localeCompare(right))
+						.sort(([left], [right]) => compareText(left, right))
 						.map(([name, scopes]) => [name, Array.isArray(scopes) ? [...scopes].sort() : scopes]),
 				),
 			)
@@ -687,7 +688,7 @@ function normalize(value: unknown): unknown {
 	if (Array.isArray(value)) {
 		return value
 			.map(normalize)
-			.sort((left, right) => stableJson(left).localeCompare(stableJson(right)));
+			.sort((left, right) => compareText(stableJson(left), stableJson(right)));
 	}
 
 	if (typeof value === "object" && value !== null) {
@@ -695,7 +696,7 @@ function normalize(value: unknown): unknown {
 			Object.entries(canonicalizeSchema(value as Record<string, unknown>))
 				.filter(([, item]) => !isEmptySchemaContainer(item))
 				.filter(([key]) => key !== "description")
-				.sort(([left], [right]) => left.localeCompare(right))
+				.sort(([left], [right]) => compareText(left, right))
 				.map(([key, item]) => [key, normalize(item)]),
 		);
 	}

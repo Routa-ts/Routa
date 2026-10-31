@@ -205,7 +205,7 @@ export function lifecycleOwnedHeaders(
 }
 
 /** The Zod object shape of a header declaration, or `undefined` when there is none or it is not an object. */
-export function declaredShape(headers: unknown): Record<string, z.ZodType> | undefined {
+function declaredShape(headers: unknown): Record<string, z.ZodType> | undefined {
 	const def = zodDef(headers);
 
 	if (def?.type !== "object" || typeof def.shape !== "object" || def.shape === null) {

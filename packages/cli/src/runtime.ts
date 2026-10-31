@@ -33,10 +33,10 @@ export async function startRuntime(
 	const routa = await loadRoutaConfig(cwd, runtimeRoot);
 	const logger = routa.logger === false ? undefined : (routa.logger ?? createLogger());
 	const app = createHonoApp(routes, {
-		logger,
-		lifecycleHeaders: routa.lifecycleHeaders,
-		responseValidation: routa.responseValidation,
 		runtimeMode,
+		...(logger && { logger }),
+		...(routa.lifecycleHeaders !== undefined && { lifecycleHeaders: routa.lifecycleHeaders }),
+		...(routa.responseValidation && { responseValidation: routa.responseValidation }),
 	});
 	const hostname = process.env.HOST ?? routa.host ?? "127.0.0.1";
 	const port = Number(process.env.PORT ?? routa.port ?? 3000);
