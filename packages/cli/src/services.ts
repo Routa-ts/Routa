@@ -396,11 +396,19 @@ function contractMembers(declaration: ContractDeclaration): {
 	}
 
 	if (ts.isInterfaceDeclaration(declaration)) {
-		if (declaration.heritageClauses?.length) {
+		// Interfaces that share a name in one module merge, so the contract holds all their members.
+		const merged = declaration
+			.getSourceFile()
+			.statements.filter(
+				(statement): statement is ts.InterfaceDeclaration =>
+					ts.isInterfaceDeclaration(statement) && statement.name.text === declaration.name.text,
+			);
+
+		if (merged.some((item) => item.heritageClauses?.length)) {
 			problems.push("extends another type");
 		}
 
-		members = declaration.members;
+		members = merged.flatMap((item) => item.members);
 	} else if (ts.isTypeLiteralNode(declaration.type)) {
 		members = declaration.type.members;
 	} else {
