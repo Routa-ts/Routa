@@ -178,7 +178,7 @@ function validateProjectInSession(
 		writeRoutesMetadata(cwd, routes, services.services);
 	}
 
-	return { routes, diagnostics, warnings: schemas.warnings, schemas };
+	return { routes, diagnostics, warnings: [...services.warnings, ...schemas.warnings], schemas };
 }
 
 /**

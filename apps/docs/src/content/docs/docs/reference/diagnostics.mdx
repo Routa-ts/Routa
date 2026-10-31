@@ -319,6 +319,17 @@ Routa can follow, such as a bare function or a call to another helper.
 `services: defineAppServices(factory)`, or write `defineServices<AppServices>()(factory)`.
 Each binding must be a `const` declaration or a relative import.
 
+### `ROUTA_SERVICES_SPREAD_UNRESOLVED`
+
+Warning. The `createRouta` object in `src/routa.ts` has no visible `services` member, but it
+has a spread or computed key that Routa cannot read, such as `...makeConfig()`. Services
+inside it never reach generated metadata, so `routa dev` and `routa start` refuse to start
+with them.
+
+**Fix:** declare `services` as a member of the `createRouta` object, or spread a `const`
+object literal declared locally or imported. When the spread holds only tuning values,
+accept the warning.
+
 ### `ROUTA_SERVICES_CONTRACT_UNRESOLVED`
 
 The contract passed to `defineServices` is an inline type, cannot be found, or is not
