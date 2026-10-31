@@ -26,10 +26,20 @@ const generatedPaths = ["examples/basic-api/.routa", "examples/full-api/.routa"]
 const result = spawnSync("git", ["diff", "--exit-code", "--", ...generatedPaths], {
 	stdio: "inherit",
 });
+// `git diff` ignores files the build created but nobody committed, such as a new generated file.
+const untracked = spawnSync(
+	"git",
+	["ls-files", "--others", "--exclude-standard", "--", ...generatedPaths],
+	{ encoding: "utf8" },
+).stdout.trim();
 
-if (result.status !== 0) {
+if (untracked) {
+	process.stderr.write(`Generated Routa files are not committed:\n${untracked}\n`);
+}
+
+if (result.status !== 0 || untracked) {
 	process.stderr.write(
 		"Generated Routa metadata changed. Review the diff and commit it with the source change.\n",
 	);
-	process.exit(result.status ?? 1);
+	process.exit(result.status || 1);
 }
