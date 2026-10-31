@@ -1,0 +1,12 @@
+---
+"@routa-ts/core": minor
+"@routa-ts/cli": minor
+---
+
+Let middleware declare the services it requires, and check every placement.
+
+- `createMiddleware<Requirements>()` returns a typed helper: `const defineCacheMiddleware = createMiddleware<CacheRequirements>();`, then `defineCacheMiddleware({ requiresServices: ["cache"], ... })`. The inline `createMiddleware<CacheRequirements>()({ ... })` is equivalent. The helper infers `requires`, `provides`, `rejects`, and `input` like `createMiddleware`, and types the callback's `ctx.services` as `Readonly<CacheRequirements>`, so the middleware sees only the services it declared. TypeScript rejects a `requiresServices` list that misses or adds a name, and a requirement interface with optional services or an index signature. The direct `createMiddleware({ ... })` form is unchanged, has no typed `ctx.services`, and rejects `requiresServices`. Reserved `ctx.services` checks apply to both forms.
+- `routa check` and `routa generate` read the helper form, named or inline, from source without running it. Filesystem middleware may require application services, route-file middleware also its route file's services, and method middleware also its method's. A required name that no earlier scope declares, including one only a later factory builds, reports `ROUTA_SERVICES_UNAVAILABLE`. A requirement interface follows the service contract rules and reports `ROUTA_SERVICES_CONTRACT_UNRESOLVED` and `ROUTA_SERVICES_CONTRACT_UNSUPPORTED`.
+- `.routa/routes.gen.ts` records each middleware's requirement interface as `requiresServices` in `routaRoutes`, and exports `RoutaServiceRequirementChecks`, one type check per placement. TypeScript fails the placement whose services have an incompatible type, so `routa check` reports it at that line. Placements are checked separately, so unrelated scopes may still give one name different types, and an implementation may have extra members. Projects without requirements get unchanged output. Requirement interfaces never reach OpenAPI.
+- Immediately before a middleware with `requiresServices` runs, Routa checks that its stage's `ctx.services` has every listed name. A missing name skips the callback, later factories, middleware, and the handler, and returns the standard `500` problem. The `http.error` log names the middleware, the service, the route, and the method. Routa checks names at runtime, not service members.
+- `HonoRoute` gains `middlewareNames`, the names messages use for the chain's middleware. The CLI runtime passes the export names `routa generate` read.

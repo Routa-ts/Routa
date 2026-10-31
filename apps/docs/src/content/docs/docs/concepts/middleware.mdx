@@ -84,6 +84,37 @@ export const withRequest = createMiddleware({
 });
 ```
 
+### Service Requirements
+
+Middleware that needs an injected [service](/docs/concepts/services/) declares a requirement
+interface through a typed helper, and lists the same names in `requiresServices`:
+
+```ts title="src/middleware/rate-limit.ts"
+import { createMiddleware } from "@routa-ts/core";
+
+export interface RateLimitRequirements {
+	limiter: { take(key: string): Promise<boolean> };
+}
+
+const defineRateLimitMiddleware = createMiddleware<RateLimitRequirements>();
+
+export const withRateLimit = defineRateLimitMiddleware({
+	requiresServices: ["limiter"],
+	rejects: { tooManyRequests: { status: 429 } },
+	run: async ({ ctx, next }) => {
+		if (!(await ctx.services.limiter.take("anonymous"))) {
+			return { type: "tooManyRequests" };
+		}
+
+		return next();
+	},
+});
+```
+
+The callback sees `RateLimitRequirements` as `ctx.services`. `routa check` verifies every
+placement provides compatible services before the middleware runs; see
+[Middleware Service Requirements](/docs/concepts/services/#middleware-service-requirements).
+
 ## Where Middleware Applies
 
 ### Folder Inheritance
@@ -166,9 +197,13 @@ Routa emits `security` and `x-routa-authz` on every operation the middleware cov
 - Always `await` or return `next()`. Calling it without awaiting drops the downstream
   result and can leave the request hanging.
 - `next()` may be called at most once per middleware invocation.
-- Middleware must be referenced as a direct identifier of a `createMiddleware` export.
-  Spreading an array or computing the value at runtime produces
-  `ROUTA_MIDDLEWARE_UNRESOLVED`, because Routa could not check the contract.
+- Middleware must be referenced as a direct identifier of a `createMiddleware` export, or of
+  a typed helper's, such as `defineRateLimitMiddleware({ ... })`. Spreading an array or
+  computing the value at runtime produces `ROUTA_MIDDLEWARE_UNRESOLVED`, because Routa could
+  not check the contract.
+- A middleware that requires services must run where each service exists with a compatible
+  type. A missing service produces `ROUTA_SERVICES_UNAVAILABLE`, and an incompatible one fails
+  the TypeScript step of `routa check`.
 - `provides` is an object literal or a `const` object literal it names. Anything else
   produces `ROUTA_MIDDLEWARE_PROVIDES_UNRESOLVED`.
 - `ctx.services` is reserved for injected [services](/docs/concepts/services/).
