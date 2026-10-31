@@ -1388,3 +1388,351 @@ export default createRouteRoot("/units")({
 		);
 	});
 });
+
+const requirementsModule = `import { createMiddleware } from "@routa-ts/core";
+
+export interface ClockRequirements {
+\tclock: { now(): string };
+}
+
+export interface LedgerRequirements {
+\tledger: { total(): number };
+}
+
+export const defineClockMiddleware = createMiddleware<ClockRequirements>();
+`;
+
+const timeMiddleware = `import { z } from "zod";
+import { defineClockMiddleware } from "../requirements.js";
+
+export const withTime = defineClockMiddleware({
+\trequiresServices: ["clock"],
+\tprovides: { time: z.string() },
+\trun: ({ ctx, next }) => next({ time: ctx.services.clock.now() }),
+});
+`;
+
+const ledgerRoute = `import { createMiddleware, createRoute, createRouteRoot, defineServices } from "@routa-ts/core";
+import { z } from "zod";
+import type { LedgerRequirements } from "../../requirements.js";
+
+export interface LedgerServices {
+\tledger: { total(): number; reset(): void };
+}
+
+export interface ReceiptServices {
+\treceipts: { issue(total: number): string };
+}
+
+const withTotal = createMiddleware<LedgerRequirements>()({
+\trequiresServices: ["ledger"],
+\tprovides: { total: z.number() },
+\trun: ({ ctx, next }) => {
+\t\t// @ts-expect-error The middleware sees its requirement interface, not the route file's services.
+\t\tvoid ctx.services.ledger.reset;
+\t\treturn next({ total: ctx.services.ledger.total() });
+\t},
+});
+
+const withReceipt = createMiddleware<ReceiptServices>()({
+\trequiresServices: ["receipts"],
+\tprovides: { receipt: z.string() },
+\trun: ({ ctx, next }) => next({ receipt: ctx.services.receipts.issue(ctx.total) }),
+});
+
+export default createRouteRoot("/ledger")({
+\tservices: defineServices<LedgerServices>()(() => ({ ledger: { total: () => 3, reset() {} } })),
+\tmiddleware: [withTotal],
+\tget: createRoute({
+\t\tresponses: { ok: { status: 200, schema: z.object({ time: z.string(), total: z.number() }) } },
+\t\trun: ({ ctx }) => ({ type: "ok", data: { time: ctx.time, total: ctx.total } }),
+\t}),
+\tpost: createRoute({
+\t\tservices: defineServices<ReceiptServices>()(() => ({
+\t\t\treceipts: { issue: (total: number) => \`receipt-\${total}\` },
+\t\t})),
+\t\tmiddleware: [withReceipt],
+\t\tresponses: { ok: { status: 200, schema: z.string() } },
+\t\trun: ({ ctx }) => ({ type: "ok", data: ctx.receipt }),
+\t}),
+});
+`;
+
+/**
+ * A project whose middleware require services at each position: filesystem middleware requires an
+ * application service, route-file middleware a route-file service, and method middleware a
+ * method service.
+ */
+function requirementsProject(files: Record<string, string> = {}): string {
+	return servicesProject({
+		"src/services.ts": clockContract,
+		"src/routa.ts": `import { createRouta } from "@routa-ts/core";
+import { defineAppServices } from "./services.js";
+
+export default createRouta({
+\tservices: defineAppServices(() => ({ clock: { now: () => "noon", tick() {} } })),
+});
+`,
+		"src/requirements.ts": requirementsModule,
+		"src/routes/middleware.ts": timeMiddleware,
+		"src/routes/ledger/route.ts": ledgerRoute,
+		...files,
+	});
+}
+
+describe("middleware service requirements", () => {
+	it("types, generates, and serves middleware that requires services at each position", async () => {
+		const sentinel = join(mkdtempSync(join(tmpdir(), "routa-requirements-sentinel-")), "executed");
+		const cwd = requirementsProject({
+			"src/routes/middleware.ts": `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(sentinel)}, "module");\n${timeMiddleware}`,
+		});
+
+		const generate = await run(["generate"], { cwd });
+
+		expect(generate.stderr ?? "").toBe("");
+		expect(existsSync(sentinel)).toBe(false);
+		writeFileSync(join(cwd, "src/routes/middleware.ts"), timeMiddleware);
+		expectPassed(await run(["check"], { cwd }));
+		const generated = readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8");
+		expect(generated).toContain(`\t\t\t\t"name": "withTime",
+				"requires": [],
+				"requiresServices": {
+					"file": "src/requirements.ts",
+					"name": "ClockRequirements",
+					"names": [
+						"clock"
+					]
+				},`);
+		const ledger = 'import("../src/routes/ledger/route.js").LedgerServices';
+		const receipts = 'import("../src/routes/ledger/route.js").ReceiptServices';
+		expect(generated).toContain(`/**
+ * Each middleware that requires services, checked against the services available where it runs.
+ * TypeScript reports a placement whose services do not satisfy the middleware's requirements.
+ */
+export type RoutaServiceRequirementChecks = [
+	RoutaServicesSatisfy<"withTime in src/routes/middleware.ts", Readonly<RoutaApplicationServices>, import("../src/requirements.js").ClockRequirements>,
+	RoutaServicesSatisfy<"withTotal on /ledger", Readonly<RoutaApplicationServices & ${ledger}>, import("../src/requirements.js").LedgerRequirements>,
+	RoutaServicesSatisfy<"withReceipt on POST /ledger", Readonly<RoutaApplicationServices & ${ledger} & ${receipts}>, ${receipts}>,
+];
+
+type RoutaServicesSatisfy<_TPlacement extends string, TAvailable extends TRequired, TRequired> = TAvailable;
+`);
+
+		const { application } = await createProjectApplication(cwd, cwd, "dev");
+		const get = await application.fetch(new Request("http://localhost/ledger"));
+		const post = await application.fetch(
+			new Request("http://localhost/ledger", { method: "POST" }),
+		);
+
+		expect(await get.json()).toEqual({ time: "noon", total: 3 });
+		expect(await post.json()).toBe("receipt-3");
+		await application.dispose();
+	}, 30_000);
+
+	it("stops a request whose middleware lacks a service at runtime, naming where it runs", async () => {
+		const events: Array<{ event: string; data?: Record<string, unknown> }> = [];
+		Object.assign(globalThis, { routaRequirementEvents: events });
+		const cwd = requirementsProject({
+			"src/routa.ts": `import { createLogger, createRouta } from "@routa-ts/core";
+import { defineAppServices } from "./services.js";
+
+export default createRouta({
+\tlogger: createLogger({
+\t\tsink: (event) => (globalThis as any).routaRequirementEvents.push(event),
+\t}),
+\tservices: defineAppServices(() => ({ clock: { now: () => "noon" } })),
+});
+`,
+		});
+		expect((await run(["generate"], { cwd })).code).toBe(0);
+		// Bypasses routa check: the filesystem middleware now needs a route-file service.
+		writeFileSync(
+			join(cwd, "src/routes/middleware.ts"),
+			timeMiddleware.replace('requiresServices: ["clock"]', 'requiresServices: ["ledger"]'),
+		);
+
+		const { application } = await createProjectApplication(cwd, cwd, "dev");
+		const response = await application.fetch(new Request("http://localhost/ledger"));
+
+		expect(response.status).toBe(500);
+		expect(JSON.stringify(await response.json())).not.toContain("ledger");
+		expect(events.find((event) => event.event === "http.error")?.data).toMatchObject({
+			method: "GET",
+			path: "/ledger",
+			error:
+				'Middleware withTime on GET /ledger requires service "ledger", but ctx.services does not provide it where the middleware runs. Declare "ledger" in a services scope that runs before the middleware.',
+		});
+		await application.dispose();
+	}, 30_000);
+});
+
+describe("middleware service requirements (routa check)", () => {
+	it("reports a required service its placement does not provide, at each position", () => {
+		const cwd = requirementsProject({
+			"src/routes/middleware.ts": `${timeMiddleware}
+import { createMiddleware } from "@routa-ts/core";
+import type { LedgerRequirements } from "../requirements.js";
+
+export const withLedger = createMiddleware<LedgerRequirements>()({
+\trequiresServices: ["ledger"],
+\trun: ({ next }) => next(),
+});
+`,
+			"src/routes/ledger/route.ts": ledgerRoute
+				.replace("middleware: [withTotal],", "middleware: [withTotal, withReceipt],")
+				.replace(
+					"\tget: createRoute({\n",
+					"\tget: createRoute({\n\t\tmiddleware: [withReceipt],\n",
+				),
+		});
+
+		expect(
+			validateProject(cwd, { write: false }).diagnostics.map(
+				({ code, message, file, routePath, suggestion }) => ({
+					code,
+					message,
+					file,
+					routePath,
+					suggestion,
+				}),
+			),
+		).toEqual([
+			{
+				code: "ROUTA_SERVICES_UNAVAILABLE",
+				message:
+					'Filesystem middleware withLedger requires service "ledger", which /ledger does not provide before it runs. The route file\'s services declare it, but their factory runs after this middleware.',
+				file: "src/routes/middleware.ts",
+				routePath: "/ledger",
+				suggestion:
+					'Filesystem middleware sees only application services. Declare "ledger" in the application services, or move the middleware into a route file or method that declares it.',
+			},
+			{
+				code: "ROUTA_SERVICES_UNAVAILABLE",
+				message:
+					'Route-file middleware withReceipt requires service "receipts", which /ledger does not provide before it runs. The POST services declare it, but their factory runs after this middleware.',
+				file: "src/routes/ledger/route.ts",
+				routePath: "/ledger",
+				suggestion:
+					'Route-file middleware sees application and route-file services. Declare "receipts" in one of them, or move the middleware into a method that declares it.',
+			},
+			{
+				code: "ROUTA_SERVICES_UNAVAILABLE",
+				message:
+					'GET middleware withReceipt requires service "receipts", which GET /ledger does not provide before it runs.',
+				file: "src/routes/ledger/route.ts",
+				routePath: "/ledger",
+				suggestion:
+					'Method middleware sees application, route-file, and method services. Declare "receipts" in one of them.',
+			},
+		]);
+	});
+
+	it("reports requirement interfaces it cannot resolve or read", () => {
+		const diagnostics = (requirement: string, declarations = "") =>
+			validateProject(
+				requirementsProject({
+					"src/routes/middleware.ts": `import { createMiddleware } from "@routa-ts/core";
+${declarations}
+export const withCache = createMiddleware<${requirement}>()({
+\trequiresServices: ["cache"],
+\trun: ({ next }) => next(),
+});
+`,
+				}),
+				{ write: false },
+			).diagnostics.map(({ code, message, file }) => ({ code, message, file }));
+
+		expect(diagnostics("{ cache: string }")).toEqual([
+			{
+				code: "ROUTA_SERVICES_CONTRACT_UNRESOLVED",
+				message: "Service requirement { cache: string } is not a named interface or type.",
+				file: "src/routes/middleware.ts",
+			},
+		]);
+		expect(
+			diagnostics("CacheRequirements", "interface CacheRequirements {\n\tcache: string;\n}\n"),
+		).toEqual([
+			{
+				code: "ROUTA_SERVICES_CONTRACT_UNRESOLVED",
+				message:
+					"Service requirement CacheRequirements in src/routes/middleware.ts is not exported, so generated types cannot reference it.",
+				file: "src/routes/middleware.ts",
+			},
+		]);
+		expect(
+			diagnostics(
+				"CacheRequirements",
+				"export interface CacheRequirements {\n\tcache?: string;\n}\n",
+			),
+		).toEqual([
+			{
+				code: "ROUTA_SERVICES_CONTRACT_UNSUPPORTED",
+				message: 'Service requirement CacheRequirements declares service "cache" optional.',
+				file: "src/routes/middleware.ts",
+			},
+		]);
+	});
+});
+
+const unitsModule = `import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+
+export interface NumberUnit {
+\tunit: number;
+}
+
+export interface TextUnit {
+\tunit: string;
+}
+
+export const withUnit = createMiddleware<NumberUnit>()({
+\trequiresServices: ["unit"],
+\tprovides: { doubled: z.number() },
+\trun: ({ ctx, next }) => next({ doubled: ctx.services.unit * 2 }),
+});
+`;
+
+const unitRoute = (
+	path: string,
+	contract: string,
+	unit: string,
+) => `import { createRoute, createRouteRoot, defineServices } from "@routa-ts/core";
+import { z } from "zod";
+import { type ${contract}, withUnit } from "../../units.js";
+
+export default createRouteRoot(${JSON.stringify(path)})({
+\tservices: defineServices<${contract}>()(() => ({ unit: ${unit} })),
+\tmiddleware: [withUnit],
+\tget: createRoute({
+\t\tresponses: { ok: { status: 200, schema: z.number() } },
+\t\trun: ({ ctx }) => ({ type: "ok", data: ctx.doubled }),
+\t}),
+});
+`;
+
+describe("middleware service requirements (TypeScript placement checks)", () => {
+	it("reports an incompatible service where it is placed, without unifying unrelated scopes", async () => {
+		const cwd = servicesProject({
+			"src/units.ts": unitsModule,
+			"src/routes/numbers/route.ts": unitRoute("/numbers", "NumberUnit", "2"),
+			"src/routes/text/route.ts": unitRoute("/text", "TextUnit", '"two"'),
+		});
+
+		const check = await run(["check"], { cwd });
+		const output = `${check.stdout ?? ""}${check.stderr ?? ""}`;
+		const errors = [...output.matchAll(/\.routa\/routes\.gen\.ts\((\d+),\d+\): error (TS\d+)/g)];
+
+		expect(check.code).toBe(1);
+		expect(errors.map((error) => error[2])).toEqual(["TS2344"]);
+		expect(output).toContain(
+			"Type 'Readonly<TextUnit>' does not satisfy the constraint 'NumberUnit'.\n  Types of property 'unit' are incompatible.",
+		);
+		const generated = readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8").split("\n");
+		expect(generated[Number(errors[0]?.[1]) - 1]).toBe(
+			'\tRoutaServicesSatisfy<"withUnit on /text", Readonly<import("../src/units.js").TextUnit>, import("../src/units.js").NumberUnit>,',
+		);
+		expect(generated).toContain(
+			'\tRoutaServicesSatisfy<"withUnit on /numbers", Readonly<import("../src/units.js").NumberUnit>, import("../src/units.js").NumberUnit>,',
+		);
+	}, 30_000);
+});
