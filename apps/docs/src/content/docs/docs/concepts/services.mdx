@@ -1,0 +1,247 @@
+---
+title: Application Services
+description: Typed application-owned dependencies that Routa constructs once and hands to handlers as ctx.services.
+---
+
+import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
+
+Application services are dependencies your application owns, such as a database client, a
+clock, or a repository, that Routa constructs once per application instance and passes to
+every handler as `ctx.services`. Handlers depend on an interface you declare, so you can
+change the implementation without touching a route. Services are optional: plain imports
+keep working, and a project without services has no `ctx.services` at all.
+
+```ts title="src/services.ts"
+import { defineServices } from "@routa-ts/core";
+
+export interface Clock {
+	now(): Date;
+}
+
+export interface UserStore {
+	find(id: string): Promise<{ id: string; name: string } | undefined>;
+}
+
+export interface AppServices {
+	clock: Clock;
+	users: UserStore;
+}
+
+export const defineAppServices = defineServices<AppServices>();
+```
+
+```ts title="src/routa.ts"
+import { createRouta } from "@routa-ts/core";
+import { defineAppServices } from "./services.js";
+import { connectUserStore } from "./users.js";
+
+export default createRouta({
+	services: defineAppServices(async ({ logger, onCleanup }) => {
+		const clock = { now: () => new Date() };
+		const users = await connectUserStore(process.env.DATABASE_URL);
+		onCleanup(() => users.close());
+
+		logger.info("services.ready", "Application services are ready.");
+		return { clock, users };
+	}),
+});
+```
+
+```ts title="src/routes/users/$userId/route.ts"
+import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/users/:userId")({
+	get: createRoute({
+		input: { params: z.object({ userId: z.string() }) },
+		responses: {
+			success: { status: 200, schema: z.object({ id: z.string(), name: z.string() }) },
+			notFound: { status: 404 },
+		},
+		run: async ({ ctx, input, response }) => {
+			const user = await ctx.services.users.find(input.params.userId);
+			return user ? response.success(user) : response.notFound();
+		},
+	}),
+});
+```
+
+## How It Works
+
+`defineServices<AppServices>()` fixes the service contract and returns a helper. Name the
+helper once, as `defineAppServices` above, and pass every factory for that contract through
+it. TypeScript checks that the factory returns each declared service with a compatible
+type. The inline form `services: defineServices<AppServices>()(factory)` is equivalent.
+
+`routa check` and `routa generate` read the contract from source. They never import your
+modules or run the factory. The generated `.routa/routes.gen.ts` records the service names
+and a type-only reference to the contract:
+
+```ts title=".routa/routes.gen.ts"
+export const routaApplicationServices = ["clock", "users"] as const;
+
+export type RoutaApplicationServices = import("../src/services.js").AppServices;
+```
+
+That reference is what types `ctx.services` in every handler. Handlers see `AppServices`,
+never the factory's concrete classes, so members the interface does not declare are a type
+error.
+
+When `routa dev` or `routa start` boots, Routa awaits the factory once, before the server
+listens. The factory receives the configured `logger` and `onCleanup`. It gets no request
+data, and it reads configuration through ordinary closures and imports. Routa then checks
+that the returned object has exactly the declared names. A missing or extra name fails
+startup. Routa does not check the services' methods at runtime.
+
+`ctx.services` is frozen and cannot be reassigned, so no handler or middleware can replace
+a service. The services themselves are not frozen, and their own state stays mutable.
+
+One factory may build several services that depend on each other. Wire them through local
+variables, and every handler receives the same instances:
+
+```ts title="src/routa.ts"
+import { createRouta } from "@routa-ts/core";
+import { defineAppServices } from "./services.js";
+import { MemoryUserStore } from "./users.js";
+
+export default createRouta({
+	services: defineAppServices(() => {
+		const clock = { now: () => new Date() };
+		return { clock, users: new MemoryUserStore(clock) };
+	}),
+});
+```
+
+## Contract Rules
+
+A service contract is an exported `interface`, or an exported `type` alias of an object
+type, whose members are all required and plainly named. It may live in any project module,
+and every binding between `services:` and `defineServices` may be a local `const` or a
+relative import, including re-exports. Routa reports a declaration it cannot follow instead
+of guessing:
+
+| Problem                                                             | Diagnostic                            |
+| ------------------------------------------------------------------- | ------------------------------------- |
+| `services` is not built through a `defineServices` helper           | `ROUTA_SERVICES_UNRESOLVED`           |
+| The contract is inline, missing, or not exported                    | `ROUTA_SERVICES_CONTRACT_UNRESOLVED`  |
+| An optional or computed member, an index signature, or an `extends` | `ROUTA_SERVICES_CONTRACT_UNSUPPORTED` |
+
+TypeScript rejects optional services and index signatures in `defineServices<...>()` too.
+Services must be declared in the `createRouta` object itself. If a spread or a computed
+config hides them from `routa generate`, startup fails rather than running unchecked
+services.
+
+## Cleanup
+
+Register a cleanup callback with `onCleanup` right after the factory acquires a resource.
+Routa awaits the callbacks one at a time, in reverse registration order, and attempts every
+callback even when an earlier one fails.
+
+```ts title="src/routa.ts"
+import { createRouta } from "@routa-ts/core";
+import { defineAppServices } from "./services.js";
+import { connectCache, createPool, SqlUserStore } from "./resources.js";
+
+export default createRouta({
+	services: defineAppServices(async ({ onCleanup }) => {
+		const pool = await createPool(process.env.DATABASE_URL);
+		onCleanup(() => pool.end());
+
+		const cache = await connectCache(process.env.CACHE_URL);
+		onCleanup(() => cache.quit());
+
+		return { clock: { now: () => new Date() }, users: new SqlUserStore(pool, cache) };
+	}),
+});
+```
+
+On disposal Routa quits the cache, then ends the pool. If `connectCache` throws, Routa ends
+the pool, then fails startup with the `connectCache` error. It does not retry the factory or substitute a service. A helper that acquires
+several resources and then throws releases its own partial work, because only callbacks
+registered before the failure run.
+
+You can also register one callback for several resources. Routa treats it as a single
+callback, so its internal order and its `try`/`finally` are yours.
+
+Cleanup runs once per application instance:
+
+- When the factory or the name check fails, Routa runs the registered callbacks and
+  rethrows the original error.
+- When the server fails to listen, for example because the port is taken, Routa logs
+  `api.start_failed`, releases the services, and exits with code `1`.
+- `createApplication(...).dispose()` waits for accepted requests to settle, then runs the
+  callbacks.
+
+A cleanup failure never replaces a startup error. Routa logs it as
+`services.cleanup_failed`. `dispose()` rejects with an `AggregateError` of the failures
+after every callback has been attempted.
+
+## Reserved `ctx.services`
+
+Routa reserves `ctx.services` in every project, including projects without services.
+Middleware cannot provide a `services` key or pass one to `next()`:
+
+- TypeScript rejects `provides: { services: ... }`, a named `provides` binding with that
+  key, and a `next()` payload that names it.
+- `routa check` reports `ROUTA_CONTEXT_RESERVED`.
+- At runtime, registration rejects a `services` provides schema that a cast hid from
+  TypeScript, and a request fails with `500` when `createContext`, `next()`, or a direct
+  write claims `ctx.services`.
+
+To read `provides` through named bindings, `routa check` follows a `const` object literal
+that `provides` names. It reports `ROUTA_MIDDLEWARE_PROVIDES_UNRESOLVED` for any
+`provides` it cannot read, such as a call or a spread, instead of treating it as empty.
+
+### Migrating a `services` Context Key
+
+If an existing middleware provides `services`, rename the key and update the handlers that
+read it:
+
+```ts title="src/middleware/billing.ts"
+import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+
+export const withBilling = createMiddleware({
+	provides: {
+		billing: z.object({ plan: z.string() }),
+	},
+	run: ({ next }) => next({ billing: { plan: "team" } }),
+});
+```
+
+When the value is an application dependency rather than per-request data, declare it as an
+application service instead.
+
+## Limits
+
+Routa owns the wiring, the construction timing, the name checks, and the cleanup order.
+Your application owns the services, their configuration, the resources they acquire, how
+those resources are released, and every business decision the services make. Service
+contracts never appear in OpenAPI, and adopting services does not change any HTTP response.
+
+<Aside type="caution" title="Partial: application scope only">
+	Application services, their cleanup, and the reserved `ctx.services` are implemented.
+	Route-file and method services, middleware service requirements, a generated test
+	application, and graceful shutdown are not. `routa dev` and `routa start` do not yet run
+	cleanup when the process receives `SIGINT` or `SIGTERM`.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Configuration"
+		href="/docs/reference/configuration/#services"
+		description="The services option and the events it logs."
+	/>
+	<LinkCard
+		title="Core reference"
+		href="/docs/reference/core/#defineservices"
+		description="defineServices and createApplication signatures."
+	/>
+	<LinkCard
+		title="Testing"
+		href="/docs/guides/testing/"
+		description="Test handlers that read ctx.services."
+	/>
+</CardGrid>

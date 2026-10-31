@@ -43,6 +43,7 @@ the complete list.
 | Routing         | Directory style, flat style, dynamic `$` segments, and `(group)` folders                                          |
 | Methods         | `get`, `post`, `put`, `patch`, `delete`, and explicit `head`; `OPTIONS` is automatic                              |
 | Middleware      | Typed `requires` / `provides` / `rejects`, folder inheritance, per-method chains; rejects are full outcomes       |
+| Services        | Application services from `defineServices`, constructed once per instance, with registered cleanup                |
 | OpenAPI in      | Scaffolding source from `.yaml`, `.yml`, and `.json` documents                                                    |
 | OpenAPI out     | Generation from source alone, same-status composition, drift checks, and breaking-change checks                   |
 | Generated files | `.routa/routes.gen.ts`, `.routa/manifest.json`, `.routa/openapi-baseline.json`                                    |
@@ -57,6 +58,10 @@ the complete list.
 - Non-Zod schema adapters
 - Client SDK generation
 - A plugin system
+- Route-file and method services, middleware service requirements, and a generated test
+  application
+- Graceful shutdown; `routa dev` and `routa start` do not release application services on
+  `SIGINT` or `SIGTERM`
 - Built-in auth provider integrations; v0 makes security _visible_ in OpenAPI but never
   implements authentication
 - Response caching, rate limiting, and broad observability features
