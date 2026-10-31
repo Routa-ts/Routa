@@ -442,9 +442,35 @@ declare class SelectedOutcome {
  */
 export type MiddlewareContinuation = SelectedOutcome;
 
+/**
+ * The type of a `services` context key, which Routa reserves for injected services; see
+ * {@link ForbiddenData}.
+ */
+type ReservedServicesKey = {
+	readonly "ctx.services is reserved for injected services. Rename this context key.": never;
+};
+
+/**
+ * Fails a `provides` declaration or `next()` payload that names `services`; adds nothing otherwise.
+ * A widened record names no key, so Routa rejects it at runtime instead.
+ */
+type ReservedContextChecks<TCtx> = string extends keyof TCtx
+	? unknown
+	: "services" extends keyof TCtx
+		? { readonly services: ReservedServicesKey }
+		: unknown;
+
+/**
+ * Continues the chain. Middleware without `provides` may pass any object, which Routa ignores,
+ * except one claiming `services`.
+ */
 export type MiddlewareNext<TProvides extends MiddlewareProvidesSpec> = keyof TProvides extends never
-	? (ctx?: MiddlewareProvidedCtx<TProvides>) => Promise<MiddlewareContinuation>
-	: (ctx: MiddlewareProvidedCtx<TProvides>) => Promise<MiddlewareContinuation>;
+	? <TCtx extends object = {}>(
+			ctx?: TCtx & ReservedContextChecks<TCtx>,
+		) => Promise<MiddlewareContinuation>
+	: (
+			ctx: MiddlewareProvidedCtx<TProvides> & { readonly services?: ReservedServicesKey },
+		) => Promise<MiddlewareContinuation>;
 
 export type MiddlewareRunArgs<
 	TRequires extends readonly RegisteredCtxKey[],
@@ -808,6 +834,7 @@ export function createMiddleware<
 >(
 	contract: MiddlewareContract<TRequires, TProvides, TRejects, TInput> & {
 		readonly rejects?: ResponseChecks<NoInfer<TRejects>>;
+		readonly provides?: ReservedContextChecks<NoInfer<TProvides>>;
 	},
 ): MiddlewareContract<TRequires, TProvides, TRejects, TInput> {
 	return contract;
