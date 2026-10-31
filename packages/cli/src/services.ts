@@ -102,35 +102,28 @@ export function routeServices(
 	const routeConfig = routeConfigObject(parseTypeScriptFile(join(cwd, file), parser));
 	const services: RouteServicesMetadata = {};
 	const diagnostics: Diagnostic[] = [];
-	const read = (property: ts.PropertyAssignment, label: string, example: string) => {
-		const declared = declaredContract(
-			cwd,
-			{ file, node: property.initializer },
-			parser,
-			`${label} in ${file}`,
-			example,
-		);
+	const read = (object: ts.ObjectLiteralExpression, label: string, example: string) => {
+		const node = servicesValue(object);
+
+		if (!node) {
+			return undefined;
+		}
+
+		const declared = declaredContract(cwd, { file, node }, parser, `${label} in ${file}`, example);
 		diagnostics.push(...declared.diagnostics);
 		return declared.services;
 	};
 
+	const routeFile = routeConfig && read(routeConfig, "Route-file services", "Orders");
+
+	if (routeFile) {
+		services.routeFile = routeFile;
+	}
+
 	for (const property of routeConfig ? objectProperties(routeConfig) : []) {
 		const key = propertyName(property.name);
-
-		if (key === "services") {
-			const contract = read(property, "Route-file services", "Orders");
-
-			if (contract) {
-				services.routeFile = contract;
-			}
-
-			continue;
-		}
-
-		const method = key && createRouteObject(property.initializer);
-		const declaration =
-			method && objectProperties(method).find((item) => propertyName(item.name) === "services");
-		const contract = declaration && read(declaration, `${key.toUpperCase()} services`, "Checkout");
+		const method = key && key !== "services" && createRouteObject(property.initializer);
+		const contract = method && read(method, `${key.toUpperCase()} services`, "Checkout");
 
 		if (contract) {
 			services.methods = { ...services.methods, [key as string]: contract };
@@ -243,17 +236,47 @@ function objectServices(
 		} else if (ts.isComputedPropertyName(property.name)) {
 			found = { ...found, hidden: true };
 		} else if (propertyName(property.name) === "services") {
-			const node = ts.isPropertyAssignment(property)
-				? property.initializer
-				: ts.isShorthandPropertyAssignment(property)
-					? property.name
-					: property;
 			// A visible member replaces whatever an earlier unreadable part held.
-			found = { declaration: { file, node }, hidden: false };
+			found = { declaration: { file, node: memberValue(property) }, hidden: false };
 		}
 	}
 
 	return found;
+}
+
+/**
+ * Finds the value of a route root's or method's `services` member, including one written as
+ * `["services"]`. A member Routa cannot read, such as a getter or a computed key, yields the
+ * member itself, which `declaredContract` reports as unresolved instead of ignoring it.
+ */
+function servicesValue(object: ts.ObjectLiteralExpression): ts.Node | undefined {
+	for (const property of object.properties) {
+		if (ts.isSpreadAssignment(property)) {
+			continue;
+		}
+
+		if (ts.isComputedPropertyName(property.name)) {
+			const key = property.name.expression;
+
+			if (ts.isStringLiteralLike(key) && key.text === "services") {
+				return property;
+			}
+		} else if (propertyName(property.name) === "services") {
+			return memberValue(property);
+		}
+	}
+}
+
+/**
+ * The node holding an object member's value: the initializer of an assignment, or the identifier
+ * of a shorthand member. Any other member, such as a method or accessor, is returned as is.
+ */
+function memberValue(property: ts.ObjectLiteralElementLike): ts.Node {
+	return ts.isPropertyAssignment(property)
+		? property.initializer
+		: ts.isShorthandPropertyAssignment(property)
+			? property.name
+			: property;
 }
 
 /** Follows a spread expression to the object literal it spreads, when it is a `const` binding. */
