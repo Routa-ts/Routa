@@ -138,6 +138,12 @@ function assertReplacements(replacements: ServiceReplacements, metadata: Metadat
 			throw new TypeError(`Cannot replace services for ${path}: no route file declares it.`);
 		}
 
+		assertKeys(route, ["services", "methods"], `routes[${JSON.stringify(path)}]`);
+
+		for (const [method, scope] of Object.entries(route.methods ?? {})) {
+			assertKeys(scope, ["services"], `routes[${JSON.stringify(path)}].methods.${method}`);
+		}
+
 		replace(`route file ${path}`, route.services, declared.services?.routeFile?.names);
 
 		for (const [method, scope] of Object.entries(route.methods ?? {})) {
@@ -151,6 +157,21 @@ function assertReplacements(replacements: ServiceReplacements, metadata: Metadat
 
 			replace(label, scope.services, declared.services?.methods?.[method]?.names);
 		}
+	}
+}
+
+/** Rejects a replacement entry that is not an object or holds a key Routa does not read. */
+function assertKeys(value: unknown, keys: readonly string[], label: string): void {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) {
+		throw new TypeError(`The replacement at ${label} must be an object.`);
+	}
+
+	const unexpected = Object.keys(value).filter((key) => !keys.includes(key));
+
+	if (unexpected.length > 0) {
+		throw new TypeError(
+			`The replacement at ${label} accepts only ${keys.join(" and ")}, received ${unexpected.map((key) => JSON.stringify(key)).join(", ")}.`,
+		);
 	}
 }
 
