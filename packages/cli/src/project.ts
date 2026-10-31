@@ -25,6 +25,7 @@ import { compareText } from "./compare-text.js";
 import { type ContractSchemaProjection, projectContractSchemas } from "./contract-schemas.js";
 import {
 	boundDeclaration,
+	type DeclarationReader,
 	exportedDeclaration,
 	exportedDeclarations,
 	type ModuleDeclaration,
@@ -36,6 +37,8 @@ import { operationId, toOpenApiPath } from "./operation-id.js";
 import {
 	applicationServices,
 	contractTypeReference,
+	middlewareRequirement,
+	requirementContract,
 	type RouteServicesMetadata,
 	routeServices,
 	type ServiceContractMetadata,
@@ -80,6 +83,8 @@ export type MiddlewareMetadata = {
 	file: string;
 	name: string;
 	requires: string[];
+	/** The requirement interface of middleware declared with `createMiddleware<Requirements>()`. */
+	requiresServices?: ServiceContractMetadata;
 	provides: string[];
 	providesTypes: Record<string, string>;
 	rejects: MiddlewareRejectMetadata[];
@@ -182,6 +187,7 @@ function validateProjectInSession(
 		...middlewareContextDiagnostics(routes),
 		...middlewareRejectStatusDiagnostics(routes),
 		...serviceCollisionDiagnostics(routes, services.services),
+		...serviceRequirementDiagnostics(routes, services.services),
 		...schemas.diagnostics,
 	];
 
@@ -1693,8 +1699,9 @@ function parseMiddlewareFile(
 ): MiddlewareMetadata[] {
 	const sourceFile = parseTypeScriptFile(join(cwd, file), parser);
 
-	return exportedDeclarations(cwd, file, sourceFile, parser, createMiddlewareObject).map((block) =>
-		middlewareMetadata(cwd, parser, file, block.exportedName, block.contract, block.file),
+	return exportedDeclarations(cwd, file, sourceFile, parser, middlewareReader(cwd, parser)).map(
+		(block) =>
+			middlewareMetadata(cwd, parser, file, block.exportedName, block.contract, block.file),
 	);
 }
 
@@ -1704,10 +1711,16 @@ function parseMiddlewareFile(
  * files record the names they export, so `file` on the metadata is not always where the contract
  * lives. Kept beside the metadata so it never reaches generated files.
  */
-const middlewareContracts = new WeakMap<
-	MiddlewareMetadata,
-	{ file: string; contract: ts.ObjectLiteralExpression; providesUnresolved: boolean }
->();
+const middlewareContracts = new WeakMap<MiddlewareMetadata, MiddlewareSource>();
+
+/** Where a discovered middleware's contract lives, and what Routa could not read from it. */
+type MiddlewareSource = {
+	file: string;
+	contract: ts.ObjectLiteralExpression;
+	providesUnresolved: boolean;
+	/** Why its requirement interface cannot be read, when it has one. */
+	requirementDiagnostics: Diagnostic[];
+};
 
 /**
  * Finds the contract a discovered middleware was read from, so its rejects can be checked like
@@ -1716,9 +1729,7 @@ const middlewareContracts = new WeakMap<
  * @param middleware - Middleware metadata from route discovery
  * @returns The declaring file and `createMiddleware` argument, or `undefined` for other metadata
  */
-export function middlewareContract(
-	middleware: MiddlewareMetadata,
-): { file: string; contract: ts.ObjectLiteralExpression; providesUnresolved: boolean } | undefined {
+export function middlewareContract(middleware: MiddlewareMetadata): MiddlewareSource | undefined {
 	return middlewareContracts.get(middleware);
 }
 
@@ -1795,14 +1806,15 @@ function parseRouteFileMiddleware(
 		return { route: [], methods: {}, unresolved: [] };
 	}
 
-	const middleware = variableDeclarations(sourceFile, false, createMiddlewareObject);
+	const read = middlewareReader(cwd, parser);
+	const middleware = variableDeclarations(routeFile, sourceFile, false, read);
 	const middlewareByName = new Map(middleware.map((item) => [item.name, item.contract]));
 	const imports = namedImportMap(cwd, routeFile, sourceFile);
 	const route: MiddlewareMetadata[] = [];
 	const methods: Record<string, MiddlewareMetadata[]> = {};
 	const unresolved: string[] = [];
 	const metadataForMiddleware = (expression: ts.Expression): MiddlewareMetadata | undefined => {
-		const metadata = middlewareExpressionMetadata(expression, middlewareByName);
+		const metadata = middlewareExpressionMetadata(expression, routeFile, middlewareByName, read);
 
 		if (metadata) {
 			return middlewareMetadata(
@@ -1822,7 +1834,7 @@ function parseRouteFileMiddleware(
 		}
 
 		const source = imports.get(unwrapped.text);
-		const declaration = source && exportedDeclaration(cwd, source, parser, createMiddlewareObject);
+		const declaration = source && exportedDeclaration(cwd, source, parser, read);
 
 		if (!declaration) {
 			return;
@@ -1920,22 +1932,28 @@ function stringArrayProperty(source: ts.ObjectLiteralExpression, property: strin
  *
  * @param declarationFile - The file that declares the contract, which differs from `file` for
  *   middleware a route file imports
- * @returns Middleware metadata including its source file, name, required context keys, provided context keys and types, and rejected keys.
+ * @returns Middleware metadata including its source file, name, required context keys and
+ *   services, provided context keys and types, and rejected keys.
  */
 function middlewareMetadata(
 	cwd: string,
 	parser: ts.SourceFileParser,
 	file: string,
 	name: string,
-	contract: ts.ObjectLiteralExpression,
+	declaration: MiddlewareDeclaration,
 	declarationFile: string,
 ): MiddlewareMetadata {
+	const { contract } = declaration;
 	const provides = middlewareProvides(cwd, declarationFile, contract, parser);
+	const requirement = declaration.requirement
+		? requirementContract(cwd, declaration.requirement, parser)
+		: { diagnostics: [] };
 	const inferred = middlewareNextProvidesTypes(contract);
 	const metadata: MiddlewareMetadata = {
 		file,
 		name,
 		requires: stringArrayProperty(contract, "requires"),
+		...(requirement.services && { requiresServices: requirement.services }),
 		provides: provides.keys,
 		providesTypes: Object.fromEntries(
 			provides.keys.map((provided) => [
@@ -1952,6 +1970,7 @@ function middlewareMetadata(
 		file: declarationFile,
 		contract,
 		providesUnresolved: provides.unresolved,
+		requirementDiagnostics: requirement.diagnostics,
 	});
 	return metadata;
 }
@@ -2494,33 +2513,54 @@ function inputAccessPath(expression: ts.Expression): string | undefined {
 	return `${segments[0]}.${segments[1]}`;
 }
 
+/** A middleware declaration: its contract object, and the requirement interface it was given. */
+type MiddlewareDeclaration = {
+	contract: ts.ObjectLiteralExpression;
+	/** The `Requirements` type argument of `createMiddleware<Requirements>()`, and its module. */
+	requirement?: { file: string; type: ts.TypeNode } | undefined;
+};
+
 /**
- * Extracts the middleware contract object from a `createMiddleware` call.
- *
- * @param expression - The expression to inspect
- * @returns The first argument object literal when the expression is a `createMiddleware(...)` call, otherwise `undefined`
+ * Reads middleware declarations: `createMiddleware({ ... })`, and the typed helper form, either
+ * `defineCacheMiddleware({ ... })` where the helper is a `const` or relative import bound to
+ * `createMiddleware<CacheRequirements>()`, or the inline `createMiddleware<CacheRequirements>()({ ... })`.
+ * Neither runs the module.
  */
-function createMiddlewareObject(expression: ts.Expression): ts.ObjectLiteralExpression | undefined {
-	const unwrapped = unwrapExpression(expression);
+function middlewareReader(
+	cwd: string,
+	parser: ts.SourceFileParser,
+): DeclarationReader<MiddlewareDeclaration> {
+	return (expression, file) => {
+		const unwrapped = unwrapExpression(expression);
+		const contract = ts.isCallExpression(unwrapped) && objectLiteral(unwrapped.arguments[0]);
 
-	if (!ts.isCallExpression(unwrapped) || callName(unwrapped) !== "createMiddleware") {
-		return;
-	}
+		if (!contract) {
+			return;
+		}
 
-	return objectLiteral(unwrapped.arguments[0]);
+		if (callName(unwrapped) === "createMiddleware") {
+			return { contract };
+		}
+
+		const requirement = middlewareRequirement(cwd, file, unwrapped.expression, parser);
+		return requirement && { contract, requirement };
+	};
 }
 
 /**
  * Resolves a middleware expression to its declaration contract.
  *
  * @param expression - The middleware expression to inspect.
+ * @param file - The module containing `expression`, relative to the project root.
  * @param middlewareByName - A lookup of locally declared middleware contracts by name.
- * @returns The middleware name and contract object when the expression resolves, or `undefined` otherwise.
+ * @returns The middleware name and declaration when the expression resolves, or `undefined` otherwise.
  */
 function middlewareExpressionMetadata(
 	expression: ts.Expression,
-	middlewareByName: Map<string, ts.ObjectLiteralExpression>,
-): { name: string; contract: ts.ObjectLiteralExpression } | undefined {
+	file: string,
+	middlewareByName: Map<string, MiddlewareDeclaration>,
+	read: DeclarationReader<MiddlewareDeclaration>,
+): { name: string; contract: MiddlewareDeclaration } | undefined {
 	const unwrapped = unwrapExpression(expression);
 
 	if (ts.isIdentifier(unwrapped)) {
@@ -2531,10 +2571,10 @@ function middlewareExpressionMetadata(
 		}
 	}
 
-	const inline = createMiddlewareObject(unwrapped);
+	const inline = read(unwrapped, file);
 
 	if (inline) {
-		return { name: "createMiddleware", contract: inline };
+		return { name: callName(unwrapped) ?? "createMiddleware", contract: inline };
 	}
 }
 
@@ -2679,7 +2719,8 @@ function middlewareOrderDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 
 /**
  * Reports middleware context Routa cannot accept: `ctx.services`, which it reserves for injected
- * services, whether provided or passed to `next()`, and `provides` it cannot read from source.
+ * services, whether provided or passed to `next()`, `provides` it cannot read from source, and a
+ * requirement interface it cannot read.
  *
  * @param routes - Route metadata whose middleware chains are checked, each contract once
  */
@@ -2696,6 +2737,7 @@ function middlewareContextDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 			}
 
 			seen.add(source.contract);
+			diagnostics.push(...source.requirementDiagnostics);
 			const report = (code: string, message: string, suggestion: string) =>
 				diagnostics.push({ code, severity: "error", message, file: source.file, suggestion });
 			const reserved =
@@ -3002,6 +3044,141 @@ function serviceCollisionDiagnostics(
 	return diagnostics;
 }
 
+/**
+ * Reports middleware that requires a service its placement does not provide. Filesystem
+ * middleware sees application services, route-file middleware also its route file's, and method
+ * middleware also its method's. A name only a later factory builds is still unavailable.
+ */
+function serviceRequirementDiagnostics(
+	routes: RouteMetadata[],
+	application: ServiceContractMetadata | undefined,
+): Diagnostic[] {
+	const fixes = {
+		filesystem: (name: string) =>
+			`Filesystem middleware sees only application services. Declare ${name} in the application services, or move the middleware into a route file or method that declares it.`,
+		"route-file": (name: string) =>
+			`Route-file middleware sees application and route-file services. Declare ${name} in one of them, or move the middleware into a method that declares it.`,
+		method: (name: string) =>
+			`Method middleware sees application, route-file, and method services. Declare ${name} in one of them.`,
+	};
+	const diagnostics: Diagnostic[] = [];
+
+	for (const route of routes) {
+		for (const placement of requirementPlacements(route)) {
+			const { middleware } = placement;
+			const available = new Set(
+				[application, ...placement.scopes].flatMap((scope) => scope?.names ?? []),
+			);
+
+			for (const name of middleware.requiresServices.names) {
+				if (available.has(name)) {
+					continue;
+				}
+
+				const later = placement.later.find((scope) => scope.contract.names.includes(name));
+				diagnostics.push({
+					code: "ROUTA_SERVICES_UNAVAILABLE",
+					severity: "error",
+					message: `${placement.kind} middleware ${middleware.name} requires service ${JSON.stringify(name)}, which ${placement.where} does not provide before it runs.${
+						later ? ` ${later.owner} declare it, but their factory runs after this middleware.` : ""
+					}`,
+					file: middleware.file,
+					routePath: route.path,
+					suggestion: fixes[placement.position](JSON.stringify(name)),
+				});
+			}
+		}
+	}
+
+	return diagnostics;
+}
+
+/** One middleware that requires services, where it runs in a route's chains. */
+type RequirementPlacement = {
+	middleware: MiddlewareMetadata & { requiresServices: ServiceContractMetadata };
+	position: "filesystem" | "route-file" | "method";
+	/** Names the position in messages: `Filesystem`, `Route-file`, or the method, such as `POST`. */
+	kind: string;
+	/** Names the middleware and its placement, such as `withCache on POST /orders`. */
+	label: string;
+	/** The route, or route and method, it runs on, such as `/orders` or `POST /orders`. */
+	where: string;
+	/** The request-scoped contracts built before it runs, in order. */
+	scopes: ReadonlyArray<ServiceContractMetadata | undefined>;
+	/** The request-scoped contracts the same request builds after it runs. */
+	later: ReadonlyArray<{ owner: string; contract: ServiceContractMetadata }>;
+};
+
+/**
+ * Lists a route's middleware that require services, with the scopes built before and after each.
+ * Filesystem and route-file middleware run for every method, so each appears once per route.
+ */
+function requirementPlacements(route: RouteMetadata): RequirementPlacement[] {
+	const { routeFile, methods = {} } = route.services ?? {};
+	const methodScopes = Object.entries(methods)
+		.sort(([left], [right]) => compareText(left, right))
+		.map(([method, contract]) => ({ owner: `The ${method.toUpperCase()} services`, contract }));
+	const routeFileScope = routeFile
+		? [{ owner: "The route file's services", contract: routeFile }]
+		: [];
+	const placements: RequirementPlacement[] = [];
+	const add = (
+		chain: readonly MiddlewareMetadata[],
+		placement: Omit<RequirementPlacement, "middleware" | "label">,
+		label: (middleware: MiddlewareMetadata) => string,
+	) => {
+		for (const middleware of chain) {
+			if (middleware.requiresServices) {
+				placements.push({
+					...placement,
+					middleware: { ...middleware, requiresServices: middleware.requiresServices },
+					label: label(middleware),
+				});
+			}
+		}
+	};
+
+	add(
+		route.middleware.filter((item) => item.file !== route.file),
+		{
+			position: "filesystem",
+			kind: "Filesystem",
+			where: route.path,
+			scopes: [],
+			later: [...routeFileScope, ...methodScopes],
+		},
+		(item) => `${item.name} in ${item.file}`,
+	);
+	add(
+		route.middleware.filter((item) => item.file === route.file),
+		{
+			position: "route-file",
+			kind: "Route-file",
+			where: route.path,
+			scopes: [routeFile],
+			later: methodScopes,
+		},
+		(item) => `${item.name} on ${route.path}`,
+	);
+
+	for (const method of route.methods.map((item) => item.toLowerCase())) {
+		const where = `${method.toUpperCase()} ${route.path}`;
+		add(
+			(route.methodMiddleware[method] ?? route.middleware).slice(route.middleware.length),
+			{
+				position: "method",
+				kind: method.toUpperCase(),
+				where,
+				scopes: [routeFile, methods[method]],
+				later: [],
+			},
+			(item) => `${item.name} on ${where}`,
+		);
+	}
+
+	return placements;
+}
+
 function duplicateRouteDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 	const seen = new Map<string, RouteMetadata>();
 	const diagnostics: Diagnostic[] = [];
@@ -3197,11 +3374,12 @@ function routeContextTypes(routes: RouteMetadata[], application: boolean): strin
 					.join("\n")}\n};`
 			: "";
 
+	const requirementChecks = serviceRequirementChecks(routes, application);
 	const servicesRegistration = `${
 		application ? "\t\tapplicationServices: RoutaApplicationServices;\n" : ""
 	}${scoped.length > 0 ? "\t\tfactoryCtxByPath: RoutaFactoryCtxByPath;\n" : ""}`;
 
-	return `${ctxTypes}\n\n${ctxMap}${factoryCtx}\n\n${ctxByKey}\n\ndeclare module "@routa-ts/core" {\n\texport interface Register {\n\t\trouteCtxByPath: RoutaRouteCtxByPath;\n\t\tctxByKey: RoutaCtxByKey;\n${servicesRegistration}\t}\n}`;
+	return `${ctxTypes}\n\n${ctxMap}${factoryCtx}${requirementChecks}\n\n${ctxByKey}\n\ndeclare module "@routa-ts/core" {\n\texport interface Register {\n\t\trouteCtxByPath: RoutaRouteCtxByPath;\n\t\tctxByKey: RoutaCtxByKey;\n${servicesRegistration}\t}\n}`;
 }
 
 /**
@@ -3225,6 +3403,45 @@ function factoryCtxMap(route: RouteMetadata, application: boolean): string {
 	];
 
 	return `{\n${entries.join("\n")}\n\t}`;
+}
+
+/**
+ * Builds one type-level check for each placement of a middleware that requires services: the
+ * services available where it runs must satisfy its requirement interface, so `tsc` reports an
+ * incompatible service at that placement. Each placement is checked on its own, so unrelated
+ * scopes may give one name different types. Projects without such middleware get no checks.
+ */
+function serviceRequirementChecks(routes: RouteMetadata[], application: boolean): string {
+	const checks = new Set<string>();
+
+	for (const route of routes) {
+		for (const placement of requirementPlacements(route)) {
+			const available = servicesType(application, placement.scopes);
+
+			// A placement without services cannot provide a requirement; validation reports it.
+			if (available) {
+				checks.add(
+					`\tRoutaServicesSatisfy<${JSON.stringify(placement.label)}, ${available}, ${contractTypeReference(placement.middleware.requiresServices)}>,`,
+				);
+			}
+		}
+	}
+
+	if (checks.size === 0) {
+		return "";
+	}
+
+	return `
+
+/**
+ * Each middleware that requires services, checked against the services available where it runs.
+ * TypeScript reports a placement whose services do not satisfy the middleware's requirements.
+ */
+export type RoutaServiceRequirementChecks = [
+${[...checks].join("\n")}
+];
+
+type RoutaServicesSatisfy<_TPlacement extends string, TAvailable extends TRequired, TRequired> = TAvailable;`;
 }
 
 /**
