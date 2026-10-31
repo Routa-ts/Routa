@@ -46,8 +46,12 @@ also exports `routaApplicationServices`, the contract's sorted service names, an
 `ctx.services`. A route file that declares [route-file or method
 services](/docs/concepts/services/#route-file-and-method-services) adds their contracts to its
 `routaRoutes` entry and `services` to its handler context, and the file exports
-`RoutaFactoryCtxByPath`, the context each request factory receives. Projects without services
-get none of these.
+`RoutaFactoryCtxByPath`, the context each request factory receives. A middleware with
+[service requirements](/docs/concepts/services/#middleware-service-requirements) adds its
+requirement interface to its `routaRoutes` entry as `requiresServices`, and the file exports
+`RoutaServiceRequirementChecks`, one type check per placement that TypeScript fails when the
+services there do not satisfy the requirement. Projects without services or requirements get
+none of these.
 
 Refresh it after adding, moving, or removing a route file, changing which methods a route
 declares, or changing middleware layout:
