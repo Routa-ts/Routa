@@ -78,7 +78,7 @@ export default createRouta({
 
 		const check = await run(["check"], { cwd });
 
-		expect(check.stderr ?? "", check.stdout).toBe("");
+		expectPassed(check);
 		expect(check.code).toBe(0);
 		const generated = readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8");
 		expect(generated).toContain(
@@ -160,7 +160,7 @@ export default createRouta({ services });
 
 		const check = await run(["check"], { cwd });
 
-		expect(check.stderr ?? "", check.stdout).toBe("");
+		expectPassed(check);
 		const generated = readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8");
 		expect(generated).toContain(
 			'export const routaApplicationServices = [\n\t"clock",\n\t"orders"\n] as const;',
@@ -196,7 +196,7 @@ export default createRouta({
 
 		const check = await run(["check"], { cwd });
 
-		expect(check.stderr ?? "", check.stdout).toBe("");
+		expectPassed(check);
 		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
 			'export type RoutaApplicationServices = import("../src/routa.js").AppServices;',
 		);
@@ -219,17 +219,22 @@ export default createRouta({ services: ${services} });
 `,
 			});
 
-			expect(validateProject(cwd, { write: false }).diagnostics, services).toEqual([
+			expect({ services, diagnostics: validateProject(cwd, { write: false }).diagnostics }).toEqual(
 				{
-					code: "ROUTA_SERVICES_UNRESOLVED",
-					severity: "error",
-					message:
-						"Application services in src/routa.ts cannot be statically resolved to a service contract.",
-					file: "src/routa.ts",
-					suggestion:
-						"Declare `const defineAppServices = defineServices<AppServices>();` and set `services: defineAppServices(factory)`, or write `services: defineServices<AppServices>()(factory)`. Each binding must be a const declaration or a relative import.",
+					services,
+					diagnostics: [
+						{
+							code: "ROUTA_SERVICES_UNRESOLVED",
+							severity: "error",
+							message:
+								"Application services in src/routa.ts cannot be statically resolved to a service contract.",
+							file: "src/routa.ts",
+							suggestion:
+								"Declare `const defineAppServices = defineServices<AppServices>();` and set `services: defineAppServices(factory)`, or write `services: defineServices<AppServices>()(factory)`. Each binding must be a const declaration or a relative import.",
+						},
+					],
 				},
-			]);
+			);
 		}
 	});
 
@@ -290,16 +295,21 @@ export default createRouta({ services: defineServices<AppServices>()(() => ({}) 
 `,
 			});
 
-			expect(validateProject(cwd, { write: false }).diagnostics, contract).toEqual([
+			expect({ contract, diagnostics: validateProject(cwd, { write: false }).diagnostics }).toEqual(
 				{
-					code: "ROUTA_SERVICES_CONTRACT_UNSUPPORTED",
-					severity: "error",
-					message: `Service contract AppServices ${problem}.`,
-					file: "src/routa.ts",
-					suggestion:
-						"Declare each service as a required property with a plain name, directly in an interface or object type, without index signatures or extends.",
+					contract,
+					diagnostics: [
+						{
+							code: "ROUTA_SERVICES_CONTRACT_UNSUPPORTED",
+							severity: "error",
+							message: `Service contract AppServices ${problem}.`,
+							file: "src/routa.ts",
+							suggestion:
+								"Declare each service as a required property with a plain name, directly in an interface or object type, without index signatures or extends.",
+						},
+					],
 				},
-			]);
+			);
 		}
 	});
 
@@ -329,7 +339,7 @@ export default createRouteRoot("/time")({
 
 		const check = await run(["check"], { cwd });
 
-		expect(check.stderr ?? "", check.stdout).toBe("");
+		expectPassed(check);
 		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).not.toMatch(/services/i);
 
 		const { application } = await createProjectApplication(cwd, cwd, "dev");
@@ -553,10 +563,6 @@ import { z } from "zod";
 
 ${body}`;
 
-function diagnosticCodes(cwd: string): string[] {
-	return validateProject(cwd, { write: false }).diagnostics.map((item) => item.code);
-}
-
 describe("reserved ctx.services (routa check)", () => {
 	it("reports middleware that provides services, literally or through a named binding", () => {
 		for (const body of [
@@ -638,19 +644,37 @@ describe("reserved ctx.services (routa check)", () => {
 				"src/routes/status/route.ts": statusRoute,
 			});
 
-			expect(validateProject(cwd, { write: false }).diagnostics, provides).toEqual([
+			expect({ provides, diagnostics: validateProject(cwd, { write: false }).diagnostics }).toEqual(
 				{
-					code: "ROUTA_MIDDLEWARE_PROVIDES_UNRESOLVED",
-					severity: "error",
-					message: "Middleware withUser declares provides that cannot be statically read.",
-					file: "src/routes/middleware.ts",
-					suggestion:
-						"Declare provides as an object literal, or a const object literal it names, with a plain key for each schema and no spreads.",
+					provides,
+					diagnostics: [
+						{
+							code: "ROUTA_MIDDLEWARE_PROVIDES_UNRESOLVED",
+							severity: "error",
+							message: "Middleware withUser declares provides that cannot be statically read.",
+							file: "src/routes/middleware.ts",
+							suggestion:
+								"Declare provides as an object literal, or a const object literal it names, with a plain key for each schema and no spreads.",
+						},
+					],
 				},
-			]);
+			);
 		}
 	});
 });
+
+/** Fails with the command's own output, so a TypeScript error in a fixture is readable. */
+function expectPassed(result: {
+	code: number;
+	stdout?: string | undefined;
+	stderr?: string | undefined;
+}) {
+	if (result.code !== 0 || result.stderr) {
+		throw new Error(`routa check failed:\n${result.stdout ?? ""}${result.stderr ?? ""}`);
+	}
+
+	expect(result.code).toBe(0);
+}
 
 /** A Routa project whose TypeScript resolves `@routa-ts/core` to this checkout's source. */
 function servicesProject(files: Record<string, string>): string {

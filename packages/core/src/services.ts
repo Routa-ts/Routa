@@ -104,7 +104,7 @@ export function logCleanupFailure(logger: RoutaLogger, error: unknown): void {
  * @throws {TypeError} When the result is not an object, or its names differ from the declared ones
  */
 function exactServices(value: unknown, names: readonly string[]): ServiceMapping {
-	const declared = names.map((name) => JSON.stringify(name)).join(", ");
+	const declared = quotedList(names);
 
 	if (typeof value !== "object" || value === null || Array.isArray(value)) {
 		throw new TypeError(
@@ -117,10 +117,8 @@ function exactServices(value: unknown, names: readonly string[]): ServiceMapping
 
 	if (missing.length > 0 || unexpected.length > 0) {
 		const problems = [
-			...(missing.length > 0 ? [`missing ${missing.map((name) => JSON.stringify(name))}`] : []),
-			...(unexpected.length > 0
-				? [`unexpected ${unexpected.map((name) => JSON.stringify(name))}`]
-				: []),
+			...(missing.length > 0 ? [`missing ${quotedList(missing)}`] : []),
+			...(unexpected.length > 0 ? [`unexpected ${quotedList(unexpected)}`] : []),
 		];
 
 		throw new TypeError(
@@ -130,4 +128,8 @@ function exactServices(value: unknown, names: readonly string[]): ServiceMapping
 
 	const services = value as Record<string, unknown>;
 	return Object.freeze(Object.fromEntries(names.map((name) => [name, services[name]])));
+}
+
+function quotedList(names: readonly string[]): string {
+	return names.map((name) => JSON.stringify(name)).join(", ");
 }
