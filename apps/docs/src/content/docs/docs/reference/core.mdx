@@ -710,6 +710,53 @@ type UsersRouteConfig = RouteRootConfigForCtx<{
 }>;
 ```
 
+## Service Factory Types
+
+```ts
+type OnCleanup = (callback: () => unknown) => void
+
+type ApplicationServicesContext = {
+	readonly logger: RoutaLogger
+	readonly onCleanup: OnCleanup
+}
+
+type ApplicationServicesFactory<TServices extends object = object> = (
+	context: ApplicationServicesContext,
+) => TServices | Promise<TServices>
+
+type RequestServicesContext<TCtx = Record<string, unknown>> = {
+	readonly ctx: Readonly<Omit<TCtx, "logger">> & { readonly logger: RoutaLogger }
+	readonly onCleanup: OnCleanup
+}
+
+type RequestServicesFactory<TServices extends object = object, TCtx = Record<string, unknown>> = (
+	context: RequestServicesContext<TCtx>,
+) => TServices | Promise<TServices>
+```
+
+These are the argument and factory types `defineServices` checks against. `OnCleanup`
+registers a callback that Routa awaits after the scope ends, one at a time, in reverse
+registration order, attempting every one. `TCtx` in a request factory is the context the
+middleware before it provided, plus earlier services.
+
+| Type parameter | Meaning                                                        |
+| -------------- | -------------------------------------------------------------- |
+| `TServices`    | The scope's service contract                                   |
+| `TCtx`         | Request factories only: the context available before the scope |
+
+To type a factory you declare on its own, use the generated `ServicesFactory` from
+`.routa/testing.gen.ts`. It fills in the contract and the scope's context, so you do not
+repeat either. Keep the file outside `src/routes`, where every module is a route file:
+
+```ts title="src/factories/orders.ts"
+import type { ServicesFactory } from "../../.routa/testing.gen.js";
+
+export const ordersServices: ServicesFactory<"/orders"> = ({ ctx, onCleanup }) => {
+	onCleanup(() => ctx.logger.info("orders.released", "Orders services released."));
+	return { orders: { list: () => [] } };
+};
+```
+
 ## Exported Types
 
 `HttpMethod`, `RouteInput`, `RouteOutcome`, `RouteResponses`, `OutcomeResult`, `ResponseChecks`, `RouteContract`, `AnyRouteContract`,
