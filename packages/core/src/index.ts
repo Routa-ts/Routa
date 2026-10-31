@@ -699,7 +699,9 @@ type ServiceContractRules<TServices> = string extends keyof TServices
 			readonly "A service contract names each service. Remove the index signature.": never;
 		}
 	: {
-			readonly [K in OptionalServiceNames<TServices>]: `Service "${K & string}" is optional. A service contract lists required services only.`;
+			readonly [
+				K in OptionalServiceNames<TServices>
+			]: `Service "${K & string}" is optional. A service contract lists required services only.`;
 		};
 
 export type RoutaConfig = {

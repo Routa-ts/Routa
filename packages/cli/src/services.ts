@@ -1,6 +1,12 @@
 import { existsSync } from "node:fs";
 import { join, sep } from "node:path";
-import { callName, objectLiteral, propertyName, resolveImportFile, unwrapExpression } from "./ast.js";
+import {
+	callName,
+	objectLiteral,
+	propertyName,
+	resolveImportFile,
+	unwrapExpression,
+} from "./ast.js";
 import { compareText } from "./contract-schemas.js";
 import {
 	boundDeclaration,
@@ -377,7 +383,10 @@ function localExportName(
 }
 
 /** Reads a contract's service names, and what keeps them from being a fixed required set. */
-function contractMembers(declaration: ContractDeclaration): { names: string[]; problems: string[] } {
+function contractMembers(declaration: ContractDeclaration): {
+	names: string[];
+	problems: string[];
+} {
 	const names = new Set<string>();
 	const problems: string[] = [];
 	let members: readonly ts.TypeElement[];
