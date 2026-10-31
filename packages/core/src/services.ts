@@ -119,7 +119,11 @@ export function logCleanupFailure(logger: RoutaLogger, error: unknown): void {
  *
  * @throws {TypeError} When the result is not an object, or its names differ from the declared ones
  */
-function exactServices(value: unknown, names: readonly string[], label: string): ServiceMapping {
+export function exactServices(
+	value: unknown,
+	names: readonly string[],
+	label: string,
+): ServiceMapping {
 	const declared = quotedList(names);
 
 	if (typeof value !== "object" || value === null || Array.isArray(value)) {

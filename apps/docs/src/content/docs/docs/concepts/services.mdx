@@ -310,11 +310,13 @@ A request cleanup failure is logged as `services.cleanup_failed` and never chang
 response. Application services stay available throughout, and `dispose()` waits for active
 requests to finish their cleanup before releasing application services.
 
-When a request factory throws or returns the wrong names, Routa runs the callbacks that
-factory registered, skips every later factory, middleware, and the handler, and responds
-with the standard `500` problem. The error is logged as `http.error` and never reaches the
-client. A middleware reject also skips later factories. Either way, Routa releases the
-scopes the request already built. It does not retry a factory or substitute a service.
+When a request factory throws or returns the wrong names, Routa skips every later factory,
+middleware, and the handler, and responds with the standard `500` problem, whatever the
+factory threw. A `ZodError` from a factory is an internal failure, not a validation error.
+The error is logged as `http.error` and never reaches the client. A middleware reject also
+skips later factories. Either way, Routa releases the scopes the request started, including
+the callbacks a failed factory registered, after the chain unwinds and in the same order. It
+does not retry a factory or substitute a service.
 
 ## Reserved `ctx.services`
 

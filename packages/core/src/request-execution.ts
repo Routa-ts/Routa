@@ -11,8 +11,8 @@ import {
 import { lifecycleHeaders, resolveHeaders, serializeHeaders } from "./response-headers.js";
 import {
 	type CleanupScope,
-	constructServices,
 	createCleanupScope,
+	exactServices,
 	logCleanupFailure,
 	type RequestServicesDeclaration,
 	type ServiceMapping,
@@ -170,7 +170,9 @@ export function createRequestExecutor(
  * replaced. A request-scoped services factory runs when the chain reaches its position, receives
  * the context so far, and starts a new stage whose `ctx.services` adds its services. Earlier
  * stages keep their own mapping, even after `next()` resolves. A factory failure ends the chain
- * there, so later factories, middleware, and the handler never run.
+ * there, so later factories, middleware, and the handler never run, and the request fails as an
+ * internal server error whatever the factory threw. Its scope is registered for cleanup before
+ * the factory runs, so cleanup it already registered is released with the other scopes.
  *
  * The response is fixed where its outcome is selected: `select` validates and serializes the
  * result before the chain unwinds, so later changes to objects the result shared with application
@@ -180,7 +182,7 @@ export function createRequestExecutor(
  * @param routeInput - Parsed input passed to the final handler
  * @param first - The context and services the first middleware sees
  * @param inputReader - Reader used to parse middleware-specific input
- * @param requestServices - The request-scoped factories, and the cleanup scopes of those built
+ * @param requestServices - The request-scoped factories, and the cleanup scopes of those started
  * @param select - Turns the result that ends the request into its response
  * @returns The response of the selected outcome
  */
@@ -202,15 +204,17 @@ async function runWithMiddleware(
 		exposeServices(factoryCtx, stage.services);
 		Object.freeze(factoryCtx);
 
+		// Registered before the factory runs, so a failed factory's partial cleanup is released
+		// with the other scopes once the chain has unwound.
 		const cleanup = createCleanupScope();
-		const mapping = await constructServices(
-			(onCleanup) => scope.factory({ ctx: factoryCtx, onCleanup }),
-			scope.names,
-			scope.label,
-			cleanup,
-			logger,
-		);
 		requestServices.constructed.push(cleanup);
+		let mapping: ServiceMapping;
+		try {
+			const value = await scope.factory({ ctx: factoryCtx, onCleanup: cleanup.onCleanup });
+			mapping = exactServices(value, scope.names, scope.label);
+		} catch (error) {
+			throw new RequestServicesError(error);
+		}
 
 		const services = Object.freeze({ ...stage.services, ...mapping });
 		exposeServices(earlier, services);
@@ -1074,6 +1078,10 @@ function logRequestError(
  * @returns An object containing error details, or a stringified error value for non-`Error` inputs
  */
 function errorLogData(error: unknown): Record<string, unknown> {
+	if (error instanceof RequestServicesError) {
+		return errorLogData(error.cause);
+	}
+
 	if (error instanceof Error) {
 		return {
 			error: error.message,
@@ -1093,3 +1101,14 @@ function errorLogData(error: unknown): Record<string, unknown> {
 class InvalidJsonBodyError extends Error {}
 
 class UnsupportedMediaTypeError extends Error {}
+
+/**
+ * A request services factory failed. `errorResponse` maps it to the generic `500` problem whatever
+ * the factory threw, so a `ZodError` or similar never reads as a client error or reaches the client.
+ * The original error is logged.
+ */
+class RequestServicesError extends Error {
+	constructor(cause: unknown) {
+		super("Request services construction failed.", { cause });
+	}
+}
