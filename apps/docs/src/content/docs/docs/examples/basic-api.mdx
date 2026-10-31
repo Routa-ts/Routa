@@ -85,9 +85,10 @@ part of the resolved path.
 
 ## Limits
 
-This example has no middleware, no authentication, and no persistence. Handlers return
-in-memory data so the HTTP boundary stays legible. For middleware chains, route groups,
-and OpenAPI workflows, read the [Full API example](/docs/examples/full-api/).
+This example has no middleware, no authentication, no persistence, and no
+[services](/docs/concepts/services/). Handlers return in-memory data so the HTTP boundary
+stays legible, and their types have no `ctx.services`. For middleware chains, route groups,
+services, and OpenAPI workflows, read the [Full API example](/docs/examples/full-api/).
 
 <Aside type="note" title="Repository only">
 	Both examples live in the Routa repository rather than on npm. Clone the repository to

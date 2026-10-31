@@ -1,5 +1,6 @@
 import { createMiddleware } from "@routa-ts/core";
 import { z } from "zod";
+import type { TenantProjects } from "../services.js";
 
 export const withProjectScope = createMiddleware({
 	requires: ["tenant", "auth"],
@@ -79,5 +80,33 @@ export const withProjectPermissions = createMiddleware({
 				canWrite: true,
 			},
 		});
+	},
+});
+
+/** The services withProjectList reads. It needs only `list`, not the whole TenantProjects. */
+export interface ProjectListRequirements {
+	tenantProjects: Pick<TenantProjects, "list">;
+}
+
+const defineProjectListMiddleware = createMiddleware<ProjectListRequirements>();
+
+/** Loads the projects for the list mode. Place it where the projects route file's services exist. */
+export const withProjectList = defineProjectListMiddleware({
+	requiresServices: ["tenantProjects"],
+	requires: ["projectListMode"],
+	provides: {
+		projectList: z.array(
+			z.object({
+				id: z.string(),
+				tenantId: z.string(),
+				name: z.string(),
+				status: z.enum(["active", "archived"]),
+			}),
+		),
+	},
+	run: async ({ ctx, next }) => {
+		const { status, label } = ctx.projectListMode;
+
+		return next({ projectList: ctx.services.tenantProjects.list(status, label) });
 	},
 });

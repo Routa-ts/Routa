@@ -114,6 +114,31 @@ export default createRouta({
 });
 ```
 
+### Changing an Implementation
+
+Routes depend on the contract, so you can swap an implementation in the factory alone. This
+factory replaces `MemoryUserStore` with a SQL-backed store. The route file above does not
+change, and handlers cannot call members `SqlUserStore` adds beyond `UserStore`, because
+`ctx.services` is typed by the contract:
+
+```ts title="src/routa.ts"
+import { createRouta } from "@routa-ts/core";
+import { defineAppServices } from "./services.js";
+import { createPool, SqlUserStore } from "./resources.js";
+
+export default createRouta({
+	services: defineAppServices(async ({ onCleanup }) => {
+		const pool = await createPool(process.env.DATABASE_URL);
+		onCleanup(() => pool.end());
+
+		return { clock: { now: () => new Date() }, users: new SqlUserStore(pool) };
+	}),
+});
+```
+
+TypeScript checks the new implementation against `UserStore` when the factory compiles. At
+runtime Routa checks only the service names.
+
 ## Route-File and Method Services
 
 A route file can declare services on its route root, and a method on its `createRoute`. Use
@@ -391,8 +416,49 @@ the pool, then fails startup with the `connectCache` error. It does not retry th
 several resources and then throws releases its own partial work, because only callbacks
 registered before the failure run.
 
+Register each callback as soon as its resource exists. A callback registered at the end of
+the factory never runs when an earlier step throws, so the resources acquired before that
+step leak.
+
 You can also register one callback for several resources. Routa treats it as a single
-callback, so its internal order and its `try`/`finally` are yours.
+callback, so its internal order and its `try`/`finally` are yours:
+
+```ts title="src/routa.ts"
+import { createRouta } from "@routa-ts/core";
+import { defineAppServices } from "./services.js";
+import { connectCache, createPool, SqlUserStore } from "./resources.js";
+
+export default createRouta({
+	services: defineAppServices(async ({ onCleanup }) => {
+		const pool = await createPool(process.env.DATABASE_URL);
+		const cache = await connectCache(process.env.CACHE_URL).catch(async (error: unknown) => {
+			// Keep the connection error primary even when ending the pool fails too.
+			await pool.end().catch((cleanupError: unknown) => console.error(cleanupError));
+			throw error;
+		});
+
+		onCleanup(async () => {
+			try {
+				await cache.quit();
+			} finally {
+				await pool.end();
+			}
+		});
+
+		return { clock: { now: () => new Date() }, users: new SqlUserStore(pool, cache) };
+	}),
+});
+```
+
+The two styles fail differently:
+
+| Style                     | When `connectCache` throws     | When `cache.quit()` throws                                     |
+| ------------------------- | ------------------------------ | -------------------------------------------------------------- |
+| One callback per resource | Routa ends the pool            | Routa still ends the pool and reports the `quit` failure       |
+| One combined callback     | Your `catch` must end the pool | Your `finally` ends the pool; Routa reports the `quit` failure |
+
+Without the `finally`, a failed `quit()` skips `pool.end()`, because Routa attempts each
+callback but not each line inside one.
 
 Cleanup runs once per application instance:
 
@@ -403,7 +469,8 @@ Cleanup runs once per application instance:
 - When a listen option is invalid, for example a port out of range, Routa releases the
   services and fails startup with the listener's error.
 - `createApplication(...).dispose()` waits for accepted requests to settle, then runs the
-  callbacks.
+  callbacks. It sets no deadline and cancels nothing, so a request or callback that never
+  settles keeps it pending.
 
 A cleanup failure never replaces a startup error. Routa logs it as
 `services.cleanup_failed`. `dispose()` rejects with an `AggregateError` of the failures
