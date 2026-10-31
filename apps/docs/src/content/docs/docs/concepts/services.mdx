@@ -128,9 +128,9 @@ of guessing:
 | An optional or computed member, an index signature, or an `extends` | `ROUTA_SERVICES_CONTRACT_UNSUPPORTED` |
 
 TypeScript rejects optional services and index signatures in `defineServices<...>()` too.
-Declare `services` in the `createRouta` object itself, or in a spread of a `const` object
-literal declared locally or imported. When a spread or computed key Routa cannot read may
-hide them, `routa check` warns with `ROUTA_SERVICES_SPREAD_UNRESOLVED`, and startup fails
+Declare `services` in the `createRouta` object itself, or in a `const` object literal,
+declared locally or imported, that you pass to `createRouta` or spread into it. When a
+spread, computed key, or config argument Routa cannot read may hide them, `routa check` warns with `ROUTA_SERVICES_SPREAD_UNRESOLVED`, and startup fails
 rather than running unchecked services.
 
 ## Cleanup
