@@ -234,11 +234,16 @@ services of earlier scopes, including replacements, through `ctx`.
 TypeScript rejects a path no route file declares, a method the route file does not declare,
 a route or method that declares no services, and a factory that returns an incomplete or
 wrong contract. When a call slips past the types, for example through a cast,
-`createTestApp` rejects before any factory runs:
+`createTestApp` rejects an unknown path, method, or scope, or a value that is not a factory,
+before any factory runs:
 
 ```txt
 TypeError: Cannot replace services for GET /orders: it declares none.
 ```
+
+A replacement's returned names are checked only when it runs: at construction for the
+application scope, and on a matching request for a route or method scope, which then
+responds with `500`. Routa never checks service members at runtime.
 
 Importing `.routa/testing.gen.js` imports none of your modules and runs no factory. Your
 modules load when you call `createTestApp`, so their own import-time effects still run then.
