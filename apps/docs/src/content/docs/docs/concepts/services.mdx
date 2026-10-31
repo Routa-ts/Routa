@@ -433,6 +433,30 @@ skips later factories. Either way, Routa releases the scopes the request started
 the callbacks a failed factory registered, after the chain unwinds and in the same order. It
 does not retry a factory or substitute a service.
 
+## Test Replacement
+
+The generated `.routa/testing.gen.ts` exports `createTestApp`, which builds an in-memory
+instance of your project with replacement factories. Each replacement takes the place of one
+scope's whole factory before construction and returns that scope's complete contract:
+
+```ts title="src/orders.test.ts"
+import { createTestApp } from "../.routa/testing.gen.js";
+import { testAppServices, testCheckoutServices } from "./testing/fakes.js";
+
+const app = await createTestApp({
+	services: testAppServices,
+	routes: { "/orders": { methods: { post: { services: testCheckoutServices } } } },
+});
+```
+
+The original factory of a replaced scope never runs, and each factory that does run owns its
+cleanup. Omitted scopes keep their factories and receive the replacements through `ctx`, so
+dependent services stay wired. Annotate a factory declared on its own, in a test file or in
+application code, with the generated `ServicesFactory<"application">`,
+`ServicesFactory<"/orders">`, or `ServicesFactory<"POST /orders">` type, so you do not repeat
+its contract or context. [Testing](/docs/guides/testing/) walks through fakes, cleanup, and
+disposal.
+
 ## Reserved `ctx.services`
 
 Routa reserves `ctx.services` in every project, including projects without services.
@@ -476,11 +500,12 @@ Your application owns the services, their configuration, the resources they acqu
 those resources are released, and every business decision the services make. Service
 contracts never appear in OpenAPI, and adopting services does not change any HTTP response.
 
-<Aside type="caution" title="Partial: no test application yet">
+<Aside type="caution" title="Partial: no graceful shutdown yet">
 	Application, route-file, and method services, middleware service requirements, their
-	cleanup, and the reserved `ctx.services` are implemented. A generated test application and
-	graceful shutdown are not implemented. `routa dev` and `routa start` do not yet run
-	application cleanup when the process receives `SIGINT` or `SIGTERM`.
+	cleanup, the generated test application with scope replacement, and the reserved
+	`ctx.services` are implemented. Graceful shutdown is not implemented. `routa dev` and
+	`routa start` do not yet run application cleanup when the process receives `SIGINT` or
+	`SIGTERM`.
 </Aside>
 
 ## Next Steps
@@ -499,6 +524,6 @@ contracts never appear in OpenAPI, and adopting services does not change any HTT
 	<LinkCard
 		title="Testing"
 		href="/docs/guides/testing/"
-		description="Test handlers that read ctx.services."
+		description="Replace services in an in-memory test application."
 	/>
 </CardGrid>

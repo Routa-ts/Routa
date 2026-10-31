@@ -1,25 +1,26 @@
 ---
 title: Generated Files
-description: The three files Routa writes into .routa and when each one changes.
+description: The four files Routa writes into .routa and when each one changes.
 ---
 
 import { Aside, CardGrid, FileTree, LinkCard } from "@astrojs/starlight/components";
 
-Routa writes exactly three files, all inside `.routa/`. They hold what Routa learned from
-your source: the route table, a record of what scaffolding generated, and the accepted
-OpenAPI contract. Commit all three.
+Routa writes exactly four files, all inside `.routa/`. They hold what Routa learned from
+your source: the route table, the test application entry point, a record of what
+scaffolding generated, and the accepted OpenAPI contract. Commit all four.
 
 <FileTree>
 - .routa/
   - routes.gen.ts route table and type augmentation
+  - testing.gen.ts project-bound createTestApp and service factory types
   - manifest.json scaffold tracking and content hashes
   - openapi-baseline.json accepted OpenAPI contract
 </FileTree>
 
 ## How It Works
 
-Every command that validates a project also refreshes `routes.gen.ts` when validation
-passes, so `check`, `build`, `dev`, and `generate` can all legitimately change your
+Every command that validates a project also refreshes `routes.gen.ts` and
+`testing.gen.ts` when validation passes, so `check`, `build`, `dev`, and `generate` can all legitimately change your
 working tree. Validation runs first: a project with diagnostics leaves the previous file
 untouched rather than writing partial metadata.
 
@@ -61,8 +62,28 @@ routa generate
 ```
 
 ```txt
-Generated .routa/routes.gen.ts for 4 route file(s).
+Generated .routa/routes.gen.ts and .routa/testing.gen.ts for 4 route file(s).
 ```
+
+### `.routa/testing.gen.ts`
+
+Exports `createTestApp`, which builds an isolated, in-memory instance of your project for
+tests, with no network listener and no app argument. See [Testing](/docs/guides/testing/)
+for how to use it. The file also exports two types:
+
+- `ServicesFactory<Scope>`, the factory type of each scope that declares services. The
+  scope is `"application"`, a route file's path such as `"/orders"`, or a method and path
+  such as `"POST /orders"`. Annotate a factory you declare on its own with it, and
+  TypeScript checks the factory against that scope's contract and context without you
+  repeating either.
+- `TestAppOptions`, the replacement factories `createTestApp` accepts, keyed by the same
+  scopes. A route or method that declares no services has no key.
+
+The file lists every module the application loads, `src/routa.ts`, each route file, and
+each filesystem middleware file, as a lazy `import()`. Importing it runs none of your code
+and no factory; `createTestApp` loads the modules when you call it. Every project gets this
+file, with or without services. It imports `@routa-ts/core/testing`, and `routa build`
+compiles it to `dist/.routa/testing.gen.js` with the rest of `.routa/`.
 
 ### `.routa/manifest.json`
 
@@ -84,25 +105,29 @@ comes from source alone, and `--update-baseline` overwrites the file with it.
 - Commit `.routa/`. It is the shared reference that makes drift checks and regeneration
   safety work across machines and in CI.
 - Review its diff like source. A change in `routes.gen.ts` is a change to your API surface.
-- Never edit `routes.gen.ts` or `manifest.json` by hand; the next command overwrites them.
+- Never edit `routes.gen.ts`, `testing.gen.ts`, or `manifest.json` by hand; the next command
+  overwrites them.
 - Generation is deterministic. Identical source produces identical output, so an unexpected
   diff means an unexpected contract change.
 
 ## Limits
 
 Generated metadata is only as fresh as the last successful command. A stale
-`routes.gen.ts` produces confusing type errors, because context types come from the
+`routes.gen.ts` produces confusing type errors, and a stale `testing.gen.ts` may not list a
+route file you added since, because context types come from the
 generated file rather than from the source Routa has not read yet. When types disagree
 with the code in front of you, run `routa generate` first.
 
 <Aside type="caution" title="Commands write to the working tree">
-	`routa check`, `routa build`, and `routa dev` all synchronize `routes.gen.ts` after a
-	successful validation. In CI, run `routa generate` and fail the job if `git status`
+	`routa check`, `routa build`, and `routa dev` all synchronize `routes.gen.ts` and
+	`testing.gen.ts` after a successful validation. In CI, run `routa generate` and fail the job if `git status`
 	reports changes, rather than assuming checks are read-only.
 </Aside>
 
 <Aside type="caution" title="v0 status">
-	In v0, commit `routes.gen.ts`, `manifest.json`, and `openapi-baseline.json`. After you
+	In v0, commit `routes.gen.ts`, `testing.gen.ts`, `manifest.json`, and
+	`openapi-baseline.json`. `routa scaffold` does not write `testing.gen.ts`; run
+	`routa generate` after scaffolding. After you
 	change source, refresh generated metadata; Routa does not run a remote metadata service.
 </Aside>
 
