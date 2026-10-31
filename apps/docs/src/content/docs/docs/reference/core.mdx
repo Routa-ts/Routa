@@ -503,6 +503,83 @@ It rejects with the factory's error after running the factory's registered clean
 `TypeError` when the returned names differ from `services.names`, and with any
 `createHonoApp` registration error after releasing the services.
 
+## `createProjectApplication`
+
+```ts
+function createProjectApplication(
+	load: ProjectModuleLoader,
+	options: CreateProjectApplicationOptions,
+): Promise<ProjectApplication>
+```
+
+Builds a project's application instance from its generated metadata without listening.
+`routa dev`, `routa start`, and the generated `createTestApp` all build through it, so a
+test application runs the same routes, middleware chains, and services as the server.
+
+| Parameter              | Type                                 | Purpose                                                                                              |
+| ---------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `load`                 | `(file: string) => Promise<unknown>` | Imports a module by its path from the project root, such as `src/routa.ts` or `.routa/routes.gen.ts` |
+| `options.runtimeMode`  | `"dev" \| "start"`                   | Explicit mode, as in `createHonoApp`                                                                 |
+| `options.replacements` | `ServiceReplacements`                | Factories that replace whole scopes before construction, in the `createTestApp` options shape        |
+
+It loads `.routa/routes.gen.ts`, each route file, its filesystem middleware, and
+`src/routa.ts`, then calls `createApplication` with the configured logger, lifecycle
+headers, response validation, and services. It returns `{ application, config, logger,
+routes }`.
+
+```ts
+import { pathToFileURL } from "node:url";
+import { createProjectApplication } from "@routa-ts/core/hono";
+
+const { application } = await createProjectApplication(
+	(file) => import(pathToFileURL(file).href),
+	{ runtimeMode: "start" },
+);
+```
+
+It rejects before any factory runs when a replacement names a path, method, or scope that
+declares no services, or holds a key it does not read. It rejects when a route file or
+`src/routa.ts` disagrees with the generated metadata, and with the errors of
+`createApplication`.
+
+## `createTestApplication`
+
+```ts
+function createTestApplication(
+	modules: ProjectModules,
+	options?: ServiceReplacements | ApplicationServicesFactory,
+): Promise<TestApplication>
+```
+
+Exported from `@routa-ts/core/testing`. The generated `createTestApp` in
+`.routa/testing.gen.ts` calls it with the project's module list, so you call `createTestApp`
+instead. See [Testing](/docs/guides/testing/).
+
+| Parameter | Type                                                | Purpose                                                                |
+| --------- | --------------------------------------------------- | ---------------------------------------------------------------------- |
+| `modules` | `Readonly<Record<string, () => Promise<unknown>>>`  | Imports each project module by its path from the project root          |
+| `options` | `ServiceReplacements \| ApplicationServicesFactory` | Replacement factories by scope, or a lone application services factory |
+
+It builds the application through `createProjectApplication` in `"dev"` mode and returns a
+frozen test application:
+
+| Member    | Type                                                                         | Behavior                                                                                                                                                                                                                    |
+| --------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `request` | `(input: string \| URL \| Request, init?: RequestInit) => Promise<Response>` | Sends one request in memory. A path resolves against `http://localhost`. Settles after the request's services are released; rejects once disposal has started                                                               |
+| `dispose` | `() => Promise<void>`                                                        | Stops accepting requests, waits for accepted ones and their request cleanup, then releases application services once. Repeated and concurrent calls share one outcome; rejects with an `AggregateError` when cleanup failed |
+
+```ts
+import { createTestApp } from "../.routa/testing.gen.js";
+
+const app = await createTestApp();
+const response = await app.request("/status");
+await app.dispose();
+```
+
+It rejects for the reasons `createProjectApplication` does, when `options` is neither a
+factory nor `{ services, routes }`, and when the generated list leaves out a module the
+metadata names.
+
 ## `isBodylessStatus`
 
 ```ts
@@ -650,7 +727,9 @@ type UsersRouteConfig = RouteRootConfigForCtx<{
 
 From `@routa-ts/core/hono`: `HonoRoute`, `CreateHonoAppOptions`, `CreateApplicationOptions`,
 `ApplicationServicesDeclaration`, `RequestServicesDeclaration`, `RouteServices`,
-`RoutaApplication`. From
+`RoutaApplication`, `ProjectModuleLoader`, `CreateProjectApplicationOptions`,
+`ProjectApplication`, `ServiceReplacements`. From `@routa-ts/core/testing`: `ProjectModules`,
+`TestApplication`. From
 `@routa-ts/core/logger`: `RoutaLogger`, `RoutaLogLevel`, `RoutaLogLevelWithSilent`,
 `RoutaLogEvent`, `RoutaLogData`, `CreateLoggerOptions`.
 

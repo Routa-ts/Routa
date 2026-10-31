@@ -105,7 +105,7 @@ Examples and Community sections.
 to `@routa-ts/core`, `@routa-ts/cli`, or `create-routa-ts`.
 
 - Every exported symbol from every `@routa-ts/core` entry point (`.`, `./hono`,
-  `./logger`, `./query/helpers`) appears in Reference with a signature, its options, and
+  `./logger`, `./query/helpers`, `./testing`) appears in Reference with a signature, its options, and
   one example.
 - Every CLI command and every flag appears in the CLI reference, and each appears in at
   least one guide that shows it inside a real workflow.
