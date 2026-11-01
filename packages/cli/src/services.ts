@@ -7,13 +7,9 @@ import {
 	resolveImportFile,
 	unwrapExpression,
 } from "./ast.js";
-import { compareText } from "./contract-schemas.js";
-import {
-	boundDeclaration,
-	type Diagnostic,
-	namedImportMap,
-	parseTypeScriptFile,
-} from "./project.js";
+import { compareText } from "./compare-text.js";
+import { boundDeclaration, namedImportMap, parseTypeScriptFile } from "./declarations.js";
+import type { Diagnostic } from "./project.js";
 import * as ts from "./typescript.js";
 
 /** The application service contract `src/routa.ts` declares, read from source. */
