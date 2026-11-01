@@ -20,7 +20,7 @@ export interface AppServices {
 	projects: ProjectCatalog;
 }
 
-export const defineAppServices = defineServices<AppServices>();
+const defineAppServices = defineServices<AppServices>();
 
 /** Fixed showcase data. A real application would wrap its database client here. */
 class DemoProjectCatalog implements ProjectCatalog {

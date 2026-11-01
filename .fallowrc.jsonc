@@ -7,6 +7,10 @@
 	"entry": ["scripts/benchmark-tooling.mjs", "scripts/check-tooling-cache.mjs"],
 	// The generated `.routa` graphs only list file paths, so nothing in them needs analysis.
 	"ignorePatterns": ["examples/**/.routa/**"],
+	// Routa reads service contracts by their exported names, and `.routa` references them only
+	// through `import("…")` types Fallow does not follow. Each contract is used in its own file by
+	// `defineServices` or `createMiddleware`, so count same-file use for type exports.
+	"ignoreExportsUsedInFile": { "type": true, "interface": true },
 	"ignoreDependencies": [
 		// Loaded by tools rather than imported: Astro's image service, Oxfmt's Astro
 		// formatter, and the CLIs that pack check runs.
