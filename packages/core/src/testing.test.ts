@@ -122,6 +122,54 @@ describe("createTestApplication", () => {
 		expect(built).toEqual(["orders", "orders"]);
 	});
 
+	it("runs each scope's factory after the middleware before it", async () => {
+		const events: string[] = [];
+		const trace = (name: string) =>
+			createMiddleware({
+				run: ({ next }) => {
+					events.push(name);
+					return next();
+				},
+			});
+		const project = projectModules({
+			route: {
+				services: () => {
+					events.push("route-file factory");
+					return { orders: { opened: () => "" } };
+				},
+				middleware: [trace("route-file middleware")],
+				post: createRoute({
+					services: () => {
+						events.push("method factory");
+						return { checkout: { total: () => "" } };
+					},
+					middleware: [trace("method middleware")],
+					responses: { ok: { status: 200, schema: z.string() } },
+					run: () => {
+						events.push("handler");
+						return { type: "ok", data: "" };
+					},
+				}),
+			},
+		});
+		const modules: ProjectModules = {
+			...project.modules,
+			"src/middleware.ts": () => Promise.resolve({ withRequest: trace("filesystem middleware") }),
+		};
+		const app = await createTestApplication(modules);
+
+		expect((await app.request("/orders", { method: "POST" })).status).toBe(200);
+		await app.dispose();
+		expect(events).toEqual([
+			"filesystem middleware",
+			"route-file factory",
+			"route-file middleware",
+			"method factory",
+			"method middleware",
+			"handler",
+		]);
+	});
+
 	it("reads a lone factory as the application services replacement", async () => {
 		const { modules, built } = projectModules();
 		const app = await createTestApplication(modules, () => ({
