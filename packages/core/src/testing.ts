@@ -1,8 +1,5 @@
-import {
-	createProjectApplication,
-	type ProjectModuleLoader,
-	type ServiceReplacements,
-} from "./project.js";
+import { createProjectApplication } from "./hono.js";
+import type { ProjectModuleLoader, ServiceReplacements } from "./project.js";
 
 /**
  * Imports each of a project's modules by its path from the project root. The generated

@@ -1,4 +1,4 @@
-import { createApplication, type HonoRoute, type RoutaApplication } from "./hono.js";
+import type { CreateApplicationOptions, HonoRoute, RoutaApplication } from "./hono.js";
 import type { RoutaConfig } from "./index.js";
 import { createLogger, type RoutaLogger } from "./logger.js";
 import type { ApplicationServicesDeclaration } from "./services.js";
@@ -74,18 +74,16 @@ type RouteModule = {
 };
 
 /**
- * Builds a project's application instance without listening: it loads the generated route
- * metadata, `src/routa.ts`, the route modules, and their middleware, then constructs the
- * application services. `routa start` and generated test applications both build through it.
- *
- * @param load - Imports a project module by its path from the project root
- * @throws When a replacement names a route, method, or scope that declares no services, when
- *   `src/routa.ts` or a route file and the generated metadata disagree about services, or when
- *   the application services factory fails
+ * Builds a project's application instance with `createApplication`; `createProjectApplication`
+ * in `./hono.js` passes it in, so this module needs only types from there.
  */
-export async function createProjectApplication(
+export async function buildProjectApplication(
 	load: ProjectModuleLoader,
 	options: CreateProjectApplicationOptions,
+	createApplication: (
+		routes: readonly HonoRoute[],
+		options: CreateApplicationOptions,
+	) => Promise<RoutaApplication>,
 ): Promise<ProjectApplication> {
 	const metadata = (await load(".routa/routes.gen.ts")) as MetadataModule;
 	const replacements = options.replacements ?? {};

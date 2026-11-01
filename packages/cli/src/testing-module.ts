@@ -1,4 +1,4 @@
-import { compareText } from "./contract-schemas.js";
+import { compareText } from "./compare-text.js";
 import type { RouteMetadata } from "./project.js";
 import { contractTypeReference, type ServiceContractMetadata } from "./services.js";
 
