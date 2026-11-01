@@ -235,6 +235,28 @@ export default createRouta({
 		await application.dispose();
 	});
 
+	it("reads a contract declared as an object type alias", async () => {
+		const cwd = servicesProject({
+			"src/routa.ts": `import { createRouta, defineServices } from "@routa-ts/core";
+
+export type AppServices = {
+\tclock: { now(): string };
+\tdb: { name: string };
+};
+
+export default createRouta({
+\tservices: defineServices<AppServices>()(() => ({ clock: { now: () => "" }, db: { name: "orders" } })),
+});
+`,
+			"src/routes/status/route.ts": statusRoute,
+		});
+
+		expect((await run(["generate"], { cwd })).code).toBe(0);
+		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
+			'export const routaApplicationServices = [\n\t"clock",\n\t"db"\n] as const;',
+		);
+	});
+
 	it("reads services from a spread of a const object literal, local or imported", async () => {
 		const factory = 'defineAppServices(() => ({ clock: { now: () => "" } }))';
 
@@ -347,12 +369,15 @@ export default createRouta(${config});
 			"makeServices()",
 			"defineServices()(() => ({}))",
 			"helpers.defineAppServices(() => ({}))",
+			"first",
 		]) {
 			const cwd = servicesProject({
 				"src/routa.ts": `import { createRouta, defineServices } from "@routa-ts/core";
 
 const makeServices = () => async () => ({});
 const helpers = { defineAppServices: defineServices<{ clock: string }>() };
+const first: unknown = second;
+const second: unknown = first;
 
 export default createRouta({ services: ${services} });
 `,
@@ -409,6 +434,22 @@ ${declaration}export default createRouta({ services: ${helper}(() => ({ clock: "
 		}
 	});
 
+	it("reports a contract re-exported in a cycle instead of following it forever", () => {
+		const cwd = servicesProject({
+			"src/contracts/a.ts": `export type { AppServices } from "./b.js";\n`,
+			"src/contracts/b.ts": `export type { AppServices } from "./a.js";\n`,
+			"src/routa.ts": `import { createRouta, defineServices } from "@routa-ts/core";
+import type { AppServices } from "./contracts/a.js";
+
+export default createRouta({ services: defineServices<AppServices>()(() => ({}) as never) });
+`,
+		});
+		const diagnostics = validateProject(cwd, { write: false }).diagnostics;
+
+		expect(diagnostics.map((item) => item.code)).toEqual(["ROUTA_SERVICES_CONTRACT_UNRESOLVED"]);
+		expect(diagnostics[0]?.message).toContain("Service contract AppServices cannot be resolved");
+	});
+
 	it("reports contracts that are not a fixed set of required services", () => {
 		const cases = [
 			["export interface AppServices { clock?: string }", 'declares service "clock" optional'],
@@ -418,6 +459,8 @@ ${declaration}export default createRouta({ services: ${helper}(() => ({ clock: "
 				"extends another type",
 			],
 			["export type AppServices = Record<string, unknown>;", "is not an object type"],
+			["export interface AppServices<T> { clock: T }", "declares type parameters"],
+			["export type AppServices = { [name: string]: unknown };", "has an index signature"],
 			[
 				'export interface AppServices { ["cl" + "ock"]: string }',
 				'has a computed service name `["cl" + "ock"]`',
