@@ -57,6 +57,8 @@ export const defineProjectRouteServices = defineServices<ProjectRouteServices>()
 export class ProjectAudit {
 	readonly #created: Project[] = [];
 
+	// Routes call it through `ctx.services`, whose type comes from `.routa`, which Fallow cannot follow.
+	// fallow-ignore-next-line unused-class-member
 	record(project: Project): void {
 		this.#created.push(project);
 	}
