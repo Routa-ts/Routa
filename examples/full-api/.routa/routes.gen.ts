@@ -2115,6 +2115,12 @@ export const routaRoutes = [
 	}
 ] as const;
 
+export const routaApplicationServices = [
+	"projects"
+] as const;
+
+export type RoutaApplicationServices = import("../src/services.js").AppServices;
+
 export type AdminAuditEventsCtx = {
 	"admin": unknown;
 	"auth": unknown;
@@ -2924,5 +2930,6 @@ declare module "@routa-ts/core" {
 	export interface Register {
 		routeCtxByPath: RoutaRouteCtxByPath;
 		ctxByKey: RoutaCtxByKey;
+		applicationServices: RoutaApplicationServices;
 	}
 }

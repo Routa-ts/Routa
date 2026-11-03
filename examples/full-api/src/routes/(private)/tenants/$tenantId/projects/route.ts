@@ -32,21 +32,11 @@ export default route({
 			},
 		},
 		run: ({ ctx, input }) => {
-			const status = ctx.projectListMode.status;
-			const projects = [
-				{
-					id: "project_1",
-					tenantId: ctx.projectScope.tenantId,
-					name: `${ctx.tenant.name} ${ctx.projectListMode.label} Portal`,
-					status,
-				},
-				{
-					id: "project_2",
-					tenantId: ctx.projectScope.tenantId,
-					name: `${ctx.tenant.name} Archive`,
-					status: "archived" as const,
-				},
-			].filter((project) => project.status === status);
+			const projects = ctx.services.projects.list(
+				{ id: ctx.projectScope.tenantId, name: ctx.tenant.name },
+				ctx.projectListMode.status,
+				ctx.projectListMode.label,
+			);
 
 			const sorted = [...projects].sort((left, right) => {
 				const sort = input.query.sort;
@@ -87,12 +77,7 @@ export default route({
 		run: ({ ctx, input }) => {
 			return {
 				type: "success",
-				data: {
-					id: "project_new",
-					tenantId: ctx.projectScope.tenantId,
-					name: input.body.name,
-					status: "active",
-				},
+				data: ctx.services.projects.create(ctx.projectScope.tenantId, input.body.name),
 			};
 		},
 	}),

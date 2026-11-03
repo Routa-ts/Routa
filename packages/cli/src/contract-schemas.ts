@@ -9,6 +9,7 @@ import {
 	routeConfigObject,
 	unwrapExpression,
 } from "./ast.js";
+import { compareText } from "./compare-text.js";
 import {
 	cookieDeclaration,
 	type Diagnostic,
@@ -3315,9 +3316,4 @@ function readDeprecation(contract: ts.ObjectLiteralExpression): ProjectedOperati
 	const sunset = string("sunset");
 	const replacement = string("replacement");
 	return sunset || replacement ? { sunset, replacement } : undefined;
-}
-
-/** Orders names by UTF-16 code units, the same everywhere, unlike locale-aware comparison. */
-export function compareText(left: string, right: string): number {
-	return left < right ? -1 : left > right ? 1 : 0;
 }

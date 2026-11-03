@@ -40,6 +40,11 @@ It also augments the `Register` interface from `@routa-ts/core`. That augmentati
 makes `createRouteRoot("/users/:userId")` know the context available at that path, and
 what lets a `deprecation.replacement` pointing at a local path be checked in the editor.
 
+When `src/routa.ts` declares [application services](/docs/concepts/services/), the file
+also exports `routaApplicationServices`, the contract's sorted service names, and
+`RoutaApplicationServices`, a type-only reference to the contract that types
+`ctx.services`. Projects without services get neither.
+
 Refresh it after adding, moving, or removing a route file, changing which methods a route
 declares, or changing middleware layout:
 

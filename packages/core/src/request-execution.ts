@@ -9,6 +9,7 @@ import {
 	serializeCookieEffect,
 } from "./response-cookies.js";
 import { lifecycleHeaders, resolveHeaders, serializeHeaders } from "./response-headers.js";
+import type { ServiceMapping } from "./services.js";
 
 type RuntimeResult = {
 	type: string;
@@ -69,6 +70,8 @@ type RequestExecutorOptions = {
 	lifecycleHeaders?: boolean | undefined;
 	requestLogger?: RoutaLogger | undefined;
 	createContext?: (() => unknown | Promise<unknown>) | undefined;
+	/** The application instance's services, exposed as `ctx.services`. */
+	services?: ServiceMapping | undefined;
 };
 
 type RequestExecutor = (request: Request, params: Record<string, string>) => Promise<Response>;
@@ -86,8 +89,13 @@ export function createRequestExecutor(
 
 			const inputReader = new RequestInputReader(request, params);
 			const input = await inputReader.parse(contract.input);
-			const ctx = toRecord(options.createContext ? await options.createContext() : {});
+			const context = toRecord(options.createContext ? await options.createContext() : {});
+			assertNoServices(context, "createContext() returned");
+			// A copy, so `ctx.services` can be defined even when createContext returns a frozen object.
+			const ctx = { ...context };
 			const lifecycle = lifecycleHeaders(contract.deprecation, options.lifecycleHeaders);
+
+			exposeServices(ctx, options.services);
 
 			return await runWithMiddleware(
 				contract,
@@ -95,6 +103,7 @@ export function createRequestExecutor(
 				ctx,
 				inputReader,
 				options.logger,
+				options.services,
 				(produced) =>
 					finalizeResponse(validateResult(produced, options.validateResponses), lifecycle),
 			);
@@ -113,6 +122,9 @@ export function createRequestExecutor(
  * no middleware can change or add to the selected outcome's response. Context updates passed to
  * `next()` are merged into the shared context object.
  *
+ * `ctx.services` is reserved for injected services: it cannot be passed to `next()`, written, or
+ * replaced, and the handler receives the application's own mapping.
+ *
  * The response is fixed where its outcome is selected: `select` validates and serializes the
  * result before the chain unwinds, so later changes to objects the result shared with application
  * code cannot reach the wire.
@@ -121,6 +133,7 @@ export function createRequestExecutor(
  * @param routeInput - Parsed input passed to the final handler
  * @param ctx - Shared context object available to middleware and the final handler
  * @param inputReader - Reader used to parse middleware-specific input
+ * @param services - The application services the handler receives as `ctx.services`
  * @param select - Turns the result that ends the request into its response
  * @returns The response of the selected outcome
  */
@@ -130,6 +143,7 @@ async function runWithMiddleware(
 	ctx: Record<string, unknown>,
 	inputReader: RequestInputReader,
 	logger: RoutaLogger,
+	services: ServiceMapping | undefined,
 	select: (produced: ProducedResult) => Response,
 ): Promise<Response> {
 	const middleware = contract.middleware ?? [];
@@ -139,14 +153,19 @@ async function runWithMiddleware(
 
 		if (!item) {
 			// Framework-owned context is applied last so middleware or a low-level
-			// createContext implementation cannot replace the configured logger.
+			// createContext implementation cannot replace the configured logger or services.
 			const response = Object.create(null) as Record<string, (...args: unknown[]) => RuntimeResult>;
 			for (const [type, outcome] of Object.entries(contract.responses)) {
 				response[type] = (...args) => buildResult(type, outcome, args);
 			}
+			if (servicesChanged(ctx, services)) {
+				assertNoServices(ctx, "Middleware wrote");
+			}
+			const handlerCtx = { ...ctx, logger };
+			exposeServices(handlerCtx, services);
 			const result = await contract.run({
 				input: routeInput,
-				ctx: { ...ctx, logger },
+				ctx: handlerCtx,
 				response: Object.freeze(response),
 			});
 
@@ -188,11 +207,18 @@ async function runWithMiddleware(
 				}
 
 				nextCalled = true;
+				assertNoServices(providedCtx, "Middleware passed next()");
 				Object.assign(ctx, parseMiddlewareProvides(item.provides, providedCtx));
 				downstream = await dispatch(index + 1);
 				return continuation;
 			},
 		});
+
+		// Without application services the key has no guard, so a write that bypassed the types,
+		// before or after next(), is caught when the middleware returns.
+		if (servicesChanged(ctx, services)) {
+			assertNoServices(ctx, "Middleware wrote");
+		}
 
 		if (nextCalled) {
 			if (!downstream || result !== continuation) {
@@ -325,6 +351,46 @@ function assertMiddlewareRequires(
 		if (!(key in ctx)) {
 			throw new Error(`Middleware requires ctx.${key}, but it was not provided.`);
 		}
+	}
+}
+
+/**
+ * Whether middleware wrote `ctx.services`: any own key when the application has no services,
+ * even one set to `undefined`, or a different value when it has them.
+ */
+function servicesChanged(
+	ctx: Record<string, unknown>,
+	services: ServiceMapping | undefined,
+): boolean {
+	return services === undefined ? Object.hasOwn(ctx, "services") : ctx.services !== services;
+}
+
+/**
+ * Fails when a context value claims `services`, which Routa reserves for injected services.
+ *
+ * @param value - The context object, or a `next()` payload
+ * @param source - Who supplied the value, for the message
+ */
+function assertNoServices(value: unknown, source: string): void {
+	if (typeof value === "object" && value !== null && Object.hasOwn(value, "services")) {
+		throw new InvalidHandlerOutputError(
+			`${source} ctx.services, which Routa reserves for injected services. Rename the context key.`,
+		);
+	}
+}
+
+/**
+ * Exposes services as a readonly `ctx.services` that cannot be reassigned or deleted. Without
+ * services the key stays absent.
+ */
+function exposeServices(ctx: Record<string, unknown>, services: ServiceMapping | undefined): void {
+	if (services) {
+		Object.defineProperty(ctx, "services", {
+			value: services,
+			enumerable: true,
+			writable: false,
+			configurable: false,
+		});
 	}
 }
 

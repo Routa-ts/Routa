@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { compareText } from "./compare-text.js";
 import {
-	compareText,
 	type ProjectedOperation,
 	type ProjectedResponse,
 	type ProjectedResponseCookie,

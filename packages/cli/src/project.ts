@@ -18,16 +18,26 @@ import {
 	objectProperty,
 	propertyName,
 	propertyValue,
-	resolveImportFile,
 	routeConfigObject,
 	unwrapExpression,
 } from "./ast.js";
+import { compareText } from "./compare-text.js";
+import { type ContractSchemaProjection, projectContractSchemas } from "./contract-schemas.js";
 import {
-	compareText,
-	type ContractSchemaProjection,
-	projectContractSchemas,
-} from "./contract-schemas.js";
+	boundDeclaration,
+	exportedDeclaration,
+	exportedDeclarations,
+	type ModuleDeclaration,
+	namedImportMap,
+	parseTypeScriptFile,
+	variableDeclarations,
+} from "./declarations.js";
 import { operationId, toOpenApiPath } from "./operation-id.js";
+import {
+	type ApplicationServicesMetadata,
+	applicationServices,
+	contractTypeReference,
+} from "./services.js";
 import * as ts from "./typescript.js";
 import { runTypeScript } from "./typescript-runner.js";
 
@@ -152,9 +162,11 @@ function validateProjectInSession(
 	const schemas = projectContractSchemas(cwd, routes, parser, {
 		lifecycleHeaders: lifecycleHeadersEnabled(cwd, parser),
 	});
+	const services = applicationServices(cwd, parser);
 	const diagnostics = [
 		...projectStructureDiagnostics(cwd),
 		...discovery.diagnostics,
+		...services.diagnostics,
 		...runResultShapeDiagnostics(cwd, parser),
 		...duplicateRouteDiagnostics(routes),
 		...duplicateOperationIdDiagnostics(routes),
@@ -162,15 +174,16 @@ function validateProjectInSession(
 		...missingSuccessResponseDiagnostics(routes),
 		...duplicateSchemaDiagnostics(cwd, parser),
 		...middlewareOrderDiagnostics(routes),
+		...middlewareContextDiagnostics(routes),
 		...middlewareRejectStatusDiagnostics(routes),
 		...schemas.diagnostics,
 	];
 
 	if (write && diagnostics.length === 0) {
-		writeRoutesMetadata(cwd, routes);
+		writeRoutesMetadata(cwd, routes, services.services);
 	}
 
-	return { routes, diagnostics, warnings: schemas.warnings, schemas };
+	return { routes, diagnostics, warnings: [...services.warnings, ...schemas.warnings], schemas };
 }
 
 /**
@@ -1667,206 +1680,7 @@ function parseMiddlewareFile(
 	const sourceFile = parseTypeScriptFile(join(cwd, file), parser);
 
 	return exportedDeclarations(cwd, file, sourceFile, parser, createMiddlewareObject).map((block) =>
-		middlewareMetadata(file, block.exportedName, block.contract, block.file),
-	);
-}
-
-/**
- * Reads what a declaration's initializer declares, such as the object it passes to its factory,
- * or `undefined` when the declaration is not the kind being looked for.
- */
-type DeclarationReader<T> = (expression: ts.Expression) => T | undefined;
-
-type ModuleDeclaration<T = ts.ObjectLiteralExpression> = {
-	/** The file that declares the value. */
-	file: string;
-	/** The declared variable name in `file`. */
-	name: string;
-	/** The name the inspected module exports it under. */
-	exportedName: string;
-	/** What the reader read from the declaration. */
-	contract: T;
-};
-
-/**
- * Resolves exported declarations from a module and its re-exports: `export const`, names exported
- * later with `export { name }`, named re-exports (aliases included), and `export *`.
- *
- * Each branch of the walk carries its own copy of the visited files, so a cycle ends the branch
- * that closes it while sibling re-exports of the same module still resolve.
- *
- * @param cwd - The project root directory
- * @param file - The module being inspected
- * @param sourceFile - The parsed TypeScript source file for `file`
- * @returns Declarations found in the module graph, explicit exports before wildcard ones
- */
-function exportedDeclarations<T>(
-	cwd: string,
-	file: string,
-	sourceFile: ts.SourceFile,
-	parser: ts.SourceFileParser,
-	read: DeclarationReader<T>,
-	seen = new Set<string>(),
-): ModuleDeclaration<T>[] {
-	if (seen.has(file)) {
-		return [];
-	}
-
-	seen.add(file);
-
-	const declarations: ModuleDeclaration<T>[] = [];
-	const wildcard: ModuleDeclaration<T>[] = [];
-	const imports = namedImportMap(cwd, file, sourceFile);
-	const walk = (target: string) =>
-		exportedDeclarations(
-			cwd,
-			target,
-			parseTypeScriptFile(join(cwd, target), parser),
-			parser,
-			read,
-			new Set(seen),
-		);
-
-	for (const statement of sourceFile.statements) {
-		if (ts.isVariableStatement(statement) && hasExportModifier(statement)) {
-			for (const declaration of statement.declarationList.declarations) {
-				if (!ts.isIdentifier(declaration.name) || !declaration.initializer) {
-					continue;
-				}
-
-				const contract = read(declaration.initializer);
-
-				if (contract) {
-					const name = declaration.name.text;
-					declarations.push({ file, name, exportedName: name, contract });
-				}
-			}
-			continue;
-		}
-
-		if (!ts.isExportDeclaration(statement)) {
-			continue;
-		}
-
-		const targetFile =
-			statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)
-				? resolveImportFile(cwd, file, statement.moduleSpecifier.text)
-				: undefined;
-
-		if (!statement.exportClause) {
-			if (targetFile) {
-				wildcard.push(...walk(targetFile));
-			}
-			continue;
-		}
-
-		if (!ts.isNamedExports(statement.exportClause)) {
-			continue;
-		}
-
-		for (const specifier of statement.exportClause.elements) {
-			const exportedName = specifier.name.text;
-			const importedName = specifier.propertyName?.text ?? specifier.name.text;
-
-			if (!statement.moduleSpecifier) {
-				const local = variableDeclarations(sourceFile, false, read).find(
-					(item) => item.name === importedName,
-				);
-
-				if (local) {
-					declarations.push({ file, name: importedName, exportedName, contract: local.contract });
-					continue;
-				}
-			}
-
-			const source = targetFile
-				? { file: targetFile, name: importedName }
-				: imports.get(importedName);
-
-			if (!source) {
-				continue;
-			}
-
-			const declaration = walk(source.file).find((item) => item.exportedName === source.name);
-
-			if (declaration) {
-				declarations.push({ ...declaration, exportedName });
-			}
-		}
-	}
-
-	const exportedNames = new Set(declarations.map((item) => item.exportedName));
-	return [
-		...declarations,
-		...wildcard.filter((item) => {
-			if (exportedNames.has(item.exportedName)) {
-				return false;
-			}
-			exportedNames.add(item.exportedName);
-			return true;
-		}),
-	];
-}
-
-/**
- * Maps named imports to their source module and exported name.
- *
- * @param cwd - The project root directory.
- * @param file - The file containing the import declarations.
- * @param sourceFile - The parsed TypeScript source file.
- * @returns A map from local import names to the resolved module file and imported name.
- */
-function namedImportMap(
-	cwd: string,
-	file: string,
-	sourceFile: ts.SourceFile,
-): Map<string, { file: string; name: string }> {
-	const imports = new Map<string, { file: string; name: string }>();
-
-	for (const statement of sourceFile.statements) {
-		if (
-			!ts.isImportDeclaration(statement)
-			|| !ts.isStringLiteral(statement.moduleSpecifier)
-			|| !statement.importClause?.namedBindings
-			|| !ts.isNamedImports(statement.importClause.namedBindings)
-		) {
-			continue;
-		}
-
-		const sourceFile = resolveImportFile(cwd, file, statement.moduleSpecifier.text);
-
-		if (!sourceFile) {
-			continue;
-		}
-
-		for (const specifier of statement.importClause.namedBindings.elements) {
-			imports.set(specifier.name.text, {
-				file: sourceFile,
-				name: specifier.propertyName?.text ?? specifier.name.text,
-			});
-		}
-	}
-
-	return imports;
-}
-
-/**
- * Resolves an imported binding to the declaration that defines it, following re-export chains
- * and aliases.
- *
- * @param source - The imported module and the name it exports the value under
- * @param read - Reads the declarations that count, such as `createMiddleware` calls
- * @returns The declaring file, declared name, and what `read` read, or `undefined` when unresolved
- */
-function exportedDeclaration<T>(
-	cwd: string,
-	source: { file: string; name: string },
-	parser: ts.SourceFileParser,
-	read: DeclarationReader<T>,
-): ModuleDeclaration<T> | undefined {
-	const targetAst = parseTypeScriptFile(join(cwd, source.file), parser);
-	return exportedDeclarations(cwd, source.file, targetAst, parser, read).find(
-		(item) => item.exportedName === source.name,
+		middlewareMetadata(cwd, parser, file, block.exportedName, block.contract, block.file),
 	);
 }
 
@@ -1878,7 +1692,7 @@ function exportedDeclaration<T>(
  */
 const middlewareContracts = new WeakMap<
 	MiddlewareMetadata,
-	{ file: string; contract: ts.ObjectLiteralExpression }
+	{ file: string; contract: ts.ObjectLiteralExpression; providesUnresolved: boolean }
 >();
 
 /**
@@ -1890,7 +1704,7 @@ const middlewareContracts = new WeakMap<
  */
 export function middlewareContract(
 	middleware: MiddlewareMetadata,
-): { file: string; contract: ts.ObjectLiteralExpression } | undefined {
+): { file: string; contract: ts.ObjectLiteralExpression; providesUnresolved: boolean } | undefined {
 	return middlewareContracts.get(middleware);
 }
 
@@ -1909,17 +1723,7 @@ export function cookieDeclaration(
 	name: string,
 	parser: ts.SourceFileParser,
 ): ModuleDeclaration | undefined {
-	const sourceFile = parseTypeScriptFile(join(cwd, file), parser);
-	const local = variableDeclarations(sourceFile, false, createCookieObject).find(
-		(item) => item.name === name,
-	);
-
-	if (local) {
-		return { file, name, exportedName: name, contract: local.contract };
-	}
-
-	const source = namedImportMap(cwd, file, sourceFile).get(name);
-	return source && exportedDeclaration(cwd, source, parser, createCookieObject);
+	return boundDeclaration(cwd, file, name, parser, createCookieObject);
 }
 
 /**
@@ -1987,7 +1791,14 @@ function parseRouteFileMiddleware(
 		const metadata = middlewareExpressionMetadata(expression, middlewareByName);
 
 		if (metadata) {
-			return middlewareMetadata(routeFile, metadata.name, metadata.contract, routeFile);
+			return middlewareMetadata(
+				cwd,
+				parser,
+				routeFile,
+				metadata.name,
+				metadata.contract,
+				routeFile,
+			);
 		}
 
 		const unwrapped = unwrapExpression(expression);
@@ -2003,7 +1814,14 @@ function parseRouteFileMiddleware(
 			return;
 		}
 
-		return middlewareMetadata(routeFile, unwrapped.text, declaration.contract, declaration.file);
+		return middlewareMetadata(
+			cwd,
+			parser,
+			routeFile,
+			unwrapped.text,
+			declaration.contract,
+			declaration.file,
+		);
 	};
 
 	for (const property of objectProperties(routeConfig)) {
@@ -2091,12 +1909,14 @@ function stringArrayProperty(source: ts.ObjectLiteralExpression, property: strin
  * @returns Middleware metadata including its source file, name, required context keys, provided context keys and types, and rejected keys.
  */
 function middlewareMetadata(
+	cwd: string,
+	parser: ts.SourceFileParser,
 	file: string,
 	name: string,
 	contract: ts.ObjectLiteralExpression,
 	declarationFile: string,
 ): MiddlewareMetadata {
-	const provides = middlewareProvides(contract);
+	const provides = middlewareProvides(cwd, declarationFile, contract, parser);
 	const inferred = middlewareNextProvidesTypes(contract);
 	const metadata: MiddlewareMetadata = {
 		file,
@@ -2114,7 +1934,11 @@ function middlewareMetadata(
 		permissions: middlewarePermissions(contract),
 	};
 
-	middlewareContracts.set(metadata, { file: declarationFile, contract });
+	middlewareContracts.set(metadata, {
+		file: declarationFile,
+		contract,
+		providesUnresolved: provides.unresolved,
+	});
 	return metadata;
 }
 
@@ -2201,33 +2025,56 @@ function middlewareRejects(contract: ts.ObjectLiteralExpression): MiddlewareReje
 /**
  * Extracts the context keys and value types provided by a middleware contract.
  *
- * @param contract - The middleware contract object.
- * @returns The provided keys and their inferred types.
+ * `provides` may be an object literal or a `const` object literal it names, declared locally or
+ * imported. Anything else, including spreads and computed keys, is reported as unresolved rather
+ * than read as providing nothing.
+ *
+ * @param file - The module that declares the contract, relative to `cwd`
+ * @returns The provided keys, their inferred types, and whether the declaration could be read
  */
-function middlewareProvides(contract: ts.ObjectLiteralExpression): {
+function middlewareProvides(
+	cwd: string,
+	file: string,
+	contract: ts.ObjectLiteralExpression,
+	parser: ts.SourceFileParser,
+): {
 	keys: string[];
 	types: Record<string, string>;
+	unresolved: boolean;
 } {
-	const item = objectProperty(contract, "provides");
+	const value = propertyValue(contract, "provides");
 
-	if (!item) {
-		return { keys: [], types: {} };
+	if (!value) {
+		return { keys: [], types: {}, unresolved: false };
 	}
 
-	const expression = unwrapExpression(item.initializer);
+	const expression = unwrapExpression(value);
+	const provides = ts.isIdentifier(expression)
+		? boundDeclaration(cwd, file, expression.text, parser, objectLiteral)?.contract
+		: objectLiteral(expression);
+	const entries = provides?.properties.map((property) => {
+		const name =
+			ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)
+				? propertyName(property.name)
+				: undefined;
 
-	if (!ts.isObjectLiteralExpression(expression)) {
-		return { keys: [], types: {} };
-	}
-
-	const entries = objectProperties(expression).flatMap((property) => {
-		const name = propertyName(property.name);
-		return name ? [[name, zodType(property.initializer)] as const] : [];
+		return name === undefined
+			? undefined
+			: ([
+					name,
+					ts.isPropertyAssignment(property) ? zodType(property.initializer) : "unknown",
+				] as const);
 	});
 
+	if (!entries || entries.some((entry) => entry === undefined)) {
+		return { keys: [], types: {}, unresolved: true };
+	}
+
+	const resolved = entries as ReadonlyArray<readonly [string, string]>;
 	return {
-		keys: entries.map(([key]) => key),
-		types: Object.fromEntries(entries),
+		keys: resolved.map(([key]) => key),
+		types: Object.fromEntries(resolved),
+		unresolved: false,
 	};
 }
 
@@ -2634,68 +2481,6 @@ function inputAccessPath(expression: ts.Expression): string | undefined {
 }
 
 /**
- * Parses a TypeScript source file.
- *
- * @param file - The file path to read and parse.
- * @returns The parsed TypeScript source file.
- */
-function parseTypeScriptFile(file: string, parser: ts.SourceFileParser): ts.SourceFile {
-	return parser.createSourceFile(file, readFileSync(file, "utf8"));
-}
-
-/**
- * Collects a source file's declarations that `read` accepts, such as `createMiddleware` calls.
- *
- * @param sourceFile - The TypeScript source file to inspect.
- * @param exportedOnly - Whether to include only exported variable declarations.
- * @returns The declared names and what `read` read from each.
- */
-function variableDeclarations<T>(
-	sourceFile: ts.SourceFile,
-	exportedOnly: boolean,
-	read: DeclarationReader<T>,
-): Array<{ name: string; contract: T }> {
-	const declarations: Array<{ name: string; contract: T }> = [];
-
-	for (const statement of sourceFile.statements) {
-		if (!ts.isVariableStatement(statement)) {
-			continue;
-		}
-
-		if (exportedOnly && !hasExportModifier(statement)) {
-			continue;
-		}
-
-		for (const declaration of statement.declarationList.declarations) {
-			if (!ts.isIdentifier(declaration.name) || !declaration.initializer) {
-				continue;
-			}
-
-			const contract = read(declaration.initializer);
-
-			if (!contract) {
-				continue;
-			}
-
-			declarations.push({ name: declaration.name.text, contract });
-		}
-	}
-
-	return declarations;
-}
-
-/**
- * Determines whether a variable statement is exported.
- *
- * @returns `true` if the statement has an `export` modifier, `false` otherwise.
- */
-function hasExportModifier(statement: ts.VariableStatement): boolean {
-	return (
-		statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false
-	);
-}
-
-/**
  * Extracts the middleware contract object from a `createMiddleware` call.
  *
  * @param expression - The expression to inspect
@@ -2878,6 +2663,247 @@ function middlewareOrderDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 	return diagnostics;
 }
 
+/**
+ * Reports middleware context Routa cannot accept: `ctx.services`, which it reserves for injected
+ * services, whether provided or passed to `next()`, and `provides` it cannot read from source.
+ *
+ * @param routes - Route metadata whose middleware chains are checked, each contract once
+ */
+function middlewareContextDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
+	const diagnostics: Diagnostic[] = [];
+	const seen = new Set<ts.ObjectLiteralExpression>();
+
+	for (const route of routes) {
+		for (const item of [route.middleware, ...Object.values(route.methodMiddleware)].flat()) {
+			const source = middlewareContract(item);
+
+			if (!source || seen.has(source.contract)) {
+				continue;
+			}
+
+			seen.add(source.contract);
+			const report = (code: string, message: string, suggestion: string) =>
+				diagnostics.push({ code, severity: "error", message, file: source.file, suggestion });
+			const reserved =
+				"Rename the context key. To share an application dependency, declare it as an application service.";
+
+			if (source.providesUnresolved) {
+				report(
+					"ROUTA_MIDDLEWARE_PROVIDES_UNRESOLVED",
+					`Middleware ${item.name} declares provides that cannot be statically read.`,
+					"Declare provides as an object literal, or a const object literal it names, with a plain key for each schema and no spreads.",
+				);
+			}
+
+			if (item.provides.includes("services")) {
+				report(
+					"ROUTA_CONTEXT_RESERVED",
+					`Middleware ${item.name} provides ctx.services, which Routa reserves for injected services.`,
+					reserved,
+				);
+			}
+
+			if (nextPayloadKeys(source.contract).includes("services")) {
+				report(
+					"ROUTA_CONTEXT_RESERVED",
+					`Middleware ${item.name} passes ctx.services to next(), which Routa reserves for injected services.`,
+					reserved,
+				);
+			}
+		}
+	}
+
+	return diagnostics;
+}
+
+/**
+ * The keys of every object a middleware's `run` passes to its own `next` continuation: an object
+ * literal written in the call, or a `const` object literal the call names. A call to a nested
+ * function that rebinds the continuation's name is not the continuation.
+ */
+function nextPayloadKeys(contract: ts.ObjectLiteralExpression): string[] {
+	const run = runFunction(contract);
+	const parameter = run?.parameters[0]?.name;
+	const continuation = parameter && continuationName(parameter);
+
+	if (!run || !continuation) {
+		return [];
+	}
+
+	const keys: string[] = [];
+	const visit = (node: ts.Node): void => {
+		if (node !== run && isFunctionNode(node) && rebinds(node, continuation)) {
+			return;
+		}
+
+		if (ts.isCallExpression(node) && callsContinuation(node.expression, continuation)) {
+			keys.push(...payloadKeys(run, payloadObject(run, node.arguments[0]), 0));
+		}
+
+		ts.forEachChild(node, visit);
+	};
+
+	visit(run);
+	return keys;
+}
+
+/** The keys an object payload names, including those of spreads `payloadObject` can read. */
+function payloadKeys(
+	run: RunFunction,
+	payload: ts.ObjectLiteralExpression | undefined,
+	depth: number,
+): string[] {
+	if (!payload || depth > 8) {
+		return [];
+	}
+
+	return payload.properties.flatMap((property) => {
+		if (ts.isSpreadAssignment(property)) {
+			return payloadKeys(run, payloadObject(run, property.expression), depth + 1);
+		}
+
+		const name =
+			ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)
+				? propertyName(property.name)
+				: undefined;
+
+		return name === undefined ? [] : [name];
+	});
+}
+
+type RunFunction = ts.ArrowFunction | ts.FunctionExpression | ts.MethodDeclaration;
+
+/** The middleware's `run`, written as a property or as a method. */
+function runFunction(contract: ts.ObjectLiteralExpression): RunFunction | undefined {
+	const method = contract.properties.find(
+		(property): property is ts.MethodDeclaration =>
+			ts.isMethodDeclaration(property) && propertyName(property.name) === "run",
+	);
+	const value = method ?? propertyValue(contract, "run");
+	const run = value && ts.isExpression(value) ? unwrapExpression(value) : value;
+
+	return run
+		&& (ts.isArrowFunction(run) || ts.isFunctionExpression(run) || ts.isMethodDeclaration(run))
+		? run
+		: undefined;
+}
+
+/**
+ * How `run` reaches its continuation: the local name `{ next }` destructures it to, or the
+ * parameter whose `next` member it calls.
+ */
+function continuationName(
+	parameter: ts.BindingName,
+): { binding: string } | { member: string } | undefined {
+	if (ts.isIdentifier(parameter)) {
+		return { member: parameter.text };
+	}
+
+	if (!ts.isObjectBindingPattern(parameter)) {
+		return;
+	}
+
+	for (const element of parameter.elements) {
+		const key = element.propertyName ? propertyName(element.propertyName) : undefined;
+
+		const local = element.name && ts.isIdentifier(element.name) ? element.name.text : undefined;
+
+		if ((key ?? local) === "next") {
+			return local === undefined ? undefined : { binding: local };
+		}
+	}
+}
+
+function callsContinuation(
+	callee: ts.Expression,
+	continuation: { binding: string } | { member: string },
+): boolean {
+	if ("binding" in continuation) {
+		return ts.isIdentifier(callee) && callee.text === continuation.binding;
+	}
+
+	return (
+		ts.isPropertyAccessExpression(callee)
+		&& ts.isIdentifier(callee.expression)
+		&& callee.expression.text === continuation.member
+		&& ts.isIdentifier(callee.name)
+		&& callee.name.text === "next"
+	);
+}
+
+type FunctionNode =
+	| ts.ArrowFunction
+	| ts.FunctionExpression
+	| ts.FunctionDeclaration
+	| ts.MethodDeclaration;
+
+function isFunctionNode(node: ts.Node): node is FunctionNode {
+	return (
+		ts.isArrowFunction(node)
+		|| ts.isFunctionExpression(node)
+		|| ts.isFunctionDeclaration(node)
+		|| ts.isMethodDeclaration(node)
+	);
+}
+
+/** Whether a nested function's own name or parameters shadow the continuation's name. */
+function rebinds(
+	fn: FunctionNode,
+	continuation: { binding: string } | { member: string },
+): boolean {
+	const name = "binding" in continuation ? continuation.binding : continuation.member;
+	const bound = (binding: ts.BindingName): boolean =>
+		ts.isIdentifier(binding)
+			? binding.text === name
+			: binding.elements.some(
+					(element) => "name" in element && element.name !== undefined && bound(element.name),
+				);
+
+	return (
+		(!ts.isArrowFunction(fn)
+			&& fn.name !== undefined
+			&& ts.isIdentifier(fn.name)
+			&& fn.name.text === name)
+		|| fn.parameters.some((item) => bound(item.name))
+	);
+}
+
+/** The object a continuation call passes, written in the call or named by a `const` in `run`. */
+function payloadObject(
+	run: RunFunction,
+	argument: ts.Expression | undefined,
+): ts.ObjectLiteralExpression | undefined {
+	const written = objectLiteral(argument);
+
+	if (written || !argument) {
+		return written;
+	}
+
+	const payload = unwrapExpression(argument);
+
+	if (!ts.isIdentifier(payload)) {
+		return;
+	}
+
+	let found: ts.ObjectLiteralExpression | undefined;
+	const visit = (node: ts.Node): void => {
+		if (
+			ts.isVariableDeclaration(node)
+			&& ts.isIdentifier(node.name)
+			&& node.name.text === payload.text
+			&& ts.isVariableDeclarationList(node.parent)
+			&& (node.parent.flags & ts.NodeFlags.Const) !== 0
+		) {
+			found ??= objectLiteral(node.initializer);
+		}
+
+		ts.forEachChild(node, visit);
+	};
+
+	visit(run);
+	return found;
+}
+
 function middlewareRejectStatusDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 	const diagnostics: Diagnostic[] = [];
 
@@ -3031,15 +3057,26 @@ function isExternalApiUrl(value: string): boolean {
  * same structure.
  *
  * @param routes - The route metadata to serialize.
+ * @param services - The application service contract, when `src/routa.ts` declares one.
  * @returns The generated TypeScript source.
  */
-export function routesMetadataSource(routes: RouteMetadata[]): string {
+export function routesMetadataSource(
+	routes: RouteMetadata[],
+	services?: ApplicationServicesMetadata,
+): string {
 	const orderedRoutes = [...routes].sort(
 		(left, right) => compareText(left.path, right.path) || compareText(left.file, right.file),
 	);
+	const servicesSource = services
+		? `export const routaApplicationServices = ${JSON.stringify(services.names, null, "\t")} as const;
+
+export type RoutaApplicationServices = ${contractTypeReference(services)};
+
+`
+		: "";
 	return `${generatedHeader}export const routaRoutes = ${JSON.stringify(orderedRoutes, null, "\t")} as const;
 
-${routeContextTypes(orderedRoutes)}
+${servicesSource}${routeContextTypes(orderedRoutes, services !== undefined)}
 `;
 }
 
@@ -3048,10 +3085,15 @@ ${routeContextTypes(orderedRoutes)}
  *
  * @param cwd - The project root directory.
  * @param routes - The discovered route metadata to serialize.
+ * @param services - The application service contract, when `src/routa.ts` declares one.
  */
-function writeRoutesMetadata(cwd: string, routes: RouteMetadata[]): void {
+function writeRoutesMetadata(
+	cwd: string,
+	routes: RouteMetadata[],
+	services: ApplicationServicesMetadata | undefined,
+): void {
 	const file = join(cwd, ".routa/routes.gen.ts");
-	const source = routesMetadataSource(routes);
+	const source = routesMetadataSource(routes, services);
 
 	if (existsSync(file) && readFileSync(file, "utf8") === source) {
 		return;
@@ -3066,7 +3108,7 @@ function writeRoutesMetadata(cwd: string, routes: RouteMetadata[]): void {
  *
  * @returns Generated source text for per-route context types, route-to-method context maps, and the `@routa-ts/core` module augmentation.
  */
-function routeContextTypes(routes: RouteMetadata[]): string {
+function routeContextTypes(routes: RouteMetadata[], services: boolean): string {
 	const ctxTypes = routes
 		.map((route) => {
 			const typeName = routeCtxTypeName(route);
@@ -3084,7 +3126,11 @@ function routeContextTypes(routes: RouteMetadata[]): string {
 		.join("\n")}\n};`;
 	const ctxByKey = `export type RoutaCtxByKey = ${ctxByKeyType(routes)};`;
 
-	return `${ctxTypes}\n\n${ctxMap}\n\n${ctxByKey}\n\ndeclare module "@routa-ts/core" {\n\texport interface Register {\n\t\trouteCtxByPath: RoutaRouteCtxByPath;\n\t\tctxByKey: RoutaCtxByKey;\n\t}\n}`;
+	const servicesRegistration = services
+		? "\t\tapplicationServices: RoutaApplicationServices;\n"
+		: "";
+
+	return `${ctxTypes}\n\n${ctxMap}\n\n${ctxByKey}\n\ndeclare module "@routa-ts/core" {\n\texport interface Register {\n\t\trouteCtxByPath: RoutaRouteCtxByPath;\n\t\tctxByKey: RoutaCtxByKey;\n${servicesRegistration}\t}\n}`;
 }
 
 /**
