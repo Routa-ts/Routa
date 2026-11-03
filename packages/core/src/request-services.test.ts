@@ -370,6 +370,40 @@ describe("request-scoped service failures and cleanup", () => {
 		await app.dispose();
 	});
 
+	it("releases request services when logging the request error throws", async () => {
+		const released: string[] = [];
+		const app = await createApplication(
+			[
+				route(
+					{
+						services: {
+							method: scope(["unit"], 0, ({ onCleanup }) => {
+								onCleanup(() => {
+									released.push("unit");
+								});
+								return { unit: 1 };
+							}),
+						},
+					},
+					() => {
+						throw new Error("handler failed");
+					},
+				),
+			],
+			{
+				logger: createLogger({
+					sink: (event) => {
+						if (event.event === "http.error") throw new Error("log sink down");
+					},
+				}),
+			},
+		);
+
+		expect((await request(app)).status).toBe(500);
+		expect(released).toEqual(["unit"]);
+		await app.dispose();
+	});
+
 	it("releases a failed factory's partial cleanup after the chain unwinds, with the built scopes", async () => {
 		const order: string[] = [];
 		const app = await createApplication([
@@ -595,6 +629,22 @@ describe("request-scoped service registration", () => {
 		expect(await (await request(app)).json()).toBe("number");
 		expect(await (await request(app, "POST")).json()).toBe("string");
 		await app.dispose();
+	});
+
+	it("rejects a contract whose services the route does not supply", () => {
+		expect(() =>
+			createHonoApp([
+				{
+					method: "get",
+					path: "/orders",
+					contract: createRoute({
+						services: (() => ({ unit: 1 })) as never,
+						responses: { ok: { status: 200, schema: z.string() } },
+						run: () => ({ type: "ok", data: "" }),
+					}),
+				},
+			]),
+		).toThrow("The contract on GET /orders declares services, but the route supplies no method");
 	});
 
 	it("rejects a factory placed outside the middleware chain", () => {

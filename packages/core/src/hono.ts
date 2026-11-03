@@ -132,7 +132,8 @@ export async function createApplication(
 
 /**
  * Creates a Hono app for the provided routes. It provides no application services, so a route
- * that reads `ctx.services` needs {@link createApplication} with a services factory.
+ * that reads them needs {@link createApplication} with a services factory. Route-file and method
+ * services from `routes[].services` still run.
  *
  * @param routes - Route definitions to register
  * @returns The configured Hono app
@@ -418,6 +419,12 @@ function assertRouteServices(
 ): void {
 	const chain = route.contract.middleware?.length ?? 0;
 	const { routeFile, method } = route.services ?? {};
+
+	if ((route.contract as { services?: unknown }).services !== undefined && !method) {
+		throw new Error(
+			`The contract on ${label} declares services, but the route supplies no method services declaration, so its factory would never run.`,
+		);
+	}
 	const owners = new Map(
 		Object.keys(application ?? {}).map((name) => [name, "application services"]),
 	);

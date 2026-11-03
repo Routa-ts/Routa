@@ -147,7 +147,12 @@ export function createRequestExecutor(
 			response = await execute(request, params, constructed);
 		} catch (error) {
 			response = errorResponse(error);
-			logRequestError(options.requestLogger, request, error, response);
+
+			try {
+				logRequestError(options.requestLogger, request, error, response);
+			} catch {
+				// A failing logger must not skip request cleanup or replace the error response.
+			}
 		}
 
 		for (const scope of constructed.reverse()) {
