@@ -98,11 +98,16 @@ export async function startRuntime(
 		// Stop listening and start releasing first, so neither waits on a logger that throws.
 		server.close();
 		void release();
-		logger?.error("api.start_failed", "Routa API failed to start.", {
-			error: error instanceof Error ? error.message : String(error),
-			host: hostname,
-			port,
-		});
+
+		try {
+			logger?.error("api.start_failed", "Routa API failed to start.", {
+				error: error instanceof Error ? error.message : String(error),
+				host: hostname,
+				port,
+			});
+		} catch {
+			// A throw here would end the process before the release above finishes.
+		}
 	});
 }
 

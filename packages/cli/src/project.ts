@@ -2737,16 +2737,7 @@ function nextPayloadKeys(contract: ts.ObjectLiteralExpression): string[] {
 		}
 
 		if (ts.isCallExpression(node) && callsContinuation(node.expression, continuation)) {
-			for (const property of payloadObject(run, node.arguments[0])?.properties ?? []) {
-				const name =
-					ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)
-						? propertyName(property.name)
-						: undefined;
-
-				if (name !== undefined) {
-					keys.push(name);
-				}
-			}
+			keys.push(...payloadKeys(run, payloadObject(run, node.arguments[0]), 0));
 		}
 
 		ts.forEachChild(node, visit);
@@ -2754,6 +2745,30 @@ function nextPayloadKeys(contract: ts.ObjectLiteralExpression): string[] {
 
 	visit(run);
 	return keys;
+}
+
+/** The keys an object payload names, including those of spreads `payloadObject` can read. */
+function payloadKeys(
+	run: RunFunction,
+	payload: ts.ObjectLiteralExpression | undefined,
+	depth: number,
+): string[] {
+	if (!payload || depth > 8) {
+		return [];
+	}
+
+	return payload.properties.flatMap((property) => {
+		if (ts.isSpreadAssignment(property)) {
+			return payloadKeys(run, payloadObject(run, property.expression), depth + 1);
+		}
+
+		const name =
+			ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)
+				? propertyName(property.name)
+				: undefined;
+
+		return name === undefined ? [] : [name];
+	});
 }
 
 type RunFunction = ts.ArrowFunction | ts.FunctionExpression | ts.MethodDeclaration;

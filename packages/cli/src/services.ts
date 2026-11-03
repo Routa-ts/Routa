@@ -99,35 +99,56 @@ type ServicesMember = {
 	hidden: boolean;
 };
 
-/** Finds the `services` member of the `createRouta({ ... })` call in `src/routa.ts`. */
+/**
+ * Finds the `services` member of the default-exported `createRouta({ ... })` call in
+ * `src/routa.ts`, the config Routa loads at startup. The export may be the call itself or a
+ * `const` bound to it; any other default export may hide `services`.
+ */
 function servicesDeclaration(cwd: string, parser: ts.SourceFileParser): ServicesMember {
-	let found: ServicesMember = { hidden: false };
+	const sourceFile = parseTypeScriptFile(join(cwd, configFile), parser);
+	const exported = sourceFile.statements.find(ts.isExportAssignment)?.expression;
+	const call = exported && createRoutaCall(sourceFile, exported);
 
-	const visit = (node: ts.Node): void => {
-		if (found.declaration) {
-			return;
-		}
+	if (!call) {
+		return { hidden: exported !== undefined };
+	}
 
-		if (ts.isCallExpression(node) && callName(node.expression) === "createRouta") {
-			// The config argument is read like a spread: an object literal or a `const` binding to one.
-			const argument = node.arguments[0];
-			const config = argument && spreadObject(cwd, configFile, argument, parser, 0);
-			const member = config
-				? objectServices(cwd, config.file, config.object, parser, 1)
-				: { hidden: argument !== undefined };
+	// The config argument is read like a spread: an object literal or a `const` binding to one.
+	const argument = call.arguments[0];
+	const config = argument && spreadObject(cwd, configFile, argument, parser, 0);
 
-			found = { declaration: member.declaration, hidden: found.hidden || member.hidden };
+	return config
+		? objectServices(cwd, config.file, config.object, parser, 1)
+		: { hidden: argument !== undefined };
+}
 
-			if (found.declaration) {
-				return;
+/** The `createRouta(...)` call an expression is, or a local `const` it names is bound to. */
+function createRoutaCall(
+	sourceFile: ts.SourceFile,
+	expression: ts.Expression,
+): ts.CallExpression | undefined {
+	let node: ts.Expression | undefined = unwrapExpression(expression);
+
+	if (ts.isIdentifier(node)) {
+		const name = node.text;
+		node = undefined;
+
+		for (const statement of sourceFile.statements) {
+			if (
+				ts.isVariableStatement(statement)
+				&& (statement.declarationList.flags & ts.NodeFlags.Const) !== 0
+			) {
+				const declaration = statement.declarationList.declarations.find(
+					(item) => ts.isIdentifier(item.name) && item.name.text === name,
+				);
+				node = declaration?.initializer ? unwrapExpression(declaration.initializer) : node;
 			}
 		}
+	}
 
-		ts.forEachChild(node, visit);
-	};
-
-	visit(parseTypeScriptFile(join(cwd, configFile), parser));
-	return found;
+	return node && ts.isCallExpression(node) && callName(node.expression) === "createRouta"
+		? node
+		: undefined;
 }
 
 /**

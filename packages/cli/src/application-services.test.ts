@@ -311,6 +311,36 @@ export default createRouta(config);
 		}
 	});
 
+	it("reads services only from the default-exported createRouta config", async () => {
+		const factory = 'defineAppServices(() => ({ clock: { now: () => "" } }))';
+
+		for (const [routa, names] of [
+			[
+				`const preview = createRouta({ services: ${factory} });\n\nexport default createRouta({ port: 3000 });\n`,
+				undefined,
+			],
+			[`const app = createRouta({ services: ${factory} });\n\nexport default app;\n`, ["clock"]],
+		] as const) {
+			const cwd = servicesProject({
+				"src/services.ts": clockContract,
+				"src/routes/status/route.ts": statusRoute,
+				"src/routa.ts": `import { createRouta } from "@routa-ts/core";
+import { defineAppServices } from "./services.js";
+
+${routa}`,
+			});
+
+			expect(validateProject(cwd, { write: false }).diagnostics, routa).toEqual([]);
+			expect((await run(["generate"], { cwd })).code).toBe(0);
+			expect(
+				readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8").includes(
+					"routaApplicationServices",
+				),
+				routa,
+			).toBe(names !== undefined);
+		}
+	});
+
 	it("warns when a spread or computed key it cannot read may hide services", () => {
 		const warning = {
 			code: "ROUTA_SERVICES_SPREAD_UNRESOLVED",
@@ -702,7 +732,12 @@ const observed = (globalThis as any)[${JSON.stringify(key)}];
 
 export default createRouta({
 \tport: ${port},
-\tlogger: createLogger({ sink: (event) => observed.events.push(event.event) }),
+\tlogger: createLogger({
+\t\tsink: (event) => {
+\t\t\tobserved.events.push(event.event);
+\t\t\tif (event.event === "api.start_failed") throw new Error("log sink down");
+\t\t},
+\t}),
 \tservices: defineAppServices(({ onCleanup }) => {
 \t\tonCleanup(() => {
 \t\t\tobserved.events.push("clock released");
@@ -817,6 +852,7 @@ describe("reserved ctx.services (routa check)", () => {
 			"export const withDb = createMiddleware({ run: ({ next: proceed }) => proceed({ services: {} }) });\n",
 			"export const withDb = createMiddleware({ run: (args) => args.next({ services: {} } as never) });\n",
 			"export const withDb = createMiddleware({\n\trun({ next }) {\n\t\tconst payload = { services: {} };\n\t\treturn next(payload as never);\n\t},\n});\n",
+			"export const withDb = createMiddleware({\n\trun: ({ next }) => {\n\t\tconst extra = { services: {} };\n\t\treturn next({ ...extra } as never);\n\t},\n});\n",
 		]) {
 			const cwd = servicesProject({
 				"src/routes/middleware.ts": middlewareFile(body),
