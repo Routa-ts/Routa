@@ -590,6 +590,41 @@ describe("reserved ctx.services (runtime)", () => {
 		}
 	});
 
+	it("fails a request whose middleware sets ctx.services to undefined without services", async () => {
+		const clears = createMiddleware({
+			run: ({ ctx, next }) => {
+				(ctx as Record<string, unknown>).services = undefined;
+				return next();
+			},
+		});
+		const app = await createApplication([
+			{ method: "get", path: "/", contract: ok([clears], () => "handled") },
+		]);
+
+		expect((await app.fetch(new Request("http://localhost/"))).status).toBe(500);
+		await app.dispose();
+	});
+
+	it("fails a request whose createContext hides services in a non-enumerable key", async () => {
+		for (const options of [{}, withServices]) {
+			const app = await createApplication(
+				[
+					{
+						method: "get",
+						path: "/",
+						contract: ok([]),
+						createContext: () =>
+							Object.defineProperty({}, "services", { value: { db: "fake" }, enumerable: false }),
+					},
+				],
+				options,
+			);
+
+			expect((await app.fetch(new Request("http://localhost/"))).status).toBe(500);
+			await app.dispose();
+		}
+	});
+
 	it("keeps the handler's ctx.services fixed", async () => {
 		const app = await createApplication(
 			[

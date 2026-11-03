@@ -89,11 +89,12 @@ export function createRequestExecutor(
 
 			const inputReader = new RequestInputReader(request, params);
 			const input = await inputReader.parse(contract.input);
+			const context = toRecord(options.createContext ? await options.createContext() : {});
+			assertNoServices(context, "createContext() returned");
 			// A copy, so `ctx.services` can be defined even when createContext returns a frozen object.
-			const ctx = { ...toRecord(options.createContext ? await options.createContext() : {}) };
+			const ctx = { ...context };
 			const lifecycle = lifecycleHeaders(contract.deprecation, options.lifecycleHeaders);
 
-			assertNoServices(ctx, "createContext() returned");
 			exposeServices(ctx, options.services);
 
 			return await runWithMiddleware(
@@ -157,7 +158,7 @@ async function runWithMiddleware(
 			for (const [type, outcome] of Object.entries(contract.responses)) {
 				response[type] = (...args) => buildResult(type, outcome, args);
 			}
-			if (ctx.services !== services) {
+			if (servicesChanged(ctx, services)) {
 				assertNoServices(ctx, "Middleware wrote");
 			}
 			const handlerCtx = { ...ctx, logger };
@@ -215,7 +216,7 @@ async function runWithMiddleware(
 
 		// Without application services the key has no guard, so a write that bypassed the types,
 		// before or after next(), is caught when the middleware returns.
-		if (ctx.services !== services) {
+		if (servicesChanged(ctx, services)) {
 			assertNoServices(ctx, "Middleware wrote");
 		}
 
@@ -351,6 +352,17 @@ function assertMiddlewareRequires(
 			throw new Error(`Middleware requires ctx.${key}, but it was not provided.`);
 		}
 	}
+}
+
+/**
+ * Whether middleware wrote `ctx.services`: any own key when the application has no services,
+ * even one set to `undefined`, or a different value when it has them.
+ */
+function servicesChanged(
+	ctx: Record<string, unknown>,
+	services: ServiceMapping | undefined,
+): boolean {
+	return services === undefined ? Object.hasOwn(ctx, "services") : ctx.services !== services;
 }
 
 /**
