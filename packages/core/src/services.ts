@@ -84,17 +84,24 @@ export async function constructServices(
 	}
 }
 
-/** Logs the failures a scope's cleanup reported. */
+/**
+ * Logs the failures a scope's cleanup reported. Callers report another error or response, so a
+ * logger that throws here is ignored rather than allowed to replace it.
+ */
 export function logCleanupFailure(logger: RoutaLogger, error: unknown): void {
 	const failures = error instanceof AggregateError ? error.errors : [error];
 
-	logger.error("services.cleanup_failed", "Service cleanup failed.", {
-		failures: failures.map((failure) =>
-			failure instanceof Error
-				? { error: failure.message, name: failure.name, stack: failure.stack }
-				: { error: String(failure) },
-		),
-	});
+	try {
+		logger.error("services.cleanup_failed", "Service cleanup failed.", {
+			failures: failures.map((failure) =>
+				failure instanceof Error
+					? { error: failure.message, name: failure.name, stack: failure.stack }
+					: { error: String(failure) },
+			),
+		});
+	} catch {
+		// The error being reported stays primary.
+	}
 }
 
 /**
@@ -113,7 +120,7 @@ function exactServices(value: unknown, names: readonly string[]): ServiceMapping
 	}
 
 	const missing = names.filter((name) => !Object.hasOwn(value, name));
-	const unexpected = Object.keys(value).filter((name) => !names.includes(name));
+	const unexpected = Object.getOwnPropertyNames(value).filter((name) => !names.includes(name));
 
 	if (missing.length > 0 || unexpected.length > 0) {
 		const problems = [

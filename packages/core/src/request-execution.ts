@@ -89,7 +89,8 @@ export function createRequestExecutor(
 
 			const inputReader = new RequestInputReader(request, params);
 			const input = await inputReader.parse(contract.input);
-			const ctx = toRecord(options.createContext ? await options.createContext() : {});
+			// A copy, so `ctx.services` can be defined even when createContext returns a frozen object.
+			const ctx = { ...toRecord(options.createContext ? await options.createContext() : {}) };
 			const lifecycle = lifecycleHeaders(contract.deprecation, options.lifecycleHeaders);
 
 			assertNoServices(ctx, "createContext() returned");

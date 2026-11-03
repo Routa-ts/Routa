@@ -154,6 +154,10 @@ describe("application services (runtime)", () => {
 		for (const [services, message] of [
 			[{ clock: 1 }, 'missing "store"'],
 			[{ clock: 1, store: 2, extra: 3 }, 'unexpected "extra"'],
+			[
+				Object.defineProperty({ clock: 1, store: 2 }, "hidden", { value: 3, enumerable: false }),
+				'unexpected "hidden"',
+			],
 			[null, "received null"],
 			[[1], "received an array"],
 		] as const) {
@@ -234,6 +238,25 @@ describe("application service cleanup", () => {
 				data: { failures: [{ error: "db close failed" }] },
 			},
 		]);
+	});
+
+	it("keeps the factory error primary when logging the cleanup failure throws", async () => {
+		const primary = new Error("cache unavailable");
+		const failure = createApplication([], {
+			logger: createLogger({
+				sink: () => {
+					throw new Error("log sink down");
+				},
+			}),
+			services: declaration(["cache"], ({ onCleanup }) => {
+				onCleanup(() => {
+					throw new Error("cache close failed");
+				});
+				throw primary;
+			}),
+		});
+
+		await expect(failure).rejects.toBe(primary);
 	});
 
 	it("never retries a failing factory", async () => {
@@ -476,6 +499,23 @@ describe("reserved ctx.services (runtime)", () => {
 			run: () => ({ type: "ok", data: run() }),
 		});
 	const withServices = { services: declaration(["db"], () => ({ db: {} })) };
+
+	it("exposes services when createContext returns a frozen object", async () => {
+		const app = await createApplication(
+			[
+				{
+					method: "get",
+					path: "/",
+					contract: ok([]),
+					createContext: () => Object.freeze({ requestId: "req-1" }),
+				},
+			],
+			withServices,
+		);
+
+		expect((await app.fetch(new Request("http://localhost/"))).status).toBe(200);
+		await app.dispose();
+	});
 
 	it("rejects middleware that provides services through a compiler bypass", async () => {
 		const bypass = createMiddleware({

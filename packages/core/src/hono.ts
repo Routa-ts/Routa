@@ -110,7 +110,8 @@ export async function createApplication(
 }
 
 /**
- * Creates a Hono app for the provided routes.
+ * Creates a Hono app for the provided routes. It provides no application services, so a route
+ * that reads `ctx.services` needs {@link createApplication} with a services factory.
  *
  * @param routes - Route definitions to register
  * @returns The configured Hono app
