@@ -327,7 +327,7 @@ schema, or a value other than `next()`'s result returned after calling it, produ
 
 Called with only a type argument, `createMiddleware<Requirements>()` returns a
 `MiddlewareHelper`. The helper takes the same contract plus `requiresServices`, which must list
-exactly the interface's names, and types the callback's `ctx.services` as
+each of the interface's names exactly once, and types the callback's `ctx.services` as
 `Readonly<Requirements>`. `Requirements` follows the service contract rules: required, plainly
 named members and no index signature. The direct form has no typed `ctx.services` and rejects
 `requiresServices`. A middleware whose required service is missing from its stage's
