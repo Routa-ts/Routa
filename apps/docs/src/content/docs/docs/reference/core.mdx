@@ -384,8 +384,9 @@ theme.clear(); // a clear effect
 function createHonoApp(routes: readonly HonoRoute[], options?: CreateHonoAppOptions): Hono
 ```
 
-Builds the Hono application from route definitions. The CLI runtime calls this for you;
-call it directly in tests.
+Builds the Hono application from route definitions. It provides no application services:
+routes that read `ctx.services` need [`createApplication`](#createapplication) with a services
+factory. Call it directly in tests of routes that use no services.
 
 | Parameter                    | Type                        | Purpose                                             |
 | ---------------------------- | --------------------------- | --------------------------------------------------- |

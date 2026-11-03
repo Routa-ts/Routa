@@ -337,8 +337,8 @@ only tuning values, accept the warning.
 The contract passed to `defineServices` is an inline type, cannot be found, or is not
 exported, so generated types cannot reference it.
 
-**Fix:** declare the contract as an exported `interface` in a project module and pass its
-name.
+**Fix:** declare the contract as an exported `interface`, or an exported `type` alias of an
+object type, in a project module and pass its name.
 
 ### `ROUTA_SERVICES_CONTRACT_UNSUPPORTED`
 

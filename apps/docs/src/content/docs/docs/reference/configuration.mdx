@@ -166,8 +166,13 @@ export default createRouta({
 });
 ```
 
-Declare `services` directly in the `createRouta` object. `routa check` reads it from source,
-and startup fails when a spread or a computed config hides it.
+`routa check` reads `services` from source: a member of the `createRouta` object, or of a
+`const` object literal, local or imported, that you pass to `createRouta` or spread into it.
+A spread or computed key it cannot read may hide `services` unless a visible `services`
+member follows it, so `routa check` warns with
+[`ROUTA_SERVICES_SPREAD_UNRESOLVED`](/docs/reference/diagnostics/#routa_services_spread_unresolved).
+Startup refuses services that `routa generate` did not read, and generated services that
+`src/routa.ts` no longer configures.
 
 ## Environment Variables
 
