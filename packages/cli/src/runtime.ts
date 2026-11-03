@@ -64,12 +64,18 @@ export async function startRuntime(
 	// No request was accepted when the listener fails, so the services can be released at once.
 	const release = () =>
 		application.dispose().catch((cleanupError: unknown) => {
-			logger?.error("services.cleanup_failed", "Application service cleanup failed.", {
-				failures: (cleanupError instanceof AggregateError
-					? cleanupError.errors
-					: [cleanupError]
-				).map((failure: unknown) => (failure instanceof Error ? failure.message : String(failure))),
-			});
+			try {
+				logger?.error("services.cleanup_failed", "Application service cleanup failed.", {
+					failures: (cleanupError instanceof AggregateError
+						? cleanupError.errors
+						: [cleanupError]
+					).map((failure: unknown) =>
+						failure instanceof Error ? failure.message : String(failure),
+					),
+				});
+			} catch {
+				// A failing logger must not replace the startup error.
+			}
 		});
 	let server: ReturnType<typeof serve>;
 
@@ -88,13 +94,15 @@ export async function startRuntime(
 	}
 
 	server.once("error", (error) => {
+		process.exitCode = 1;
+		// Stop listening and start releasing first, so neither waits on a logger that throws.
+		server.close();
+		void release();
 		logger?.error("api.start_failed", "Routa API failed to start.", {
 			error: error instanceof Error ? error.message : String(error),
 			host: hostname,
 			port,
 		});
-		process.exitCode = 1;
-		void release();
 	});
 }
 

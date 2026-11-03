@@ -2716,13 +2716,28 @@ function middlewareContextDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 	return diagnostics;
 }
 
-/** The keys of every object literal a middleware's `run` passes to `next()`. */
+/**
+ * The keys of every object a middleware's `run` passes to its own `next` continuation: an object
+ * literal written in the call, or a `const` object literal the call names. A call to a nested
+ * function that rebinds the continuation's name is not the continuation.
+ */
 function nextPayloadKeys(contract: ts.ObjectLiteralExpression): string[] {
-	const run = propertyValue(contract, "run");
+	const run = runFunction(contract);
+	const parameter = run?.parameters[0]?.name;
+	const continuation = parameter && continuationName(parameter);
+
+	if (!run || !continuation) {
+		return [];
+	}
+
 	const keys: string[] = [];
 	const visit = (node: ts.Node): void => {
-		if (ts.isCallExpression(node) && callName(node) === "next") {
-			for (const property of objectLiteral(node.arguments[0])?.properties ?? []) {
+		if (node !== run && isFunctionNode(node) && rebinds(node, continuation)) {
+			return;
+		}
+
+		if (ts.isCallExpression(node) && callsContinuation(node.expression, continuation)) {
+			for (const property of payloadObject(run, node.arguments[0])?.properties ?? []) {
 				const name =
 					ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)
 						? propertyName(property.name)
@@ -2737,11 +2752,141 @@ function nextPayloadKeys(contract: ts.ObjectLiteralExpression): string[] {
 		ts.forEachChild(node, visit);
 	};
 
-	if (run) {
-		visit(run);
+	visit(run);
+	return keys;
+}
+
+type RunFunction = ts.ArrowFunction | ts.FunctionExpression | ts.MethodDeclaration;
+
+/** The middleware's `run`, written as a property or as a method. */
+function runFunction(contract: ts.ObjectLiteralExpression): RunFunction | undefined {
+	const method = contract.properties.find(
+		(property): property is ts.MethodDeclaration =>
+			ts.isMethodDeclaration(property) && propertyName(property.name) === "run",
+	);
+	const value = method ?? propertyValue(contract, "run");
+	const run = value && ts.isExpression(value) ? unwrapExpression(value) : value;
+
+	return run
+		&& (ts.isArrowFunction(run) || ts.isFunctionExpression(run) || ts.isMethodDeclaration(run))
+		? run
+		: undefined;
+}
+
+/**
+ * How `run` reaches its continuation: the local name `{ next }` destructures it to, or the
+ * parameter whose `next` member it calls.
+ */
+function continuationName(
+	parameter: ts.BindingName,
+): { binding: string } | { member: string } | undefined {
+	if (ts.isIdentifier(parameter)) {
+		return { member: parameter.text };
 	}
 
-	return keys;
+	if (!ts.isObjectBindingPattern(parameter)) {
+		return;
+	}
+
+	for (const element of parameter.elements) {
+		const key = element.propertyName ? propertyName(element.propertyName) : undefined;
+
+		const local = element.name && ts.isIdentifier(element.name) ? element.name.text : undefined;
+
+		if ((key ?? local) === "next") {
+			return local === undefined ? undefined : { binding: local };
+		}
+	}
+}
+
+function callsContinuation(
+	callee: ts.Expression,
+	continuation: { binding: string } | { member: string },
+): boolean {
+	if ("binding" in continuation) {
+		return ts.isIdentifier(callee) && callee.text === continuation.binding;
+	}
+
+	return (
+		ts.isPropertyAccessExpression(callee)
+		&& ts.isIdentifier(callee.expression)
+		&& callee.expression.text === continuation.member
+		&& ts.isIdentifier(callee.name)
+		&& callee.name.text === "next"
+	);
+}
+
+type FunctionNode =
+	| ts.ArrowFunction
+	| ts.FunctionExpression
+	| ts.FunctionDeclaration
+	| ts.MethodDeclaration;
+
+function isFunctionNode(node: ts.Node): node is FunctionNode {
+	return (
+		ts.isArrowFunction(node)
+		|| ts.isFunctionExpression(node)
+		|| ts.isFunctionDeclaration(node)
+		|| ts.isMethodDeclaration(node)
+	);
+}
+
+/** Whether a nested function's own name or parameters shadow the continuation's name. */
+function rebinds(
+	fn: FunctionNode,
+	continuation: { binding: string } | { member: string },
+): boolean {
+	const name = "binding" in continuation ? continuation.binding : continuation.member;
+	const bound = (binding: ts.BindingName): boolean =>
+		ts.isIdentifier(binding)
+			? binding.text === name
+			: binding.elements.some(
+					(element) => "name" in element && element.name !== undefined && bound(element.name),
+				);
+
+	return (
+		(!ts.isArrowFunction(fn)
+			&& fn.name !== undefined
+			&& ts.isIdentifier(fn.name)
+			&& fn.name.text === name)
+		|| fn.parameters.some((item) => bound(item.name))
+	);
+}
+
+/** The object a continuation call passes, written in the call or named by a `const` in `run`. */
+function payloadObject(
+	run: RunFunction,
+	argument: ts.Expression | undefined,
+): ts.ObjectLiteralExpression | undefined {
+	const written = objectLiteral(argument);
+
+	if (written || !argument) {
+		return written;
+	}
+
+	const payload = unwrapExpression(argument);
+
+	if (!ts.isIdentifier(payload)) {
+		return;
+	}
+
+	let found: ts.ObjectLiteralExpression | undefined;
+	const visit = (node: ts.Node): void => {
+		if (
+			ts.isVariableDeclaration(node)
+			&& ts.isIdentifier(node.name)
+			&& node.name.text === payload.text
+			&& ts.isVariableDeclarationList(node.parent)
+			&& (node.parent.flags & ts.NodeFlags.Const) !== 0
+		) {
+			found ??= objectLiteral(node.initializer);
+		}
+
+		ts.forEachChild(node, visit);
+	};
+
+	visit(run);
+	return found;
 }
 
 function middlewareRejectStatusDiagnostics(routes: RouteMetadata[]): Diagnostic[] {

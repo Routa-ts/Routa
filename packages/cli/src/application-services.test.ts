@@ -739,7 +739,12 @@ const observed = (globalThis as any)[${JSON.stringify(key)}];
 
 export default createRouta({
 \tport: -1,
-\tlogger: createLogger({ sink: (event) => observed.events.push(event.event) }),
+\tlogger: createLogger({
+\t\tsink: (event) => {
+\t\t\tobserved.events.push(event.event);
+\t\t\tif (event.event === "services.cleanup_failed") throw new Error("log sink down");
+\t\t},
+\t}),
 \tservices: defineAppServices(({ onCleanup }) => {
 \t\tonCleanup(() => {
 \t\t\tobserved.events.push("clock released");
@@ -807,20 +812,36 @@ describe("reserved ctx.services (routa check)", () => {
 	});
 
 	it("reports middleware that passes services to next()", () => {
+		for (const body of [
+			"export const withDb = createMiddleware({ run: ({ next }) => next({ services: { db: 'fake' } }) });\n",
+			"export const withDb = createMiddleware({ run: ({ next: proceed }) => proceed({ services: {} }) });\n",
+			"export const withDb = createMiddleware({ run: (args) => args.next({ services: {} } as never) });\n",
+			"export const withDb = createMiddleware({\n\trun({ next }) {\n\t\tconst payload = { services: {} };\n\t\treturn next(payload as never);\n\t},\n});\n",
+		]) {
+			const cwd = servicesProject({
+				"src/routes/middleware.ts": middlewareFile(body),
+				"src/routes/status/route.ts": statusRoute,
+			});
+
+			expect(validateProject(cwd, { write: false }).diagnostics, body).toMatchObject([
+				{
+					code: "ROUTA_CONTEXT_RESERVED",
+					message:
+						"Middleware withDb passes ctx.services to next(), which Routa reserves for injected services.",
+				},
+			]);
+		}
+	});
+
+	it("does not read a nested function's own next() as the continuation", () => {
 		const cwd = servicesProject({
 			"src/routes/middleware.ts": middlewareFile(
-				"export const withDb = createMiddleware({ run: ({ next }) => next({ services: { db: 'fake' } }) });\n",
+				"const subscribe = (next: (value: { services: string }) => void) => next({ services: 'feed' });\n\nexport const withFeed = createMiddleware({\n\trun: ({ next }) => {\n\t\t[1].forEach((next) => next);\n\t\tsubscribe((value) => value);\n\t\tconst notify = (next: (value: object) => void) => next({ services: 'queued' });\n\t\tnotify(() => undefined);\n\t\treturn next();\n\t},\n});\n",
 			),
 			"src/routes/status/route.ts": statusRoute,
 		});
 
-		expect(validateProject(cwd, { write: false }).diagnostics).toMatchObject([
-			{
-				code: "ROUTA_CONTEXT_RESERVED",
-				message:
-					"Middleware withDb passes ctx.services to next(), which Routa reserves for injected services.",
-			},
-		]);
+		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
 	});
 
 	it("reads named provides bindings into generated context", () => {
