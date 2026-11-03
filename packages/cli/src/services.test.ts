@@ -1759,6 +1759,26 @@ export const withTime = defineClockMiddleware({
 		]);
 	});
 
+	it("checks the run result types of helper-form middleware", () => {
+		const cwd = requirementsProject({
+			"src/routes/middleware.ts": `import { z } from "zod";
+import { defineClockMiddleware } from "../requirements.js";
+
+export const requireFresh = defineClockMiddleware({
+\trequiresServices: ["clock"],
+\trejects: { stale: { status: 409, schema: z.object({ message: z.string() }) } },
+\trun: () => ({ type: "stal", data: { message: "Stale" } }) as never,
+});
+`,
+		});
+
+		expect(
+			validateProject(cwd, { write: false })
+				.diagnostics.filter(({ code }) => code === "ROUTA_RESULT_TYPE")
+				.map(({ message }) => message),
+		).toEqual(['Run result type "stal" is not declared.']);
+	});
+
 	it("reports requirement interfaces it cannot resolve or read", () => {
 		const diagnostics = (requirement: string, declarations = "") =>
 			validateProject(

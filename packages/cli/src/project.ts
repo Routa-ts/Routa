@@ -1493,18 +1493,35 @@ function runResultShapeDiagnosticsForFile(
 	const sourceFile = parseTypeScriptFile(file, parser);
 	const diagnostics: Diagnostic[] = [];
 
+	// Middleware declared through a helper bound to `createMiddleware<Requirements>()` is checked
+	// like a direct `createMiddleware` call.
+	function contractKind(call: ts.CallExpression): "route" | "middleware" | undefined {
+		const name = callName(call.expression);
+
+		if (name === "createRoute") {
+			return "route";
+		}
+
+		return name === "createMiddleware"
+			|| (ts.isIdentifier(unwrapExpression(call.expression))
+				&& middlewareRequirement(cwd, relativeFile, call.expression, parser) !== undefined)
+			? "middleware"
+			: undefined;
+	}
+
 	function visit(node: ts.Node): void {
-		if (
+		const kind =
 			ts.isCallExpression(node)
-			&& (callName(node.expression) === "createRoute"
-				|| callName(node.expression) === "createMiddleware")
 			&& node.arguments[0] !== undefined
 			&& ts.isObjectLiteralExpression(node.arguments[0])
-		) {
-			const contract = node.arguments[0];
+				? contractKind(node)
+				: undefined;
+
+		if (kind && ts.isCallExpression(node) && node.arguments[0] !== undefined) {
+			const contract = node.arguments[0] as ts.ObjectLiteralExpression;
 			const run = objectProperty(contract, "run");
 			const resultTypes =
-				callName(node.expression) === "createRoute"
+				kind === "route"
 					? contractObjectKeys(contract, "responses")
 					: contractObjectKeys(contract, "rejects");
 
