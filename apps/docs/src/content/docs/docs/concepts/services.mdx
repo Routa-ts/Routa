@@ -157,7 +157,7 @@ const Order = z.object({ id: z.string(), total: z.number() });
 
 export default createRouteRoot("/orders")({
 	services: defineOrdersServices(({ ctx }) => ({
-		orders: openOrderBook(ctx.auth.userId, ctx.services.clock),
+		orders: openOrderBook(ctx.services.clock),
 	})),
 	get: createRoute({
 		responses: { success: { status: 200, schema: z.array(Order) } },
@@ -180,8 +180,7 @@ export default createRouteRoot("/orders")({
 });
 ```
 
-The example assumes a filesystem `middleware.ts` that provides `ctx.auth`, and the
-`AppServices` contract above.
+The example uses the `AppServices` contract above.
 
 A request factory receives `{ ctx, onCleanup }`. `ctx` holds the context the middleware
 before it provided, the services of earlier scopes, and the request `logger`. It holds no
@@ -204,8 +203,9 @@ route file, and the matched method. `routa check` reports `ROUTA_SERVICES_DUPLIC
 collision, and route registration rejects one that skipped the check. Unrelated route files
 and methods may reuse a name with a different interface.
 
-Every `.ts` file under `src/routes` is a route, so declare request contracts in the route
-file itself, exported, or in a module outside `src/routes`. `routa generate` adds the
+Every `.ts` file under `src/routes` other than `middleware.ts`, `schemas.ts`, and `*.test.ts`
+is a route, so declare request contracts in the route file itself, exported, or in a module
+outside `src/routes`. `routa generate` adds the
 contracts to the route's `routaRoutes` entry, types the handler's `ctx.services` per method,
 and writes `RoutaFactoryCtxByPath`, the context each request factory receives:
 

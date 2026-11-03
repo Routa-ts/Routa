@@ -393,8 +393,8 @@ function createHonoApp(routes: readonly HonoRoute[], options?: CreateHonoAppOpti
 ```
 
 Builds the Hono application from route definitions. It provides no application services:
-routes that read `ctx.services` need [`createApplication`](#createapplication) with a services
-factory. Call it directly in tests of routes that use no services.
+routes that read them need [`createApplication`](#createapplication) with a services
+factory. Call it directly in tests of routes that use no application services.
 
 | Parameter                    | Type                        | Purpose                                             |
 | ---------------------------- | --------------------------- | --------------------------------------------------- |
@@ -412,11 +412,25 @@ Registration throws for an explicitly declared `options` method, a duplicate
 method-and-path pair, a `GET` or `HEAD` contract declaring a body, and duplicate reject
 keys within one chain.
 
-Each `RouteServices` entry is a `RequestServicesDeclaration`: the `factory`, its contract's
-`names`, and `after`, the number of middleware at the start of the route's chain that run
-before the factory. Registration also throws when `after` falls outside the chain, when
-method services run before route-file services, or when the application, route-file, and
-method services share a name.
+```ts
+type RouteServices = {
+	readonly routeFile?: RequestServicesDeclaration
+	readonly method?: RequestServicesDeclaration
+}
+
+type RequestServicesDeclaration = {
+	readonly factory: RequestServicesFactory
+	readonly names: readonly string[]
+	readonly after: number
+}
+```
+
+Each `RouteServices` entry pairs a request factory with its contract's `names` and `after`,
+the number of middleware at the start of the route's chain that run before the factory.
+Registration also throws when `after` falls outside the chain, when method services run
+before route-file services, when the application, route-file, and method services share a
+name, or when the contract declares `services` that `routes[].services.method` does not
+supply.
 
 ```ts
 import { createHonoApp } from "@routa-ts/core/hono";
