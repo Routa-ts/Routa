@@ -575,6 +575,11 @@ describe("middleware service requirements (types)", () => {
 				requiresServices: ["cache", "clock", "db"],
 				run: ({ next }) => next(),
 			});
+			defineCacheMiddleware({
+				// @ts-expect-error Each required service is listed once.
+				requiresServices: ["cache", "cache", "clock"],
+				run: ({ next }) => next(),
+			});
 			// @ts-expect-error The helper form needs its requiresServices list.
 			defineCacheMiddleware({ run: ({ next }) => next() });
 			createMiddleware({

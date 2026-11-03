@@ -983,4 +983,16 @@ type RequirementListChecks<TServices, TNames extends readonly unknown[]> = {
 	readonly [
 		K in Exclude<keyof TServices, TNames[number]> as `requiresServices must list "${K & string}".`
 	]: never;
+} & {
+	readonly [
+		K in RepeatedNames<TNames> & string as `requiresServices lists "${K}" more than once.`
+	]: never;
 };
+
+/** The names a `requiresServices` tuple lists more than once. */
+type RepeatedNames<TNames extends readonly unknown[], TSeen = never> = TNames extends readonly [
+	infer THead,
+	...infer TRest,
+]
+	? (THead extends TSeen ? THead : never) | RepeatedNames<TRest, TSeen | THead>
+	: never;
