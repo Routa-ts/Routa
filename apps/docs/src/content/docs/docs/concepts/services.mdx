@@ -224,6 +224,117 @@ export type RoutaFactoryCtxByPath = {
 };
 ```
 
+## Middleware Service Requirements
+
+Middleware that needs a service declares a requirement interface, the services it reads and
+the members it calls. Pass the interface to `createMiddleware<Requirements>()`, name the
+helper it returns, and list the same names in `requiresServices`:
+
+```ts title="src/middleware/rate-limit.ts"
+import { createMiddleware } from "@routa-ts/core";
+
+export interface RateLimitRequirements {
+	limiter: { take(key: string): Promise<boolean> };
+}
+
+const defineRateLimitMiddleware = createMiddleware<RateLimitRequirements>();
+
+export const withRateLimit = defineRateLimitMiddleware({
+	requiresServices: ["limiter"],
+	rejects: { tooManyRequests: { status: 429 } },
+	run: async ({ ctx, next }) => {
+		if (!(await ctx.services.limiter.take("anonymous"))) {
+			return { type: "tooManyRequests" };
+		}
+
+		return next();
+	},
+});
+```
+
+The helper infers `requires`, `provides`, `rejects`, and `input` the way `createMiddleware`
+does. TypeScript rejects a `requiresServices` list that leaves out a name or adds one the
+interface does not declare. The callback's `ctx.services` is `RateLimitRequirements` and
+nothing else, so the middleware cannot reach a service it did not declare, even when its
+placement provides one. The inline `createMiddleware<RateLimitRequirements>()({ ... })` is
+equivalent. Middleware without service requirements keeps the direct
+`createMiddleware({ ... })` form, which has no typed `ctx.services` and rejects
+`requiresServices`.
+
+A requirement interface follows the [contract rules](#contract-rules): exported, with
+required, plainly named members. It names what one middleware needs, so the same name may have
+a different type in a requirement and in an unrelated scope.
+
+### Valid and Invalid Placements
+
+`routa check` checks the middleware at every placement against the services that exist before
+it runs:
+
+| Middleware                     | Sees                                         |
+| ------------------------------ | -------------------------------------------- |
+| Filesystem `middleware.ts`     | Application services                         |
+| A route root's `middleware`    | Application and route-file services          |
+| A `createRoute`'s `middleware` | Application, route-file, and method services |
+
+A placement is valid when each required service exists there and its type is assignable to
+the requirement. Extra members on the implementation are fine. This application service
+satisfies `RateLimitRequirements`, so `withRateLimit` can run as filesystem middleware:
+
+```ts title="src/services.ts"
+import { defineServices } from "@routa-ts/core";
+
+export interface AppServices {
+	limiter: { take(key: string): Promise<boolean>; close(): void };
+}
+
+export const defineAppServices = defineServices<AppServices>();
+```
+
+```ts title="src/routes/middleware.ts"
+export { withRateLimit } from "../middleware/rate-limit.js";
+```
+
+A required name that no earlier scope declares fails the check, including a name that a later
+factory of the same request builds. Declaring `limiter` in the `/orders` route file's
+services instead of the application's reports:
+
+```txt
+ROUTA_SERVICES_UNAVAILABLE: src/routes/middleware.ts: Filesystem middleware withRateLimit requires service "limiter", which /orders does not provide before it runs. The route file's services declare it, but their factory runs after this middleware.
+Suggestion: Filesystem middleware sees only application services. Declare "limiter" in the application services, or move the middleware into a route file or method that declares it.
+```
+
+A service with the right name and an incompatible type fails the TypeScript step of
+`routa check`. `routa generate` writes one check per placement into `.routa/routes.gen.ts`, and
+TypeScript reports the line of the placement that fails. With
+`limiter: { take(key: string): boolean }` in `AppServices`:
+
+```txt
+.routa/routes.gen.ts(111,68): error TS2344: Type 'Readonly<AppServices>' does not satisfy the constraint 'RateLimitRequirements'.
+  The types of 'limiter.take(...)' are incompatible between these types.
+    Type 'boolean' is not assignable to type 'Promise<boolean>'.
+```
+
+```ts title=".routa/routes.gen.ts"
+export type RoutaServiceRequirementChecks = [
+	RoutaServicesSatisfy<"withRateLimit in src/routes/middleware.ts", Readonly<RoutaApplicationServices>, import("../src/middleware/rate-limit.js").RateLimitRequirements>,
+];
+```
+
+Each placement gets its own check, so a middleware placed in two route files can pass in one
+and fail in the other.
+
+At runtime, Routa checks that every name in `requiresServices` is on the middleware's
+`ctx.services` immediately before it runs. A missing name, which only a project that bypassed
+`routa check` can reach, stops the request before the callback with the standard `500` problem.
+The client gets no details. The `http.error` log names the middleware, the service, the route,
+and the method:
+
+```txt
+Middleware withRateLimit on GET /orders requires service "limiter", but ctx.services does not provide it where the middleware runs. Declare "limiter" in a services scope that runs before the middleware.
+```
+
+Routa checks names at runtime, not the members of the services.
+
 ## Contract Rules
 
 A service contract is an exported `interface`, or an exported `type` alias of an object
@@ -240,6 +351,10 @@ of guessing:
 | The contract is inline, missing, or not exported                    | `ROUTA_SERVICES_CONTRACT_UNRESOLVED`  |
 | An optional or computed member, an index signature, or an `extends` | `ROUTA_SERVICES_CONTRACT_UNSUPPORTED` |
 | Scopes that run in one request declare the same name                | `ROUTA_SERVICES_DUPLICATE`            |
+| Middleware requires a service its placement does not provide        | `ROUTA_SERVICES_UNAVAILABLE`          |
+
+Requirement interfaces passed to `createMiddleware<Requirements>()` follow the same rules and
+report the same contract diagnostics.
 
 TypeScript rejects optional services and index signatures in `defineServices<...>()` too.
 Declare `services` in the `createRouta` object itself, or in a `const` object literal,
@@ -361,12 +476,11 @@ Your application owns the services, their configuration, the resources they acqu
 those resources are released, and every business decision the services make. Service
 contracts never appear in OpenAPI, and adopting services does not change any HTTP response.
 
-<Aside type="caution" title="Partial: no middleware requirements or test application yet">
-	Application, route-file, and method services, their cleanup, and the reserved
-	`ctx.services` are implemented. Middleware cannot yet declare the services it requires, so
-	it reads `ctx.services` without typed access. A generated test application and graceful
-	shutdown are not implemented. `routa dev` and `routa start` do not yet run application
-	cleanup when the process receives `SIGINT` or `SIGTERM`.
+<Aside type="caution" title="Partial: no test application yet">
+	Application, route-file, and method services, middleware service requirements, their
+	cleanup, and the reserved `ctx.services` are implemented. A generated test application and
+	graceful shutdown are not implemented. `routa dev` and `routa start` do not yet run
+	application cleanup when the process receives `SIGINT` or `SIGTERM`.
 </Aside>
 
 ## Next Steps

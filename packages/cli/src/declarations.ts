@@ -5,9 +5,10 @@ import * as ts from "./typescript.js";
 
 /**
  * Reads what a declaration's initializer declares, such as the object it passes to its factory,
- * or `undefined` when the declaration is not the kind being looked for.
+ * or `undefined` when the declaration is not the kind being looked for. `file` is the module the
+ * initializer is written in, relative to the project root.
  */
-export type DeclarationReader<T> = (expression: ts.Expression) => T | undefined;
+export type DeclarationReader<T> = (expression: ts.Expression, file: string) => T | undefined;
 
 export type ModuleDeclaration<T = ts.ObjectLiteralExpression> = {
 	/** The file that declares the value. */
@@ -66,7 +67,7 @@ export function exportedDeclarations<T>(
 					continue;
 				}
 
-				const contract = read(declaration.initializer);
+				const contract = read(declaration.initializer, file);
 
 				if (contract) {
 					const name = declaration.name.text;
@@ -101,7 +102,7 @@ export function exportedDeclarations<T>(
 			const importedName = specifier.propertyName?.text ?? specifier.name.text;
 
 			if (!statement.moduleSpecifier) {
-				const local = variableDeclarations(sourceFile, false, read).find(
+				const local = variableDeclarations(file, sourceFile, false, read).find(
 					(item) => item.name === importedName,
 				);
 
@@ -218,7 +219,9 @@ export function boundDeclaration<T>(
 	read: DeclarationReader<T>,
 ): ModuleDeclaration<T> | undefined {
 	const sourceFile = parseTypeScriptFile(join(cwd, file), parser);
-	const local = variableDeclarations(sourceFile, false, read).find((item) => item.name === name);
+	const local = variableDeclarations(file, sourceFile, false, read).find(
+		(item) => item.name === name,
+	);
 
 	if (local) {
 		return { file, name, exportedName: name, contract: local.contract };
@@ -241,11 +244,13 @@ export function parseTypeScriptFile(file: string, parser: ts.SourceFileParser): 
 /**
  * Collects a source file's declarations that `read` accepts, such as `createMiddleware` calls.
  *
+ * @param file - The source file's path relative to the project root, passed to `read`.
  * @param sourceFile - The TypeScript source file to inspect.
  * @param exportedOnly - Whether to include only exported variable declarations.
  * @returns The declared names and what `read` read from each.
  */
 export function variableDeclarations<T>(
+	file: string,
 	sourceFile: ts.SourceFile,
 	exportedOnly: boolean,
 	read: DeclarationReader<T>,
@@ -266,7 +271,7 @@ export function variableDeclarations<T>(
 				continue;
 			}
 
-			const contract = read(declaration.initializer);
+			const contract = read(declaration.initializer, file);
 
 			if (!contract) {
 				continue;
