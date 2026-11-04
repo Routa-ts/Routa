@@ -171,7 +171,7 @@ Routa emits `security` and `x-routa-authz` on every operation the middleware cov
   `ROUTA_MIDDLEWARE_UNRESOLVED`, because Routa could not check the contract.
 - `provides` is an object literal or a `const` object literal it names. Anything else
   produces `ROUTA_MIDDLEWARE_PROVIDES_UNRESOLVED`.
-- `ctx.services` is reserved for [application services](/docs/concepts/services/).
+- `ctx.services` is reserved for injected [services](/docs/concepts/services/).
   Providing `services` or passing it to `next()` fails TypeScript and `routa check`
   (`ROUTA_CONTEXT_RESERVED`); see the
   [migration](/docs/concepts/services/#migrating-a-services-context-key).
