@@ -46,11 +46,12 @@ the complete list.
 | Services        | `defineServices` services per application, route file, or method, with cleanup and middleware requirements        |
 | OpenAPI in      | Scaffolding source from `.yaml`, `.yml`, and `.json` documents                                                    |
 | OpenAPI out     | Generation from source alone, same-status composition, drift checks, and breaking-change checks                   |
-| Generated files | `.routa/routes.gen.ts`, `.routa/manifest.json`, `.routa/openapi-baseline.json`                                    |
+| Generated files | `.routa/routes.gen.ts`, `.routa/testing.gen.ts`, `.routa/manifest.json`, `.routa/openapi-baseline.json`           |
 | CLI             | `create`, `scaffold`, `dev`, `start`, `check`, `generate`, `build`, `routes`, `openapi check`, `openapi breaking` |
 | Logging         | Backend-neutral `RoutaLogger` contract with a built-in console implementation                                     |
 | Lifecycle       | Route `deprecation` metadata with optional `Deprecation`, `Sunset`, and `Link` headers                            |
 | Query helpers   | `Sort` and `Fields` parsers from `@routa-ts/core/query/helpers`                                                   |
+| Testing         | Generated `createTestApp` with in-memory requests, scope service replacement, and disposal                        |
 
 ### Deferred
 
@@ -58,7 +59,7 @@ the complete list.
 - Non-Zod schema adapters
 - Client SDK generation
 - A plugin system
-- A generated test application
+- A typed test client and test runner integrations
 - Graceful shutdown; `routa dev` and `routa start` do not release application services on
   `SIGINT` or `SIGTERM`
 - Built-in auth provider integrations; v0 makes security _visible_ in OpenAPI but never

@@ -77,6 +77,7 @@ export function createProject(
 		files.set(".routa/openapi-baseline.json", openApiBaseline);
 		files.set(".routa/manifest.json", manifest);
 		files.set(".routa/routes.gen.ts", routesMetadata);
+		files.set(".routa/testing.gen.ts", testingModuleSource());
 	}
 
 	for (const [path, content] of files) {
@@ -160,6 +161,55 @@ declare module "@routa-ts/core" {
 \t\trouteCtxByPath: RoutaRouteCtxByPath;
 \t\tctxByKey: RoutaCtxByKey;
 \t}
+}
+`;
+}
+
+/**
+ * Generates the test application module for the scaffolded OpenAPI project.
+ *
+ * The output mirrors what `routa check` writes for a project without services, so the first
+ * check does not rewrite the file.
+ *
+ * @returns The generated TypeScript source for `.routa/testing.gen.ts`.
+ */
+function testingModuleSource(): string {
+	return `${generatedHeader("src/routa.ts and src/routes directory")}import {
+\tcreateTestApplication,
+\ttype ProjectModules,
+\ttype TestApplication,
+} from "@routa-ts/core/testing";
+
+/**
+ * The services factory a scope declares, by scope: \`"application"\`, a route file's path, or a
+ * method and path such as \`"POST /orders"\`. Annotate a factory declared on its own with it.
+ */
+export type ServicesFactory<TScope extends keyof RoutaServicesFactories> =
+\tRoutaServicesFactories[TScope];
+
+type RoutaServicesFactories = {};
+
+/** Factories that replace whole service scopes before a test application is built. */
+export type TestAppOptions = {
+\treadonly services?: never;
+\treadonly routes?: never;
+};
+
+const modules: ProjectModules = {
+\t".routa/routes.gen.ts": () => import("./routes.gen.js"),
+\t"src/routa.ts": () => import("../src/routa.js"),
+\t"src/routes/status/route.ts": () => import("../src/routes/status/route.js"),
+};
+
+/**
+ * Builds an isolated, in-memory instance of this project, with its own services and cleanup.
+ * Each factory in \`options\` replaces its scope's factory before construction, so the original
+ * never runs; omitted scopes keep their factories. Call \`dispose()\` when the test ends.
+ */
+export function createTestApp(
+\toptions?: TestAppOptions,
+): Promise<TestApplication> {
+\treturn createTestApplication(modules, options);
 }
 `;
 }

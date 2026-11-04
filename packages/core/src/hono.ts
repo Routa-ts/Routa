@@ -7,6 +7,12 @@ import {
 	type RequestScope,
 	type RuntimeRouteContract,
 } from "./request-execution.js";
+import {
+	buildProjectApplication,
+	type CreateProjectApplicationOptions,
+	type ProjectApplication,
+	type ProjectModuleLoader,
+} from "./project.js";
 import { cookieDeclarationProblem, cookieScopeWarnings } from "./response-cookies.js";
 import { headerDeclarationProblem, lifecycleOwnedHeaders } from "./response-headers.js";
 import {
@@ -20,6 +26,12 @@ import {
 
 export { isBodylessStatus };
 export type { ApplicationServicesDeclaration, RequestServicesDeclaration };
+export type {
+	CreateProjectApplicationOptions,
+	ProjectApplication,
+	ProjectModuleLoader,
+	ServiceReplacements,
+} from "./project.js";
 
 type RuntimeMode = "dev" | "start";
 
@@ -133,6 +145,23 @@ export async function createApplication(
 				await scope.release();
 			})()),
 	});
+}
+
+/**
+ * Builds a project's application instance without listening: it loads the generated route
+ * metadata, `src/routa.ts`, the route modules, and their middleware, then constructs the
+ * application services. `routa start` and generated test applications both build through it.
+ *
+ * @param load - Imports a project module by its path from the project root
+ * @throws When a replacement names a route, method, or scope that declares no services, when
+ *   `src/routa.ts` or a route file and the generated metadata disagree about services, or when
+ *   the application services factory fails
+ */
+export function createProjectApplication(
+	load: ProjectModuleLoader,
+	options: CreateProjectApplicationOptions,
+): Promise<ProjectApplication> {
+	return buildProjectApplication(load, options, createApplication);
 }
 
 /**
