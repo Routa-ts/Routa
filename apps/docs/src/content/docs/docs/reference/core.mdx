@@ -595,6 +595,40 @@ It rejects for the reasons `createProjectApplication` does, when `options` is ne
 factory nor `{ services, routes }`, and when the generated list leaves out a module the
 metadata names.
 
+`ServiceReplacements` is the scoped form of `options`, keyed by route path and lowercase
+method. Each `services` entry is a factory for that scope; the generated `TestAppOptions`
+types each one against the scope's contract.
+
+```ts
+type ServiceReplacements = {
+	readonly services?: unknown
+	readonly routes?: Readonly<
+		Record<
+			string,
+			{
+				readonly services?: unknown
+				readonly methods?: Readonly<Record<string, { readonly services?: unknown }>>
+			}
+		>
+	>
+}
+```
+
+```ts
+import { createTestApp } from "../.routa/testing.gen.js";
+
+const app = await createTestApp({
+	services: () => ({ clock: { now: () => new Date(0) } }),
+	routes: {
+		"/orders": { methods: { post: { services: () => ({ receipts: { send: () => {} } }) } } },
+	},
+});
+```
+
+A `routes` or `methods` value that is not a plain object, a path no route file declares, a
+method the route file does not declare, or a scope without services rejects before any
+factory runs.
+
 ## `isBodylessStatus`
 
 ```ts
