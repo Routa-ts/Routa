@@ -208,6 +208,14 @@ describe("createTestApplication", () => {
 		await expect(
 			createTestApplication(modules, { routes: { "/orders": "services" } } as never),
 		).rejects.toThrow('The replacement at routes["/orders"] must be an object.');
+		for (const routes of [[], 5]) {
+			await expect(createTestApplication(modules, { routes } as never)).rejects.toThrow(
+				"The replacement at routes must be an object.",
+			);
+		}
+		await expect(
+			createTestApplication(modules, { routes: { "/orders": { methods: [] } } } as never),
+		).rejects.toThrow('The replacement at routes["/orders"].methods must be an object.');
 		await expect(
 			createTestApplication(modules, {
 				routes: { "/orders": { methods: { post: { services: factory, extra: 1 } } } },
@@ -226,6 +234,19 @@ describe("createTestApplication", () => {
 			createTestApplication(modules, { routes: { "/orders": { services: "orders" } } }),
 		).rejects.toThrow("The replacement services for route file /orders must be a factory.");
 		expect(built).toEqual([]);
+	});
+
+	it("types a lone factory's context and rejects a malformed request instead of throwing", async () => {
+		const { modules } = projectModules();
+		const app = await createTestApplication(modules, ({ onCleanup, logger }) => {
+			onCleanup(() => logger.info("clock.released", "Clock released."));
+			return { clock: { now: () => "test noon" } };
+		});
+		const response = app.request("http://[invalid");
+
+		expect(response).toBeInstanceOf(Promise);
+		await expect(response).rejects.toThrow();
+		await app.dispose();
 	});
 
 	it("rejects an application replacement when the project declares no application services", async () => {

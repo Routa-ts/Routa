@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -270,6 +270,24 @@ describe("generated test applications", () => {
 		await app.dispose();
 		expect(events).toEqual(["test clock built", "test clock released"]);
 	}, 30_000);
+
+	it("keeps the previous route table when writing the testing module fails", async () => {
+		const cwd = testingProject({
+			"src/services.ts": clockServices,
+			"src/routa.ts": productionConfig,
+			"src/routes/time/route.ts": timeRoute,
+		});
+		expectPassed(await run(["generate"], { cwd }));
+		const routes = readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8");
+
+		mkdirSync(join(cwd, "src/routes/clock"), { recursive: true });
+		writeFileSync(join(cwd, "src/routes/clock/route.ts"), timeRoute.replace('"/time"', '"/clock"'));
+		rmSync(join(cwd, ".routa/testing.gen.ts"));
+		mkdirSync(join(cwd, ".routa/testing.gen.ts"));
+
+		await expect(async () => run(["generate"], { cwd })).rejects.toThrow("EISDIR");
+		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toBe(routes);
+	});
 
 	it("replaces route-file and method services while omitted scopes consume the replacements", async () => {
 		const cwd = scopedProject();

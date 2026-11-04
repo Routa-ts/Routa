@@ -1,4 +1,5 @@
 import { createProjectApplication } from "./hono.js";
+import type { ApplicationServicesFactory } from "./index.js";
 import type { ProjectModuleLoader, ServiceReplacements } from "./project.js";
 
 /**
@@ -36,7 +37,7 @@ export type TestApplication = {
  */
 export async function createTestApplication(
 	modules: ProjectModules,
-	options?: ServiceReplacements | ((context: never) => unknown),
+	options?: ServiceReplacements | ApplicationServicesFactory,
 ): Promise<TestApplication> {
 	const load: ProjectModuleLoader = (file) => {
 		const module = modules[file];
@@ -53,7 +54,8 @@ export async function createTestApplication(
 	});
 
 	return Object.freeze({
-		request: (input: string | URL | Request, init?: RequestInit) =>
+		// Async, so a malformed URL or init rejects like any other request failure.
+		request: async (input: string | URL | Request, init?: RequestInit) =>
 			application.fetch(
 				input instanceof Request
 					? new Request(input, init)

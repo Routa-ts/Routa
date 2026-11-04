@@ -5,6 +5,7 @@ import {
 	readdirSync,
 	readFileSync,
 	realpathSync,
+	rmSync,
 	statSync,
 	writeFileSync,
 } from "node:fs";
@@ -3353,8 +3354,22 @@ function writeGeneratedState(
 	routes: RouteMetadata[],
 	services: ServiceContractMetadata | undefined,
 ): void {
-	writeGeneratedFile(join(cwd, ".routa/routes.gen.ts"), routesMetadataSource(routes, services));
-	writeGeneratedFile(join(cwd, ".routa/testing.gen.ts"), testingModuleSource(routes, services));
+	const routesFile = join(cwd, ".routa/routes.gen.ts");
+	const previous = existsSync(routesFile) ? readFileSync(routesFile, "utf8") : undefined;
+	writeGeneratedFile(routesFile, routesMetadataSource(routes, services));
+
+	try {
+		writeGeneratedFile(join(cwd, ".routa/testing.gen.ts"), testingModuleSource(routes, services));
+	} catch (error) {
+		// Keep the two files describing the same routes: put the previous route table back.
+		if (previous === undefined) {
+			rmSync(routesFile, { force: true });
+		} else {
+			writeFileSync(routesFile, previous);
+		}
+
+		throw error;
+	}
 }
 
 function writeGeneratedFile(file: string, source: string): void {

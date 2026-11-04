@@ -129,7 +129,7 @@ function assertReplacements(replacements: ServiceReplacements, metadata: Metadat
 
 	replace("the application", replacements.services, metadata.routaApplicationServices);
 
-	for (const [path, route] of Object.entries(replacements.routes ?? {})) {
+	for (const [path, route] of replacementEntries(replacements.routes, "routes")) {
 		const declared = metadata.routaRoutes.find((item) => item.path === path);
 
 		if (!declared) {
@@ -139,7 +139,10 @@ function assertReplacements(replacements: ServiceReplacements, metadata: Metadat
 		assertKeys(route, ["services", "methods"], `routes[${JSON.stringify(path)}]`);
 		replace(`route file ${path}`, route.services, declared.services?.routeFile?.names);
 
-		for (const [method, scope] of Object.entries(route.methods ?? {})) {
+		for (const [method, scope] of replacementEntries(
+			route.methods,
+			`routes[${JSON.stringify(path)}].methods`,
+		)) {
 			const label = `${method.toUpperCase()} ${path}`;
 			assertKeys(scope, ["services"], `routes[${JSON.stringify(path)}].methods.${method}`);
 
@@ -155,6 +158,22 @@ function assertReplacements(replacements: ServiceReplacements, metadata: Metadat
 }
 
 /** Rejects a replacement entry that is not an object or holds a key Routa does not read. */
+/** The entries of an optional replacement container, which must be a plain object when given. */
+function replacementEntries<T>(
+	value: Readonly<Record<string, T>> | undefined,
+	label: string,
+): Array<[string, T]> {
+	if (value === undefined) {
+		return [];
+	}
+
+	if (typeof value !== "object" || value === null || Array.isArray(value)) {
+		throw new TypeError(`The replacement at ${label} must be an object.`);
+	}
+
+	return Object.entries(value);
+}
+
 function assertKeys(value: unknown, keys: readonly string[], label: string): void {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) {
 		throw new TypeError(`The replacement at ${label} must be an object.`);
