@@ -140,7 +140,7 @@ export function createRequestExecutor(
 			options.logger,
 			{ scopes: options.requestServices ?? [], constructed },
 			(index) =>
-				`${options.middlewareNames?.[index] ?? `middleware[${index}]`}${options.route ? ` on ${options.route}` : ""}`,
+				`${options.middlewareNames?.[index] || `middleware[${index}]`}${options.route ? ` on ${options.route}` : ""}`,
 			(produced) =>
 				finalizeResponse(validateResult(produced, options.validateResponses), lifecycle),
 		);

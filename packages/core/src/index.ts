@@ -935,7 +935,7 @@ export function createRouteRoot<const TPath extends keyof RegisteredRouteCtxByPa
  *   unchanged
  */
 export function createMiddleware<
-	TServices extends object & ServiceContractRules<TServices> = never,
+	TServices extends object & ServiceContractRules<TServices> & RequirementRules<TServices> = never,
 >(): MiddlewareHelper<TServices>;
 /**
  * Preserves a middleware contract's type information.
@@ -978,8 +978,29 @@ export type MiddlewareHelper<TServices extends object> = <
 	},
 ) => MiddlewareContract<TRequires, TProvides, TRejects, TInput, TServices>;
 
-/** Fails a `requiresServices` list that leaves out a name the requirement interface declares. */
-type RequirementListChecks<TServices, TNames extends readonly unknown[]> = {
+/**
+ * A requirement interface names at least one service, each with a string name, so
+ * `requiresServices` can list every one of them.
+ */
+type RequirementRules<TServices> = (keyof TServices extends never
+	? {
+			readonly "A requirement interface names at least one service. Use createMiddleware(contract) for middleware without services.": never;
+		}
+	: unknown)
+	& (Exclude<keyof TServices, string> extends never
+		? unknown
+		: { readonly "Name each required service with a string, not a number or symbol.": never });
+
+/**
+ * Fails a `requiresServices` list that is not a literal list of names, leaves out a name the
+ * requirement interface declares, or repeats one.
+ */
+type RequirementListChecks<
+	TServices,
+	TNames extends readonly unknown[],
+> = (number extends TNames["length"]
+	? { readonly "requiresServices must be a literal list of service names.": never }
+	: unknown) & {
 	readonly [
 		K in Exclude<keyof TServices, TNames[number]> as `requiresServices must list "${K & string}".`
 	]: never;

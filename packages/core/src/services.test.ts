@@ -595,6 +595,16 @@ describe("middleware service requirements (types)", () => {
 				},
 			});
 
+			const widened: readonly ("cache" | "clock")[] = ["cache"];
+			defineCacheMiddleware({
+				// @ts-expect-error The list is a literal tuple, so every name is checked.
+				requiresServices: widened,
+				run: ({ next }) => next(),
+			});
+			// @ts-expect-error A requirement interface names at least one service.
+			createMiddleware<{}>();
+			// @ts-expect-error Required services have string names.
+			createMiddleware<{ 1: Cache }>();
 			// @ts-expect-error A requirement interface lists required services only.
 			createMiddleware<{ cache?: Cache }>();
 			// @ts-expect-error A requirement interface names each service.

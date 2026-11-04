@@ -704,9 +704,16 @@ describe("middleware service requirements (runtime)", () => {
 				return next();
 			},
 		});
-		const app = createHonoApp([route({ method: "post", middleware: [bypass] }, () => "handled")], {
-			logger: createLogger({ sink: (event) => events.push(event) }),
-		});
+		// An empty name falls back to the middleware's position too.
+		const app = createHonoApp(
+			[
+				{
+					...route({ method: "post", middleware: [bypass] }, () => "handled"),
+					middlewareNames: [""],
+				},
+			],
+			{ logger: createLogger({ sink: (event) => events.push(event) }) },
+		);
 
 		const response = await app.request("http://localhost/orders", { method: "POST" });
 
