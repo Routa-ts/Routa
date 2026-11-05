@@ -387,8 +387,10 @@ declared locally or imported, that you pass to `createRouta` or spread into it. 
 spread, computed key, or config argument Routa cannot read may hide them, `routa check`
 warns with `ROUTA_SERVICES_SPREAD_UNRESOLVED`. The warning does not stop startup. Startup
 fails only when the hidden services have no generated metadata. When a visible `services`
-member comes before the spread, a hidden factory can replace it, and Routa runs that factory
-unchecked. Declare `services` after any spread.
+member comes before the spread, a hidden factory can replace it. Routa still checks that the
+hidden factory returns exactly the names the visible contract declares, and fails startup if
+they differ, but nothing checks the hidden factory against that contract's types. Declare
+`services` after any spread.
 
 ## Cleanup
 
