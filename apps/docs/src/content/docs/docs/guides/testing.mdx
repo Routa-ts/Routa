@@ -36,19 +36,28 @@ services in an in-memory test application, and where Routa's own checks already 
    });
    ```
 
-3. Test a handler by calling its `run` directly. It is a plain function, so pass `input`
-   and `ctx` and assert on the outcome name.
+3. Test a handler by calling its `run` directly. It is a plain function, so pass `input`,
+   `ctx`, and `response`, then assert on the outcome name. The
+   [response builders](/docs/reference/core/#responsebuilders) are pure functions that return
+   result objects, so a test can supply its own. This test targets a `GET` that declares
+   `success` and `notFound` outcomes.
 
    ```ts title="src/routes/users/$userId/route.test.ts"
    import { createLogger } from "@routa-ts/core/logger";
    import { describe, expect, it } from "vitest";
    import route from "./route.js";
 
+   type GetUserArgs = Parameters<typeof route.get.run>[0];
+
    const ctx = { logger: createLogger({ enabled: false }) };
+   const response: GetUserArgs["response"] = {
+   	success: (data) => ({ type: "success", data }),
+   	notFound: () => ({ type: "notFound" }),
+   };
 
    describe("GET /users/:userId", () => {
    	it("returns notFound for an unknown user", async () => {
-   		const result = await route.get.run({ input: { params: { userId: "nope" } }, ctx });
+   		const result = await route.get.run({ input: { params: { userId: "nope" } }, ctx, response });
 
    		expect(result.type).toBe("notFound");
    	});

@@ -46,18 +46,20 @@ For each matched route, in order:
 | ------ | ------------------------------------------------------------------------ |
 | `204`  | Automatic `OPTIONS` response                                             |
 | `400`  | Input failed schema validation, or the JSON body could not be parsed     |
+| `404`  | No route matches the request path                                        |
 | `405`  | The path exists but does not declare the requested method                |
 | `406`  | The `Accept` header cannot be satisfied by JSON                          |
 | `415`  | The request body's content type is not a JSON media type                 |
 | `500`  | A handler or middleware returned output that does not match its contract |
 | `500`  | A route-file or method service factory failed during the request         |
+| `500`  | A handler or middleware threw an error it did not handle                 |
 
-Every other status comes from your contract.
+Every other status comes from your contract: a handler outcome or a middleware reject.
 
 ## Error Response Shape
 
-For most errors Routa generates, it returns problem documents. Responses with status 405
-or 406 are the plain-text exceptions:
+For most errors Routa generates, it returns problem documents. Responses with status 404,
+405, or 406 are the plain-text exceptions:
 
 ```json
 {
@@ -72,6 +74,7 @@ or 406 are the plain-text exceptions:
 | ----------------------------------- | ---------------------- | ------ |
 | `…/problems/validation`             | Validation failed      | 400    |
 | `…/problems/invalid-json`           | Invalid JSON body      | 400    |
+| Plain text (no problem type)        | Not Found              | 404    |
 | Plain text (no problem type)        | Method Not Allowed     | 405    |
 | Plain text (no problem type)        | Not Acceptable         | 406    |
 | `…/problems/unsupported-media-type` | Unsupported Media Type | 415    |
