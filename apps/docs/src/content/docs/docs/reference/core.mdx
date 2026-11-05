@@ -301,7 +301,25 @@ function createMiddleware<TRequires, TProvides, TRejects, TInput>(
 ): MiddlewareContract<TRequires, TProvides, TRejects, TInput>
 
 function createMiddleware<Requirements>(): MiddlewareHelper<Requirements>
+
+type MiddlewareHelper<TServices extends object> = <
+	const TRequires extends readonly RegisteredCtxKey[] = readonly RegisteredCtxKey[],
+	const TProvides extends MiddlewareProvidesSpec = Record<never, never>,
+	const TRejects extends MiddlewareRejectsSpec = Record<never, never>,
+	const TInput extends RouteInput | undefined = undefined,
+	const TNames extends readonly (keyof TServices & string)[] = readonly (keyof TServices & string)[],
+>(
+	contract: MiddlewareContract<TRequires, TProvides, TRejects, TInput, TServices> & {
+		readonly requiresServices: TNames & RequirementListChecks<TServices, NoInfer<TNames>>
+		readonly rejects?: ResponseChecks<NoInfer<TRejects>>
+		readonly provides?: ReservedContextChecks<NoInfer<TProvides>>
+	},
+) => MiddlewareContract<TRequires, TProvides, TRejects, TInput, TServices>
 ```
+
+`RequirementListChecks` fails a `requiresServices` list that is not a literal list, leaves out
+a name the requirement interface declares, or repeats one. `ResponseChecks` and
+`ReservedContextChecks` apply the same rules as the contract form.
 
 | Field              | Type                                                                    | Purpose                                        |
 | ------------------ | ----------------------------------------------------------------------- | ---------------------------------------------- |
@@ -539,8 +557,20 @@ test application runs the same routes, middleware chains, and services as the se
 
 It loads `.routa/routes.gen.ts`, each route file, its filesystem middleware, and
 `src/routa.ts`, then calls `createApplication` with the configured logger, lifecycle
-headers, response validation, and services. It returns `{ application, config, logger,
-routes }`.
+headers, response validation, and services. It returns a `ProjectApplication`:
+
+```ts
+type ProjectApplication = {
+	application: RoutaApplication
+	config: RoutaConfig
+	logger: RoutaLogger | undefined
+	routes: readonly HonoRoute[]
+}
+```
+
+`config` is the default export of `src/routa.ts`. `logger` is its configured logger, a
+default logger when it sets none, or `undefined` when it sets `logger: false`. `routes` are
+the routes passed to `createApplication`.
 
 ```ts
 import { pathToFileURL } from "node:url";
@@ -758,6 +788,177 @@ type UsersRouteConfig = RouteRootConfigForCtx<{
 	post: { requestId: string; auth: { userId: string } };
 }>;
 ```
+
+## `OnCleanup`
+
+```ts
+type OnCleanup = (callback: () => unknown) => void
+```
+
+Registers a callback that releases a resource a services factory acquired. Routa awaits the
+callbacks after the scope ends, one at a time, in reverse registration order, and attempts
+every one even when an earlier one fails. A callback may return a promise.
+
+| Parameter  | Type            | Purpose                        |
+| ---------- | --------------- | ------------------------------ |
+| `callback` | `() => unknown` | Releases one acquired resource |
+
+Returns nothing.
+
+```ts
+import type { OnCleanup } from "@routa-ts/core";
+
+export function startHeartbeat(onCleanup: OnCleanup): void {
+	const timer = setInterval(() => {}, 30_000);
+	onCleanup(() => clearInterval(timer));
+}
+```
+
+**Errors:** `onCleanup` throws a `TypeError` when `callback` is not a function, and throws
+when called after cleanup has started. A failing callback is logged as
+`services.cleanup_failed`. For application services, `dispose()` then rejects with an
+`AggregateError`. A request cleanup failure never changes the response.
+
+## `ApplicationServicesContext`
+
+```ts
+type ApplicationServicesContext = {
+	readonly logger: RoutaLogger
+	readonly onCleanup: OnCleanup
+}
+```
+
+What an application services factory receives.
+
+| Field       | Type          | Purpose                                                        |
+| ----------- | ------------- | -------------------------------------------------------------- |
+| `logger`    | `RoutaLogger` | The configured logger, or a no-op logger when logging is off   |
+| `onCleanup` | `OnCleanup`   | Registers a callback that releases a resource the factory owns |
+
+```ts
+import type { ApplicationServicesContext } from "@routa-ts/core";
+
+export function createClock({ logger }: ApplicationServicesContext) {
+	logger.info("clock.ready", "Clock ready.");
+	return { now: () => new Date() };
+}
+```
+
+**Errors:** none. It is a type.
+
+## `ApplicationServicesFactory`
+
+```ts
+type ApplicationServicesFactory<TServices extends object = object> = (
+	context: ApplicationServicesContext,
+) => TServices | Promise<TServices>
+```
+
+Builds one application instance's services. It runs once, before the application accepts
+requests. `defineServices` checks an application factory against this type.
+
+| Type parameter | Meaning                            |
+| -------------- | ---------------------------------- |
+| `TServices`    | The application's service contract |
+
+Returns the services, or a promise of them, with exactly the names `TServices` declares.
+
+```ts
+import type { ApplicationServicesFactory } from "@routa-ts/core";
+
+export type AppServices = { clock: { now(): Date } };
+
+export const appServices: ApplicationServicesFactory<AppServices> = () => ({
+	clock: { now: () => new Date() },
+});
+```
+
+**Errors:** when the factory throws or returns different names, Routa runs the callbacks it
+registered, then fails startup with that error.
+
+## `RequestServicesContext`
+
+```ts
+type RequestServicesContext<TCtx = Record<string, unknown>> = {
+	readonly ctx: Readonly<Omit<TCtx, "logger">> & { readonly logger: RoutaLogger }
+	readonly onCleanup: OnCleanup
+}
+```
+
+What a route-file or method services factory receives. It carries no request or handler
+input.
+
+| Field       | Type                                          | Purpose                                                                                    |
+| ----------- | --------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `ctx`       | `Readonly<Omit<TCtx, "logger">> & { logger }` | Context the middleware before the scope provided, earlier services, and the request logger |
+| `onCleanup` | `OnCleanup`                                   | Registers a callback that Routa runs after the response is ready                           |
+
+```ts
+import type { RequestServicesContext } from "@routa-ts/core";
+
+export function startTimer({ ctx, onCleanup }: RequestServicesContext<{ requestId: string }>) {
+	const started = Date.now();
+	onCleanup(() => ctx.logger.info("request.timed", `${ctx.requestId}: ${Date.now() - started} ms`));
+	return { started };
+}
+```
+
+**Errors:** none. It is a type.
+
+## `RequestServicesFactory`
+
+```ts
+type RequestServicesFactory<TServices extends object = object, TCtx = Record<string, unknown>> = (
+	context: RequestServicesContext<TCtx>,
+) => TServices | Promise<TServices>
+```
+
+Builds one request's route-file or method services. It runs once for each request the scope
+applies to. `defineServices` checks a route-file or method factory against this type.
+
+| Type parameter | Meaning                                     |
+| -------------- | ------------------------------------------- |
+| `TServices`    | The scope's service contract                |
+| `TCtx`         | The context available before the scope runs |
+
+Returns the services, or a promise of them, with exactly the names `TServices` declares.
+
+```ts
+import type { RequestServicesFactory } from "@routa-ts/core";
+
+type AuditServices = { audit: { record(event: string): void } };
+
+export const auditServices: RequestServicesFactory<AuditServices, { requestId: string }> = ({
+	ctx,
+}) => ({
+	audit: { record: (event) => ctx.logger.info("audit", `${ctx.requestId}: ${event}`) },
+});
+```
+
+To type a factory for one of your project's scopes, use the generated `ServicesFactory` from
+`.routa/testing.gen.ts`. It fills in the contract and the scope's context, so you do not
+repeat either. `ServicesFactory` accepts only scopes your project declares, so the example
+below needs `/orders` services declared as in
+[Route-File and Method Services](/docs/concepts/services/#route-file-and-method-services).
+Keep the file outside `src/routes`, where every module is a route file:
+
+```ts title="src/factories/orders.ts"
+import type { ServicesFactory } from "../../.routa/testing.gen.js";
+
+export const ordersServices: ServicesFactory<"/orders"> = ({ ctx, onCleanup }) => {
+	onCleanup(() => ctx.logger.info("orders.released", "Orders services released."));
+	return {
+		orders: {
+			list: async () => [],
+			place: async (total) => ({ id: crypto.randomUUID(), total }),
+		},
+	};
+};
+```
+
+**Errors:** when the factory throws or returns different names, Routa skips the rest of the
+request, releases the scopes the request started, and responds with the standard `500`
+problem.
 
 ## Exported Types
 

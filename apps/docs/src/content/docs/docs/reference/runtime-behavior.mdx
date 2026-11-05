@@ -50,6 +50,7 @@ For each matched route, in order:
 | `406`  | The `Accept` header cannot be satisfied by JSON                          |
 | `415`  | The request body's content type is not a JSON media type                 |
 | `500`  | A handler or middleware returned output that does not match its contract |
+| `500`  | A route-file or method service factory failed during the request         |
 
 Every other status comes from your contract.
 
