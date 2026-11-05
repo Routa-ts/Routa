@@ -384,8 +384,11 @@ report the same contract diagnostics.
 TypeScript rejects optional services and index signatures in `defineServices<...>()` too.
 Declare `services` in the `createRouta` object itself, or in a `const` object literal,
 declared locally or imported, that you pass to `createRouta` or spread into it. When a
-spread, computed key, or config argument Routa cannot read may hide them, `routa check` warns with `ROUTA_SERVICES_SPREAD_UNRESOLVED`, and startup fails
-rather than running unchecked services.
+spread, computed key, or config argument Routa cannot read may hide them, `routa check`
+warns with `ROUTA_SERVICES_SPREAD_UNRESOLVED`. The warning does not stop startup. Startup
+fails only when the hidden services have no generated metadata. When a visible `services`
+member comes before the spread, a hidden factory can replace it, and Routa runs that factory
+unchecked. Declare `services` after any spread.
 
 ## Cleanup
 
