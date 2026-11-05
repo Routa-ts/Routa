@@ -530,8 +530,9 @@ The OpenAPI file path does not exist relative to the project root.
 
 `routa openapi breaking` could not parse `.routa/openapi-baseline.json`.
 
-**Fix:** fix the JSON syntax, or recreate the baseline with
-`routa openapi breaking --update-baseline`.
+**Fix:** fix the JSON syntax, or replace the baseline with
+`routa openapi breaking --update-baseline`, which writes the current contract without
+reading the old file.
 
 ## OpenAPI Scaffold Input
 

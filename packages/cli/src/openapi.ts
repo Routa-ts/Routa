@@ -76,9 +76,9 @@ export function runOpenApiBreaking(
 	argv: readonly string[],
 	cwd = process.cwd(),
 ): { code: number; stdout?: string | undefined; stderr?: string | undefined } {
-	const baseline = readBaseline(cwd);
+	const baselineFile = join(cwd, ".routa/openapi-baseline.json");
 
-	if (!baseline) {
+	if (!existsSync(baselineFile)) {
 		return { code: 1, stderr: "Missing .routa/openapi-baseline.json. Run routa scaffold first.\n" };
 	}
 
@@ -89,15 +89,19 @@ export function runOpenApiBreaking(
 		return { code: 1, stderr: `${invalidGraph.join("\n")}\n` };
 	}
 
-	const diagnostics = breakingChangeDiagnostics(baseline, current);
-
+	// Updating replaces the baseline, so it never parses the old one, even when its JSON is invalid.
 	if (argv.includes("--update-baseline")) {
-		writeFileSync(
-			join(cwd, ".routa/openapi-baseline.json"),
-			`${JSON.stringify(current, null, "\t")}\n`,
-		);
+		writeFileSync(baselineFile, `${JSON.stringify(current, null, "\t")}\n`);
 		return { code: 0, stdout: "OpenAPI baseline updated.\n" };
 	}
+
+	const baseline = readBaseline(cwd);
+
+	if (!baseline) {
+		return { code: 1, stderr: "Missing .routa/openapi-baseline.json. Run routa scaffold first.\n" };
+	}
+
+	const diagnostics = breakingChangeDiagnostics(baseline, current);
 
 	if (diagnostics.length > 0) {
 		return {

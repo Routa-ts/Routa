@@ -237,6 +237,24 @@ describe("OpenAPI generated from source", () => {
 			expect(readBaseline(cwd).paths).not.toHaveProperty("/accounts");
 			expect(readBaseline(cwd)).toEqual(generateOpenApi(cwd));
 		});
+
+		it("replaces a baseline with invalid JSON when --update-baseline is passed", async () => {
+			const cwd = project({
+				"src/routes/users/$id/schemas.ts": userSchemas,
+				"src/routes/users/$id/route.ts": userRoute(),
+			});
+			writeFileSync(join(cwd, ".routa/openapi-baseline.json"), "{ not json");
+
+			const refused = await run(["openapi", "breaking"], { cwd });
+
+			expect(refused.code).toBe(1);
+			expect(refused.stderr).toContain("ROUTA_OPENAPI_BASELINE_INVALID_JSON");
+
+			const updated = await run(["openapi", "breaking", "--update-baseline"], { cwd });
+
+			expect(updated.code).toBe(0);
+			expect(readBaseline(cwd)).toEqual(generateOpenApi(cwd));
+		});
 	});
 
 	describe("migration from baseline carryover", () => {

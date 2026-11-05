@@ -157,12 +157,35 @@ export const getStatus = createRoute({
 
 ```ts
 type ResponseBuilders<TResponses extends RouteResponses> = {
-	// One builder per outcome, except an outcome that declares a required cookie
-	readonly [K in keyof TResponses]: TResponses[K] extends { schema: ZodType }
-		? (data: SchemaOutput<Schema>, ...headers: HeaderArgs) => OutcomeResult<K, TResponses[K]>
-		: (...headers: HeaderArgs) => OutcomeResult<K, TResponses[K]>
+	readonly [K in Exclude<keyof TResponses & string, OutcomesWithRequiredCookies<TResponses>>]:
+		TResponses[K] extends { readonly schema: infer TSchema extends ZodType }
+			? (
+					data: SchemaOutput<TSchema>,
+					...headers: BuilderHeaderArgs<TResponses[K]>
+				) => Extract<OutcomeResult<K, TResponses[K]>, { readonly data: unknown }>
+			: (...headers: BuilderHeaderArgs<TResponses[K]>) => OutcomeResult<K, TResponses[K]>
 }
+
+// Internal helpers, not exported
+type BuilderHeaderArgs<TOutcome> = TOutcome extends { readonly headers: infer THeaders extends ZodType }
+	? {} extends SchemaOutput<THeaders>
+		? [headers?: SchemaOutput<THeaders>] // every declared header is optional
+		: [headers: SchemaOutput<THeaders>]
+	: [] // no headers declared
+
+type OutcomesWithRequiredCookies<TResponses extends RouteResponses> = {
+	[K in keyof TResponses & string]: TResponses[K] extends {
+		readonly cookies: readonly (infer TEntry)[]
+	}
+		? Extract<TEntry, { readonly required: true }> extends never
+			? never
+			: K
+		: never
+}[keyof TResponses & string]
 ```
+
+An outcome that lists a required cookie has no builder. Return its result object instead, so
+you can set the cookie effect.
 
 ```ts
 import { createRoute } from "@routa-ts/core";
@@ -1013,12 +1036,26 @@ type RouteOutcome = {
 type RouteResponses = Record<string, RouteOutcome>
 type MiddlewareRejectsSpec = RouteResponses
 
-type OutcomeResult<TName extends string, TOutcome> = {
-	readonly type: TName
-	readonly data: SchemaOutput<Schema> // required with a schema, forbidden without one
-	readonly headers?: SchemaOutput<Headers> // required when a declared header is, forbidden when none
-	readonly cookies?: readonly CookieEffect[] // required with a required cookie, forbidden when none are listed
+type OutcomeResult<TName extends string, TOutcome> = (TOutcome extends {
+	readonly schema: infer TSchema extends ZodType
 }
+	? { readonly type: TName; readonly data: SchemaOutput<TSchema> }
+	: { readonly type: TName; readonly data?: never })
+	& OutcomeHeaders<TOutcome>
+	& OutcomeCookies<TOutcome>
+
+// Internal helpers, not exported
+type OutcomeHeaders<TOutcome> = TOutcome extends { readonly headers: infer THeaders extends ZodType }
+	? {} extends SchemaOutput<THeaders>
+		? { readonly headers?: SchemaOutput<THeaders> }
+		: { readonly headers: SchemaOutput<THeaders> }
+	: { readonly headers?: never }
+
+type OutcomeCookies<TOutcome> = TOutcome extends { readonly cookies: readonly (infer TEntry)[] }
+	? Extract<TEntry, { readonly required: true }> extends never
+		? { readonly cookies?: readonly CookieEffect[] }
+		: { readonly cookies: readonly CookieEffect[] } // must include an effect for each required cookie
+	: { readonly cookies?: never }
 
 type RoutaResult<TResponses extends RouteResponses> = {
 	[K in keyof TResponses]: OutcomeResult<K, TResponses[K]>
@@ -1034,6 +1071,10 @@ type ResponseChecks<TResponses extends RouteResponses> = {
 	readonly [K in keyof TResponses]: OutcomeChecks<TResponses[K]>
 }
 ```
+
+A schema-less outcome forbids `data`, an outcome without headers forbids `headers`, and an
+outcome without cookies forbids `cookies`. The source uses named error types for those fields
+so the compiler message names the outcome; the block shows them as `never`.
 
 | Type                     | Meaning                                                                      |
 | ------------------------ | ---------------------------------------------------------------------------- |
