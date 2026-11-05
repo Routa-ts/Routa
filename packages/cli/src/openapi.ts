@@ -41,20 +41,13 @@ export function runOpenApiCheck(cwd = process.cwd()): {
 	stdout?: string | undefined;
 	stderr?: string | undefined;
 } {
-	const baseline = readBaseline(cwd);
+	const contract = currentContract(cwd);
 
-	if (!baseline) {
-		return { code: 1, stderr: "Missing .routa/openapi-baseline.json. Run routa scaffold first.\n" };
+	if ("failure" in contract) {
+		return contract.failure;
 	}
 
-	const current = generateOpenApi(cwd);
-	const invalidGraph = invalidGraphDiagnostics(current);
-
-	if (invalidGraph.length > 0) {
-		return { code: 1, stderr: `${invalidGraph.join("\n")}\n` };
-	}
-
-	const diagnostics = driftDiagnostics(baseline, current);
+	const diagnostics = driftDiagnostics(readBaseline(cwd), contract.current);
 
 	if (diagnostics.length > 0) {
 		return { code: 1, stderr: `${diagnostics.join("\n")}\n` };
@@ -76,32 +69,19 @@ export function runOpenApiBreaking(
 	argv: readonly string[],
 	cwd = process.cwd(),
 ): { code: number; stdout?: string | undefined; stderr?: string | undefined } {
-	const baselineFile = join(cwd, ".routa/openapi-baseline.json");
+	const contract = currentContract(cwd);
 
-	if (!existsSync(baselineFile)) {
-		return { code: 1, stderr: "Missing .routa/openapi-baseline.json. Run routa scaffold first.\n" };
-	}
-
-	const current = generateOpenApi(cwd);
-	const invalidGraph = invalidGraphDiagnostics(current);
-
-	if (invalidGraph.length > 0) {
-		return { code: 1, stderr: `${invalidGraph.join("\n")}\n` };
+	if ("failure" in contract) {
+		return contract.failure;
 	}
 
 	// Updating replaces the baseline, so it never parses the old one, even when its JSON is invalid.
 	if (argv.includes("--update-baseline")) {
-		writeFileSync(baselineFile, `${JSON.stringify(current, null, "\t")}\n`);
+		writeFileSync(join(cwd, BASELINE_FILE), `${JSON.stringify(contract.current, null, "\t")}\n`);
 		return { code: 0, stdout: "OpenAPI baseline updated.\n" };
 	}
 
-	const baseline = readBaseline(cwd);
-
-	if (!baseline) {
-		return { code: 1, stderr: "Missing .routa/openapi-baseline.json. Run routa scaffold first.\n" };
-	}
-
-	const diagnostics = breakingChangeDiagnostics(baseline, current);
+	const diagnostics = breakingChangeDiagnostics(readBaseline(cwd), contract.current);
 
 	if (diagnostics.length > 0) {
 		return {
@@ -855,21 +835,44 @@ function parameterKey(parameter: Record<string, unknown>): string | undefined {
 	return `${parameter.in}:${name}`;
 }
 
-/**
- * Loads the OpenAPI baseline from the project.
- *
- * @param cwd - The directory containing the `.routa/openapi-baseline.json` file.
- * @returns The parsed baseline document, or `undefined` if the file does not exist.
- */
-function readBaseline(cwd: string): OpenApiLike | undefined {
-	const file = join(cwd, ".routa/openapi-baseline.json");
+const BASELINE_FILE = ".routa/openapi-baseline.json";
 
-	if (!existsSync(file)) {
-		return undefined;
+/**
+ * Generates the current contract for `openapi check` and `openapi breaking`, without parsing the
+ * baseline.
+ *
+ * @param cwd - The working directory containing the Routa project
+ * @returns The generated document, or the failure to return when the baseline file is missing or
+ *   the route graph is invalid
+ */
+function currentContract(
+	cwd: string,
+): { current: OpenApiLike } | { failure: { code: number; stderr: string } } {
+	if (!existsSync(join(cwd, BASELINE_FILE))) {
+		return {
+			failure: { code: 1, stderr: `Missing ${BASELINE_FILE}. Run routa scaffold first.\n` },
+		};
 	}
 
+	const current = generateOpenApi(cwd);
+	const invalidGraph = invalidGraphDiagnostics(current);
+
+	return invalidGraph.length > 0
+		? { failure: { code: 1, stderr: `${invalidGraph.join("\n")}\n` } }
+		: { current };
+}
+
+/**
+ * Loads the OpenAPI baseline from the project. Call it after {@link currentContract} confirms the
+ * file exists.
+ *
+ * @param cwd - The directory containing the `.routa/openapi-baseline.json` file.
+ * @returns The parsed baseline document
+ * @throws When the file is not valid JSON
+ */
+function readBaseline(cwd: string): OpenApiLike {
 	try {
-		return JSON.parse(readFileSync(file, "utf8")) as OpenApiLike;
+		return JSON.parse(readFileSync(join(cwd, BASELINE_FILE), "utf8")) as OpenApiLike;
 	} catch (error) {
 		const details = error instanceof Error ? error.message : String(error);
 		throw new Error(
