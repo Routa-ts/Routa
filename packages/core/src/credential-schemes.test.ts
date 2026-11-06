@@ -289,6 +289,19 @@ describe("credential selection", () => {
 			[],
 		]);
 	});
+
+	it("ignores an unsupported Authorization scheme beside an allowed credential", async () => {
+		const result = await send(whoami(), configured(), {
+			authorization: "Basic dXNlcjpwYXNz",
+			...credentials.apiKey,
+		});
+
+		expect([result.status, result.body.auth.scheme, result.calls]).toEqual([
+			200,
+			"serviceKey",
+			["serviceKey"],
+		]);
+	});
 });
 
 describe("strict multiple-credential mode", () => {
