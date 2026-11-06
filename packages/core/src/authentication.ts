@@ -396,8 +396,48 @@ export type RequireAuthMiddleware = MiddlewareContract<
 	undefined
 >;
 
-/** The allowed schemes each `requireAuth` contract declares; `undefined` means any scheme. */
-const requirements = new WeakMap<object, { readonly schemes?: readonly string[] }>();
+/** The schemes a `requireAuth` contract allows, or `"any"` for every configured scheme. */
+type Requirement = readonly string[] | "any";
+
+/**
+ * Marks every `requireAuth` contract with its requirement. The key comes from the global symbol
+ * registry, so Routa recognizes a guard that another copy of `@routa-ts/core` built, such as a
+ * package factory's own dependency, instead of treating it as ordinary middleware. Every copy
+ * reads the same key, so it never changes.
+ */
+const requirementKey = Symbol.for("@routa-ts/core/requireAuth");
+
+/** Freezes a guard contract, marked with the requirement it enforces. */
+function markRequirement<T extends object>(contract: T, requirement: Requirement): Readonly<T> {
+	Object.defineProperty(contract, requirementKey, { value: requirement });
+	return Object.freeze(contract);
+}
+
+/**
+ * The requirement a guard is marked with, from any copy of `@routa-ts/core`. Only a frozen list of
+ * names or `"any"` counts: a guard marked otherwise fails registration instead of running as
+ * ordinary middleware.
+ *
+ * @param where - Names the middleware in the message, such as `middleware[0] on GET /orders`
+ * @throws {TypeError} When the mark holds anything `requireAuth` does not write
+ */
+function guardRequirement(item: object, where: string): Requirement {
+	const { value } = Object.getOwnPropertyDescriptor(item, requirementKey) ?? {};
+
+	if (
+		value === "any"
+		|| (Array.isArray(value)
+			&& Object.isFrozen(value)
+			&& value.length > 0
+			&& value.every((name) => typeof name === "string"))
+	) {
+		return value as Requirement;
+	}
+
+	throw new TypeError(
+		`${where} is marked as a requireAuth() guard, but Routa cannot read the schemes it allows. Build the guard with requireAuth() from @routa-ts/core.`,
+	);
+}
 
 /**
  * A middleware guard that rejects anonymous requests with `authenticationRequired` (`401`) and
@@ -423,16 +463,17 @@ export function requireAuth<
 		throw new TypeError("requireAuth() schemes must be a non-empty list of scheme names.");
 	}
 
-	const contract: RequireAuthMiddleware = Object.freeze({
-		rejects: Object.freeze({ authenticationRequired: authenticationRequiredOutcome }),
-		run: () => {
-			throw new Error(
-				"requireAuth() runs only in an application that configures authentication in createRouta.",
-			);
+	return markRequirement<RequireAuthMiddleware>(
+		{
+			rejects: Object.freeze({ authenticationRequired: authenticationRequiredOutcome }),
+			run: () => {
+				throw new Error(
+					"requireAuth() runs only in an application that configures authentication in createRouta.",
+				);
+			},
 		},
-	});
-	requirements.set(contract, schemes ? { schemes: Object.freeze([...schemes]) } : {});
-	return contract;
+		schemes ? Object.freeze([...schemes]) : "any",
+	);
 }
 
 /** One configured scheme, ready to extract and authenticate credentials. */
@@ -653,7 +694,13 @@ export function routeAuthentication<TItem extends object>(
 	label: string,
 	bodyless = false,
 ): { readonly middleware: readonly TItem[]; readonly authentication?: RouteAuthentication } {
-	const guarded = middleware.filter((item) => requirements.has(item));
+	// Each item's requirement, by position, or undefined for middleware that is not a guard.
+	const requirements = middleware.map((item, index) =>
+		isAuthenticationGuard(item)
+			? guardRequirement(item, `middleware[${index}] on ${label}`)
+			: undefined,
+	);
+	const guarded = requirements.filter((requirement) => requirement !== undefined);
 
 	if (!authentication) {
 		if (guarded.length > 0) {
@@ -667,8 +714,8 @@ export function routeAuthentication<TItem extends object>(
 
 	let allowed = authentication.schemes;
 
-	for (const item of guarded) {
-		const names = requirements.get(item)!.schemes;
+	for (const requirement of guarded) {
+		const names = requirement === "any" ? undefined : requirement;
 		const unknown = names?.find(
 			(name) => !authentication.schemes.some((scheme) => scheme.name === name),
 		);
@@ -692,9 +739,12 @@ export function routeAuthentication<TItem extends object>(
 		middleware:
 			guarded.length === 0
 				? middleware
-				: middleware.map((item) =>
-						requirements.has(item) ? (authenticationGuard(item, allowed, bodyless) as TItem) : item,
-					),
+				: middleware.map((item, index) => {
+						const requirement = requirements[index];
+						return requirement
+							? (authenticationGuard(requirement, allowed, bodyless) as TItem)
+							: item;
+					}),
 		authentication: route,
 	};
 }
@@ -712,36 +762,41 @@ export function rejectsAmbiguousCredentials(route: RouteAuthentication): boolean
  * through an allowed scheme, challenging every allowed scheme.
  */
 function authenticationGuard(
-	item: object,
+	requirement: Requirement,
 	allowed: readonly RuntimeScheme[],
 	bodyless: boolean,
 ): object {
 	const challenge = challengeAll(allowed);
 	const names = new Set(allowed.map((scheme) => scheme.name));
-	const guard = Object.freeze({
-		rejects: Object.freeze({
-			authenticationRequired: bodyless
-				? bodylessOutcome(authenticationRequiredOutcome)
-				: authenticationRequiredOutcome,
-		}),
-		run: ({ ctx, next }: { ctx: Record<string, unknown>; next: () => Promise<object> }) => {
-			const auth = ctx.auth as AuthContext | undefined;
-			return auth?.status === "authenticated" && names.has(auth.scheme)
-				? next()
-				: {
-						type: "authenticationRequired",
-						...(bodyless ? {} : { data: authenticationRequiredBody }),
-						headers: { "www-authenticate": challenge },
-					};
+	return markRequirement(
+		{
+			rejects: Object.freeze({
+				authenticationRequired: bodyless
+					? bodylessOutcome(authenticationRequiredOutcome)
+					: authenticationRequiredOutcome,
+			}),
+			run: ({ ctx, next }: { ctx: Record<string, unknown>; next: () => Promise<object> }) => {
+				const auth = ctx.auth as AuthContext | undefined;
+				return auth?.status === "authenticated" && names.has(auth.scheme)
+					? next()
+					: {
+							type: "authenticationRequired",
+							...(bodyless ? {} : { data: authenticationRequiredBody }),
+							headers: { "www-authenticate": challenge },
+						};
+			},
 		},
-	});
-	requirements.set(guard, requirements.get(item)!);
-	return guard;
+		requirement,
+	);
 }
 
-/** Whether a middleware contract is a `requireAuth` guard. */
-export function isAuthenticationGuard(item: object): boolean {
-	return requirements.has(item);
+/**
+ * Whether a middleware contract is a `requireAuth` guard, from any copy of `@routa-ts/core`. A
+ * guard whose mark Routa cannot read still counts, so it fails registration instead of passing
+ * as ordinary middleware.
+ */
+export function isAuthenticationGuard(item: unknown): boolean {
+	return typeof item === "object" && item !== null && Object.hasOwn(item, requirementKey);
 }
 
 /**
