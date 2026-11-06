@@ -328,6 +328,18 @@ contract facts, so Routa reads them without running `src/routa.ts`.
 follow, with a plain key for each scheme and a `bearer({ ... })` call, or a `const` bound to
 one, as its value.
 
+### `ROUTA_AUTH_SPREAD_UNRESOLVED`
+
+Warning. The default-exported `createRouta` config in `src/routa.ts` has a spread, computed
+key, or config argument that Routa cannot read, such as `...makeConfig()` or
+`createRouta(makeConfig())`, and no visible `authentication` member after it. Authentication
+inside it never reaches generated metadata or OpenAPI. If the unread part does supply
+authentication, `routa dev` and `routa start` refuse to start. An unread part that holds only
+tuning values starts normally.
+
+**Fix:** declare `authentication` as a member of the `createRouta` object after any spread, or
+spread a `const` object literal Routa can follow.
+
 ### `ROUTA_AUTH_CONFIG_INVALID`
 
 The `authentication` config has no `principal`, declares no schemes, or names a scheme with a

@@ -47,15 +47,33 @@ export const authenticationFailedDescription =
 export function applicationAuthentication(
 	cwd: string,
 	parser: ts.SourceFileParser,
-): { authentication?: AuthenticationMetadata; diagnostics: Diagnostic[] } {
+): {
+	authentication?: AuthenticationMetadata;
+	diagnostics: Diagnostic[];
+	warnings: Diagnostic[];
+} {
 	if (!existsSync(join(cwd, configFile))) {
-		return { diagnostics: [] };
+		return { diagnostics: [], warnings: [] };
 	}
 
-	const { declaration } = routaConfigMember(cwd, parser, "authentication");
+	const { declaration, hidden } = routaConfigMember(cwd, parser, "authentication");
+	// Like services: a config Routa cannot read may only hold tuning values, so this is no error.
+	// Startup still rejects authentication that routa generate could not read.
+	const warnings: Diagnostic[] = hidden
+		? [
+				{
+					code: "ROUTA_AUTH_SPREAD_UNRESOLVED",
+					severity: "warning",
+					message: `The createRouta config in ${configFile} has a spread, computed key, or config argument that cannot be statically read, so authentication inside it cannot be read.`,
+					file: configFile,
+					suggestion:
+						"Declare authentication as a visible member of the createRouta object, after any spread, or spread a const object literal. Startup rejects authentication that routa generate could not read.",
+				},
+			]
+		: [];
 
 	if (!declaration) {
-		return { diagnostics: [] };
+		return { diagnostics: [], warnings };
 	}
 
 	const diagnostics: Diagnostic[] = [];
@@ -72,7 +90,7 @@ export function applicationAuthentication(
 
 	if (!config || hasUnreadableMember(config.object)) {
 		unresolved(`The authentication config in ${configFile} cannot be statically read.`);
-		return { diagnostics };
+		return { diagnostics, warnings };
 	}
 
 	if (!memberNode(config.object, "principal")) {
@@ -92,7 +110,7 @@ export function applicationAuthentication(
 			`The authentication schemes in ${configFile} cannot be statically read.`,
 			config.file,
 		);
-		return { diagnostics };
+		return { diagnostics, warnings };
 	}
 
 	const metadata: AuthenticationSchemeMetadata[] = [];
@@ -164,8 +182,8 @@ export function applicationAuthentication(
 	}
 
 	return diagnostics.length > 0
-		? { diagnostics }
-		: { authentication: { schemes: metadata }, diagnostics };
+		? { diagnostics, warnings }
+		: { authentication: { schemes: metadata }, diagnostics, warnings };
 }
 
 /** A node read as an object literal: written in place, or a `const` bound to one. */

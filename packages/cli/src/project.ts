@@ -217,7 +217,7 @@ function validateProjectInSession(
 	return {
 		routes,
 		diagnostics,
-		warnings: [...services.warnings, ...discoveryWarnings, ...schemas.warnings],
+		warnings: [...auth.warnings, ...services.warnings, ...discoveryWarnings, ...schemas.warnings],
 		schemas,
 		...(authentication && { authentication }),
 	};

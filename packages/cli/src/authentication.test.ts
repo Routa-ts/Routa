@@ -436,6 +436,39 @@ describe("authentication diagnostics", () => {
 		}
 	});
 
+	it("warns when a spread or config argument it cannot read may hide authentication", () => {
+		const warning = {
+			code: "ROUTA_AUTH_SPREAD_UNRESOLVED",
+			severity: "warning",
+			message:
+				"The createRouta config in src/routa.ts has a spread, computed key, or config argument that cannot be statically read, so authentication inside it cannot be read.",
+			file: "src/routa.ts",
+			suggestion:
+				"Declare authentication as a visible member of the createRouta object, after any spread, or spread a const object literal. Startup rejects authentication that routa generate could not read.",
+		};
+
+		for (const [config, warnings] of [
+			["makeConfig()", [warning]],
+			["{ ...makeConfig() }", [warning]],
+			["{ port: 3000 }", []],
+		] as const) {
+			const cwd = project({
+				"src/routa.ts": `import { createRouta } from "@routa-ts/core";
+
+const makeConfig = () => ({ port: 3000 });
+
+export default createRouta(${config});
+`,
+			});
+			expect(
+				validateProject(cwd, { write: false }).warnings.filter((item) =>
+					item.code.startsWith("ROUTA_AUTH_"),
+				),
+				config,
+			).toEqual(warnings);
+		}
+	});
+
 	it("follows const bindings, aliases, and spreads to literal contract facts", () => {
 		const cwd = project({
 			"src/schemes.ts": `import { bearer as bearerScheme } from "@routa-ts/core";
