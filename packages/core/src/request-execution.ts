@@ -1185,7 +1185,7 @@ function errorLogData(error: unknown): Record<string, unknown> {
 
 	// Never the thrown value's message or stack: a provider error may carry the credential.
 	if (error instanceof AuthenticatorError) {
-		return { error: error.message, name: error.name, scheme: error.scheme, cause: error.errorName };
+		return { error: error.message, name: error.name, scheme: error.scheme };
 	}
 
 	if (error instanceof AuthenticationContractError) {

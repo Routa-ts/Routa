@@ -235,22 +235,23 @@ describe("authenticator failures", () => {
 		expect(logged).not.toContain("provider said");
 	});
 
-	it("logs a thrown error's name only when it is a plain identifier", async () => {
+	it("logs nothing the thrown error carries, not even its name", async () => {
 		const { app, events } = serveWith(() => {
 			const error = new Error("hidden");
-			error.name = "ProviderFailure: secret-token-value";
+			error.name = "SecretToken123";
 			throw error;
 		});
 
 		const response = await app.request("/whoami", {
-			headers: { authorization: "Bearer secret-token-value" },
+			headers: { authorization: "Bearer SecretToken123" },
 		});
 
 		expect(response.status).toBe(500);
 		expect(events.find((event) => event.event === "http.error")?.data).toMatchObject({
-			cause: "Error",
+			name: "AuthenticatorError",
+			scheme: "userToken",
 		});
-		expect(JSON.stringify(events)).not.toContain("secret-token-value");
+		expect(JSON.stringify(events)).not.toContain("SecretToken123");
 	});
 
 	it("reports a principal that fails the principal schema as a contract violation", async () => {

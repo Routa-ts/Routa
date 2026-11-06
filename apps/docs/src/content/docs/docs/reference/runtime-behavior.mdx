@@ -224,8 +224,9 @@ and middleware context schema failures also include structured `issues` containi
 each Zod issue's `code` and `path`; rejected values are never logged.
 
 For an authenticator that throws, `http.error` carries the message
-`Authenticator for scheme "<name>" threw.`, the `scheme`, and the thrown error's name as
-`cause`, never its message or stack, because a provider error may include the credential. An
+`Authenticator for scheme "<name>" threw.` and the `scheme`, never anything the thrown value
+carries, such as its message, stack, or name, because a provider error may include the
+credential. An
 invalid principal logs the scheme in the message and the principal schema's `issues`.
 
 Handlers always receive `ctx.logger`. With logging disabled it is a complete no-op

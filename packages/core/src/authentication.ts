@@ -466,8 +466,8 @@ async function authenticate(
 				...(context.services === undefined ? {} : { services: context.services }),
 			}) as AuthenticatorContext,
 		);
-	} catch (error) {
-		throw new AuthenticatorError(scheme.name, error);
+	} catch {
+		throw new AuthenticatorError(scheme.name);
 	}
 
 	const type =
@@ -585,30 +585,16 @@ export function isAuthenticationGuard(item: object): boolean {
 }
 
 /**
- * An authenticator threw. Routa answers with the generic `500` problem and logs only the scheme and
- * the error's name, because a provider's message may carry the credential.
+ * An authenticator threw. Routa answers with the generic `500` problem and logs only the scheme,
+ * because anything the thrown value carries, including its message, stack, and name, is set by
+ * application or provider code and may carry the credential.
  */
 export class AuthenticatorError extends Error {
 	override readonly name = "AuthenticatorError";
 
-	/** The thrown value's error name, such as `TypeError`, which is safe to log. */
-	readonly errorName: string;
-
-	constructor(
-		readonly scheme: string,
-		cause: unknown,
-	) {
+	constructor(readonly scheme: string) {
 		super(`Authenticator for scheme "${scheme}" threw.`);
-		this.errorName = cause instanceof Error ? safeErrorName(cause.name) : typeof cause;
 	}
-}
-
-/**
- * An error class name such as `TypeError`, or `Error` when the name is anything else, because
- * application code sets `name` and it could carry a credential.
- */
-function safeErrorName(name: unknown): string {
-	return typeof name === "string" && /^[A-Za-z_$][\w$]{0,63}$/.test(name) ? name : "Error";
 }
 
 /**
