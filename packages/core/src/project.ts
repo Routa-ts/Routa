@@ -62,6 +62,7 @@ type RouteMetadata = {
 type MetadataModule = {
 	routaRoutes: readonly RouteMetadata[];
 	routaApplicationServices?: readonly string[];
+	routaAuthenticationSchemes?: readonly string[];
 };
 
 type Middleware = NonNullable<HonoRoute["contract"]["middleware"]>[number];
@@ -97,8 +98,10 @@ export async function buildProjectApplication(
 		declare: "Declare services in the createRouta object with defineServices<Contract>()",
 		replacement: replacements.services,
 	});
+	assertAuthenticationMetadata(config.authentication, metadata.routaAuthenticationSchemes);
 	const application = await createApplication(routes, {
 		runtimeMode: options.runtimeMode,
+		...(config.authentication && { authentication: config.authentication }),
 		...(logger && { logger }),
 		...(config.lifecycleHeaders !== undefined && { lifecycleHeaders: config.lifecycleHeaders }),
 		...(config.responseValidation && { responseValidation: config.responseValidation }),
@@ -106,6 +109,46 @@ export async function buildProjectApplication(
 	});
 
 	return { application, config, logger, routes };
+}
+
+/**
+ * Checks that `src/routa.ts` configures the authentication schemes `routa generate` read, in the
+ * same order, so types, OpenAPI, and the running application describe one contract.
+ *
+ * @throws When only one side declares authentication, or their scheme names differ
+ */
+function assertAuthenticationMetadata(
+	authentication: RoutaConfig["authentication"],
+	generated: readonly string[] | undefined,
+): void {
+	if (authentication === undefined) {
+		if (generated) {
+			throw new Error(
+				".routa/routes.gen.ts declares authentication schemes, but src/routa.ts configures no authentication. Run routa generate.",
+			);
+		}
+
+		return;
+	}
+
+	if (!generated) {
+		throw new Error(
+			"src/routa.ts configures authentication that routa generate could not read from source. Write authentication as a literal in the createRouta object, then run routa generate.",
+		);
+	}
+
+	const configured = Object.keys(
+		typeof authentication.schemes === "object" && authentication.schemes !== null
+			? authentication.schemes
+			: {},
+	);
+	const quoted = (names: readonly string[]) => names.map((name) => JSON.stringify(name)).join(", ");
+
+	if (quoted(configured) !== quoted(generated)) {
+		throw new Error(
+			`src/routa.ts configures authentication schemes ${quoted(configured)}, but .routa/routes.gen.ts declares ${quoted(generated)}. Run routa generate.`,
+		);
+	}
 }
 
 /**

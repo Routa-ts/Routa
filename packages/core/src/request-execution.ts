@@ -1,4 +1,13 @@
 import { ZodError, type z } from "zod";
+import {
+	AuthenticationContractError,
+	type AuthContext,
+	AuthenticatorError,
+	authenticationFailedOutcome,
+	authenticationFailedResult,
+	resolveAuthentication,
+	type RuntimeAuthentication,
+} from "./authentication.js";
 import type { AnyRouteContract, MiddlewareContract, RouteInput } from "./index.js";
 import { type HandlerOutputIssue, InvalidHandlerOutputError } from "./handler-output-error.js";
 import type { RoutaLogger } from "./logger.js";
@@ -80,6 +89,8 @@ type RequestExecutorOptions = {
 	createContext?: (() => unknown | Promise<unknown>) | undefined;
 	/** The application instance's services, exposed as `ctx.services`. */
 	services?: ServiceMapping | undefined;
+	/** Credential orchestration, which resolves `ctx.auth` before anything else reads the request. */
+	authentication?: RuntimeAuthentication | undefined;
 	/** The route file's, then the method's, request-scoped services. */
 	requestServices?: readonly RequestScope[] | undefined;
 	/** Names the route in messages, such as `GET /orders`. */
@@ -98,6 +109,8 @@ export type RequestScope = RequestServicesDeclaration & { readonly label: string
 type Stage = {
 	readonly ctx: Record<string, unknown>;
 	readonly services: ServiceMapping | undefined;
+	/** The request's `ctx.auth`, the same in every stage; absent without authentication. */
+	readonly auth?: AuthContext | undefined;
 };
 
 type RequestExecutor = (request: Request, params: Record<string, string>) => Promise<Response>;
@@ -118,6 +131,27 @@ export function createRequestExecutor(
 		params: Record<string, string>,
 		constructed: CleanupScope[],
 	): Promise<Response> => {
+		const lifecycle = lifecycleHeaders(contract.deprecation, options.lifecycleHeaders);
+		const select = (produced: ProducedResult) =>
+			finalizeResponse(validateResult(produced, options.validateResponses), lifecycle);
+		// Credentials resolve before negotiation, input, and middleware, so a request presenting an
+		// invalid credential fails the same way whatever else it gets wrong.
+		const resolved =
+			options.authentication
+			&& (await resolveAuthentication(options.authentication, request, {
+				logger: options.logger,
+				services: options.services,
+			}));
+
+		if (resolved && "failed" in resolved) {
+			return select({
+				result: authenticationFailedResult(resolved.failed.challenge),
+				outcomes: { authenticationFailed: authenticationFailedOutcome },
+				producer: "Routa authentication",
+				label: (type) => `outcome "${type}"`,
+			});
+		}
+
 		if (!acceptsJson(request)) {
 			return new Response("Not Acceptable", { status: 406 });
 		}
@@ -128,21 +162,20 @@ export function createRequestExecutor(
 		assertNoServices(context, "createContext() returned");
 		// A copy, so `ctx.services` can be defined even when createContext returns a frozen object.
 		const ctx = { ...context };
-		const lifecycle = lifecycleHeaders(contract.deprecation, options.lifecycleHeaders);
+		const first: Stage = { ctx, services: options.services, auth: resolved?.auth };
 
-		exposeServices(ctx, options.services);
+		exposeFramework(ctx, first);
 
 		return await runWithMiddleware(
 			contract,
 			input,
-			{ ctx, services: options.services },
+			first,
 			inputReader,
 			options.logger,
 			{ scopes: options.requestServices ?? [], constructed },
 			(index) =>
 				`${options.middlewareNames?.[index] || `middleware[${index}]`}${options.route ? ` on ${options.route}` : ""}`,
-			(produced) =>
-				finalizeResponse(validateResult(produced, options.validateResponses), lifecycle),
+			select,
 		);
 	};
 
@@ -215,9 +248,9 @@ async function runWithMiddleware(
 
 	async function startStage(scope: RequestScope, stage: Stage): Promise<Stage> {
 		assertServicesKept(stage);
-		const earlier = withoutServices(stage.ctx);
+		const earlier = withoutFramework(stage.ctx);
 		const factoryCtx = { ...earlier, logger };
-		exposeServices(factoryCtx, stage.services);
+		exposeFramework(factoryCtx, stage);
 		Object.freeze(factoryCtx);
 
 		// Registered before the factory runs, so a failed factory's partial cleanup is released
@@ -233,8 +266,9 @@ async function runWithMiddleware(
 		}
 
 		const services = Object.freeze({ ...stage.services, ...mapping });
-		exposeServices(earlier, services);
-		return { ctx: earlier, services };
+		const next: Stage = { ctx: earlier, services, auth: stage.auth };
+		exposeFramework(earlier, next);
+		return next;
 	}
 
 	async function dispatch(index: number, stages: readonly Stage[]): Promise<Response> {
@@ -244,7 +278,8 @@ async function runWithMiddleware(
 			}
 		}
 
-		const { ctx, services } = stages.at(-1) as Stage;
+		const stage = stages.at(-1) as Stage;
+		const { ctx, services } = stage;
 		const item = middleware[index];
 
 		if (!item) {
@@ -256,7 +291,7 @@ async function runWithMiddleware(
 			}
 			assertServicesKept({ ctx, services });
 			const handlerCtx = { ...ctx, logger };
-			exposeServices(handlerCtx, services);
+			exposeFramework(handlerCtx, stage);
 			const result = await contract.run({
 				input: routeInput,
 				ctx: handlerCtx,
@@ -349,9 +384,11 @@ function assertServicesKept(stage: Stage): void {
 	}
 }
 
-/** Copies a context without its `services`, which each stage exposes for itself. */
-function withoutServices(ctx: Record<string, unknown>): Record<string, unknown> {
-	return Object.fromEntries(Object.entries(ctx).filter(([key]) => key !== "services"));
+/** Copies a context without `services` and `auth`, which each stage exposes for itself. */
+function withoutFramework(ctx: Record<string, unknown>): Record<string, unknown> {
+	return Object.fromEntries(
+		Object.entries(ctx).filter(([key]) => key !== "services" && key !== "auth"),
+	);
 }
 
 /**
@@ -512,17 +549,25 @@ function assertNoServices(value: unknown, source: string): void {
 }
 
 /**
- * Exposes services as a readonly `ctx.services` that cannot be reassigned or deleted. Without
- * services the key stays absent.
+ * Exposes a stage's services and the request's authentication as readonly `ctx.services` and
+ * `ctx.auth`, which cannot be reassigned or deleted. Without them the keys stay absent.
  */
-function exposeServices(ctx: Record<string, unknown>, services: ServiceMapping | undefined): void {
-	if (services) {
-		Object.defineProperty(ctx, "services", {
-			value: services,
-			enumerable: true,
-			writable: false,
-			configurable: false,
-		});
+function exposeFramework(
+	ctx: Record<string, unknown>,
+	stage: Pick<Stage, "services" | "auth">,
+): void {
+	for (const [key, value] of [
+		["services", stage.services],
+		["auth", stage.auth],
+	] as const) {
+		if (value) {
+			Object.defineProperty(ctx, key, {
+				value,
+				enumerable: true,
+				writable: false,
+				configurable: false,
+			});
+		}
 	}
 }
 
@@ -1131,6 +1176,19 @@ function logRequestError(
 function errorLogData(error: unknown): Record<string, unknown> {
 	if (error instanceof RequestServicesError) {
 		return errorLogData(error.cause);
+	}
+
+	// Never the thrown value's message or stack: a provider error may carry the credential.
+	if (error instanceof AuthenticatorError) {
+		return { error: error.message, name: error.name, scheme: error.scheme, cause: error.errorName };
+	}
+
+	if (error instanceof AuthenticationContractError) {
+		return {
+			error: error.message,
+			name: error.name,
+			...(error.issues && { issues: error.issues }),
+		};
 	}
 
 	if (error instanceof Error) {

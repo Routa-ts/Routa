@@ -1,5 +1,16 @@
 import { Hono } from "hono";
-import type { AnyRouteContract, HttpMethod, ResponseValidation } from "./index.js";
+import {
+	authenticationGuard,
+	isAuthenticationGuard,
+	type RuntimeAuthentication,
+	runtimeAuthentication,
+} from "./authentication.js";
+import type {
+	AnyRouteContract,
+	AuthenticationConfig,
+	HttpMethod,
+	ResponseValidation,
+} from "./index.js";
 import { createLogger, type RoutaLogger } from "./logger.js";
 import {
 	createRequestExecutor,
@@ -65,6 +76,11 @@ export type CreateHonoAppOptions = {
 	responseValidation?: ResponseValidation;
 	/** Explicit runtime command mode. Defaults to `"dev"` for direct low-level use. */
 	runtimeMode?: RuntimeMode;
+	/**
+	 * The `authentication` from `createRouta`. Every route resolves `ctx.auth` from the request's
+	 * credential before negotiation, input, and middleware, and `requireAuth` guards enforce it.
+	 */
+	authentication?: AuthenticationConfig;
 };
 
 export type CreateApplicationOptions = CreateHonoAppOptions & {
@@ -188,6 +204,10 @@ function honoApp(
 	const methodsByPath = new Map<string, Set<string>>();
 	const routeLogger = options.logger ?? createLogger({ enabled: false });
 	const validateResponses = shouldValidateResponses(options);
+	const authentication =
+		options.authentication === undefined
+			? undefined
+			: runtimeAuthentication(options.authentication);
 
 	if (options.logger) {
 		app.use("*", async (context, next) => {
@@ -223,9 +243,13 @@ function honoApp(
 	// Hono dispatches HEAD through its GET router. Register explicit HEAD contracts
 	// first as guarded GET handlers so they win without intercepting real GETs.
 	for (const route of registrationRoutes) {
-		const contract = route.contract as RuntimeRouteContract;
 		const method = route.method.toUpperCase();
 		const routeKey = `${method} ${route.path}`;
+		const contract = withAuthenticationGuards(
+			route.contract as RuntimeRouteContract,
+			authentication,
+			routeKey,
+		);
 
 		if (registeredRoutes.has(routeKey)) {
 			throw new Error(`Duplicate route registration: ${routeKey}`);
@@ -244,8 +268,8 @@ function honoApp(
 			options.lifecycleHeaders,
 			routeLogger,
 		);
-		assertUniqueOutcomeNames(contract, route.path, method);
-		assertReservedContext(contract, routeKey);
+		assertUniqueOutcomeNames(contract, route.path, method, authentication !== undefined);
+		assertReservedContext(contract, routeKey, authentication !== undefined);
 		assertRouteServices(route, routeKey, services);
 
 		const methods = methodsByPath.get(route.path) ?? new Set<string>();
@@ -260,6 +284,7 @@ function honoApp(
 			requestLogger: options.logger,
 			createContext: route.createContext,
 			services,
+			authentication,
 			requestServices: requestScopes(route.services, routeKey),
 			route: routeKey,
 			middlewareNames: route.middlewareNames,
@@ -421,17 +446,53 @@ function outcomeProblem(
 }
 
 /**
- * Rejects middleware that provides `ctx.services`, which Routa reserves for injected services.
- * TypeScript and `routa check` report the same rule; this covers contracts typed through `any`.
+ * Rejects middleware that provides `ctx.services`, which Routa reserves for injected services, or
+ * `ctx.auth` when authentication is configured. TypeScript and `routa check` report the same
+ * rules; this covers contracts typed through `any`.
  */
-function assertReservedContext(contract: RuntimeRouteContract, label: string): void {
+function assertReservedContext(
+	contract: RuntimeRouteContract,
+	label: string,
+	authenticated: boolean,
+): void {
 	for (const [index, item] of (contract.middleware ?? []).entries()) {
 		if (item.provides && Object.hasOwn(item.provides, "services")) {
 			throw new Error(
 				`middleware[${index}] on ${label} provides ctx.services, which Routa reserves for injected services. Rename the provided key.`,
 			);
 		}
+
+		if (authenticated && item.provides && Object.hasOwn(item.provides, "auth")) {
+			throw new Error(
+				`middleware[${index}] on ${label} provides ctx.auth, which Routa reserves for authentication. Rename the provided key.`,
+			);
+		}
 	}
+}
+
+/**
+ * Replaces each `requireAuth` contract in a route's chain with the guard that enforces it there.
+ *
+ * @throws {Error} When a guard appears without authentication or names an unknown scheme
+ */
+function withAuthenticationGuards(
+	contract: RuntimeRouteContract,
+	authentication: RuntimeAuthentication | undefined,
+	label: string,
+): RuntimeRouteContract {
+	const { middleware } = contract;
+
+	if (!middleware?.some(isAuthenticationGuard)) {
+		return contract;
+	}
+
+	return {
+		...contract,
+		middleware: middleware.map(
+			(item) =>
+				(authenticationGuard(item, authentication, label) as typeof item | undefined) ?? item,
+		) as typeof middleware,
+	};
 }
 
 /** Orders a route's request-scoped factories as they run: route file, then method. */
@@ -514,13 +575,35 @@ function assertUniqueOutcomeNames(
 	contract: RuntimeRouteContract,
 	path: string,
 	method: string,
+	authenticated: boolean,
 ): void {
 	const seen = new Map<string, string>(
 		Object.keys(contract.responses).map((type) => [type, "the route"]),
 	);
+	// Routa owns the authentication outcomes. Every requireAuth guard shares one.
+	const framework = [
+		...(authenticated ? ["authenticationFailed"] : []),
+		...((contract.middleware ?? []).some(isAuthenticationGuard) ? ["authenticationRequired"] : []),
+	];
+
+	for (const type of framework) {
+		const previous = seen.get(type);
+
+		if (previous) {
+			throw new Error(
+				`Outcome "${type}" on ${method} ${path} is declared by ${previous} and by Routa authentication. Give each outcome its own name.`,
+			);
+		}
+
+		seen.set(type, "Routa authentication");
+	}
 
 	for (const [index, item] of (contract.middleware ?? []).entries()) {
 		const label = `middleware[${index}]`;
+
+		if (isAuthenticationGuard(item)) {
+			continue;
+		}
 
 		for (const type of Object.keys(item.rejects ?? {})) {
 			const previous = seen.get(type);

@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { AuthenticationChecks, AuthenticationConfig } from "./authentication.js";
 import type { RoutaLogger } from "./logger.js";
 import { defineCookie } from "./response-cookies.js";
 import type { reservedHeaders } from "./response-headers.js";
@@ -12,6 +13,25 @@ export type {
 	RoutaLogLevelWithSilent,
 } from "./logger.js";
 export { createLogger } from "./logger.js";
+export type {
+	AnonymousAuthContext,
+	AuthContext,
+	AuthenticatedAuthContext,
+	AuthenticationConfig,
+	AuthenticationResult,
+	Authenticator,
+	AuthenticatorContext,
+	BearerChallenge,
+	BearerOptions,
+	BearerScheme,
+	CredentialScheme,
+	Principal,
+	PrincipalOf,
+	PrincipalSchema,
+	RequireAuthMiddleware,
+	RequireAuthOptions,
+} from "./authentication.js";
+export { bearer, requireAuth } from "./authentication.js";
 
 export type HttpMethod = "get" | "post" | "put" | "patch" | "delete" | "head";
 
@@ -795,16 +815,22 @@ export type RoutaConfig = {
 	 * can read its contract. Handlers receive its services as `ctx.services`.
 	 */
 	services?: ApplicationServicesFactory;
+	/**
+	 * Credential orchestration for every route: one principal schema and the credential schemes,
+	 * keyed by name. Without it, no route has `ctx.auth` and `requireAuth` fails `routa check`.
+	 */
+	authentication?: AuthenticationConfig;
 };
 
 /**
- * Preserves a Routa configuration object.
+ * Preserves a Routa configuration object. When it configures authentication, each scheme's
+ * authenticated principal must be a valid input of the principal schema.
  *
  * @param config - The Routa configuration to use
  * @returns The provided configuration with Routa configuration typing
  */
 export function createRouta<const TConfig extends RoutaConfig>(
-	config: TConfig,
+	config: TConfig & AuthenticationChecks<NoInfer<TConfig>>,
 ): TConfig & RoutaConfig {
 	return config;
 }
