@@ -208,7 +208,7 @@ describe("generated test applications", () => {
 		const { createTestApp } = (await import(
 			pathToFileURL(join(cwd, ".routa/testing.gen.ts")).href
 		)) as {
-			createTestApp(): Promise<{
+			createTestApp: () => Promise<{
 				request: (path: string, init?: RequestInit) => Promise<Response>;
 				dispose(): Promise<void>;
 			}>;
@@ -615,7 +615,9 @@ describe("OpenAPI for Bearer authentication", () => {
 			properties: Record<string, { const: unknown }>;
 		}>;
 
-		for (const headers of [{}, { authorization: "Bearer expired" }]) {
+		for (const headers of [{}, { authorization: "Bearer expired" }] as Array<
+			Record<string, string>
+		>) {
 			const response = await application.fetch(
 				new Request("http://localhost/projects", {
 					method: "POST",

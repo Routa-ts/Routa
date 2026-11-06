@@ -388,7 +388,7 @@ function presentedBearer(request: Request): Presented {
 
 	const match = authSchemePattern.exec(header.trim());
 
-	if (!match || match[1]!.toLowerCase() !== "bearer") {
+	if (match?.[1]?.toLowerCase() !== "bearer") {
 		return { kind: "unsupported" };
 	}
 
