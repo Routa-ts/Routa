@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
 import { createApplication, createHonoApp, type HonoRoute } from "./hono.js";
-import { bearer, createMiddleware, createRoute, defineServices, requireAuth } from "./index.js";
+import {
+	bearer,
+	createMiddleware,
+	createRoute,
+	createRouta,
+	defineServices,
+	requireAuth,
+} from "./index.js";
 import { createLogger, type RoutaLogEvent } from "./logger.js";
 import { createTestApplication } from "./testing.js";
 
@@ -523,5 +530,96 @@ describe("project applications", () => {
 		for (const [overrides, message] of cases) {
 			await expect(createTestApplication(project(overrides))).rejects.toThrow(message);
 		}
+	});
+});
+
+/** Type fixtures: compiled, never run. */
+function typesOnly(_check: () => void): void {}
+
+describe("authentication configuration (types)", () => {
+	it("checks each scheme's principal against the principal schema input", () => {
+		typesOnly(() => {
+			createRouta({
+				authentication: {
+					principal: Principal,
+					schemes: {
+						userToken: bearer({
+							authenticate: (token) =>
+								token === "t"
+									? { type: "authenticated", principal: { type: "service", id: token } }
+									: { type: "rejected" },
+						}),
+					},
+				},
+			});
+
+			createRouta({
+				authentication: {
+					principal: Principal,
+					schemes: {
+						// @ts-expect-error "admin" is not a principal type the schema accepts.
+						userToken: bearer({
+							authenticate: () => ({
+								type: "authenticated",
+								principal: { type: "admin", id: "a" },
+							}),
+						}),
+					},
+				},
+			});
+
+			createRouta({
+				authentication: {
+					principal: Principal,
+					schemes: {
+						// @ts-expect-error A user principal needs an email.
+						userToken: bearer({
+							authenticate: async () => ({
+								type: "authenticated",
+								principal: { type: "user", id: "u" },
+							}),
+						}),
+					},
+				},
+			});
+
+			createRouta({
+				authentication: {
+					principal: Principal,
+					schemes: {
+						// @ts-expect-error A rejection carries no reason.
+						userToken: bearer({ authenticate: () => ({ type: "rejected", reason: "expired" }) }),
+					},
+				},
+			});
+
+			createRouta({
+				authentication: {
+					// @ts-expect-error A principal schema's output has string id and type fields.
+					principal: z.object({ name: z.string() }),
+					schemes: { userToken: bearer({ authenticate: () => ({ type: "rejected" }) }) },
+				},
+			});
+
+			// @ts-expect-error A Bearer challenge override accepts only realm.
+			bearer({ challenge: { scope: "read" }, authenticate: () => ({ type: "rejected" }) });
+		});
+	});
+
+	it("names requireAuth's outcome so route outcomes cannot reuse it", () => {
+		typesOnly(() => {
+			createRoute({
+				middleware: [requireAuth()],
+				responses: {
+					// @ts-expect-error authenticationRequired belongs to requireAuth.
+					authenticationRequired: { status: 401 },
+					ok: { status: 200 },
+				},
+				run: () => ({ type: "ok" }),
+			});
+
+			// @ts-expect-error Without generated authentication, no scheme name is known.
+			requireAuth({ schemes: ["userToken"] });
+		});
 	});
 });

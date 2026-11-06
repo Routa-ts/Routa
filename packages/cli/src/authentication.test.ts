@@ -86,12 +86,32 @@ export default createRouteRoot("/projects")({
 });
 `;
 
+const adminRoute = `import { createRoute, createRouteRoot, requireAuth } from "@routa-ts/core";
+import { z } from "zod";
+
+// Type assertions only; never called.
+export const typeChecks = () => {
+\trequireAuth({ schemes: ["userToken"] });
+\t// @ts-expect-error Only schemes src/routa.ts declares.
+\trequireAuth({ schemes: ["serviceKey"] });
+};
+
+export default createRouteRoot("/admin")({
+\tmiddleware: [requireAuth({ schemes: ["userToken"] })],
+\tget: createRoute({
+\t\tresponses: { ok: { status: 200, schema: z.object({ id: z.string() }) } },
+\t\trun: ({ ctx }) => ({ type: "ok", data: { id: ctx.auth.principal.id } }),
+\t}),
+});
+`;
+
 describe("Bearer authentication in a project", () => {
 	it("types ctx.auth, narrows it after requireAuth, and serves the same contract", async () => {
 		const cwd = project({
 			"src/routa.ts": routaConfig,
 			"src/routes/me/route.ts": meRoute,
 			"src/routes/projects/route.ts": projectsRoute,
+			"src/routes/admin/route.ts": adminRoute,
 		});
 
 		expectPassed(await run(["check"], { cwd }));
@@ -130,6 +150,10 @@ describe("Bearer authentication in a project", () => {
 			owner: "user_1",
 			name: "Atlas",
 		});
+		expect((await request("/admin")).status).toBe(401);
+		expect(
+			await (await request("/admin", { headers: { authorization: "Bearer user-token" } })).json(),
+		).toEqual({ id: "user_1" });
 		await application.dispose();
 	}, 30_000);
 });
@@ -574,6 +598,72 @@ describe("OpenAPI for Bearer authentication", () => {
 					},
 				},
 			},
+		});
+	});
+
+	it("documents the 401 bodies and challenges the running application sends", async () => {
+		const cwd = project({
+			"src/routa.ts": routaConfig,
+			"src/routes/projects/route.ts": projectsRoute,
+		});
+		expectPassed(await run(["generate"], { cwd }));
+		const document = generateOpenApi(cwd) as Record<string, any>;
+		const { application } = await createProjectApplication(cwd, cwd, "dev");
+		const documented = document.paths["/projects"].post.responses["401"];
+		const alternatives = documented.content["application/json"].schema.oneOf as Array<{
+			required: string[];
+			properties: Record<string, { const: unknown }>;
+		}>;
+
+		for (const headers of [{}, { authorization: "Bearer expired" }]) {
+			const response = await application.fetch(
+				new Request("http://localhost/projects", {
+					method: "POST",
+					headers: { "content-type": "application/json", ...headers },
+					body: JSON.stringify({ name: "Atlas" }),
+				}),
+			);
+			const body = (await response.json()) as Record<string, unknown>;
+			const schema = alternatives.find((item) => item.properties.type!.const === body.type);
+
+			expect(response.status).toBe(401);
+			expect(Object.keys(documented.headers)).toEqual(["www-authenticate"]);
+			expect(response.headers.get("www-authenticate")).toBeTruthy();
+			expect(Object.keys(body).sort()).toEqual([...schema!.required].sort());
+			expect(body).toEqual(
+				Object.fromEntries(
+					Object.entries(schema!.properties).map(([key, value]) => [key, value.const]),
+				),
+			);
+		}
+
+		await application.dispose();
+	}, 30_000);
+
+	it("documents a HEAD operation's authentication failures without a body", () => {
+		const document = generateOpenApi(
+			project({
+				"src/routa.ts": routaConfig,
+				"src/routes/files/route.ts": `import { createRoute, createRouteRoot, requireAuth } from "@routa-ts/core";
+
+export default createRouteRoot("/files")({
+\thead: createRoute({
+\t\tmiddleware: [requireAuth()],
+\t\tresponses: { ok: { status: 200 } },
+\t\trun: () => ({ type: "ok" }),
+\t}),
+});
+`,
+			}),
+		) as Record<string, any>;
+
+		expect(document["x-routa-diagnostics"]).toBeUndefined();
+		expect(document.paths["/files"].head.responses["401"]).toEqual({
+			description: [
+				"- `authenticationFailed`: Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.",
+				"- `authenticationRequired`: Authentication is required: the request presented no credential.",
+			].join("\n"),
+			headers: challenge,
 		});
 	});
 
