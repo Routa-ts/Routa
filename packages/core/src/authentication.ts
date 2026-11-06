@@ -483,9 +483,19 @@ async function authenticate(
 		);
 	}
 
-	const parsed = await authentication.principal.safeParseAsync(
-		(result as { principal?: unknown }).principal,
-	);
+	let parsed: Awaited<ReturnType<PrincipalSchema["safeParseAsync"]>>;
+
+	try {
+		parsed = await authentication.principal.safeParseAsync(
+			(result as { principal?: unknown }).principal,
+		);
+	} catch {
+		// A refinement or transform threw, possibly a ZodError with application messages. It must
+		// not reach the generic error mapping, which would answer 400 with those messages.
+		throw new AuthenticationContractError(
+			`Parsing the principal from scheme "${scheme.name}" threw.`,
+		);
+	}
 
 	if (!parsed.success) {
 		throw new AuthenticationContractError(

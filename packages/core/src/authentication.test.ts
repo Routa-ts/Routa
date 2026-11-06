@@ -253,6 +253,34 @@ describe("authenticator failures", () => {
 		expect(JSON.stringify(events)).not.toContain("abc");
 	});
 
+	it("keeps an error thrown while parsing the principal a safe server error", async () => {
+		const events: RoutaLogEvent[] = [];
+		const throwing = z.object({ id: z.string(), type: z.string() }).transform((principal) => ({
+			...principal,
+			tenant: z.string({ error: "tenant lookup said: secret-tenant-detail" }).parse(42),
+		}));
+		const app = createHonoApp([whoami], {
+			logger: createLogger({ sink: (event) => events.push(event) }),
+			authentication: {
+				principal: throwing,
+				schemes: {
+					userToken: bearer({
+						authenticate: () => ({ type: "authenticated", principal: { id: "u", type: "user" } }),
+					}),
+				},
+			},
+		});
+
+		const response = await app.request("/whoami", { headers: { authorization: "Bearer abc" } });
+
+		expect(response.status).toBe(500);
+		expect(await response.text()).not.toContain("secret-tenant-detail");
+		expect(events.find((event) => event.event === "http.error")?.data).toMatchObject({
+			name: "AuthenticationContractError",
+		});
+		expect(JSON.stringify(events)).not.toContain("secret-tenant-detail");
+	});
+
 	it("reports a result that is neither authenticated nor rejected as a contract violation", async () => {
 		const { app, events } = serveWith(() => null as never);
 
