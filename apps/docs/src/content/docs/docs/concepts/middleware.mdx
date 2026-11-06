@@ -219,8 +219,8 @@ Routa emits `security` and `x-routa-authz` on every operation the middleware cov
 
 Routa makes security context and early responses visible at the HTTP boundary. Without
 `authentication` in `createRouta`, Routa never authenticates a request: middleware such as
-the example above owns it. With it, Routa reads Bearer credentials, calls your authenticator,
-and enforces [`requireAuth`](/docs/reference/core/#requireauth). Your application still owns
+the example above owns it. With it, Routa reads Bearer, API-key, and session-cookie
+credentials, calls one authenticator, and enforces [`requireAuth`](/docs/reference/core/#requireauth). Your application still owns
 credential verification, authorization rules, policy correctness, and secrets.
 
 <Aside type="caution" title="v0 status">
