@@ -9,6 +9,10 @@ import {
 	routeConfigObject,
 	unwrapExpression,
 } from "./ast.js";
+import {
+	authenticationFailedDescription,
+	authenticationRequiredDescription,
+} from "./authentication.js";
 import { compareText } from "./compare-text.js";
 import {
 	cookieDeclaration,
@@ -108,6 +112,8 @@ export type ProjectedHeader = {
 export type ContractSchemaOptions = {
 	/** Whether `src/routa.ts` turns lifecycle headers on. */
 	lifecycleHeaders?: boolean;
+	/** Whether `src/routa.ts` configures authentication, so every operation can fail it. */
+	authentication?: boolean;
 };
 
 /**
@@ -149,14 +155,19 @@ export function projectContractSchemas(
 		for (const method of Object.keys(route.responses)) {
 			const contract = contracts[method];
 			const site = { file: route.file, routePath: route.path, method };
+			const chain = route.methodMiddleware[method] ?? route.middleware;
 			const rejects = projector.middlewareRejects(
-				route.methodMiddleware[method] ?? route.middleware,
+				chain,
 				site,
 				contract?.lifecycle ?? { owned: new Set() },
 			);
+			const authentication = options.authentication ? authenticationOutcomes(chain, method) : [];
 			methods[method] = {
 				input: contract?.input ?? {},
-				responses: projector.compose([...(contract?.outcomes ?? []), ...rejects], site),
+				responses: projector.compose(
+					[...(contract?.outcomes ?? []), ...rejects, ...authentication],
+					site,
+				),
 				...(contract?.deprecation ? { deprecation: contract.deprecation } : {}),
 			};
 		}
@@ -170,6 +181,65 @@ export function projectContractSchemas(
 		diagnostics: projector.diagnostics.filter((item) => item.severity === "error"),
 		warnings: projector.diagnostics.filter((item) => item.severity === "warning"),
 	};
+}
+
+/**
+ * The authentication outcomes Routa owns on an operation: `authenticationFailed` everywhere, and
+ * `authenticationRequired` behind a `requireAuth` guard. Each has a stable problem body and a
+ * required `WWW-Authenticate` challenge. HEAD responses have no body, so a HEAD operation
+ * documents them as one bodyless response.
+ */
+function authenticationOutcomes(
+	chain: readonly MiddlewareMetadata[],
+	method: string,
+): ProjectedOutcome[] {
+	const outcome = (name: string, problem: string, title: string, description: string) => ({
+		name,
+		status: 401,
+		producer: "Routa authentication",
+		label: `"${name}"`,
+		description,
+		schema: {
+			type: "object",
+			required: ["type", "title", "status"],
+			properties: {
+				type: { type: "string", const: `https://routa-ts.dev/problems/${problem}` },
+				title: { type: "string", const: title },
+				status: { type: "number", const: 401 },
+			},
+		},
+		headers: { "www-authenticate": { required: true, schema: { type: "string" } } },
+	});
+	const outcomes: ProjectedOutcome[] = [
+		outcome(
+			"authenticationFailed",
+			"authentication-failed",
+			"Authentication failed",
+			authenticationFailedDescription,
+		),
+		...(chain.some((item) => item.authentication)
+			? [
+					outcome(
+						"authenticationRequired",
+						"authentication-required",
+						"Authentication required",
+						authenticationRequiredDescription,
+					),
+				]
+			: []),
+	];
+
+	if (method !== "head") {
+		return outcomes;
+	}
+
+	const { schema: _schema, ...last } = outcomes.at(-1)!;
+	return [
+		{
+			...last,
+			description: outcomes.map((item) => `- \`${item.name}\`: ${item.description}`).join("\n"),
+		},
+	];
 }
 
 type SchemaIo = "input" | "output";

@@ -22,6 +22,14 @@ import {
 	routeConfigObject,
 	unwrapExpression,
 } from "./ast.js";
+import {
+	applicationAuthentication,
+	type AuthenticationMetadata,
+	type AuthenticationRequirementMetadata,
+	authenticationFailedDescription,
+	filesystemRequirementDiagnostics,
+	requireAuthMiddleware,
+} from "./authentication.js";
 import { compareText } from "./compare-text.js";
 import { type ContractSchemaProjection, projectContractSchemas } from "./contract-schemas.js";
 import {
@@ -92,6 +100,8 @@ export type MiddlewareMetadata = {
 	rejects: MiddlewareRejectMetadata[];
 	security: Array<Record<string, string[]>>;
 	permissions: string[];
+	/** The schemes a `requireAuth` guard allows; present only on that guard. */
+	authentication?: AuthenticationRequirementMetadata;
 };
 
 export type MiddlewareRejectMetadata = {
@@ -110,6 +120,8 @@ export type ProjectValidationResult = {
 	diagnostics: Diagnostic[];
 	warnings: Diagnostic[];
 	schemas: ContractSchemaProjection;
+	/** The authentication contract `src/routa.ts` declares, when it declares one. */
+	authentication?: AuthenticationMetadata;
 };
 
 const generatedHeader =
@@ -169,15 +181,19 @@ function validateProjectInSession(
 	parser: ts.SourceFileParser,
 ): ProjectValidationResult {
 	const write = options.write ?? true;
-	const discovery = discoverRoutes(cwd, parser);
+	const auth = applicationAuthentication(cwd, parser);
+	const { authentication } = auth;
+	const discovery = discoverRoutes(cwd, parser, authentication);
 	const routes = discovery.routes;
 	const schemas = projectContractSchemas(cwd, routes, parser, {
 		lifecycleHeaders: lifecycleHeadersEnabled(cwd, parser),
+		...(authentication && { authentication: true }),
 	});
 	const services = applicationServices(cwd, parser);
 	const discoveryWarnings = discovery.diagnostics.filter((item) => item.severity === "warning");
 	const diagnostics = [
 		...projectStructureDiagnostics(cwd),
+		...auth.diagnostics,
 		...discovery.diagnostics.filter((item) => item.severity !== "warning"),
 		...services.diagnostics,
 		...runResultShapeDiagnostics(cwd, parser),
@@ -186,8 +202,8 @@ function validateProjectInSession(
 		...deprecationReplacementDiagnostics(routes),
 		...missingSuccessResponseDiagnostics(routes),
 		...duplicateSchemaDiagnostics(cwd, parser),
-		...middlewareOrderDiagnostics(routes),
-		...middlewareContextDiagnostics(routes),
+		...middlewareOrderDiagnostics(routes, authentication !== undefined),
+		...middlewareContextDiagnostics(routes, authentication !== undefined),
 		...middlewareRejectStatusDiagnostics(routes),
 		...serviceCollisionDiagnostics(routes, services.services),
 		...serviceRequirementDiagnostics(routes, services.services),
@@ -195,7 +211,7 @@ function validateProjectInSession(
 	];
 
 	if (write && diagnostics.length === 0) {
-		writeGeneratedState(cwd, routes, services.services);
+		writeGeneratedState(cwd, routes, services.services, authentication);
 	}
 
 	return {
@@ -203,6 +219,7 @@ function validateProjectInSession(
 		diagnostics,
 		warnings: [...services.warnings, ...discoveryWarnings, ...schemas.warnings],
 		schemas,
+		...(authentication && { authentication }),
 	};
 }
 
@@ -949,15 +966,22 @@ type RouteDiscovery = {
  * @param cwd - Project root directory
  * @returns The discovered route metadata for each `route.ts` file under `src/routes`, plus discovery diagnostics
  */
-function discoverRoutes(cwd: string, parser: ts.SourceFileParser): RouteDiscovery {
+function discoverRoutes(
+	cwd: string,
+	parser: ts.SourceFileParser,
+	authentication: AuthenticationMetadata | undefined,
+): RouteDiscovery {
 	const routesDir = join(cwd, routesRoot);
 
 	if (!existsSync(routesDir)) {
 		return { routes: [], diagnostics: [] };
 	}
 
-	const files = walk(routesDir).filter(isRouteFile);
-	const diagnostics: Diagnostic[] = [];
+	const sources = walk(routesDir);
+	const files = sources.filter(isRouteFile);
+	const diagnostics: Diagnostic[] = sources
+		.filter((file) => basename(file) === "middleware.ts")
+		.flatMap((file) => filesystemRequirementDiagnostics(cwd, relative(cwd, file), parser));
 
 	const routes = files.flatMap((file) => {
 		const relativeFile = relative(cwd, file);
@@ -969,7 +993,7 @@ function discoverRoutes(cwd: string, parser: ts.SourceFileParser): RouteDiscover
 			(segment) => !(segment.startsWith("(") && segment.endsWith(")")),
 		);
 		const inheritedMiddleware = middlewareChain(cwd, rawSegments, parser);
-		const routeFileMiddleware = parseRouteFileMiddleware(cwd, relativeFile, parser);
+		const routeFileMiddleware = parseRouteFileMiddleware(cwd, relativeFile, parser, authentication);
 		const middleware = [...inheritedMiddleware, ...routeFileMiddleware.route];
 		const methodMiddleware = Object.fromEntries(
 			Object.entries(routeFileMiddleware.methods).map(([method, items]) => [
@@ -1016,6 +1040,10 @@ function discoverRoutes(cwd: string, parser: ts.SourceFileParser): RouteDiscover
 			]),
 		).sort();
 
+		diagnostics.push(
+			...routeFileMiddleware.diagnostics.map((item) => ({ ...item, routePath: path })),
+		);
+
 		for (const unresolved of routeFileMiddleware.unresolved) {
 			diagnostics.push({
 				code: "ROUTA_MIDDLEWARE_UNRESOLVED",
@@ -1040,7 +1068,11 @@ function discoverRoutes(cwd: string, parser: ts.SourceFileParser): RouteDiscover
 				responses: Object.fromEntries(
 					Object.entries(contract).map(([method, metadata]) => [
 						method,
-						methodResponseStatuses(metadata.responses, methodMiddleware[method] ?? middleware),
+						methodResponseStatuses(
+							// Every operation can fail authentication once credentials are resolved.
+							authentication ? [...metadata.responses, 401] : metadata.responses,
+							methodMiddleware[method] ?? middleware,
+						),
 					]),
 				),
 				inputs: Object.fromEntries(
@@ -1814,16 +1846,19 @@ function parseRouteFileMiddleware(
 	cwd: string,
 	routeFile: string,
 	parser: ts.SourceFileParser,
+	authentication: AuthenticationMetadata | undefined,
 ): {
 	route: MiddlewareMetadata[];
 	methods: Record<string, MiddlewareMetadata[]>;
 	unresolved: string[];
+	diagnostics: Diagnostic[];
 } {
 	const sourceFile = parseTypeScriptFile(join(cwd, routeFile), parser);
 	const routeConfig = routeConfigObject(sourceFile);
+	const diagnostics: Diagnostic[] = [];
 
 	if (!routeConfig) {
-		return { route: [], methods: {}, unresolved: [] };
+		return { route: [], methods: {}, unresolved: [], diagnostics };
 	}
 
 	const read = middlewareReader(cwd, parser);
@@ -1834,6 +1869,13 @@ function parseRouteFileMiddleware(
 	const methods: Record<string, MiddlewareMetadata[]> = {};
 	const unresolved: string[] = [];
 	const metadataForMiddleware = (expression: ts.Expression): MiddlewareMetadata | undefined => {
+		const guard = requireAuthMiddleware(expression, routeFile, authentication);
+
+		if (guard) {
+			diagnostics.push(...guard.diagnostics);
+			return guard.metadata;
+		}
+
 		const metadata = middlewareExpressionMetadata(expression, routeFile, middlewareByName, read);
 
 		if (metadata) {
@@ -1924,7 +1966,7 @@ function parseRouteFileMiddleware(
 		methods[method] = entries;
 	}
 
-	return { route, methods, unresolved };
+	return { route, methods, unresolved, diagnostics };
 }
 
 /**
@@ -2699,7 +2741,7 @@ function numericValue(expression: ts.Expression): number | undefined {
  *
  * @returns Diagnostics for middleware that requires context before it has been provided.
  */
-function middlewareOrderDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
+function middlewareOrderDiagnostics(routes: RouteMetadata[], authenticated: boolean): Diagnostic[] {
 	const diagnostics: Diagnostic[] = [];
 
 	for (const route of routes) {
@@ -2711,7 +2753,8 @@ function middlewareOrderDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 				: [route.middleware];
 
 		for (const chain of chains) {
-			const provided = new Set<string>();
+			// Credential orchestration resolves ctx.auth before the first middleware runs.
+			const provided = new Set<string>(authenticated ? ["auth"] : []);
 
 			for (const middleware of chain) {
 				for (const required of middleware.requires) {
@@ -2744,7 +2787,10 @@ function middlewareOrderDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
  *
  * @param routes - Route metadata whose middleware chains are checked, each contract once
  */
-function middlewareContextDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
+function middlewareContextDiagnostics(
+	routes: RouteMetadata[],
+	authenticated: boolean,
+): Diagnostic[] {
 	const diagnostics: Diagnostic[] = [];
 	const seen = new Set<ts.ObjectLiteralExpression>();
 
@@ -2776,6 +2822,14 @@ function middlewareContextDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
 					"ROUTA_CONTEXT_RESERVED",
 					`Middleware ${item.name} provides ctx.services, which Routa reserves for injected services.`,
 					reserved,
+				);
+			}
+
+			if (authenticated && item.provides.includes("auth")) {
+				report(
+					"ROUTA_CONTEXT_RESERVED",
+					`Middleware ${item.name} provides ctx.auth, which Routa reserves for authentication.`,
+					"Rename the context key. Routa resolves ctx.auth from the request's credential.",
 				);
 			}
 
@@ -3319,11 +3373,13 @@ function isExternalApiUrl(value: string): boolean {
  *
  * @param routes - The route metadata to serialize.
  * @param services - The application service contract, when `src/routa.ts` declares one.
+ * @param authentication - The authentication contract, when `src/routa.ts` declares one.
  * @returns The generated TypeScript source.
  */
 export function routesMetadataSource(
 	routes: RouteMetadata[],
 	services?: ServiceContractMetadata,
+	authentication?: AuthenticationMetadata,
 ): string {
 	const orderedRoutes = [...routes].sort(
 		(left, right) => compareText(left.path, right.path) || compareText(left.file, right.file),
@@ -3335,9 +3391,23 @@ export type RoutaApplicationServices = ${contractTypeReference(services)};
 
 `
 		: "";
+	const names = authentication?.schemes.map((scheme) => scheme.name) ?? [];
+	const authenticationSource = authentication
+		? `export const routaAuthenticationSchemes = ${JSON.stringify(names, null, "\t")} as const;
+
+/** The principal schema's output, from the authentication config in \`src/routa.ts\`. */
+export type RoutaPrincipal = import("@routa-ts/core").PrincipalOf<typeof import("../src/routa.js").default>;
+
+export type RoutaAuthenticationScheme = ${names.map((name) => JSON.stringify(name)).join(" | ")};
+
+/** \`ctx.auth\` on an operation no requireAuth guard protects. */
+export type RoutaAuth = import("@routa-ts/core").AuthContext<RoutaAuthenticationScheme, RoutaPrincipal>;
+
+`
+		: "";
 	return `${generatedHeader}export const routaRoutes = ${JSON.stringify(orderedRoutes, null, "\t")} as const;
 
-${servicesSource}${routeContextTypes(orderedRoutes, services !== undefined)}
+${servicesSource}${authenticationSource}${routeContextTypes(orderedRoutes, services !== undefined, authentication !== undefined)}
 `;
 }
 
@@ -3353,10 +3423,11 @@ function writeGeneratedState(
 	cwd: string,
 	routes: RouteMetadata[],
 	services: ServiceContractMetadata | undefined,
+	authentication: AuthenticationMetadata | undefined,
 ): void {
 	const routesFile = join(cwd, ".routa/routes.gen.ts");
 	const previous = existsSync(routesFile) ? readFileSync(routesFile, "utf8") : undefined;
-	writeGeneratedFile(routesFile, routesMetadataSource(routes, services));
+	writeGeneratedFile(routesFile, routesMetadataSource(routes, services, authentication));
 
 	try {
 		writeGeneratedFile(join(cwd, ".routa/testing.gen.ts"), testingModuleSource(routes, services));
@@ -3386,7 +3457,11 @@ function writeGeneratedFile(file: string, source: string): void {
  *
  * @returns Generated source text for per-route context types, route-to-method context maps, and the `@routa-ts/core` module augmentation.
  */
-function routeContextTypes(routes: RouteMetadata[], application: boolean): string {
+function routeContextTypes(
+	routes: RouteMetadata[],
+	application: boolean,
+	authenticated: boolean,
+): string {
 	const ctxTypes = routes
 		.map((route) => {
 			const typeName = routeCtxTypeName(route);
@@ -3400,21 +3475,31 @@ function routeContextTypes(routes: RouteMetadata[], application: boolean): strin
 		.join("\n\n");
 
 	const ctxMap = `export type RoutaRouteCtxByPath = {\n${routes
-		.map((route) => `\t${JSON.stringify(route.path)}: ${routeMethodCtxMap(route, application)};`)
+		.map(
+			(route) =>
+				`\t${JSON.stringify(route.path)}: ${routeMethodCtxMap(route, application, authenticated)};`,
+		)
 		.join("\n")}\n};`;
-	const ctxByKey = `export type RoutaCtxByKey = ${ctxByKeyType(routes)};`;
+	const ctxByKey = `export type RoutaCtxByKey = ${ctxByKeyType(routes, authenticated)};`;
 	const scoped = routes.filter((route) => route.services);
 	const factoryCtx =
 		scoped.length > 0
 			? `\n\nexport type RoutaFactoryCtxByPath = {\n${scoped
-					.map((route) => `\t${JSON.stringify(route.path)}: ${factoryCtxMap(route, application)};`)
+					.map(
+						(route) =>
+							`\t${JSON.stringify(route.path)}: ${factoryCtxMap(route, application, authenticated)};`,
+					)
 					.join("\n")}\n};`
 			: "";
 
 	const requirementChecks = serviceRequirementChecks(routes, application);
 	const servicesRegistration = `${
 		application ? "\t\tapplicationServices: RoutaApplicationServices;\n" : ""
-	}${scoped.length > 0 ? "\t\tfactoryCtxByPath: RoutaFactoryCtxByPath;\n" : ""}`;
+	}${scoped.length > 0 ? "\t\tfactoryCtxByPath: RoutaFactoryCtxByPath;\n" : ""}${
+		authenticated
+			? "\t\tauthentication: { schemes: RoutaAuthenticationScheme; principal: RoutaPrincipal };\n"
+			: ""
+	}`;
 
 	return `${ctxTypes}\n\n${ctxMap}${factoryCtx}${requirementChecks}\n\n${ctxByKey}\n\ndeclare module "@routa-ts/core" {\n\texport interface Register {\n\t\trouteCtxByPath: RoutaRouteCtxByPath;\n\t\tctxByKey: RoutaCtxByKey;\n${servicesRegistration}\t}\n}`;
 }
@@ -3424,18 +3509,20 @@ function routeContextTypes(routes: RouteMetadata[], application: boolean): strin
  * middleware before it and the services of earlier scopes. The route file's factory follows the
  * filesystem middleware; each method's follows the route file's own middleware too.
  */
-function factoryCtxMap(route: RouteMetadata, application: boolean): string {
+function factoryCtxMap(route: RouteMetadata, application: boolean, authenticated: boolean): string {
 	const { routeFile, methods = {} } = route.services ?? {};
 	const filesystem = route.middleware.filter((item) => item.file !== route.file);
 	const entries = [
 		...(routeFile
-			? [`\t\trouteFile: ${ctxObjectType(filesystem, servicesType(application, []))};`]
+			? [
+					`\t\trouteFile: ${ctxObjectType(filesystem, servicesType(application, []), authType(filesystem, authenticated))};`,
+				]
 			: []),
 		...Object.keys(methods)
 			.sort(compareText)
 			.map(
 				(method) =>
-					`\t\t${method}: ${ctxObjectType(route.middleware, servicesType(application, [routeFile]))};`,
+					`\t\t${method}: ${ctxObjectType(route.middleware, servicesType(application, [routeFile]), authType(route.middleware, authenticated))};`,
 			),
 	];
 
@@ -3505,8 +3592,9 @@ function servicesType(
  * @param routes - Route metadata used to collect provided context keys and their inferred types
  * @returns A TypeScript object type string for the combined context map, or `{ readonly __empty?: never }` when no context is provided
  */
-function ctxByKeyType(routes: RouteMetadata[]): string {
-	const ctx = new Map<string, string>();
+function ctxByKeyType(routes: RouteMetadata[], authenticated: boolean): string {
+	// Middleware that requires ctx.auth sees it before any requireAuth guard narrows it.
+	const ctx = new Map<string, string>(authenticated ? [["auth", "RoutaAuth"]] : []);
 
 	for (const route of routes) {
 		const chains = [route.middleware, ...Object.values(route.methodMiddleware)];
@@ -3536,11 +3624,17 @@ function ctxByKeyType(routes: RouteMetadata[]): string {
  * @param route - The route metadata to describe.
  * @returns A TypeScript object type mapping each HTTP method to its context type.
  */
-function routeMethodCtxMap(route: RouteMetadata, application: boolean): string {
+function routeMethodCtxMap(
+	route: RouteMetadata,
+	application: boolean,
+	authenticated: boolean,
+): string {
 	const methods: string[] = [];
 
 	for (const method of ["get", "post", "put", "patch", "delete", "head"]) {
-		methods.push(`\t\t${method}: ${routeCtxTypeNameForMiddleware(route, method, application)};`);
+		methods.push(
+			`\t\t${method}: ${routeCtxTypeNameForMiddleware(route, method, application, authenticated)};`,
+		);
 	}
 
 	return `{\n${methods.join("\n")}\n\t}`;
@@ -3558,21 +3652,51 @@ function routeCtxTypeNameForMiddleware(
 	route: RouteMetadata,
 	method: string,
 	application: boolean,
+	authenticated: boolean,
 ): string {
 	const chain = route.methodMiddleware[method] ?? route.middleware;
 	const services =
 		route.services
 		&& servicesType(application, [route.services.routeFile, route.services.methods?.[method]]);
 
-	return ctxObjectType(chain, services);
+	return ctxObjectType(chain, services, authType(chain, authenticated));
 }
 
 /**
- * Builds a context object type from the keys a middleware chain provides, and a `services` type.
+ * The type of `ctx.auth` after a middleware chain, or `undefined` without authentication: anonymous
+ * or authenticated, or authenticated through the schemes every requireAuth guard in it allows.
+ */
+function authType(
+	chain: readonly MiddlewareMetadata[],
+	authenticated: boolean,
+): string | undefined {
+	if (!authenticated) {
+		return undefined;
+	}
+
+	const guards = chain.flatMap((item) =>
+		item.authentication ? [item.authentication.schemes] : [],
+	);
+
+	if (guards.length === 0) {
+		return "RoutaAuth";
+	}
+
+	const allowed = guards.reduce((left, right) => left.filter((name) => right.includes(name)));
+	return `import("@routa-ts/core").AuthenticatedAuthContext<${allowed.map((name) => JSON.stringify(name)).join(" | ") || "never"}, RoutaPrincipal>`;
+}
+
+/**
+ * Builds a context object type from the keys a middleware chain provides, its `auth` type, and a
+ * `services` type.
  *
  * @returns A TypeScript object type nested two levels deep in the generated map
  */
-function ctxObjectType(chain: readonly MiddlewareMetadata[], services: string | undefined): string {
+function ctxObjectType(
+	chain: readonly MiddlewareMetadata[],
+	services: string | undefined,
+	auth?: string,
+): string {
 	const ctx = new Map<string, string>();
 
 	for (const middleware of chain) {
@@ -3581,7 +3705,7 @@ function ctxObjectType(chain: readonly MiddlewareMetadata[], services: string | 
 		}
 	}
 
-	if (ctx.size === 0 && !services) {
+	if (ctx.size === 0 && !services && !auth) {
 		return "{ readonly __empty?: never }";
 	}
 
@@ -3589,6 +3713,7 @@ function ctxObjectType(chain: readonly MiddlewareMetadata[], services: string | 
 		...Array.from(ctx.entries())
 			.sort(([left], [right]) => compareText(left, right))
 			.map(([key, type]) => `\t\t\t${JSON.stringify(key)}: ${indentType(type, 3)};`),
+		...(auth ? [`\t\t\treadonly "auth": ${auth};`] : []),
 		...(services ? [`\t\t\treadonly "services": ${services};`] : []),
 	].join("\n")}\n\t\t}`;
 }
