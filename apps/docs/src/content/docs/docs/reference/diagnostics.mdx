@@ -399,8 +399,8 @@ holds no runtime values.
 
 ### `ROUTA_AUTH_NOT_CONFIGURED`
 
-A route uses `requireAuth()`, but `src/routa.ts` configures no `authentication`, so no request
-could ever pass the guard.
+A route or a folder `middleware.ts` uses `requireAuth()`, but `src/routa.ts` configures no
+`authentication`, so no request could ever pass the guard.
 
 **Fix:** configure [`authentication`](/docs/reference/configuration/#authentication) in
 `createRouta`, or remove the guard.
@@ -427,31 +427,51 @@ ROUTA_AUTH_PRIORITY_INVALID: The authentication priority in src/routa.ts omits "
 ### `ROUTA_AUTH_REQUIREMENT_EMPTY`
 
 `requireAuth({ schemes: [] })` allows no schemes, so it would reject every request. The same
-code reports an operation whose `requireAuth` guards, such as a route-level and a method-level
-one, allow no scheme in common.
+code reports an operation whose `requireAuth` guards, from its folders down to its method,
+allow no scheme in common. The message names each guard's file and the schemes it allows.
 
 ```text
-ROUTA_AUTH_REQUIREMENT_EMPTY: requireAuth() guards on GET /projects allow no scheme in common, so no request could pass them.
+ROUTA_AUTH_REQUIREMENT_EMPTY: requireAuth() guards on GET /projects allow no scheme in common, so no request could pass them: src/routes/(private)/middleware.ts allows "session"; src/routes/(private)/projects/route.ts allows "userToken".
 ```
 
 **Fix:** list at least one scheme, call `requireAuth()` to accept any configured scheme, or
-make the guards on one operation share a scheme.
+make the guards on one operation share a scheme. A descendant cannot widen an inherited
+requirement, so allow the scheme in the folder guard when its routes need it.
 
 ### `ROUTA_AUTH_REQUIREMENT_UNRESOLVED`
 
-`requireAuth` receives options `routa check` cannot read, such as `requireAuth(options)` or
-`requireAuth({ schemes: allowed })`.
+`requireAuth` receives options `routa check` cannot read, such as `requireAuth(options)`,
+`requireAuth({ ...options })`, or `requireAuth({ schemes: allowed })`. The same code reports a
+folder `middleware.ts` export that builds a guard without being a literal call, such as a
+conditional or a factory function that calls `requireAuth`. Routa would not run that guard,
+and the routes below would stay public.
+
+```ts title="src/routes/(private)/middleware.ts"
+import { guardFor } from "../../guards.js";
+
+// Fails: a factory call, not a literal requireAuth() call
+export const signedIn = guardFor("session");
+```
+
+```text
+ROUTA_AUTH_REQUIREMENT_UNRESOLVED: src/routes/(private)/middleware.ts exports signedIn, which builds a requireAuth() guard routa check cannot read, so the guard would not run.
+```
 
 **Fix:** call `requireAuth()`, or list scheme names inline:
-`requireAuth({ schemes: ["userToken"] })`.
+`requireAuth({ schemes: ["userToken"] })`. In a folder, export the call as a `const`, or
+re-export a `const` another module binds to one.
 
-### `ROUTA_AUTH_REQUIREMENT_UNSUPPORTED`
+### `ROUTA_AUTH_REQUIREMENT_WIDENED`
 
-A folder `middleware.ts` exports a `requireAuth()` guard. Folder middleware cannot require
-authentication yet, so the guard would never run and its routes would stay public.
+Warning. A `requireAuth` guard lists a scheme that a guard before it on the same operation
+excludes, such as a route guard that allows `"userToken"` under a folder guard that allows
+only `"session"`. Requirements only narrow, so that scheme never authenticates the operation.
 
-**Fix:** write `requireAuth()` inline in the `middleware` of each route root or method it
-protects.
+```text
+ROUTA_AUTH_REQUIREMENT_WIDENED: requireAuth() in src/routes/(private)/projects/route.ts allows "userToken", which the requireAuth() in src/routes/(private)/middleware.ts it follows does not. Requirements only narrow, so it accepts "session".
+```
+
+**Fix:** remove the excluded scheme from the list. To accept it, allow it in the earlier guard.
 
 ## Services
 

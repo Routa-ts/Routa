@@ -120,15 +120,16 @@ the principal schema, and `ctx.auth.principal` is the schema's output. `ctx.auth
 middleware cannot replace it, and writing it fails the request with the generic `500`.
 
 A [`requireAuth`](/docs/reference/core/#requireauth) guard runs at its position in the
-middleware chain, after input parsing. It returns `authenticationRequired` for an anonymous
-request and passes an authenticated one on. The handler sees the authenticated branch of
+middleware chain, after input parsing. A guard a folder `middleware.ts` exports runs with the
+folder's middleware, before route and method middleware. It returns `authenticationRequired`
+for an anonymous request and passes an authenticated one on. The handler sees the authenticated branch of
 `ctx.auth`.
 
 ### Credential Selection
 
 Each operation accepts a set of schemes, which Routa computes once at startup: the schemes
-every `requireAuth` guard in its middleware chain allows, or every configured scheme when no
-guard applies. Only credentials of accepted schemes are eligible. For each request:
+every `requireAuth` guard in its middleware chain allows, from the root folder to the method,
+or every configured scheme when no guard applies. Only credentials of accepted schemes are eligible. For each request:
 
 | Presented credentials                                   | Result                                                |
 | ------------------------------------------------------- | ----------------------------------------------------- |
@@ -146,8 +147,9 @@ alike. Because resolution runs first, a request it fails receives `authenticatio
 `ambiguousCredentials` whatever its `Accept` header or body.
 
 A credential of a scheme the operation does not accept never authenticates it. A route behind
-`requireAuth({ schemes: ["session"] })` that receives only a valid Bearer token returns
-`authenticationFailed`, challenging `Session`. When the same request also carries a session
+`requireAuth({ schemes: ["session"] })`, inline or inherited from a folder, that receives only
+a valid Bearer token returns `authenticationFailed`, challenging `Session`, and the Bearer
+authenticator never runs. When the same request also carries a session
 cookie, Routa ignores the Bearer token and authenticates the session.
 
 ### Outcomes and Challenges
