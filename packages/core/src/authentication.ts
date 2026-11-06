@@ -424,14 +424,29 @@ function markRequirement<T extends object>(contract: T, requirement: Requirement
 function guardRequirement(item: object, where: string): Requirement {
 	const { value } = Object.getOwnPropertyDescriptor(item, requirementKey) ?? {};
 
-	if (
-		value === "any"
-		|| (Array.isArray(value)
-			&& Object.isFrozen(value)
-			&& value.length > 0
-			&& value.every((name) => typeof name === "string"))
-	) {
-		return value as Requirement;
+	if (value === "any") {
+		return value;
+	}
+
+	if (Array.isArray(value) && Object.isFrozen(value)) {
+		// Copied with index reads only, so a list that overrides `includes` or `filter` cannot widen
+		// the schemes it allows.
+		const names: string[] = [];
+
+		for (let index = 0; index < value.length; index++) {
+			const { value: name } = Object.getOwnPropertyDescriptor(value, index) ?? {};
+
+			if (typeof name !== "string") {
+				names.length = 0;
+				break;
+			}
+
+			names.push(name);
+		}
+
+		if (names.length > 0 && names.length === value.length) {
+			return Object.freeze(names);
+		}
 	}
 
 	throw new TypeError(
