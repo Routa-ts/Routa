@@ -60,6 +60,7 @@ function projectModules(
 						methods: ["GET", "POST"],
 						middleware: [{ file: "src/middleware.ts", name: "withRequest" }],
 						methodMiddleware: {},
+						middlewareFiles: [],
 						services: {
 							routeFile: { names: ["orders"] },
 							methods: { post: { names: ["checkout"] } },
@@ -312,13 +313,14 @@ describe("createTestApplication", () => {
 		const logger = createLogger({ sink: (event) => events.push(event.event) });
 		const { modules } = projectModules({
 			config: { logger, lifecycleHeaders: false, responseValidation: "always" },
-			// Older generators wrote no middleware fields, so the chain comes from the route file.
+			// Without middleware chain fields, the chain comes from the route file.
 			metadata: {
 				routaRoutes: [
 					{
 						file: "src/routes/orders/route.ts",
 						path: "/orders",
 						methods: ["GET"],
+						middlewareFiles: [],
 						services: { routeFile: { names: ["orders"] } },
 					},
 				],

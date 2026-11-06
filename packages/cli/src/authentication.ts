@@ -1,12 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { objectLiteral, propertyName, unwrapExpression } from "./ast.js";
-import {
-	boundDeclaration,
-	type ModuleDeclaration,
-	namedImportMap,
-	parseTypeScriptFile,
-} from "./declarations.js";
+import { boundDeclaration, localBinding, type ModuleExport } from "./declarations.js";
 import type { Diagnostic, MiddlewareMetadata } from "./project.js";
 import { routaConfigMember, spreadObject } from "./services.js";
 import * as ts from "./typescript.js";
@@ -792,31 +787,33 @@ function requestedSchemes(call: ts.CallExpression): string[] | "unresolved" | un
 
 /**
  * Reads a folder `middleware.ts` export that is not a `createMiddleware` contract. A literal
- * `requireAuth(...)` call becomes the guard's metadata under its export name. An export that
- * builds a guard Routa cannot read, such as a conditional or a factory call, is an error: Routa
- * would not run it, and the routes below would stay public.
+ * `requireAuth(...)` call becomes the guard's metadata under its export name, also through `const`
+ * aliases and re-exports. Routa runs only the exports it reads, so an export that builds a guard
+ * any other way, such as through a factory or a destructuring, is an error: the routes below would
+ * stay public. Startup refuses any guard export the metadata does not list, including one package
+ * code builds.
  *
  * @param file - The folder `middleware.ts`, relative to the project root
  * @param exported - The export and the module that declares it
+ * @param readsMiddleware - Whether an expression reads as a `createMiddleware` contract
  */
 export function folderGuard(
 	cwd: string,
 	file: string,
-	exported: ModuleDeclaration<ts.Expression>,
+	exported: ModuleExport,
 	parser: ts.SourceFileParser,
 	authentication: AuthenticationMetadata | undefined,
+	readsMiddleware: (expression: ts.Expression, file: string) => boolean,
 ): { metadata?: MiddlewareMetadata; diagnostics: Diagnostic[] } {
-	const guard = requireAuthMiddleware(exported.contract, exported.file, authentication, {
-		file,
-		name: exported.exportedName,
-	});
+	const value = folderValue(cwd, exported, parser, readsMiddleware);
+	const name = exported.exportedName;
 
-	if (guard) {
-		return guard;
+	if (value === "other") {
+		return { diagnostics: [] };
 	}
 
-	if (!buildsRequireAuth(cwd, exported.file, exported.contract, parser)) {
-		return { diagnostics: [] };
+	if (value !== "builds") {
+		return requireAuthMiddleware(value.call, value.file, authentication, { file, name })!;
 	}
 
 	return {
@@ -824,70 +821,100 @@ export function folderGuard(
 			{
 				code: "ROUTA_AUTH_REQUIREMENT_UNRESOLVED",
 				severity: "error",
-				message: `${file} exports ${exported.exportedName}, which builds a requireAuth() guard routa check cannot read, so the guard would not run.`,
+				message: `${file} exports ${name}, which builds a requireAuth() guard routa check cannot read, so the guard would not run.`,
 				file,
-				suggestion: `Export a literal call, such as export const ${exported.exportedName} = requireAuth({ schemes: ["userToken"] }), with scheme names written inline.`,
+				suggestion: `Export a literal call, such as export const ${name} = requireAuth({ schemes: ["userToken"] }), with scheme names written inline.`,
 			},
 		],
 	};
 }
 
+/** How deep Routa follows `const` aliases before it stops reading a value. */
+const maxAliasDepth = 8;
+
 /**
- * Whether an expression Routa cannot read as a guard still builds one: it refers to the core
- * `requireAuth`, or calls a function that does, declared in its module or imported from another.
+ * Classifies a folder export's value, following `const` aliases, imports, and re-exports: the
+ * literal `requireAuth(...)` call it is bound to, `builds` when it builds a guard another way, or
+ * `other`.
+ */
+function folderValue(
+	cwd: string,
+	exported: ModuleExport,
+	parser: ts.SourceFileParser,
+	readsMiddleware: (expression: ts.Expression, file: string) => boolean,
+): { file: string; call: ts.CallExpression } | "other" | "builds" {
+	let binding: Omit<ModuleExport, "exportedName"> | "none" = exported;
+
+	for (
+		let depth = 0;
+		binding !== "none" && binding.value && ts.isExpression(binding.value);
+		depth += 1
+	) {
+		const node = unwrapExpression(binding.value);
+
+		if (!ts.isIdentifier(node)) {
+			const call = coreCall(node, "requireAuth");
+
+			if (call) {
+				return { file: binding.file, call };
+			}
+
+			return !readsMiddleware(node, binding.file)
+				&& buildsRequireAuth(cwd, binding.file, node, parser)
+				? "builds"
+				: "other";
+		}
+
+		if (coreExportName(node) !== undefined || depth === maxAliasDepth) {
+			return buildsRequireAuth(cwd, binding.file, node, parser) ? "builds" : "other";
+		}
+
+		binding = localBinding(cwd, binding.file, node.getSourceFile(), node.text, parser);
+	}
+
+	return binding !== "none"
+		&& binding.from
+		&& buildsRequireAuth(cwd, binding.file, binding.from, parser)
+		? "builds"
+		: "other";
+}
+
+/**
+ * Whether a node builds a `requireAuth` guard: it names the core `requireAuth`, or names project
+ * code that does, followed through `const` bindings, functions, imports, and re-exports at any
+ * depth. Package code is not followed.
  *
- * @param file - The module the expression is written in, relative to the project root
+ * @param file - The module the node is written in, relative to the project root
+ * @param seen - The bindings already followed, as `file\0name`
  */
 function buildsRequireAuth(
 	cwd: string,
 	file: string,
-	expression: ts.Expression,
+	node: ts.Node,
 	parser: ts.SourceFileParser,
+	seen = new Set<string>(),
 ): boolean {
-	if (refersToRequireAuth(expression)) {
-		return true;
-	}
-
-	const node = unwrapExpression(expression);
-	const callee = ts.isCallExpression(node) ? unwrapExpression(node.expression) : undefined;
-
-	if (!callee || !ts.isIdentifier(callee)) {
-		return false;
-	}
-
-	const sourceFile = node.getSourceFile();
-	const imported = namedImportMap(cwd, file, sourceFile).get(callee.text);
-	const declaration = imported
-		? topLevelDeclaration(parseTypeScriptFile(join(cwd, imported.file), parser), imported.name)
-		: topLevelDeclaration(sourceFile, callee.text);
-	return declaration !== undefined && refersToRequireAuth(declaration);
-}
-
-/** Whether a node names the `requireAuth` its module imports from `@routa-ts/core`. */
-function refersToRequireAuth(node: ts.Node): boolean {
-	const names = coreImportNames(node.getSourceFile(), "requireAuth");
-	const visit = (child: ts.Node): boolean =>
-		(ts.isIdentifier(child) && names.has(child.text)) || ts.forEachChild(child, visit) === true;
-	return names.size > 0 && visit(node);
-}
-
-/** The function or variable a module declares at its top level under `name`. */
-function topLevelDeclaration(sourceFile: ts.SourceFile, name: string): ts.Node | undefined {
-	for (const statement of sourceFile.statements) {
-		if (ts.isFunctionDeclaration(statement) && statement.name?.text === name) {
-			return statement;
+	const visit = (child: ts.Node): boolean => {
+		if (coreExportName(child) === "requireAuth") {
+			return true;
 		}
 
-		const declaration = ts.isVariableStatement(statement)
-			? statement.declarationList.declarations.find(
-					(item) => ts.isIdentifier(item.name) && item.name.text === name,
-				)
-			: undefined;
+		if (ts.isIdentifier(child)) {
+			const binding = localBinding(cwd, file, child.getSourceFile(), child.text, parser);
 
-		if (declaration) {
-			return declaration;
+			if (binding === "none" || seen.has(`${binding.file}\0${binding.name}`)) {
+				return false;
+			}
+
+			seen.add(`${binding.file}\0${binding.name}`);
+			const target = binding.value ?? binding.from;
+			return target !== undefined && buildsRequireAuth(cwd, binding.file, target, parser, seen);
 		}
-	}
+
+		return ts.forEachChild(child, visit) === true;
+	};
+
+	return visit(node);
 }
 
 /**

@@ -51,6 +51,7 @@ export const routaRoutes = [
 			"put": [],
 			"head": []
 		},
+		"middlewareFiles": [],
 		"ctx": [],
 		"groups": [],
 		"segments": [
