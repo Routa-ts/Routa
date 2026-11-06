@@ -123,7 +123,9 @@ A [`requireAuth`](/docs/reference/core/#requireauth) guard runs at its position 
 middleware chain, after input parsing. A guard a folder `middleware.ts` exports runs with the
 folder's middleware, before route and method middleware. It returns `authenticationRequired`
 for an anonymous request and passes an authenticated one on. The handler sees the authenticated branch of
-`ctx.auth`.
+`ctx.auth`. Startup refuses a folder `middleware.ts` that exports a `requireAuth` guard the
+generated metadata does not list, because Routa would never run it; see
+[Authentication Requirements](/docs/concepts/middleware/#authentication-requirements).
 
 ### Credential Selection
 

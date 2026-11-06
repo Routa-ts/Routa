@@ -442,15 +442,19 @@ requirement, so allow the scheme in the folder guard when its routes need it.
 
 `requireAuth` receives options `routa check` cannot read, such as `requireAuth(options)`,
 `requireAuth({ ...options })`, or `requireAuth({ schemes: allowed })`. The same code reports a
-folder `middleware.ts` export that builds a guard without being a literal call, such as a
-conditional or a factory function that calls `requireAuth`. Routa would not run that guard,
-and the routes below would stay public.
+folder `middleware.ts` export that builds a guard without being a literal call bound to a
+`const`: a conditional, a destructuring, or a factory function that reaches `requireAuth` at
+any depth, through your project's functions, imports, and re-exports. Routa would not run that
+guard, and the routes below would stay public.
 
 ```ts title="src/routes/(private)/middleware.ts"
 import { guardFor } from "../../guards.js";
 
 // Fails: a factory call, not a literal requireAuth() call
 export const signedIn = guardFor("session");
+
+// Fails: a destructured binding
+export const { adminOnly } = { adminOnly: guardFor("userToken") };
 ```
 
 ```text
@@ -458,8 +462,10 @@ ROUTA_AUTH_REQUIREMENT_UNRESOLVED: src/routes/(private)/middleware.ts exports si
 ```
 
 **Fix:** call `requireAuth()`, or list scheme names inline:
-`requireAuth({ schemes: ["userToken"] })`. In a folder, export the call as a `const`, or
-re-export a `const` another module binds to one.
+`requireAuth({ schemes: ["userToken"] })`. In a folder, export the call as a `const`, a `const`
+bound to one, or a re-export of either. `routa check` does not read package code, so startup
+refuses a guard a package builds; see
+[Authentication Requirements](/docs/concepts/middleware/#authentication-requirements).
 
 ### `ROUTA_AUTH_REQUIREMENT_WIDENED`
 
