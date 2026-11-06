@@ -387,6 +387,12 @@ describe("authentication diagnostics", () => {
 				'Authentication scheme "userToken" in src/routa.ts is not a statically readable bearer() call.',
 			],
 			[
+				"{ principal: Principal, schemes: { userToken: bearer({ authenticate: reject, ...dynamicChallenge() }) } }",
+				"ROUTA_AUTH_CONFIG_UNRESOLVED",
+				'Authentication scheme "userToken" in src/routa.ts is not a statically readable bearer() call.',
+				"const dynamicChallenge = () => ({ challenge: { realm: process.env.REALM ?? 'api' } });",
+			],
+			[
 				"{ schemes: { userToken: bearer({ authenticate: reject }) } }",
 				"ROUTA_AUTH_CONFIG_INVALID",
 				"The authentication config in src/routa.ts declares no principal schema.",

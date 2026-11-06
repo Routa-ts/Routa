@@ -227,7 +227,9 @@ function bearerDescriptor(
 ): { file: string; options: ts.ObjectLiteralExpression } | undefined {
 	const read = (node: ts.Expression) => {
 		const call = coreCall(node, "bearer");
-		return call && objectLiteral(call.arguments[0]);
+		const options = call && objectLiteral(call.arguments[0]);
+		// A spread or computed key could hide or replace the challenge override.
+		return options && !hasUnreadableMember(options) ? options : undefined;
 	};
 	const node = unwrapExpression(expression);
 
