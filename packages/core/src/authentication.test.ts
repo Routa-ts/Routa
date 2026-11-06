@@ -134,6 +134,42 @@ describe("requireAuth", () => {
 		expect(response.status).toBe(401);
 		expect(response.headers.get("www-authenticate")).toBe('Bearer realm="api"');
 	});
+
+	it("guards an explicit HEAD operation with bodyless authentication outcomes", async () => {
+		const app = createHonoApp(
+			[
+				{
+					method: "head",
+					path: "/files",
+					contract: createRoute({
+						middleware: [requireAuth()],
+						responses: { ok: { status: 200 } },
+						run: () => ({ type: "ok" }),
+					}),
+				},
+			],
+			{ authentication },
+		);
+
+		const anonymous = await app.request("/files", { method: "HEAD" });
+		const rejected = await app.request("/files", {
+			method: "HEAD",
+			headers: { authorization: "Bearer wrong" },
+		});
+		const accepted = await app.request("/files", {
+			method: "HEAD",
+			headers: { authorization: "Bearer valid-user" },
+		});
+
+		expect([anonymous.status, anonymous.headers.get("www-authenticate")]).toEqual([401, "Bearer"]);
+		expect(await anonymous.text()).toBe("");
+		expect([rejected.status, rejected.headers.get("www-authenticate")]).toEqual([
+			401,
+			'Bearer error="invalid_token"',
+		]);
+		expect(await rejected.text()).toBe("");
+		expect(accepted.status).toBe(200);
+	});
 });
 
 describe("presented credentials fail closed", () => {

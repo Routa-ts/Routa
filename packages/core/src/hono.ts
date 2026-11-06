@@ -249,6 +249,7 @@ function honoApp(
 			route.contract as RuntimeRouteContract,
 			authentication,
 			routeKey,
+			method === "HEAD",
 		);
 
 		if (registeredRoutes.has(routeKey)) {
@@ -285,6 +286,7 @@ function honoApp(
 			createContext: route.createContext,
 			services,
 			authentication,
+			head: method === "HEAD",
 			requestServices: requestScopes(route.services, routeKey),
 			route: routeKey,
 			middlewareNames: route.middlewareNames,
@@ -479,6 +481,7 @@ function withAuthenticationGuards(
 	contract: RuntimeRouteContract,
 	authentication: RuntimeAuthentication | undefined,
 	label: string,
+	bodyless: boolean,
 ): RuntimeRouteContract {
 	const { middleware } = contract;
 
@@ -490,7 +493,8 @@ function withAuthenticationGuards(
 		...contract,
 		middleware: middleware.map(
 			(item) =>
-				(authenticationGuard(item, authentication, label) as typeof item | undefined) ?? item,
+				(authenticationGuard(item, authentication, label, bodyless) as typeof item | undefined)
+				?? item,
 		) as typeof middleware,
 	};
 }

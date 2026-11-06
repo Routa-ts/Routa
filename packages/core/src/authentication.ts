@@ -509,11 +509,25 @@ async function authenticate(
 	};
 }
 
-/** The `authenticationFailed` result Routa selects for a failed credential. */
-export function authenticationFailedResult(challenge: string) {
+/**
+ * An authentication outcome as an explicit HEAD operation declares it: the same status,
+ * description, and challenge header, without a body schema, because HEAD responses have no body.
+ */
+export function bodylessOutcome<TOutcome extends { readonly schema?: unknown }>(
+	outcome: TOutcome,
+): Omit<TOutcome, "schema"> {
+	const { schema: _schema, ...rest } = outcome;
+	return rest;
+}
+
+/**
+ * The `authenticationFailed` result Routa selects for a failed credential, without a body on an
+ * explicit HEAD operation.
+ */
+export function authenticationFailedResult(challenge: string, bodyless = false) {
 	return {
 		type: "authenticationFailed",
-		data: authenticationFailedBody,
+		...(bodyless ? {} : { data: authenticationFailedBody }),
 		headers: { "www-authenticate": challenge },
 	};
 }
@@ -523,15 +537,21 @@ export function authenticationFailedResult(challenge: string) {
  * `undefined` for any other middleware. The guard challenges every scheme it allows.
  *
  * @param label - Names the route in messages, such as `GET /orders`
+ * @param bodyless - Whether the route is an explicit HEAD operation, whose outcomes have no body
  * @throws {Error} When authentication is not configured or the guard names an unknown scheme
  */
 export function authenticationGuard(
 	item: object,
 	authentication: RuntimeAuthentication | undefined,
 	label: string,
+	bodyless = false,
 ):
 	| {
-			readonly rejects: RequireAuthMiddleware["rejects"];
+			readonly rejects: {
+				readonly authenticationRequired:
+					| typeof authenticationRequiredOutcome
+					| Omit<typeof authenticationRequiredOutcome, "schema">;
+			};
 			readonly run: (args: {
 				ctx: Record<string, unknown>;
 				next: () => Promise<object>;
@@ -565,13 +585,17 @@ export function authenticationGuard(
 	);
 	const challenge = challengeAll(allowed);
 	const guard = Object.freeze({
-		rejects: (item as RequireAuthMiddleware).rejects,
+		rejects: Object.freeze({
+			authenticationRequired: bodyless
+				? bodylessOutcome(authenticationRequiredOutcome)
+				: authenticationRequiredOutcome,
+		}),
 		run: ({ ctx, next }: { ctx: Record<string, unknown>; next: () => Promise<object> }) =>
 			(ctx.auth as AuthContext | undefined)?.status === "authenticated"
 				? next()
 				: {
 						type: "authenticationRequired",
-						data: authenticationRequiredBody,
+						...(bodyless ? {} : { data: authenticationRequiredBody }),
 						headers: { "www-authenticate": challenge },
 					},
 	});

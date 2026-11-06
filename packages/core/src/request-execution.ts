@@ -5,6 +5,7 @@ import {
 	AuthenticatorError,
 	authenticationFailedOutcome,
 	authenticationFailedResult,
+	bodylessOutcome,
 	resolveAuthentication,
 	type RuntimeAuthentication,
 } from "./authentication.js";
@@ -91,6 +92,8 @@ type RequestExecutorOptions = {
 	services?: ServiceMapping | undefined;
 	/** Credential orchestration, which resolves `ctx.auth` before anything else reads the request. */
 	authentication?: RuntimeAuthentication | undefined;
+	/** Whether the route is an explicit HEAD operation, whose authentication outcomes have no body. */
+	head?: boolean | undefined;
 	/** The route file's, then the method's, request-scoped services. */
 	requestServices?: readonly RequestScope[] | undefined;
 	/** Names the route in messages, such as `GET /orders`. */
@@ -145,8 +148,12 @@ export function createRequestExecutor(
 
 		if (resolved && "failed" in resolved) {
 			return select({
-				result: authenticationFailedResult(resolved.failed.challenge),
-				outcomes: { authenticationFailed: authenticationFailedOutcome },
+				result: authenticationFailedResult(resolved.failed.challenge, options.head),
+				outcomes: {
+					authenticationFailed: options.head
+						? bodylessOutcome(authenticationFailedOutcome)
+						: authenticationFailedOutcome,
+				},
 				producer: "Routa authentication",
 				label: (type) => `outcome "${type}"`,
 			});
