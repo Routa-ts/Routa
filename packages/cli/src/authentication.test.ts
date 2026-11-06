@@ -548,44 +548,6 @@ export default createRouta({ ...base, port: 3000 });
 		]);
 	});
 
-	it("reports requireAuth exported from folder middleware, which would not run", () => {
-		expect(
-			diagnostics({
-				"src/routa.ts": bearerConfig,
-				"src/routes/(private)/middleware.ts": `import { requireAuth } from "@routa-ts/core";
-
-export const signedIn = requireAuth();
-`,
-				"src/routes/(private)/projects/route.ts": routeWith("", "createRoute, createRouteRoot"),
-			}),
-		).toEqual([
-			{
-				code: "ROUTA_AUTH_REQUIREMENT_UNSUPPORTED",
-				message:
-					"src/routes/(private)/middleware.ts exports requireAuth() as signedIn, but folder middleware cannot require authentication yet, so it would not run.",
-			},
-		]);
-	});
-
-	it("reports requireAuth called on a namespace import of core in folder middleware", () => {
-		expect(
-			diagnostics({
-				"src/routa.ts": bearerConfig,
-				"src/routes/(private)/middleware.ts": `import * as core from "@routa-ts/core";
-
-export const signedIn = core.requireAuth();
-`,
-				"src/routes/(private)/projects/route.ts": routeWith("", "createRoute, createRouteRoot"),
-			}),
-		).toEqual([
-			{
-				code: "ROUTA_AUTH_REQUIREMENT_UNSUPPORTED",
-				message:
-					"src/routes/(private)/middleware.ts exports requireAuth() as signedIn, but folder middleware cannot require authentication yet, so it would not run.",
-			},
-		]);
-	});
-
 	it("reserves ctx.auth and the authentication outcome names", () => {
 		const providesAuth = `import { createMiddleware } from "@routa-ts/core";
 import { z } from "zod";
@@ -1364,7 +1326,7 @@ export default createRouteRoot("/projects")({
 			{
 				code: "ROUTA_AUTH_REQUIREMENT_EMPTY",
 				message:
-					"requireAuth() guards on GET /projects allow no scheme in common, so no request could pass them.",
+					'requireAuth() guards on GET /projects allow no scheme in common, so no request could pass them: src/routes/projects/route.ts allows "a"; src/routes/projects/route.ts allows "b".',
 			},
 		]);
 	});
@@ -1390,6 +1352,534 @@ export default createRouteRoot("/projects")({
 		expect(
 			diagnostics({ "src/routa.ts": config(two), "src/routes/projects/route.ts": route }),
 		).toEqual([]);
+	});
+});
+
+/** Three schemes whose authenticators record each call in `globalThis.routaAuthCalls`. */
+const countingConfig = `import { apiKey, bearer, createRouta, sessionCookie } from "@routa-ts/core";
+import { z } from "zod";
+
+const record = (scheme: string) => {
+\t(globalThis as unknown as { routaAuthCalls?: string[] }).routaAuthCalls?.push(scheme);
+};
+
+export default createRouta({
+\tauthentication: {
+\t\tprincipal: z.object({ id: z.string(), type: z.string() }),
+\t\tschemes: {
+\t\t\tuserToken: bearer({
+\t\t\t\tauthenticate: (token) => {
+\t\t\t\t\trecord("userToken");
+\t\t\t\t\treturn token === "user-token" ? { type: "authenticated", principal: { type: "user", id: "user_1" } } : { type: "rejected" };
+\t\t\t\t},
+\t\t\t}),
+\t\t\tserviceKey: apiKey({
+\t\t\t\theader: "x-api-key",
+\t\t\t\tauthenticate: (key) => {
+\t\t\t\t\trecord("serviceKey");
+\t\t\t\t\treturn key === "service-key" ? { type: "authenticated", principal: { type: "service", id: "svc_1" } } : { type: "rejected" };
+\t\t\t\t},
+\t\t\t}),
+\t\t\tsession: sessionCookie({
+\t\t\t\tcookie: "session",
+\t\t\t\tauthenticate: (value) => {
+\t\t\t\t\trecord("session");
+\t\t\t\t\treturn value === "session-id" ? { type: "authenticated", principal: { type: "user", id: "user_2" } } : { type: "rejected" };
+\t\t\t\t},
+\t\t\t}),
+\t\t},
+\t\tpriority: ["session", "userToken", "serviceKey"],
+\t},
+});
+`;
+
+/** Generic middleware and requireAuth guards at every placement of the filesystem hierarchy. */
+const composedRoutes: Record<string, string> = {
+	"src/guards.ts": `import { requireAuth } from "@routa-ts/core";
+
+export const sessionOnly = requireAuth({ schemes: ["session"] });
+`,
+	"src/routes/middleware.ts": `import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+
+export const withActor = createMiddleware({
+\trequires: ["auth"],
+\tprovides: { actor: z.string() },
+\trun: ({ ctx, next }) =>
+\t\tnext({ actor: ctx.auth.status === "authenticated" ? ctx.auth.principal.id : "anonymous" }),
+});
+`,
+	"src/routes/public/route.ts": `import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/public")({
+\tget: createRoute({
+\t\tresponses: { ok: { status: 200, schema: z.object({ actor: z.string() }) } },
+\t\trun: ({ ctx }) => {
+\t\t\t// Type assertions only; never called.
+\t\t\tconst typeChecks = () => {
+\t\t\t\t// @ts-expect-error No guard protects this route, so narrow before reading the principal.
+\t\t\t\tvoid ctx.auth.principal;
+\t\t\t};
+\t\t\tvoid typeChecks;
+\t\t\treturn { type: "ok", data: { actor: ctx.actor } };
+\t\t},
+\t}),
+});
+`,
+	"src/routes/(staff)/middleware.ts": `import { createMiddleware, requireAuth } from "@routa-ts/core";
+import { z } from "zod";
+
+export const staff = requireAuth({ schemes: ["userToken", "session"] });
+
+export const withBadge = createMiddleware({
+\trequires: ["actor"],
+\tprovides: { badge: z.string() },
+\trun: ({ ctx, next }) => next({ badge: \`staff:\${ctx.actor}\` }),
+});
+`,
+	"src/routes/(staff)/reports/route.ts": `import { createRoute, createRouteRoot, requireAuth } from "@routa-ts/core";
+import { z } from "zod";
+
+const Who = z.object({ who: z.string() });
+
+export default createRouteRoot("/reports")({
+\tget: createRoute({
+\t\tresponses: { ok: { status: 200, schema: Who } },
+\t\trun: ({ ctx }) => {
+\t\t\tconst scheme: "session" | "userToken" = ctx.auth.scheme;
+\t\t\treturn { type: "ok", data: { who: \`\${ctx.badge}:\${scheme}\` } };
+\t\t},
+\t}),
+\tpost: createRoute({
+\t\tmiddleware: [requireAuth({ schemes: ["session"] })],
+\t\tresponses: { created: { status: 201, schema: Who } },
+\t\trun: ({ ctx }) => {
+\t\t\tconst scheme: "session" = ctx.auth.scheme;
+\t\t\treturn { type: "created", data: { who: \`\${scheme}:\${ctx.auth.principal.id}\` } };
+\t\t},
+\t}),
+});
+`,
+	"src/routes/(staff)/audit/route.ts": `import { createRoute, createRouteRoot, requireAuth } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/audit")({
+\tmiddleware: [requireAuth({ schemes: ["userToken"] })],
+\tget: createRoute({
+\t\tresponses: { ok: { status: 200, schema: z.object({ who: z.string() }) } },
+\t\trun: ({ ctx }) => {
+\t\t\tconst scheme: "userToken" = ctx.auth.scheme;
+\t\t\treturn { type: "ok", data: { who: \`\${scheme}:\${ctx.auth.principal.id}\` } };
+\t\t},
+\t}),
+});
+`,
+	"src/routes/(staff)/tenants/$tenantId/middleware.ts": `export { sessionOnly as tenantMember } from "../../../../guards.js";
+`,
+	"src/routes/(staff)/tenants/$tenantId/projects/route.ts": `import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/tenants/:tenantId/projects")({
+\tget: createRoute({
+\t\tinput: { params: z.object({ tenantId: z.string() }) },
+\t\tresponses: { ok: { status: 200, schema: z.object({ who: z.string() }) } },
+\t\trun: ({ ctx, input }) => {
+\t\t\tconst scheme: "session" = ctx.auth.scheme;
+\t\t\treturn { type: "ok", data: { who: \`\${input.params.tenantId}:\${scheme}\` } };
+\t\t},
+\t}),
+});
+`,
+};
+
+describe("requireAuth in folder middleware", () => {
+	it("intersects folder, route, and method requirements in types, metadata, and requests", async () => {
+		const cwd = project({ "src/routa.ts": countingConfig, ...composedRoutes });
+
+		expectPassed(await run(["check"], { cwd }));
+
+		const { routes } = validateProject(cwd, { write: false });
+		const chains = Object.fromEntries(
+			routes.flatMap((route) =>
+				route.methods.map((method) => [
+					`${method} ${route.path}`,
+					(route.methodMiddleware[method.toLowerCase()] ?? route.middleware).map((item) =>
+						item.authentication
+							? `${item.file} ${item.name}(${item.authentication.schemes.join(", ")})`
+							: item.name,
+					),
+				]),
+			),
+		);
+		const folder = "src/routes/(staff)/middleware.ts staff(userToken, session)";
+
+		expect(chains).toEqual({
+			"GET /audit": [
+				"withActor",
+				folder,
+				"withBadge",
+				"src/routes/(staff)/audit/route.ts requireAuth(userToken)",
+			],
+			"GET /public": ["withActor"],
+			"GET /reports": ["withActor", folder, "withBadge"],
+			"POST /reports": [
+				"withActor",
+				folder,
+				"withBadge",
+				"src/routes/(staff)/reports/route.ts requireAuth(session)",
+			],
+			"GET /tenants/:tenantId/projects": [
+				"withActor",
+				folder,
+				"withBadge",
+				"src/routes/(staff)/tenants/$tenantId/middleware.ts tenantMember(session)",
+			],
+		});
+
+		const generated = readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8");
+		const authOf = (path: string, method: string) =>
+			new RegExp(
+				`\\t${JSON.stringify(path).replaceAll("/", "\\/")}: \\{[^]*?\\t\\t${method}: \\{[^}]*?readonly "auth": ([^;]+);`,
+			).exec(generated)?.[1];
+		const authenticated = (schemes: string) =>
+			`import("@routa-ts/core").AuthenticatedAuthContext<${schemes}, RoutaPrincipal>`;
+
+		expect(authOf("/public", "get")).toBe("RoutaAuth");
+		expect(authOf("/reports", "get")).toBe(authenticated('"session" | "userToken"'));
+		expect(authOf("/reports", "post")).toBe(authenticated('"session"'));
+		expect(authOf("/audit", "get")).toBe(authenticated('"userToken"'));
+		expect(authOf("/tenants/:tenantId/projects", "get")).toBe(authenticated('"session"'));
+
+		const calls: string[] = [];
+		(globalThis as { routaAuthCalls?: string[] }).routaAuthCalls = calls;
+		const { application } = await createProjectApplication(cwd, cwd, "dev");
+		const request = async (method: string, path: string, headers: Record<string, string> = {}) => {
+			const response = await application.fetch(
+				new Request(`http://localhost${path}`, { method, headers }),
+			);
+			const body = (await response.json()) as { title?: string };
+			return [
+				response.status,
+				response.headers.get("www-authenticate"),
+				response.status === 401 ? body.title : body,
+			];
+		};
+		const session = { cookie: "session=session-id" };
+		const bearerToken = { authorization: "Bearer user-token" };
+		const serviceKey = { "x-api-key": "service-key" };
+
+		try {
+			expect(await request("GET", "/public")).toEqual([200, null, { actor: "anonymous" }]);
+			expect(await request("GET", "/reports")).toEqual([
+				401,
+				"Session, Bearer",
+				"Authentication required",
+			]);
+			expect(await request("GET", "/reports", serviceKey)).toEqual([
+				401,
+				"Session, Bearer",
+				"Authentication failed",
+			]);
+			expect(await request("GET", "/reports", session)).toEqual([
+				200,
+				null,
+				{ who: "staff:user_2:session" },
+			]);
+			expect(await request("POST", "/reports", bearerToken)).toEqual([
+				401,
+				"Session",
+				"Authentication failed",
+			]);
+			expect(await request("POST", "/reports", session)).toEqual([
+				201,
+				null,
+				{ who: "session:user_2" },
+			]);
+			expect(await request("GET", "/audit", session)).toEqual([
+				401,
+				"Bearer",
+				"Authentication failed",
+			]);
+			expect(await request("GET", "/audit", bearerToken)).toEqual([
+				200,
+				null,
+				{ who: "userToken:user_1" },
+			]);
+			expect(await request("GET", "/tenants/acme/projects", bearerToken)).toEqual([
+				401,
+				"Session",
+				"Authentication failed",
+			]);
+			expect(await request("GET", "/tenants/acme/projects", session)).toEqual([
+				200,
+				null,
+				{ who: "acme:session" },
+			]);
+			// A credential the operation does not accept never reaches its authenticator.
+			expect(calls).toEqual(["session", "session", "userToken", "session"]);
+		} finally {
+			await application.dispose();
+			delete (globalThis as { routaAuthCalls?: string[] }).routaAuthCalls;
+		}
+	}, 60_000);
+
+	it("declares the security and outcomes each inherited requirement leaves", () => {
+		const document = generateOpenApi(
+			project({ "src/routa.ts": countingConfig, ...composedRoutes }),
+		) as Record<string, any>;
+		const operations = Object.fromEntries(
+			Object.entries(document.paths as Record<string, Record<string, any>>).flatMap(
+				([path, methods]) =>
+					Object.entries(methods).map(([method, operation]) => [
+						`${method.toUpperCase()} ${path}`,
+						{
+							security: operation.security,
+							"401": operation.responses["401"].description.match(/`(\w+)`/g) ?? [
+								operation.responses["401"].description,
+							],
+						},
+					]),
+			),
+		);
+		const failed = [
+			"Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.",
+		];
+		const required = ["`authenticationFailed`", "`authenticationRequired`"];
+
+		expect(document["x-routa-diagnostics"]).toBeUndefined();
+		expect(operations).toEqual({
+			"GET /audit": { security: [{ userToken: [] }], "401": required },
+			"GET /public": {
+				security: [{}, { session: [] }, { userToken: [] }, { serviceKey: [] }],
+				"401": failed,
+			},
+			"GET /reports": { security: [{ session: [] }, { userToken: [] }], "401": required },
+			"POST /reports": { security: [{ session: [] }], "401": required },
+			"GET /tenants/{tenantId}/projects": { security: [{ session: [] }], "401": required },
+		});
+	});
+
+	it("protects every route under a root guard", async () => {
+		const cwd = project({
+			"src/routa.ts": routaConfig,
+			"src/routes/middleware.ts": `import { requireAuth } from "@routa-ts/core";
+
+export const signedIn = requireAuth();
+`,
+			"src/routes/me/route.ts": `import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/me")({
+\tget: createRoute({
+\t\tresponses: { ok: { status: 200, schema: z.object({ id: z.string() }) } },
+\t\trun: ({ ctx }) => {
+\t\t\tconst scheme: "userToken" = ctx.auth.scheme;
+\t\t\tvoid scheme;
+\t\t\treturn { type: "ok", data: { id: ctx.auth.principal.id } };
+\t\t},
+\t}),
+});
+`,
+		});
+
+		expectPassed(await run(["check"], { cwd }));
+		expect((generateOpenApi(cwd) as Record<string, any>).paths["/me"].get.security).toEqual([
+			{ userToken: [] },
+		]);
+
+		const { application } = await createProjectApplication(cwd, cwd, "dev");
+		const me = (headers: Record<string, string> = {}) =>
+			application.fetch(new Request("http://localhost/me", { headers }));
+
+		try {
+			const required = await me();
+			expect(required.status).toBe(401);
+			expect(required.headers.get("www-authenticate")).toBe('Bearer realm="api"');
+			expect(await (await me({ authorization: "Bearer user-token" })).json()).toEqual({
+				id: "user_1",
+			});
+		} finally {
+			await application.dispose();
+		}
+	}, 30_000);
+});
+
+describe("folder requirement diagnostics", () => {
+	const config = configWith(
+		'{ principal: Principal, schemes: { a: apiKey({ header: "x-a", authenticate: reject }), b: sessionCookie({ cookie: "b", authenticate: reject }) } }',
+	).replace(
+		'import { bearer, createRouta } from "@routa-ts/core";',
+		'import { apiKey, createRouta, sessionCookie } from "@routa-ts/core";',
+	);
+	const folder = "src/routes/(private)/middleware.ts";
+	const guarded = (exports: string, files: Record<string, string> = {}) => ({
+		"src/routa.ts": config,
+		[folder]: `import { requireAuth } from "@routa-ts/core";\n\n${exports}\n`,
+		"src/routes/(private)/projects/route.ts": routeWith("", "createRoute, createRouteRoot"),
+		...files,
+	});
+
+	it("checks a folder guard's schemes against the configuration", () => {
+		const cases: Array<[string, string, string]> = [
+			[
+				'export const signedIn = requireAuth({ schemes: ["c"] });',
+				"ROUTA_AUTH_SCHEME_UNKNOWN",
+				`requireAuth() in ${folder} allows scheme "c", which src/routa.ts does not declare.`,
+			],
+			[
+				"export const signedIn = requireAuth({ schemes: [] });",
+				"ROUTA_AUTH_REQUIREMENT_EMPTY",
+				`requireAuth() in ${folder} allows no schemes, so no request could pass it.`,
+			],
+		];
+
+		for (const [exports, code, message] of cases) {
+			expect(diagnostics(guarded(exports))).toEqual([{ code, message }]);
+		}
+
+		expect(
+			diagnostics({
+				...guarded("export const signedIn = requireAuth();"),
+				"src/routa.ts": plainConfig,
+			}),
+		).toEqual([
+			{
+				code: "ROUTA_AUTH_NOT_CONFIGURED",
+				message: `requireAuth() in ${folder} needs authentication, but src/routa.ts configures none.`,
+			},
+		]);
+	});
+
+	it("reports a re-exported guard where its call is written, once", () => {
+		const guards = `import { requireAuth } from "@routa-ts/core";
+
+export const memberOnly = requireAuth({ schemes: ["c"] });
+`;
+
+		expect(
+			diagnostics({
+				"src/routa.ts": config,
+				"src/guards.ts": guards,
+				"src/routes/middleware.ts": 'export { memberOnly } from "../guards.js";\n',
+				"src/routes/(private)/middleware.ts": 'export { memberOnly } from "../../guards.js";\n',
+				"src/routes/(private)/projects/route.ts": routeWith("", "createRoute, createRouteRoot"),
+			}),
+		).toEqual([
+			{
+				code: "ROUTA_AUTH_SCHEME_UNKNOWN",
+				message:
+					'requireAuth() in src/guards.ts allows scheme "c", which src/routa.ts does not declare.',
+			},
+		]);
+	});
+
+	it("reports folder guards it cannot read, which would not run", () => {
+		const unread = (name: string) => ({
+			code: "ROUTA_AUTH_REQUIREMENT_UNRESOLVED",
+			message: `${folder} exports ${name}, which builds a requireAuth() guard routa check cannot read, so the guard would not run.`,
+		});
+		const options = {
+			code: "ROUTA_AUTH_REQUIREMENT_UNRESOLVED",
+			message: `requireAuth() in ${folder} declares options that cannot be statically read.`,
+		};
+		const cases: Array<[string, Record<string, string>, Array<{ code: string; message: string }>]> =
+			[
+				[
+					'const allowed = ["a"] as const;\nexport const signedIn = requireAuth({ schemes: allowed });',
+					{},
+					[options],
+				],
+				[
+					'const options = { schemes: ["a"] as const };\nexport const signedIn = requireAuth({ ...options });',
+					{},
+					[options],
+				],
+				[
+					'declare const strict: boolean;\nexport const signedIn = strict ? requireAuth({ schemes: ["a"] }) : requireAuth();',
+					{},
+					[unread("signedIn")],
+				],
+				[
+					'const guardFor = (scheme: "a" | "b") => requireAuth({ schemes: [scheme] });\nexport const signedIn = guardFor("a");',
+					{},
+					[unread("signedIn")],
+				],
+				[
+					'import { guardFor } from "../../guards.js";\n\nexport const signedIn = guardFor("a");',
+					{
+						"src/guards.ts": `import { requireAuth } from "@routa-ts/core";
+
+export function guardFor(scheme: "a" | "b") {
+\treturn requireAuth({ schemes: [scheme] });
+}
+`,
+					},
+					[unread("signedIn")],
+				],
+			];
+
+		for (const [exports, files, expected] of cases) {
+			expect(diagnostics(guarded(exports, files))).toEqual(expected);
+		}
+	});
+
+	it("keeps an application middleware named requireAuth ordinary middleware", () => {
+		const cwd = project({
+			"src/routa.ts": config,
+			"src/middleware/auth.ts": `import { createMiddleware } from "@routa-ts/core";
+
+export const requireAuth = createMiddleware({ run: ({ next }) => next() });
+`,
+			[folder]: 'export { requireAuth } from "../../middleware/auth.js";\n',
+			"src/routes/(private)/projects/route.ts": routeWith("", "createRoute, createRouteRoot"),
+		});
+		const validation = validateProject(cwd, { write: false });
+
+		expect(validation.diagnostics).toEqual([]);
+		expect(validation.routes[0]!.middleware).toEqual([
+			expect.objectContaining({ file: folder, name: "requireAuth" }),
+		]);
+		expect(validation.routes[0]!.middleware[0]!.authentication).toBeUndefined();
+	});
+
+	it("reports folder, route, and method requirements that allow no scheme in common", () => {
+		expect(
+			diagnostics(
+				guarded('export const signedIn = requireAuth({ schemes: ["a"] });', {
+					"src/routes/(private)/projects/route.ts": routeWith('requireAuth({ schemes: ["b"] })'),
+				}),
+			),
+		).toEqual([
+			{
+				code: "ROUTA_AUTH_REQUIREMENT_EMPTY",
+				message: `requireAuth() guards on GET /projects allow no scheme in common, so no request could pass them: ${folder} allows "a"; src/routes/(private)/projects/route.ts allows "b".`,
+			},
+		]);
+	});
+
+	it("warns when a guard lists schemes the requirement it follows excludes", () => {
+		const validation = validateProject(
+			project(
+				guarded('export const signedIn = requireAuth({ schemes: ["a"] });', {
+					"src/routes/(private)/projects/route.ts": routeWith(
+						'requireAuth({ schemes: ["a", "b"] })',
+					),
+				}),
+			),
+			{ write: false },
+		);
+
+		expect(validation.diagnostics).toEqual([]);
+		expect(validation.warnings.map(({ code, message, file }) => ({ code, message, file }))).toEqual(
+			[
+				{
+					code: "ROUTA_AUTH_REQUIREMENT_WIDENED",
+					message: `requireAuth() in src/routes/(private)/projects/route.ts allows "b", which the requireAuth() in ${folder} it follows does not. Requirements only narrow, so it accepts "a".`,
+					file: "src/routes/(private)/projects/route.ts",
+				},
+			],
+		);
 	});
 });
 

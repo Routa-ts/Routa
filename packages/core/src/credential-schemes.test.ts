@@ -283,6 +283,26 @@ describe("credential selection", () => {
 		).toThrow("requireAuth() guards on GET /whoami allow no scheme in common.");
 	});
 
+	it("enforces a guard several routes share, as a folder export is, with each route's own schemes", async () => {
+		const staff = requireAuth({ schemes: ["userToken", "session"] as never });
+		const setup = configured();
+		const app = createHonoApp(
+			[
+				{ ...whoami([staff]), path: "/reports" },
+				{ ...whoami([staff, requireAuth({ schemes: ["session"] as never })]), path: "/tenants" },
+			],
+			{ authentication: setup.authentication },
+		);
+		const request = async (path: string) => {
+			const response = await app.request(path, { headers: credentials.bearer });
+			return [response.status, response.headers.get("www-authenticate")];
+		};
+
+		expect(await request("/tenants")).toEqual([401, "Session"]);
+		expect(await request("/reports")).toEqual([200, null]);
+		expect(setup.calls).toEqual(["userToken"]);
+	});
+
 	it("fails an Authorization scheme no configured scheme reads, challenging the allowed schemes", async () => {
 		const reject = () => ({ type: "rejected" }) as const;
 		const keyOnly = {

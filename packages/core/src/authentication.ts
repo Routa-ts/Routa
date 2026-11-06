@@ -401,9 +401,10 @@ const requirements = new WeakMap<object, { readonly schemes?: readonly string[] 
 
 /**
  * A middleware guard that rejects anonymous requests with `authenticationRequired` (`401`) and
- * narrows the handler's `ctx.auth` to authenticated. It requires
- * `authentication` in `createRouta`. Write it inline in a route's or method's `middleware`, so
- * `routa check` can read it.
+ * narrows the handler's `ctx.auth` to authenticated. It requires `authentication` in
+ * `createRouta`. Write it inline in a route's or method's `middleware`, or export it from a folder
+ * `middleware.ts` as `export const signedIn = requireAuth()`, so `routa check` can read it. Every
+ * guard on an operation applies: it accepts only the schemes all of them allow.
  *
  * @param options - The schemes the operation accepts; omit to accept any configured scheme
  * @throws {TypeError} When `schemes` is not a non-empty list of names
