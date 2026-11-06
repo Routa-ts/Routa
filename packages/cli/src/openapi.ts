@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { AuthenticationMetadata } from "./authentication.js";
 import { compareText } from "./compare-text.js";
 import {
 	type ProjectedOperation,
@@ -28,6 +29,7 @@ type OpenApiLike = {
 	>;
 	components?: {
 		schemas?: Record<string, unknown>;
+		securitySchemes?: Record<string, unknown>;
 	};
 };
 
@@ -141,7 +143,7 @@ function generateOpenApiInSession(cwd: string, parser: ts.SourceFileParser): Ope
 					method,
 					{
 						operationId: operationId(method, openApiPath),
-						...middlewareOpenApiMetadata(middleware),
+						...middlewareOpenApiMetadata(middleware, validation.authentication),
 						...deprecationMetadata(operation?.deprecation),
 						...input,
 						responses: operationResponses(statuses, operation?.responses),
@@ -152,12 +154,18 @@ function generateOpenApiInSession(cwd: string, parser: ts.SourceFileParser): Ope
 	}
 
 	const schemas = referencedComponents(paths, projection.components);
+	const securitySchemes =
+		validation.authentication && securitySchemeObjects(validation.authentication);
+	const components = {
+		...(Object.keys(schemas).length > 0 ? { schemas } : {}),
+		...(securitySchemes ? { securitySchemes } : {}),
+	};
 
 	return {
 		openapi: "3.1.0",
 		info: defaultInfo,
 		paths,
-		...(Object.keys(schemas).length > 0 ? { components: { schemas } } : {}),
+		...(Object.keys(components).length > 0 ? { components } : {}),
 		...(projection.warnings.length > 0
 			? {
 					"x-routa-schema-warnings": projection.warnings.map((warning) => ({
@@ -212,10 +220,52 @@ function referencedComponents(
 
 const componentRefPrefix = "#/components/schemas/";
 
+/** One Security Scheme Object per configured scheme, keyed by scheme name. */
+function securitySchemeObjects(authentication: AuthenticationMetadata): Record<string, unknown> {
+	return Object.fromEntries(
+		authentication.schemes.map((scheme) => [scheme.name, { type: "http", scheme: "bearer" }]),
+	);
+}
+
+/**
+ * The operation's security requirements. Middleware `openapi.security` lists application-owned
+ * alternatives. With authentication, every operation also accepts each allowed scheme, and an
+ * operation without requireAuth also accepts no credential (`{}`). Routa enforces authentication
+ * in addition to application middleware, so each application alternative combines with each
+ * authentication alternative.
+ */
+function operationSecurity(
+	middleware: readonly MiddlewareMetadata[],
+	authentication: AuthenticationMetadata | undefined,
+): Array<Record<string, string[]>> {
+	const declared = middleware.flatMap((item) => item.security);
+
+	if (!authentication) {
+		return declared;
+	}
+
+	const guards = middleware.flatMap((item) =>
+		item.authentication ? [item.authentication.schemes] : [],
+	);
+	const allowed = guards.reduce(
+		(left, right) => left.filter((name) => right.includes(name)),
+		authentication.schemes.map((scheme) => scheme.name),
+	);
+	const alternatives = [
+		...(guards.length === 0 ? [{}] : []),
+		...allowed.map((name) => ({ [name]: [] })),
+	];
+
+	return (declared.length > 0 ? declared : [{}]).flatMap((requirement) =>
+		alternatives.map((alternative) => ({ ...requirement, ...alternative })),
+	);
+}
+
 function middlewareOpenApiMetadata(
 	middleware: readonly MiddlewareMetadata[],
+	authentication: AuthenticationMetadata | undefined,
 ): Record<string, unknown> {
-	const security = middleware.flatMap((item) => item.security);
+	const security = operationSecurity(middleware, authentication);
 	const permissions = Array.from(new Set(middleware.flatMap((item) => item.permissions))).sort();
 	return {
 		...(security.length > 0 ? { security } : {}),
@@ -822,8 +872,18 @@ function requiredInputDiagnostics(
 	return diagnostics;
 }
 
+/** Whether security requires a credential: some requirement, and no empty one accepting none. */
 function hasSecurity(security: unknown): boolean {
-	return Array.isArray(security) && security.length > 0;
+	return (
+		Array.isArray(security)
+		&& security.length > 0
+		&& !security.some(
+			(requirement) =>
+				typeof requirement === "object"
+				&& requirement !== null
+				&& Object.keys(requirement).length === 0,
+		)
+	);
 }
 
 function parameterKey(parameter: Record<string, unknown>): string | undefined {

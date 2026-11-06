@@ -350,8 +350,8 @@ export function runProjectRoutes(
 		code: 0,
 		stdout:
 			format === "json"
-				? `${JSON.stringify(routeReference(validation.routes), null, "\t")}\n`
-				: routeReferenceMarkdown(validation.routes),
+				? `${JSON.stringify(routeReference(validation.routes, validation.authentication), null, "\t")}\n`
+				: routeReferenceMarkdown(validation.routes, validation.authentication),
 	};
 }
 
@@ -828,7 +828,10 @@ function routeReferenceFormat(argv: readonly string[]): RouteReferenceFormat | u
  * @param routes - Validated route metadata
  * @returns Route reference data suitable for JSON or Markdown rendering
  */
-function routeReference(routes: readonly RouteMetadata[]): RouteReference {
+function routeReference(
+	routes: readonly RouteMetadata[],
+	authentication: AuthenticationMetadata | undefined,
+): RouteReference {
 	return {
 		routes: [...routes]
 			.sort(
@@ -841,7 +844,7 @@ function routeReference(routes: readonly RouteMetadata[]): RouteReference {
 				segments: route.segments,
 				methods: [...route.methods]
 					.sort(compareText)
-					.map((method) => routeReferenceMethod(route, method)),
+					.map((method) => routeReferenceMethod(route, method, authentication)),
 			})),
 	};
 }
@@ -853,11 +856,26 @@ function routeReference(routes: readonly RouteMetadata[]): RouteReference {
  * @param method - Uppercase HTTP method name
  * @returns Method metadata with resolved middleware, context, rejects, inputs, and responses
  */
-function routeReferenceMethod(route: RouteMetadata, method: string): RouteReferenceMethod {
+function routeReferenceMethod(
+	route: RouteMetadata,
+	method: string,
+	authentication: AuthenticationMetadata | undefined,
+): RouteReferenceMethod {
 	const key = method.toLowerCase();
 	const middleware = route.methodMiddleware[key] ?? route.middleware;
 	const ctx = Array.from(new Set(middleware.flatMap((item) => item.provides))).sort();
-	const rejects = uniqueRejects(middleware.flatMap((item) => item.rejects));
+	const rejects = uniqueRejects([
+		...(authentication
+			? [
+					{
+						type: "authenticationFailed",
+						status: 401,
+						description: authenticationFailedDescription,
+					},
+				]
+			: []),
+		...middleware.flatMap((item) => item.rejects),
+	]);
 
 	return {
 		method,
@@ -881,8 +899,11 @@ function routeReferenceMethod(route: RouteMetadata, method: string): RouteRefere
  * @param routes - Validated route metadata
  * @returns Markdown route reference
  */
-function routeReferenceMarkdown(routes: readonly RouteMetadata[]): string {
-	const reference = routeReference(routes);
+function routeReferenceMarkdown(
+	routes: readonly RouteMetadata[],
+	authentication: AuthenticationMetadata | undefined,
+): string {
+	const reference = routeReference(routes, authentication);
 	const lines = ["# Routa Route Reference", ""];
 
 	if (reference.routes.length === 0) {
