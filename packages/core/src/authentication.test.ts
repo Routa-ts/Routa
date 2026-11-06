@@ -692,6 +692,26 @@ describe("authentication registration", () => {
 		}
 	});
 
+	it("reads a guard's schemes without trusting methods the marked list overrides", async () => {
+		const schemes = ["userToken"];
+		Object.defineProperty(schemes, "includes", { value: () => true });
+		Object.defineProperty(schemes, "filter", { value: () => ["userToken", "serviceKey"] });
+		Object.freeze(schemes);
+		const marked = Object.defineProperty(
+			{ run: ({ next }: { next: () => unknown }) => next() },
+			requirementKey,
+			{ value: schemes },
+		);
+		const app = createHonoApp(
+			[{ ...whoami, contract: { ...whoami.contract, middleware: [marked as never] } }],
+			{ authentication: { principal: Principal, schemes: { userToken, serviceKey } } },
+		);
+
+		const response = await app.request("/whoami", { headers: { "x-api-key": "service-key" } });
+
+		expect([response.status, response.headers.get("www-authenticate")]).toEqual([401, "Bearer"]);
+	});
+
 	it("validates the authentication configuration", () => {
 		const reject = () => ({ type: "rejected" }) as const;
 		const cases: Array<[unknown, string]> = [
