@@ -205,10 +205,27 @@ lists `"serviceKey"` under this folder still accepts only `"session"` and `"user
 `routa check` warns with `ROUTA_AUTH_REQUIREMENT_WIDENED`. Guards that share no scheme fail
 with `ROUTA_AUTH_REQUIREMENT_EMPTY`.
 
-`routa check` reads a guard the folder declares as `export const name = requireAuth(...)`, or
-re-exports from a module that declares it that way. A guard built another way, such as through
-a factory function or a conditional, fails with `ROUTA_AUTH_REQUIREMENT_UNRESOLVED`, because
-Routa would not run it.
+Routa runs only the folder exports `routa check` reads. It reads a guard written as a literal
+`requireAuth(...)` call bound to a `const`:
+
+- `export const signedIn = requireAuth({ ... })`, with `requireAuth` imported by name, under an
+  alias, or called on a namespace import as `core.requireAuth({ ... })`
+- a `const` bound to such a guard, declared in the folder or imported:
+  `const guard = requireAuth(); export const signedIn = guard;`
+- a re-export of either form: `export { member as signedIn } from "../../guards.js"`
+
+A guard built any other way, through a factory function at any depth, a conditional, or a
+destructuring, fails with `ROUTA_AUTH_REQUIREMENT_UNRESOLVED`. `routa check` follows your
+project's functions, imports, and re-exports to find it, but not package code.
+
+Startup is the backstop. For every route, Routa loads each folder `middleware.ts` above it and
+refuses to start when one exports a `requireAuth` guard the generated metadata does not list,
+such as one a package builds or one added after the last `routa generate`. `routa dev`,
+`routa start`, and `createTestApp` all fail the same way:
+
+```text
+src/routes/(staff)/middleware.ts exports signedIn, a requireAuth() guard .routa/routes.gen.ts does not list, so it would not run and the routes below would be public. Write it as export const signedIn = requireAuth({ ... }), or re-export a const declared that way, then run routa generate.
+```
 
 ## Security Visibility
 

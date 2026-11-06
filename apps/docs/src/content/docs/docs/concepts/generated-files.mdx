@@ -37,6 +37,11 @@ statuses, declared input sources, middleware chains, provided context keys, reje
 outcomes, groups, and segments. The runtime loads it to register routes, and the CLI reads
 it during checks.
 
+Each entry's `middlewareFiles` lists every folder `middleware.ts` on the route's path, root
+first, including one with no export Routa reads. Startup loads each of them and refuses a
+`requireAuth` guard export the route's chain does not list, and it asks you to run
+`routa generate` when an entry has no `middlewareFiles`.
+
 It also augments the `Register` interface from `@routa-ts/core`. That augmentation is what
 makes `createRouteRoot("/users/:userId")` know the context available at that path, and
 what lets a `deprecation.replacement` pointing at a local path be checked in the editor.

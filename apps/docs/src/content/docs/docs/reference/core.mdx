@@ -628,10 +628,12 @@ import { requireAuth } from "@routa-ts/core";
 export const signedIn = requireAuth({ schemes: ["session", "userToken"] });
 ```
 
-The folder may also re-export a guard another module declares as a `const` bound to a literal
-call, such as `export { signedIn } from "../../guards.js"`. A guard built any other way, such
-as through a factory function or a conditional, fails `routa check`, because Routa would not
-run it.
+The folder may also export a `const` bound to such a guard, call it on a namespace import as
+`core.requireAuth()`, or re-export a guard another module declares that way, such as
+`export { signedIn } from "../../guards.js"`. A guard built any other way, such as through a
+factory function, a conditional, or a destructuring, fails `routa check`, and startup refuses a
+guard export the generated metadata does not list, because Routa would not run it. See
+[Authentication Requirements](/docs/concepts/middleware/#authentication-requirements).
 
 Every guard on an operation applies, from the root folder to the method, and the operation
 accepts only the schemes all of them allow. A descendant can narrow an inherited requirement
