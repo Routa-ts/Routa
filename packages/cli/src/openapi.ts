@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AuthenticationMetadata } from "./authentication.js";
+import { allowedSchemes, type AuthenticationMetadata } from "./authentication.js";
 import { compareText } from "./compare-text.js";
 import {
 	type ProjectedOperation,
@@ -220,19 +220,26 @@ function referencedComponents(
 
 const componentRefPrefix = "#/components/schemas/";
 
-/** One Security Scheme Object per configured scheme, keyed by scheme name. */
+/** One Security Scheme Object per configured scheme, keyed by scheme name, in priority order. */
 function securitySchemeObjects(authentication: AuthenticationMetadata): Record<string, unknown> {
 	return Object.fromEntries(
-		authentication.schemes.map((scheme) => [scheme.name, { type: "http", scheme: "bearer" }]),
+		authentication.schemes.map((scheme) => [
+			scheme.name,
+			scheme.kind === "bearer"
+				? { type: "http", scheme: "bearer" }
+				: scheme.kind === "apiKey"
+					? { type: "apiKey", in: "header", name: scheme.header }
+					: { type: "apiKey", in: "cookie", name: scheme.cookie },
+		]),
 	);
 }
 
 /**
  * The operation's security requirements. Middleware `openapi.security` lists application-owned
- * alternatives. With authentication, every operation also accepts each allowed scheme, and an
- * operation without requireAuth also accepts no credential (`{}`). Routa enforces authentication
- * in addition to application middleware, so each application alternative combines with each
- * authentication alternative.
+ * alternatives. With authentication, every operation also accepts each allowed scheme, as
+ * separate alternatives in priority order, and an operation without requireAuth also accepts no
+ * credential (`{}`). Routa enforces authentication in addition to application middleware, so
+ * each application alternative combines with each authentication alternative.
  */
 function operationSecurity(
 	middleware: readonly MiddlewareMetadata[],
@@ -244,16 +251,9 @@ function operationSecurity(
 		return declared;
 	}
 
-	const guards = middleware.flatMap((item) =>
-		item.authentication ? [item.authentication.schemes] : [],
-	);
-	const allowed = guards.reduce(
-		(left, right) => left.filter((name) => right.includes(name)),
-		authentication.schemes.map((scheme) => scheme.name),
-	);
 	const alternatives = [
-		...(guards.length === 0 ? [{}] : []),
-		...allowed.map((name) => ({ [name]: [] })),
+		...(middleware.some((item) => item.authentication) ? [] : [{}]),
+		...allowedSchemes(middleware, authentication).map((name) => ({ [name]: [] })),
 	];
 
 	return (declared.length > 0 ? declared : [{}]).flatMap((requirement) =>
