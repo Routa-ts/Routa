@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
-import { createApplication, createHonoApp, type HonoRoute } from "./hono.js";
+import {
+	createApplication,
+	createHonoApp,
+	createProjectApplication,
+	type HonoRoute,
+} from "./hono.js";
 import {
 	bearer,
 	createMiddleware,
@@ -660,7 +665,12 @@ describe("project applications", () => {
 					routaAuthenticationSchemes: ["userToken"],
 					routaMultipleCredentials: "priority",
 					routaRoutes: [
-						{ file: "src/routes/projects/route.ts", path: "/projects", methods: ["POST"] },
+						{
+							file: "src/routes/projects/route.ts",
+							path: "/projects",
+							methods: ["POST"],
+							middlewareFiles: [],
+						},
 					],
 					...overrides.metadata,
 				}),
@@ -710,6 +720,85 @@ describe("project applications", () => {
 		for (const [overrides, message] of cases) {
 			await expect(createTestApplication(project(overrides))).rejects.toThrow(message);
 		}
+	});
+
+	/** A public route below a folder `middleware.ts` that exports `exports`, of which the metadata lists `listed`. */
+	function folderProject(exports: Record<string, unknown>, listed: readonly string[] = []) {
+		const folder = "src/routes/middleware.ts";
+		const modules: Record<string, () => Promise<unknown>> = {
+			...project({
+				metadata: {
+					routaRoutes: [
+						{
+							file: "src/routes/projects/route.ts",
+							path: "/projects",
+							methods: ["GET"],
+							middleware: listed.map((name) => ({ file: folder, name })),
+							middlewareFiles: [folder],
+						},
+					],
+				},
+			}),
+			[folder]: () => Promise.resolve(exports),
+			"src/routes/projects/route.ts": () => Promise.resolve({ default: { get: whoami.contract } }),
+		};
+		return { modules, load: (file: string) => modules[file]!() };
+	}
+
+	it("refuses to start when a folder guard is missing from the generated metadata", async () => {
+		// A guard routa generate could not read, such as one a factory builds, is never listed.
+		const guardFor = () => requireAuth();
+		const { modules, load } = folderProject({
+			signedIn: guardFor(),
+			withNothing: createMiddleware({ run: ({ next }) => next() }),
+		});
+		const message =
+			"src/routes/middleware.ts exports signedIn, a requireAuth() guard .routa/routes.gen.ts does not list, so it would not run and the routes below would be public. Write it as export const signedIn = requireAuth({ ... }), or re-export a const declared that way, then run routa generate.";
+
+		await expect(createTestApplication(modules)).rejects.toThrow(message);
+		await expect(createProjectApplication(load, { runtimeMode: "start" })).rejects.toThrow(message);
+	});
+
+	it("runs a folder guard the generated metadata lists", async () => {
+		const { modules, load } = folderProject({ signedIn: requireAuth() }, ["signedIn"]);
+		const app = await createTestApplication(modules);
+		const { application } = await createProjectApplication(load, { runtimeMode: "start" });
+		const signedIn = {
+			auth: {
+				status: "authenticated",
+				scheme: "userToken",
+				principal: { type: "user", id: "user_1", email: "a@example.com" },
+			},
+		};
+
+		try {
+			expect((await app.request("/projects")).status).toBe(401);
+			expect(
+				await (
+					await app.request("/projects", { headers: { authorization: "Bearer valid-user" } })
+				).json(),
+			).toEqual(signedIn);
+			expect((await application.fetch(new Request("http://localhost/projects"))).status).toBe(401);
+		} finally {
+			await app.dispose();
+			await application.dispose();
+		}
+	});
+
+	it("asks to regenerate metadata that lists no folder middleware files", async () => {
+		await expect(
+			createTestApplication(
+				project({
+					metadata: {
+						routaRoutes: [
+							{ file: "src/routes/projects/route.ts", path: "/projects", methods: ["POST"] },
+						],
+					},
+				}),
+			),
+		).rejects.toThrow(
+			".routa/routes.gen.ts lists no folder middleware files for src/routes/projects/route.ts, so Routa cannot check them for requireAuth() guards. Run routa generate.",
+		);
 	});
 });
 

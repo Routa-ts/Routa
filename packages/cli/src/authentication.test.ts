@@ -1703,6 +1703,162 @@ export default createRouteRoot("/me")({
 			await application.dispose();
 		}
 	}, 30_000);
+
+	it("reads guards bound to a const, imported, or called through a core namespace", async () => {
+		const signedInRoute = (
+			path: string,
+			middleware = "",
+		) => `import { createRoute, createRouteRoot } from "@routa-ts/core";
+import * as core from "@routa-ts/core";
+import { z } from "zod";
+
+void core;
+
+export default createRouteRoot("${path}")({
+\tget: createRoute({${middleware}
+\t\tresponses: { ok: { status: 200, schema: z.object({ id: z.string() }) } },
+\t\trun: ({ ctx }) => {
+\t\t\tconst scheme: "userToken" = ctx.auth.scheme;
+\t\t\tvoid scheme;
+\t\t\treturn { type: "ok", data: { id: ctx.auth.principal.id } };
+\t\t},
+\t}),
+});
+`;
+		const cwd = project({
+			"src/routa.ts": `import * as core from "@routa-ts/core";
+import { z } from "zod";
+
+export default core.createRouta({
+\tauthentication: {
+\t\tprincipal: z.object({ id: z.string(), type: z.literal("user") }),
+\t\tschemes: {
+\t\t\tuserToken: core.bearer({
+\t\t\t\tauthenticate: (token) =>
+\t\t\t\t\ttoken === "user-token"
+\t\t\t\t\t\t? { type: "authenticated", principal: { id: "user_1", type: "user" } }
+\t\t\t\t\t\t: { type: "rejected" },
+\t\t\t}),
+\t\t},
+\t},
+});
+`,
+			"src/guards.ts": `import { requireAuth } from "@routa-ts/core";
+
+const base = requireAuth({ schemes: ["userToken"] });
+
+export const member = base;
+`,
+			"src/routes/(aliased)/middleware.ts": `import { requireAuth } from "@routa-ts/core";
+
+const guard = requireAuth();
+
+export const signedIn = guard;
+`,
+			"src/routes/(aliased)/aliased/route.ts": signedInRoute("/aliased"),
+			"src/routes/(imported)/middleware.ts": `import { member } from "../../guards.js";
+
+export const signedIn = member;
+`,
+			"src/routes/(imported)/imported/route.ts": signedInRoute("/imported"),
+			"src/routes/(namespaced)/middleware.ts": `import * as core from "@routa-ts/core";
+
+export const signedIn = core.requireAuth({ schemes: ["userToken"] });
+`,
+			"src/routes/(namespaced)/namespaced/route.ts": signedInRoute("/namespaced"),
+			"src/routes/inline/route.ts": signedInRoute(
+				"/inline",
+				"\n\t\tmiddleware: [core.requireAuth()],",
+			),
+		});
+
+		expectPassed(await run(["check"], { cwd }));
+
+		const { routes } = validateProject(cwd, { write: false });
+		expect(
+			Object.fromEntries(
+				routes.map((route) => [
+					route.path,
+					route.methodMiddleware.get!.map(
+						(item) => `${item.file} ${item.name}(${item.authentication?.schemes.join(", ")})`,
+					),
+				]),
+			),
+		).toEqual({
+			"/aliased": ["src/routes/(aliased)/middleware.ts signedIn(userToken)"],
+			"/imported": ["src/routes/(imported)/middleware.ts signedIn(userToken)"],
+			"/inline": ["src/routes/inline/route.ts requireAuth(userToken)"],
+			"/namespaced": ["src/routes/(namespaced)/middleware.ts signedIn(userToken)"],
+		});
+
+		const document = generateOpenApi(cwd) as Record<string, any>;
+		expect(Object.keys(document.components.securitySchemes)).toEqual(["userToken"]);
+		expect(
+			Object.fromEntries(
+				Object.entries(document.paths as Record<string, any>).map(([path, item]) => [
+					path,
+					item.get.security,
+				]),
+			),
+		).toEqual({
+			"/aliased": [{ userToken: [] }],
+			"/imported": [{ userToken: [] }],
+			"/inline": [{ userToken: [] }],
+			"/namespaced": [{ userToken: [] }],
+		});
+
+		const { application } = await createProjectApplication(cwd, cwd, "dev");
+		const get = async (path: string, headers: Record<string, string> = {}) => {
+			const response = await application.fetch(new Request(`http://localhost${path}`, { headers }));
+			return [response.status, await response.json()];
+		};
+
+		try {
+			for (const path of ["/aliased", "/imported", "/inline", "/namespaced"]) {
+				expect(await get(path)).toEqual([401, expect.objectContaining({ status: 401 })]);
+				expect(await get(path, { authorization: "Bearer user-token" })).toEqual([
+					200,
+					{ id: "user_1" },
+				]);
+			}
+		} finally {
+			await application.dispose();
+		}
+	}, 60_000);
+
+	it("refuses to start when the generated metadata misses a folder guard", async () => {
+		const folder = "src/routes/(private)/middleware.ts";
+		const cwd = project({
+			"src/routa.ts": routaConfig,
+			[folder]: "export {};\n",
+			"src/routes/(private)/me/route.ts": meRoute,
+		});
+
+		expectPassed(await run(["generate"], { cwd }));
+		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
+			`"middlewareFiles": [\n\t\t\t"${folder}"\n\t\t]`,
+		);
+		// A guard written after generation, which the metadata cannot list. Two factory levels
+		// stand in for any form a generator might not read.
+		writeFileSync(
+			join(cwd, folder),
+			`import { requireAuth } from "@routa-ts/core";
+
+const inner = () => requireAuth();
+const outer = () => inner();
+
+export const signedIn = outer();
+`,
+		);
+		const message = `${folder} exports signedIn, a requireAuth() guard .routa/routes.gen.ts does not list, so it would not run and the routes below would be public. Write it as export const signedIn = requireAuth({ ... }), or re-export a const declared that way, then run routa generate.`;
+
+		await expect(createProjectApplication(cwd, cwd, "dev")).rejects.toThrow(message);
+
+		const { createTestApp } = (await import(
+			pathToFileURL(join(cwd, ".routa/testing.gen.ts")).href
+		)) as { createTestApp: () => Promise<unknown> };
+		await expect(createTestApp()).rejects.toThrow(message);
+	}, 30_000);
 });
 
 describe("folder requirement diagnostics", () => {
@@ -1822,6 +1978,96 @@ export function guardFor(scheme: "a" | "b") {
 		for (const [exports, files, expected] of cases) {
 			expect(diagnostics(guarded(exports, files))).toEqual(expected);
 		}
+	});
+
+	it("reports guards built through factories, aliases, and destructuring at any depth", () => {
+		const builds = {
+			code: "ROUTA_AUTH_REQUIREMENT_UNRESOLVED",
+			message: `${folder} exports signedIn, which builds a requireAuth() guard routa check cannot read, so the guard would not run.`,
+		};
+		const cases: Array<[string, Record<string, string>]> = [
+			[
+				"const inner = () => requireAuth();\nconst outer = () => inner();\nexport const signedIn = outer();",
+				{},
+			],
+			[
+				'import { guardFor } from "../../guards/index.js";\n\nexport const signedIn = guardFor();',
+				{
+					"src/guards/index.ts": 'export { guardFor } from "./factory.js";\n',
+					"src/guards/factory.ts": `import { requireAuth } from "@routa-ts/core";
+
+const inner = () => requireAuth();
+
+export function guardFor() {
+\treturn inner();
+}
+`,
+				},
+			],
+			[
+				"const guardFor = () => requireAuth();\nconst guard = guardFor();\nexport const signedIn = guard;",
+				{},
+			],
+			["export const { signedIn } = { signedIn: requireAuth() };", {}],
+			["const { guard } = { guard: requireAuth() };\nexport const signedIn = guard;", {}],
+		];
+
+		for (const [exports, files] of cases) {
+			expect(diagnostics(guarded(exports, files))).toEqual([builds]);
+		}
+	});
+
+	it("leaves folder exports that cannot be guards alone", () => {
+		expect(
+			diagnostics(
+				guarded(
+					`import { createMiddleware } from "@routa-ts/core";
+
+export const role = "admin";
+export const limits = { perMinute: 60 };
+export const roles = ["admin"];
+export const format = (value: string) => value.trim();
+export function helper() {
+\treturn 1;
+}
+export type Role = "admin";
+const withNothing = createMiddleware({ run: ({ next }) => next() });
+export const withAlias = withNothing;
+export { helperFrom, Shape } from "../../helpers.js";`,
+					{
+						"src/helpers.ts":
+							"export type Shape = { id: string };\n\nexport function helperFrom() {\n\treturn 1;\n}\n",
+					},
+				),
+			),
+		).toEqual([]);
+	});
+
+	it("reads credential schemes declared through a core namespace", () => {
+		const cwd = project({
+			"src/routa.ts": `import * as core from "@routa-ts/core";
+import { z } from "zod";
+
+const reject = () => ({ type: "rejected" }) as const;
+
+export default core.createRouta({
+\tauthentication: {
+\t\tprincipal: z.object({ id: z.string(), type: z.literal("user") }),
+\t\tschemes: {
+\t\t\tserviceKey: core.apiKey({ header: "x-api-key", authenticate: reject }),
+\t\t\tsession: core.sessionCookie({ cookie: "sid", authenticate: reject }),
+\t\t},
+\t},
+});
+`,
+			"src/routes/(private)/projects/route.ts": routeWith("", "createRoute, createRouteRoot"),
+		});
+
+		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
+		expect((generateOpenApi(cwd) as Record<string, any>).components.securitySchemes).toEqual({
+			serviceKey: { type: "apiKey", in: "header", name: "x-api-key" },
+			session: { type: "apiKey", in: "cookie", name: "sid" },
+		});
 	});
 
 	it("keeps an application middleware named requireAuth ordinary middleware", () => {

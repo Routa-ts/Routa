@@ -121,12 +121,19 @@ function routeOptions(route: RouteMetadata): string {
 	return `\t\treadonly ${JSON.stringify(route.path)}?: {\n${entries.join("\n")}\n\t\t};`;
 }
 
-/** Every module the application loads: the metadata, the config, route files, and middleware. */
+/**
+ * Every module the application loads: the metadata, the config, route files, and middleware,
+ * including each folder `middleware.ts` startup checks for guards.
+ */
 function projectModules(routes: readonly RouteMetadata[]): string[] {
 	const files = new Set([".routa/routes.gen.ts", "src/routa.ts"]);
 
 	for (const route of routes) {
 		files.add(route.file);
+
+		for (const file of route.middlewareFiles) {
+			files.add(file);
+		}
 
 		for (const middleware of [route.middleware, ...Object.values(route.methodMiddleware)].flat()) {
 			// The route file's own middleware arrives through its route config.

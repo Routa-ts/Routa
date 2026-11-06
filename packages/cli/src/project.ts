@@ -40,8 +40,8 @@ import {
 	boundDeclaration,
 	type DeclarationReader,
 	exportedDeclaration,
-	exportedDeclarations,
 	type ModuleDeclaration,
+	moduleExports,
 	namedImportMap,
 	parseTypeScriptFile,
 	variableDeclarations,
@@ -77,6 +77,11 @@ export type RouteMetadata = {
 	inputs: Record<string, RouteMethodInputMetadata>;
 	middleware: MiddlewareMetadata[];
 	methodMiddleware: Record<string, MiddlewareMetadata[]>;
+	/**
+	 * Every folder `middleware.ts` on the route's path, root first, including files with no export
+	 * Routa reads. Startup loads each one and refuses a `requireAuth` guard export the chain omits.
+	 */
+	middlewareFiles: string[];
 	/** The service contracts the route file declares, when it declares any. */
 	services?: RouteServicesMetadata;
 	deprecations?: Record<string, RouteDeprecationMetadata | undefined>;
@@ -546,6 +551,9 @@ function validateRuntimeOutput(
 			for (const middleware of middlewareList) {
 				runtimeFiles.add(middleware.file);
 			}
+		}
+		for (const file of route.middlewareFiles) {
+			runtimeFiles.add(file);
 		}
 	}
 
@@ -1038,7 +1046,8 @@ function discoverRoutes(
 		const segments = rawSegments.filter(
 			(segment) => !(segment.startsWith("(") && segment.endsWith(")")),
 		);
-		const inheritedMiddleware = middlewareChain(cwd, rawSegments, folderMiddleware);
+		const middlewareFiles = folderMiddlewareFiles(cwd, rawSegments);
+		const inheritedMiddleware = middlewareFiles.flatMap(folderMiddleware);
 		const routeFileMiddleware = parseRouteFileMiddleware(cwd, relativeFile, parser, authentication);
 		const middleware = [...inheritedMiddleware, ...routeFileMiddleware.route];
 		const methodMiddleware = Object.fromEntries(
@@ -1146,6 +1155,7 @@ function discoverRoutes(
 					: {}),
 				middleware,
 				methodMiddleware,
+				middlewareFiles,
 				...(services.services && { services: services.services }),
 				ctx,
 				groups,
@@ -1749,18 +1759,13 @@ function contractObjectKeys(
 }
 
 /**
- * Collects middleware declarations inherited from the route directory hierarchy.
+ * Lists the folder `middleware.ts` files a route inherits middleware from, root first.
  *
  * @param cwd - Project root directory
  * @param rawSegments - Route path segments used to locate nested `middleware.ts` files
- * @param folderMiddleware - Reads a `middleware.ts` file's middleware, relative to `cwd`
- * @returns Middleware declarations from the global route middleware file and any matching nested middleware files
+ * @returns The root routes `middleware.ts` and each nested one that exists, relative to `cwd`
  */
-function middlewareChain(
-	cwd: string,
-	rawSegments: string[],
-	folderMiddleware: (file: string) => MiddlewareMetadata[],
-): MiddlewareMetadata[] {
+function folderMiddlewareFiles(cwd: string, rawSegments: string[]): string[] {
 	const candidates = [`${routesRoot}/middleware.ts`];
 	let current = routesRoot;
 
@@ -1769,7 +1774,7 @@ function middlewareChain(
 		candidates.push(join(current, "middleware.ts"));
 	}
 
-	return candidates.filter((file) => existsSync(join(cwd, file))).flatMap(folderMiddleware);
+	return candidates.filter((file) => existsSync(join(cwd, file)));
 }
 
 /**
@@ -1823,8 +1828,14 @@ function parseMiddlewareFile(
 	const middleware: MiddlewareMetadata[] = [];
 	const diagnostics: Diagnostic[] = [];
 
-	for (const exported of exportedDeclarations(cwd, file, sourceFile, parser, (node) => node)) {
-		const declaration = read(exported.contract, exported.file);
+	const readsMiddleware = (expression: ts.Expression, from: string) =>
+		read(expression, from) !== undefined;
+
+	for (const exported of moduleExports(cwd, file, sourceFile, parser)) {
+		const declaration =
+			exported.value && ts.isExpression(exported.value)
+				? read(exported.value, exported.file)
+				: undefined;
 
 		if (declaration) {
 			middleware.push(
@@ -1833,7 +1844,7 @@ function parseMiddlewareFile(
 			continue;
 		}
 
-		const guard = folderGuard(cwd, file, exported, parser, authentication);
+		const guard = folderGuard(cwd, file, exported, parser, authentication, readsMiddleware);
 		middleware.push(...(guard.metadata ? [guard.metadata] : []));
 		diagnostics.push(...guard.diagnostics);
 	}
