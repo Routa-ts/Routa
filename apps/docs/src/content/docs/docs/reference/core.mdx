@@ -481,8 +481,11 @@ function requireAuth(options?: { schemes: readonly SchemeName[] }): RequireAuthM
 ```
 
 A middleware guard that returns `authenticationRequired` (`401`) for an anonymous request and
-lets an authenticated one continue. The middleware after it and the handler see `ctx.auth`
-narrowed to `{ status: "authenticated", scheme, principal }`. Omit `options` to accept any
+lets an authenticated one continue. The handler sees `ctx.auth` narrowed to
+`{ status: "authenticated", scheme, principal }`. Middleware placed after the guard receives an
+authenticated value at runtime, but a middleware contract that declares `requires: ["auth"]`
+is typed with the anonymous-or-authenticated union, so check `ctx.auth.status` before reading
+`principal`. Omit `options` to accept any
 configured scheme, or list the accepted schemes inline; `SchemeName` is the union of names
 `routa generate` read from `src/routa.ts`.
 

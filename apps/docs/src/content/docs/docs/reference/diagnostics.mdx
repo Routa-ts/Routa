@@ -320,8 +320,9 @@ as an application service instead.
 
 `routa check` cannot read the `authentication` config in `src/routa.ts`, its `schemes`, a
 scheme name, or a scheme's descriptor. Examples: `authentication: makeAuthentication()`, a
-spread or computed key inside `authentication` or `schemes`, or a scheme whose value is not a
-`bearer({ ... })` call imported from `@routa-ts/core`. Scheme names and descriptors are
+spread or computed key inside `authentication`, `schemes`, or a `bearer({ ... })` call's
+options, or a scheme whose value is not a `bearer({ ... })` call imported from
+`@routa-ts/core`. Scheme names and descriptors are
 contract facts, so Routa reads them without running `src/routa.ts`.
 
 **Fix:** write `authentication` as an object literal, or a `const` object literal it can
