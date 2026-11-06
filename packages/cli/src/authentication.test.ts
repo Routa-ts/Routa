@@ -403,9 +403,14 @@ describe("authentication diagnostics", () => {
 				"The authentication config in src/routa.ts declares no credential schemes.",
 			],
 			[
+				'{ principal: Principal, schemes: { "2": bearer({ authenticate: reject }) } }',
+				"ROUTA_AUTH_CONFIG_INVALID",
+				'Authentication scheme name "2" must start with a letter and use only letters, digits, ".", "-", and "_".',
+			],
+			[
 				'{ principal: Principal, schemes: { "user token": bearer({ authenticate: reject }) } }',
 				"ROUTA_AUTH_CONFIG_INVALID",
-				'Authentication scheme name "user token" may use only letters, digits, ".", "-", and "_".',
+				'Authentication scheme name "user token" must start with a letter and use only letters, digits, ".", "-", and "_".',
 			],
 			[
 				"{ principal: Principal, schemes: { userToken: bearer({ authenticate: reject }), adminToken: bearer({ authenticate: reject }) } }",

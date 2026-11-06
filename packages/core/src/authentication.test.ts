@@ -519,8 +519,12 @@ describe("authentication registration", () => {
 			],
 			[{ principal: Principal, schemes: {} }, "declares no credential schemes."],
 			[
+				{ principal: Principal, schemes: { "2": bearer({ authenticate: reject }) } },
+				'scheme name "2" must start with a letter and use only letters, digits, ".", "-", and "_".',
+			],
+			[
 				{ principal: Principal, schemes: { "user token": bearer({ authenticate: reject }) } },
-				'scheme name "user token" may use only letters, digits, ".", "-", and "_".',
+				'scheme name "user token" must start with a letter and use only letters, digits, ".", "-", and "_".',
 			],
 			[
 				{ principal: Principal, schemes: { userToken: { kind: "basic" } } },

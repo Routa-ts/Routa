@@ -343,9 +343,10 @@ spread a `const` object literal Routa can follow.
 
 ### `ROUTA_AUTH_CONFIG_INVALID`
 
-The `authentication` config has no `principal`, declares no schemes, or names a scheme with a
-character other than letters, digits, `.`, `-`, and `_`. A scheme name is the OpenAPI
-security scheme key.
+The `authentication` config has no `principal`, declares no schemes, or names a scheme that
+does not start with a letter or has a character other than letters, digits, `.`, `-`, and `_`.
+A scheme name is the OpenAPI security scheme key, and a leading letter keeps scheme order the
+same in source and at runtime.
 
 **Fix:** add a principal schema, declare at least one scheme, or rename the scheme.
 

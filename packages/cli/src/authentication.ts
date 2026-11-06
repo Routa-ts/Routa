@@ -28,7 +28,9 @@ export type AuthenticationRequirementMetadata = {
 const configFile = "src/routa.ts";
 const coreModule = "@routa-ts/core";
 /** Scheme names are OpenAPI security scheme keys, so they follow the component key rule. */
-const schemeNamePattern = /^[a-zA-Z0-9.\-_]+$/;
+// A leading letter also keeps names out of JavaScript's integer-key ordering, so scheme order is
+// the same in source, at runtime, and in generated metadata.
+const schemeNamePattern = /^[a-zA-Z][a-zA-Z0-9.\-_]*$/;
 /** Printable ASCII without `"` or `\`, as `bearer()` checks at runtime. */
 const realmPattern = /^[\x20\x21\x23-\x5b\x5d-\x7e]+$/;
 
@@ -123,7 +125,7 @@ export function applicationAuthentication(
 		if (!schemeNamePattern.test(name)) {
 			report(
 				"ROUTA_AUTH_CONFIG_INVALID",
-				`Authentication scheme name "${name}" may use only letters, digits, ".", "-", and "_".`,
+				`Authentication scheme name "${name}" must start with a letter and use only letters, digits, ".", "-", and "_".`,
 				"Rename the scheme. Its name is the OpenAPI security scheme key.",
 				schemes.file,
 			);

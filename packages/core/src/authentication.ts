@@ -289,7 +289,9 @@ export type RuntimeAuthentication = {
 };
 
 /** Scheme names are OpenAPI security scheme keys, so they follow the component key rule. */
-const schemeNamePattern = /^[a-zA-Z0-9.\-_]+$/;
+// A leading letter also keeps names out of JavaScript's integer-key ordering, so scheme order is
+// the same in source, at runtime, and in generated metadata.
+const schemeNamePattern = /^[a-zA-Z][a-zA-Z0-9.\-_]*$/;
 
 /**
  * Validates an `authentication` configuration before the application serves traffic.
@@ -325,7 +327,9 @@ export function runtimeAuthentication(config: unknown): RuntimeAuthentication {
 		const scheme = descriptor as Partial<BearerScheme> | null;
 
 		if (!schemeNamePattern.test(name)) {
-			fail(`scheme name "${name}" may use only letters, digits, ".", "-", and "_".`);
+			fail(
+				`scheme name "${name}" must start with a letter and use only letters, digits, ".", "-", and "_".`,
+			);
 		}
 
 		if (scheme?.kind !== "bearer" || typeof scheme.authenticate !== "function") {

@@ -197,7 +197,7 @@ Declare schemes with [`bearer`](/docs/reference/core/#bearer), which reads
 `Authorization: Bearer <token>`. One Bearer scheme per application: a second one reads the same
 credential and fails `routa check` with
 [`ROUTA_AUTH_TRANSPORT_OVERLAP`](/docs/reference/diagnostics/#routa_auth_transport_overlap).
-A scheme name uses only letters, digits, `.`, `-`, and `_`.
+A scheme name starts with a letter and uses only letters, digits, `.`, `-`, and `_`.
 
 ```ts title="src/routa.ts"
 import { bearer, createRouta } from "@routa-ts/core";
