@@ -21,17 +21,21 @@ export type {
 	AuthenticationResult,
 	Authenticator,
 	AuthenticatorContext,
-	BearerChallenge,
+	ApiKeyOptions,
+	ApiKeyScheme,
 	BearerOptions,
 	BearerScheme,
+	CredentialChallenge,
 	CredentialScheme,
 	Principal,
 	PrincipalOf,
 	PrincipalSchema,
 	RequireAuthMiddleware,
 	RequireAuthOptions,
+	SessionCookieOptions,
+	SessionCookieScheme,
 } from "./authentication.js";
-export { bearer, requireAuth } from "./authentication.js";
+export { apiKey, bearer, requireAuth, sessionCookie } from "./authentication.js";
 
 export type HttpMethod = "get" | "post" | "put" | "patch" | "delete" | "head";
 

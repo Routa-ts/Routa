@@ -1,3 +1,4 @@
+import { runtimeAuthentication } from "./authentication.js";
 import type { CreateApplicationOptions, HonoRoute, RoutaApplication } from "./hono.js";
 import type { RoutaConfig } from "./index.js";
 import { createLogger, type RoutaLogger } from "./logger.js";
@@ -113,9 +114,10 @@ export async function buildProjectApplication(
 
 /**
  * Checks that `src/routa.ts` configures the authentication schemes `routa generate` read, in the
- * same order, so types, OpenAPI, and the running application describe one contract.
+ * same priority order, so types, OpenAPI, and the running application describe one contract.
  *
- * @throws When only one side declares authentication, or their scheme names differ
+ * @throws When only one side declares authentication, the configuration is invalid, or their
+ *   scheme names or priority differ
  */
 function assertAuthenticationMetadata(
 	authentication: RoutaConfig["authentication"],
@@ -137,11 +139,7 @@ function assertAuthenticationMetadata(
 		);
 	}
 
-	const configured = Object.keys(
-		typeof authentication.schemes === "object" && authentication.schemes !== null
-			? authentication.schemes
-			: {},
-	);
+	const configured = runtimeAuthentication(authentication).schemes.map((scheme) => scheme.name);
 	const quoted = (names: readonly string[]) => names.map((name) => JSON.stringify(name)).join(", ");
 
 	if (quoted(configured) !== quoted(generated)) {

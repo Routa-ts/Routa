@@ -384,12 +384,12 @@ describe("authentication diagnostics", () => {
 			[
 				"{ principal: Principal, schemes: { userToken: makeScheme() } }",
 				"ROUTA_AUTH_CONFIG_UNRESOLVED",
-				'Authentication scheme "userToken" in src/routa.ts is not a statically readable bearer() call.',
+				'Authentication scheme "userToken" in src/routa.ts is not a statically readable bearer(), apiKey(), or sessionCookie() call.',
 			],
 			[
 				"{ principal: Principal, schemes: { userToken: bearer({ authenticate: reject, ...dynamicChallenge() }) } }",
 				"ROUTA_AUTH_CONFIG_UNRESOLVED",
-				'Authentication scheme "userToken" in src/routa.ts is not a statically readable bearer() call.',
+				'Authentication scheme "userToken" in src/routa.ts is not a statically readable bearer(), apiKey(), or sessionCookie() call.',
 				"const dynamicChallenge = () => ({ challenge: { realm: process.env.REALM ?? 'api' } });",
 			],
 			[
@@ -508,6 +508,7 @@ export default createRouta({ ...base, port: 3000 });
 		expect(validation.diagnostics).toEqual([]);
 		expect(validation.authentication).toEqual({
 			schemes: [{ name: "userToken", kind: "bearer", realm: "api" }],
+			multipleCredentials: "priority",
 		});
 	});
 
@@ -541,7 +542,7 @@ export default createRouta({ ...base, port: 3000 });
 			{
 				code: "ROUTA_AUTH_CONFIG_UNRESOLVED",
 				message:
-					'Authentication scheme "userToken" in src/routa.ts is not a statically readable bearer() call.',
+					'Authentication scheme "userToken" in src/routa.ts is not a statically readable bearer(), apiKey(), or sessionCookie() call.',
 			},
 		]);
 	});
@@ -939,6 +940,431 @@ export const withTenantKey = createMiddleware({
 
 		expect(operations.get.security).toEqual([{ tenantKey: [] }, { tenantKey: [], userToken: [] }]);
 		expect(operations.post.security).toEqual([{ tenantKey: [], userToken: [] }]);
+	});
+});
+
+const multiSchemeConfig = (
+	options = "",
+) => `import { apiKey, bearer, createRouta, sessionCookie } from "@routa-ts/core";
+import { z } from "zod";
+
+const Principal = z.discriminatedUnion("type", [
+\tz.object({ type: z.literal("user"), id: z.string() }),
+\tz.object({ type: z.literal("service"), id: z.string() }),
+]);
+
+export default createRouta({
+\tauthentication: {
+\t\tprincipal: Principal,
+\t\tschemes: {
+\t\t\tuserToken: bearer({
+\t\t\t\tauthenticate: (token) =>
+\t\t\t\t\ttoken === "user-token" ? { type: "authenticated", principal: { type: "user", id: "user_1" } } : { type: "rejected" },
+\t\t\t}),
+\t\t\tserviceKey: apiKey({
+\t\t\t\theader: "X-Api-Key",
+\t\t\t\tchallenge: { realm: "partners" },
+\t\t\t\tauthenticate: async (key, { logger }) => {
+\t\t\t\t\tlogger.debug("auth.key", "Checking a service key.");
+\t\t\t\t\treturn key === "service-key" ? { type: "authenticated", principal: { type: "service", id: "svc_1" } } : { type: "rejected" };
+\t\t\t\t},
+\t\t\t}),
+\t\t\tsession: sessionCookie({
+\t\t\t\tcookie: "session",
+\t\t\t\tauthenticate: (value) =>
+\t\t\t\t\tvalue === "session-id" ? { type: "authenticated", principal: { type: "user", id: "user_2" } } : { type: "rejected" },
+\t\t\t}),
+\t\t},
+\t\tpriority: ["session", "userToken", "serviceKey"],${options}
+\t},
+});
+`;
+
+const reportsRoute = `import { createRoute, createRouteRoot, requireAuth } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/reports")({
+\tget: createRoute({
+\t\tresponses: { ok: { status: 200, schema: z.object({ who: z.string() }) } },
+\t\trun: ({ ctx }) => {
+\t\t\tif (ctx.auth.status === "anonymous") {
+\t\t\t\treturn { type: "ok", data: { who: "anonymous" } };
+\t\t\t}
+
+\t\t\tconst scheme: "userToken" | "serviceKey" | "session" = ctx.auth.scheme;
+\t\t\treturn { type: "ok", data: { who: \`\${scheme}:\${ctx.auth.principal.id}\` } };
+\t\t},
+\t}),
+\tpost: createRoute({
+\t\tmiddleware: [requireAuth({ schemes: ["session"] })],
+\t\tresponses: { created: { status: 201, schema: z.object({ who: z.string() }) } },
+\t\trun: ({ ctx }) => {
+\t\t\tconst scheme: "session" = ctx.auth.scheme;
+\t\t\treturn { type: "created", data: { who: \`\${scheme}:\${ctx.auth.principal.id}\` } };
+\t\t},
+\t}),
+\tput: createRoute({
+\t\tmiddleware: [requireAuth({ schemes: ["serviceKey", "userToken"] })],
+\t\tresponses: { ok: { status: 200, schema: z.object({ who: z.string() }) } },
+\t\trun: ({ ctx }) => ({ type: "ok", data: { who: ctx.auth.scheme } }),
+\t}),
+});
+`;
+
+describe("session-cookie and API-key authentication in a project", () => {
+	it("checks, generates priority order, and serves the same selection rules", async () => {
+		const cwd = project({
+			"src/routa.ts": multiSchemeConfig('\n\t\tmultipleCredentials: "reject",'),
+			"src/routes/reports/route.ts": reportsRoute,
+		});
+
+		expectPassed(await run(["check"], { cwd }));
+		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
+			'export const routaAuthenticationSchemes = [\n\t"session",\n\t"userToken",\n\t"serviceKey"\n] as const;',
+		);
+
+		const { application } = await createProjectApplication(cwd, cwd, "dev");
+		const request = async (method: string, headers: Record<string, string>) => {
+			const response = await application.fetch(
+				new Request("http://localhost/reports", { method, headers }),
+			);
+			return [response.status, response.headers.get("www-authenticate"), await response.json()];
+		};
+
+		expect(await request("GET", { "x-api-key": "service-key" })).toEqual([
+			200,
+			null,
+			{ who: "serviceKey:svc_1" },
+		]);
+		expect(await request("GET", { cookie: "session=session-id" })).toEqual([
+			200,
+			null,
+			{ who: "session:user_2" },
+		]);
+		expect(await request("GET", { cookie: "session=wrong" })).toEqual([
+			401,
+			"Session",
+			expect.objectContaining({ title: "Authentication failed" }),
+		]);
+		expect(
+			await request("GET", { authorization: "Bearer user-token", cookie: "session=session-id" }),
+		).toEqual([
+			400,
+			null,
+			{
+				type: "https://routa-ts.dev/problems/ambiguous-credentials",
+				title: "Ambiguous credentials",
+				status: 400,
+			},
+		]);
+		expect(await request("POST", { authorization: "Bearer user-token" })).toEqual([
+			401,
+			"Session",
+			expect.objectContaining({ title: "Authentication failed" }),
+		]);
+		expect(
+			await request("POST", { authorization: "Bearer user-token", cookie: "session=session-id" }),
+		).toEqual([201, null, { who: "session:user_2" }]);
+		expect(await request("PUT", {})).toEqual([
+			401,
+			'Bearer, ApiKey realm="partners"',
+			expect.objectContaining({ title: "Authentication required" }),
+		]);
+		await application.dispose();
+	}, 30_000);
+
+	it("lists ambiguousCredentials only where strict mode can return it", async () => {
+		const cwd = project({
+			"src/routa.ts": multiSchemeConfig('\n\t\tmultipleCredentials: "reject",'),
+			"src/routes/reports/route.ts": reportsRoute,
+		});
+
+		const result = await run(["routes", "--format", "json"], { cwd });
+		const methods = JSON.parse(result.stdout ?? "").routes[0].methods as Array<{
+			method: string;
+			responses: number[];
+			rejects: Array<{ type: string }>;
+		}>;
+
+		expect(
+			methods.map(({ method, responses, rejects }) => ({
+				method,
+				responses,
+				rejects: rejects.map((item) => item.type),
+			})),
+		).toEqual([
+			{
+				method: "GET",
+				responses: [200, 400, 401],
+				rejects: ["ambiguousCredentials", "authenticationFailed"],
+			},
+			{
+				method: "POST",
+				responses: [201, 401],
+				rejects: ["authenticationFailed", "authenticationRequired"],
+			},
+			{
+				method: "PUT",
+				responses: [200, 400, 401],
+				rejects: ["ambiguousCredentials", "authenticationFailed", "authenticationRequired"],
+			},
+		]);
+	});
+});
+
+describe("OpenAPI for session-cookie and API-key authentication", () => {
+	const ambiguous = {
+		description:
+			"Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+		content: {
+			"application/json": {
+				schema: {
+					type: "object",
+					required: ["type", "title", "status"],
+					properties: {
+						type: {
+							type: "string",
+							const: "https://routa-ts.dev/problems/ambiguous-credentials",
+						},
+						title: { type: "string", const: "Ambiguous credentials" },
+						status: { type: "number", const: 400 },
+					},
+				},
+			},
+		},
+	};
+
+	it("declares each scheme and its alternatives in priority order", () => {
+		const document = generateOpenApi(
+			project({
+				"src/routa.ts": multiSchemeConfig(),
+				"src/routes/reports/route.ts": reportsRoute,
+			}),
+		) as Record<string, any>;
+		const operations = document.paths["/reports"];
+
+		expect(document.components.securitySchemes).toEqual({
+			session: { type: "apiKey", in: "cookie", name: "session" },
+			userToken: { type: "http", scheme: "bearer" },
+			serviceKey: { type: "apiKey", in: "header", name: "X-Api-Key" },
+		});
+		expect(operations.get.security).toEqual([
+			{},
+			{ session: [] },
+			{ userToken: [] },
+			{ serviceKey: [] },
+		]);
+		expect(operations.post.security).toEqual([{ session: [] }]);
+		expect(operations.put.security).toEqual([{ userToken: [] }, { serviceKey: [] }]);
+		expect(Object.keys(operations.get.responses)).toEqual(["200", "401"]);
+	});
+
+	it("documents ambiguousCredentials where strict mode applies", () => {
+		const document = generateOpenApi(
+			project({
+				"src/routa.ts": multiSchemeConfig('\n\t\tmultipleCredentials: "reject",'),
+				"src/routes/reports/route.ts": reportsRoute,
+				"src/routes/files/route.ts": `import { createRoute, createRouteRoot } from "@routa-ts/core";
+
+export default createRouteRoot("/files")({
+\thead: createRoute({ responses: { ok: { status: 200 } }, run: () => ({ type: "ok" }) }),
+});
+`,
+			}),
+		) as Record<string, any>;
+		const operations = document.paths["/reports"];
+
+		expect(document["x-routa-diagnostics"]).toBeUndefined();
+		expect(operations.get.responses["400"]).toEqual(ambiguous);
+		expect(operations.put.responses["400"]).toEqual(ambiguous);
+		expect(operations.post.responses["400"]).toBeUndefined();
+		expect(document.paths["/files"].head.responses["400"]).toEqual({
+			description: ambiguous.description,
+		});
+	});
+});
+
+describe("session-cookie and API-key diagnostics", () => {
+	const config = (schemes: string, options = "") =>
+		configWith(`{ principal: Principal, schemes: { ${schemes} }${options} }`).replace(
+			'import { bearer, createRouta } from "@routa-ts/core";',
+			'import { apiKey, bearer, createRouta, sessionCookie } from "@routa-ts/core";',
+		);
+	const key = (header: string) => `apiKey({ header: ${header}, authenticate: reject })`;
+	const cookie = (name: string) => `sessionCookie({ cookie: ${name}, authenticate: reject })`;
+	const two = `a: ${key('"x-a"')}, b: ${cookie('"b"')}`;
+
+	it("reports overlapping and invalid transports", () => {
+		const cases: Array<[string, string, string]> = [
+			[
+				`a: ${key('"X-Api-Key"')}, b: ${key('"x-api-key"')}`,
+				"ROUTA_AUTH_TRANSPORT_OVERLAP",
+				'Authentication schemes "a" and "b" both read the x-api-key header.',
+			],
+			[
+				`a: ${cookie('"sid"')}, b: ${cookie('"sid"')}`,
+				"ROUTA_AUTH_TRANSPORT_OVERLAP",
+				'Authentication schemes "a" and "b" both read the "sid" cookie.',
+			],
+			[
+				`a: ${key('"Authorization"')}`,
+				"ROUTA_AUTH_TRANSPORT_OVERLAP",
+				'Authentication scheme "a" reads the Authorization header, which carries Authorization-scheme credentials such as Bearer.',
+			],
+			[
+				`a: ${key('"cookie"')}`,
+				"ROUTA_AUTH_TRANSPORT_OVERLAP",
+				'Authentication scheme "a" reads the Cookie header, which carries cookies.',
+			],
+			[
+				`a: ${key('"x api key"')}`,
+				"ROUTA_AUTH_CONFIG_INVALID",
+				'Authentication scheme "a" declares header "x api key", which is not an HTTP header name.',
+			],
+			[
+				`a: ${cookie('"se;ssion"')}`,
+				"ROUTA_AUTH_CONFIG_INVALID",
+				'Authentication scheme "a" declares cookie "se;ssion", which is not a cookie name.',
+			],
+			[
+				`a: ${key("process.env.HEADER")}`,
+				"ROUTA_AUTH_CONFIG_UNRESOLVED",
+				'Authentication scheme "a" declares a header that is not a string literal.',
+			],
+			[
+				`a: ${cookie("name")}`,
+				"ROUTA_AUTH_CONFIG_UNRESOLVED",
+				'Authentication scheme "a" declares a cookie that is not a string literal.',
+			],
+			[
+				'a: apiKey({ header: "x-a", challenge: { scope: "x" }, authenticate: reject })',
+				"ROUTA_AUTH_CHALLENGE_INVALID",
+				'Authentication scheme "a" declares challenge "scope". An ApiKey challenge override accepts only realm.',
+			],
+			[
+				'a: sessionCookie({ cookie: "sid", challenge: { realm: "" }, authenticate: reject })',
+				"ROUTA_AUTH_CHALLENGE_INVALID",
+				'Authentication scheme "a" declares a challenge realm that is empty or has a character outside printable ASCII, " or \\.',
+			],
+		];
+
+		for (const [schemes, code, message] of cases) {
+			expect(diagnostics({ "src/routa.ts": config(schemes) }), schemes).toEqual([
+				{ code, message },
+			]);
+		}
+	});
+
+	it("reports priority and multipleCredentials it cannot use", () => {
+		const cases: Array<[string, string, string]> = [
+			[
+				', priority: ["a", "b", "c"]',
+				"ROUTA_AUTH_SCHEME_UNKNOWN",
+				'The authentication priority in src/routa.ts lists "c", which schemes does not declare.',
+			],
+			[
+				', priority: ["a", "b", "a"]',
+				"ROUTA_AUTH_PRIORITY_INVALID",
+				'The authentication priority in src/routa.ts lists "a" more than once.',
+			],
+			[
+				', priority: ["b"]',
+				"ROUTA_AUTH_PRIORITY_INVALID",
+				'The authentication priority in src/routa.ts omits "a".',
+			],
+			[
+				", priority: order",
+				"ROUTA_AUTH_CONFIG_UNRESOLVED",
+				"The authentication priority in src/routa.ts is not a literal list of scheme names.",
+			],
+			[
+				', multipleCredentials: "first"',
+				"ROUTA_AUTH_CONFIG_INVALID",
+				'The authentication multipleCredentials in src/routa.ts is "first". Use "priority" or "reject".',
+			],
+			[
+				", multipleCredentials: mode",
+				"ROUTA_AUTH_CONFIG_UNRESOLVED",
+				'The authentication multipleCredentials in src/routa.ts is not the literal "priority" or "reject".',
+			],
+		];
+
+		for (const [options, code, message] of cases) {
+			expect(diagnostics({ "src/routa.ts": config(two, options) }), options).toEqual([
+				{ code, message },
+			]);
+		}
+	});
+
+	it("reads priority, multipleCredentials, and transports as contract facts", () => {
+		const validation = validateProject(
+			project({
+				"src/routa.ts": config(
+					`${two}, c: apiKey({ header: "X-B", challenge: { realm: "partners" }, authenticate: reject })`,
+					', priority: ["c", "a", "b"], multipleCredentials: "reject"',
+				),
+			}),
+			{ write: false },
+		);
+
+		expect(validation.diagnostics).toEqual([]);
+		expect(validation.authentication).toEqual({
+			multipleCredentials: "reject",
+			schemes: [
+				{ name: "c", kind: "apiKey", header: "X-B", realm: "partners" },
+				{ name: "a", kind: "apiKey", header: "x-a" },
+				{ name: "b", kind: "sessionCookie", cookie: "b" },
+			],
+		});
+	});
+
+	it("reports route and method requirements that allow no scheme in common", () => {
+		expect(
+			diagnostics({
+				"src/routa.ts": config(two),
+				"src/routes/projects/route.ts": `import { createRoute, createRouteRoot, requireAuth } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/projects")({
+\tmiddleware: [requireAuth({ schemes: ["a"] })],
+\tget: createRoute({
+\t\tmiddleware: [requireAuth({ schemes: ["b"] })],
+\t\tresponses: { ok: { status: 200, schema: z.object({ ok: z.boolean() }) } },
+\t\trun: () => ({ type: "ok", data: { ok: true } }),
+\t}),
+});
+`,
+			}),
+		).toEqual([
+			{
+				code: "ROUTA_AUTH_REQUIREMENT_EMPTY",
+				message:
+					"requireAuth() guards on GET /projects allow no scheme in common, so no request could pass them.",
+			},
+		]);
+	});
+
+	it("reserves ambiguousCredentials where strict mode applies", () => {
+		const route = routeWith("", "createRoute, createRouteRoot").replace(
+			"responses: { ok:",
+			"responses: { ambiguousCredentials: { status: 400 }, ok:",
+		);
+
+		expect(
+			diagnostics({
+				"src/routa.ts": config(two, ', multipleCredentials: "reject"'),
+				"src/routes/projects/route.ts": route,
+			}),
+		).toEqual([
+			{
+				code: "ROUTA_OUTCOME_NAME_COLLISION",
+				message:
+					'Outcome "ambiguousCredentials" is declared by the route and by Routa authentication',
+			},
+		]);
+		expect(
+			diagnostics({ "src/routa.ts": config(two), "src/routes/projects/route.ts": route }),
+		).toEqual([]);
 	});
 });
 

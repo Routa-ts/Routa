@@ -3,11 +3,9 @@ import {
 	AuthenticationContractError,
 	type AuthContext,
 	AuthenticatorError,
-	authenticationFailedOutcome,
-	authenticationFailedResult,
-	bodylessOutcome,
+	authenticationFailure,
 	resolveAuthentication,
-	type RuntimeAuthentication,
+	type RouteAuthentication,
 } from "./authentication.js";
 import type { AnyRouteContract, MiddlewareContract, RouteInput } from "./index.js";
 import { type HandlerOutputIssue, InvalidHandlerOutputError } from "./handler-output-error.js";
@@ -90,8 +88,11 @@ type RequestExecutorOptions = {
 	createContext?: (() => unknown | Promise<unknown>) | undefined;
 	/** The application instance's services, exposed as `ctx.services`. */
 	services?: ServiceMapping | undefined;
-	/** Credential orchestration, which resolves `ctx.auth` before anything else reads the request. */
-	authentication?: RuntimeAuthentication | undefined;
+	/**
+	 * Credential orchestration for this route, which resolves `ctx.auth` from the schemes it
+	 * accepts before anything else reads the request.
+	 */
+	authentication?: RouteAuthentication | undefined;
 	/** Whether the route is an explicit HEAD operation, whose authentication outcomes have no body. */
 	head?: boolean | undefined;
 	/** The route file's, then the method's, request-scoped services. */
@@ -146,14 +147,11 @@ export function createRequestExecutor(
 				services: options.services,
 			}));
 
-		if (resolved && "failed" in resolved) {
+		if (resolved && !("auth" in resolved)) {
+			const { result, outcome } = authenticationFailure(resolved, options.head);
 			return select({
-				result: authenticationFailedResult(resolved.failed.challenge, options.head),
-				outcomes: {
-					authenticationFailed: options.head
-						? bodylessOutcome(authenticationFailedOutcome)
-						: authenticationFailedOutcome,
-				},
+				result,
+				outcomes: { [result.type]: outcome },
 				producer: "Routa authentication",
 				label: (type) => `outcome "${type}"`,
 			});
