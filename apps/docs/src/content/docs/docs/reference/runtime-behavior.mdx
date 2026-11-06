@@ -14,27 +14,31 @@ directly.
 
 For each matched route, in order:
 
-1. **Accept negotiation.** A request whose `Accept` header cannot be satisfied by JSON
+1. **Credential resolution.** Only when `src/routa.ts` configures
+   [`authentication`](/docs/reference/configuration/#authentication). Routa reads the request's
+   credential and sets `ctx.auth`, or ends the request with `authenticationFailed`. See
+   [Authentication](#authentication).
+2. **Accept negotiation.** A request whose `Accept` header cannot be satisfied by JSON
    receives `406 Not Acceptable`. A missing `Accept` header is treated as acceptable.
-2. **Input parsing.** Declared `params`, `query`, `headers`, `cookies`, and `body` are
+3. **Input parsing.** Declared `params`, `query`, `headers`, `cookies`, and `body` are
    parsed with their Zod schemas. The body is read at most once per request and shared
    between middleware and the handler.
-3. **Context creation.** `createContext()` runs if provided. It must return a plain
+4. **Context creation.** `createContext()` runs if provided. It must return a plain
    object.
-4. **Middleware chain.** Each middleware's `requires` keys are checked against the current
+5. **Middleware chain.** Each middleware's `requires` keys are checked against the current
    context, then `run` executes. It either returns one of its own rejects, ending the request,
    or calls `next(ctx)` and returns what `next()` resolves to, unchanged. Returning anything
    else after `next()` fails as invalid handler output. Declared `provides` values are parsed
    before any are merged, and undeclared top-level keys are omitted.
-5. **Handler.** `run` receives the parsed input and the accumulated context, with
+6. **Handler.** `run` receives the parsed input and the accumulated context, with
    framework-owned values such as `logger` applied last so they cannot be replaced.
-6. **Response validation.** As soon as the handler or a middleware returns an outcome, before
+7. **Response validation.** As soon as the handler or a middleware returns an outcome, before
    earlier middleware resume, the result shape and `type` are checked against the
    outcomes of whoever returned it: the route's `responses` for the handler, or that
    middleware's own `rejects`. Its `data` is parsed according
    to the configured response-validation policy. Declared headers and cookie effects are
    checked the same way. A missing required cookie effect fails in every mode.
-7. **Serialization.** The response is written at the same point as
+8. **Serialization.** The response is written at the same point as
    `application/json; charset=utf-8`, with the outcome's declared headers, its cookies as
    repeated `Set-Cookie` fields, and, when enabled, lifecycle headers. A bodyless outcome gets
    no content headers. The selected response is then fixed: changes that code makes later to
@@ -42,17 +46,20 @@ For each matched route, in order:
 
 ## Status Codes Routa Produces
 
-| Status | Cause                                                                    |
-| ------ | ------------------------------------------------------------------------ |
-| `204`  | Automatic `OPTIONS` response                                             |
-| `400`  | Input failed schema validation, or the JSON body could not be parsed     |
-| `404`  | No route matches the request path                                        |
-| `405`  | The path exists but does not declare the requested method                |
-| `406`  | The `Accept` header cannot be satisfied by JSON                          |
-| `415`  | The request body's content type is not a JSON media type                 |
-| `500`  | A handler or middleware returned output that does not match its contract |
-| `500`  | A route-file or method service factory failed during the request         |
-| `500`  | A handler or middleware threw an error it did not handle                 |
+| Status | Cause                                                                              |
+| ------ | ---------------------------------------------------------------------------------- |
+| `204`  | Automatic `OPTIONS` response                                                       |
+| `400`  | Input failed schema validation, or the JSON body could not be parsed               |
+| `401`  | A presented credential failed authentication (`authenticationFailed`)              |
+| `401`  | A `requireAuth` guard received an anonymous request (`authenticationRequired`)     |
+| `404`  | No route matches the request path                                                  |
+| `405`  | The path exists but does not declare the requested method                          |
+| `406`  | The `Accept` header cannot be satisfied by JSON                                    |
+| `415`  | The request body's content type is not a JSON media type                           |
+| `500`  | A handler or middleware returned output that does not match its contract           |
+| `500`  | A route-file or method service factory failed during the request                   |
+| `500`  | A handler or middleware threw an error it did not handle                           |
+| `500`  | An authenticator threw, or returned a result or principal that breaks its contract |
 
 Every other status comes from your contract: a handler outcome or a middleware reject.
 
@@ -71,20 +78,83 @@ the table below:
 }
 ```
 
-| `type`                              | Title                  | Status |
-| ----------------------------------- | ---------------------- | ------ |
-| `…/problems/validation`             | Validation failed      | 400    |
-| `…/problems/invalid-json`           | Invalid JSON body      | 400    |
-| Plain text (no problem type)        | 404 Not Found          | 404    |
-| Plain text (no problem type)        | Method Not Allowed     | 405    |
-| Plain text (no problem type)        | Not Acceptable         | 406    |
-| `…/problems/unsupported-media-type` | Unsupported Media Type | 415    |
-| `…/problems/handler-output`         | Invalid handler output | 500    |
-| `…/problems/internal`               | Internal Server Error  | 500    |
+| `type`                               | Title                   | Status |
+| ------------------------------------ | ----------------------- | ------ |
+| `…/problems/validation`              | Validation failed       | 400    |
+| `…/problems/invalid-json`            | Invalid JSON body       | 400    |
+| `…/problems/authentication-failed`   | Authentication failed   | 401    |
+| `…/problems/authentication-required` | Authentication required | 401    |
+| Plain text (no problem type)         | 404 Not Found           | 404    |
+| Plain text (no problem type)         | Method Not Allowed      | 405    |
+| Plain text (no problem type)         | Not Acceptable          | 406    |
+| `…/problems/unsupported-media-type`  | Unsupported Media Type  | 415    |
+| `…/problems/handler-output`          | Invalid handler output  | 500    |
+| `…/problems/internal`                | Internal Server Error   | 500    |
 
 Only input validation problems include `issues` in the response. Handler-output problems
 never leak the underlying message or response values, since they may contain internal
 data.
+
+## Authentication
+
+When `src/routa.ts` configures [`authentication`](/docs/reference/configuration/#authentication),
+Routa resolves every matched request's credential before anything else reads the request. A
+Bearer scheme reads the `Authorization` header:
+
+| `Authorization` header                                                      | Result                                                         |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Absent                                                                      | `ctx.auth` is `{ status: "anonymous" }`                        |
+| `Bearer <token>`, accepted by the authenticator                             | `ctx.auth` is `{ status: "authenticated", scheme, principal }` |
+| `Bearer <token>`, rejected by the authenticator                             | `authenticationFailed`                                         |
+| `Bearer` with an empty token, or a token that is not an RFC 6750 `b64token` | `authenticationFailed`; the authenticator does not run         |
+| Another scheme, such as `Basic …`                                           | `authenticationFailed`; the authenticator does not run         |
+
+A presented credential that fails never downgrades to anonymous, on public operations and
+protected ones alike. Because resolution runs first, a request with an invalid credential
+receives `401` whatever its `Accept` header or body.
+
+The authenticator runs once per request. Routa parses an accepted principal once with the
+principal schema, and `ctx.auth.principal` is the schema's output. `ctx.auth` is readonly:
+middleware cannot replace it, and writing it fails the request with the generic `500`.
+
+A [`requireAuth`](/docs/reference/core/#requireauth) guard runs at its position in the
+middleware chain, after input parsing. It returns `authenticationRequired` for an anonymous
+request and passes an authenticated one on. The handler sees the authenticated branch of
+`ctx.auth`.
+
+### Outcomes and Challenges
+
+Both outcomes are `401` problem documents with a `WWW-Authenticate` challenge:
+
+```json
+{
+	"type": "https://routa-ts.dev/problems/authentication-failed",
+	"title": "Authentication failed",
+	"status": 401
+}
+```
+
+| Situation                          | Outcome                  | `WWW-Authenticate`                                                   |
+| ---------------------------------- | ------------------------ | -------------------------------------------------------------------- |
+| No credential behind `requireAuth` | `authenticationRequired` | `Bearer` or `Bearer realm="api"`                                     |
+| Another scheme than Bearer         | `authenticationFailed`   | `Bearer` or `Bearer realm="api"`                                     |
+| Malformed or rejected Bearer token | `authenticationFailed`   | `Bearer error="invalid_token"`, with the realm first when configured |
+
+`realm` appears only when the scheme declares a static
+[challenge override](/docs/reference/core/#bearer). Routa never adds `error_description`,
+`error_uri`, or any value from the request, the application, or its provider.
+
+### Authenticator Failures
+
+| Authenticator behavior                                    | Response                     |
+| --------------------------------------------------------- | ---------------------------- |
+| Returns `{ type: "rejected" }`                            | `401` `authenticationFailed` |
+| Throws                                                    | `500` `…/problems/internal`  |
+| Returns a principal the principal schema rejects          | `500` `…/problems/internal`  |
+| Returns anything other than `authenticated` or `rejected` | `500` `…/problems/internal`  |
+
+An invalid result is an application contract violation, not a client error. A thrown error
+stays a server error so an outage at a provider never reads as a bad credential.
 
 ## Methods
 
@@ -152,6 +222,11 @@ completed request with `method`, `path`, `status`, and `durationMs`, and `http.e
 `error` for responses of 500 or above with the error message, name, and stack. Response
 and middleware context schema failures also include structured `issues` containing only
 each Zod issue's `code` and `path`; rejected values are never logged.
+
+For an authenticator that throws, `http.error` carries the message
+`Authenticator for scheme "<name>" threw.`, the `scheme`, and the thrown error's name as
+`cause`, never its message or stack, because a provider error may include the credential. An
+invalid principal logs the scheme in the message and the principal schema's `issues`.
 
 Handlers always receive `ctx.logger`. With logging disabled it is a complete no-op
 implementation of the same type.

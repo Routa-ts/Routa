@@ -32,6 +32,25 @@ Middleware `rejects` are documented exactly like route outcomes: description, bo
 and cookies. Middleware `openapi` metadata contributes `security` and `x-routa-authz`, and
 route `deprecation` metadata marks the operation deprecated.
 
+### Authentication
+
+When `src/routa.ts` configures [`authentication`](/docs/reference/configuration/#authentication),
+`components.securitySchemes` declares each scheme under its name, such as
+`userToken: { type: "http", scheme: "bearer" }`, and every operation documents its security:
+
+| Operation             | `security`                | `401` outcomes                                      |
+| --------------------- | ------------------------- | --------------------------------------------------- |
+| Without `requireAuth` | `[{}, { userToken: [] }]` | `authenticationFailed`                              |
+| Behind `requireAuth`  | `[{ userToken: [] }]`     | `authenticationFailed` and `authenticationRequired` |
+
+The empty requirement `{}` says the operation also accepts requests without a credential.
+Each `401` outcome documents its problem body and a required `WWW-Authenticate` header, and
+the two compose under one status like any other outcomes. A `HEAD` operation documents them
+as one bodyless response. Middleware `openapi.security` still applies: Routa enforces
+authentication in addition to your middleware, so each middleware requirement combines with
+each authentication alternative. `[{ tenantKey: [] }]` on a public operation becomes
+`[{ tenantKey: [] }, { tenantKey: [], userToken: [] }]`.
+
 ### Outcomes That Share a Status
 
 OpenAPI has one response per status, so outcomes that share a status are composed into one.
@@ -110,7 +129,10 @@ the generated `Set-Cookie` header description, which lists cookie names and attr
 Removing a response status or an operation's authentication from source is drift, because the
 current document no longer carries them over from the baseline. `openapi breaking` is
 narrower: it fails only for removed operations and for inputs that became required or
-newly require authentication, so it is the check to run in CI on every pull request.
+newly require authentication, so it is the check to run in CI on every pull request. An
+operation whose `security` includes the empty requirement `{}` does not require
+authentication, so adding `authentication` to an application flags only the operations behind
+`requireAuth`.
 
 ## OpenAPI to Source
 

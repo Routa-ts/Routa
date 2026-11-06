@@ -115,8 +115,10 @@ returns one that is not in its own `rejects`. The message lists the valid names.
 ### `ROUTA_OUTCOME_NAME_COLLISION`
 
 Two outcomes that can end the same operation share a name: a route outcome and a middleware
-reject, or the rejects of two middleware in one chain. The handler result names its outcome,
-so the names must be distinct.
+reject, or the rejects of two middleware in one chain. With `authentication` configured, Routa
+owns `authenticationFailed` on every operation and `authenticationRequired` behind
+`requireAuth`, so a route outcome or reject cannot use those names. The handler result names
+its outcome, so the names must be distinct.
 
 **Fix:** rename one of them. A route does not need to redeclare a reject its middleware
 already declares.
@@ -305,10 +307,92 @@ locally or imported. Routa would otherwise miss the context the middleware provi
 ### `ROUTA_CONTEXT_RESERVED`
 
 A middleware provides `services` or passes it to `next()`. Routa reserves `ctx.services`
-for injected [services](/docs/concepts/services/).
+for injected [services](/docs/concepts/services/). When `src/routa.ts` configures
+`authentication`, a middleware that provides `auth` fails too, because Routa resolves
+`ctx.auth` from the request's credential.
 
 **Fix:** rename the context key. When the value is an application dependency, declare it
 as an application service instead.
+
+## Authentication
+
+### `ROUTA_AUTH_CONFIG_UNRESOLVED`
+
+`routa check` cannot read the `authentication` config in `src/routa.ts`, its `schemes`, a
+scheme name, or a scheme's descriptor. Examples: `authentication: makeAuthentication()`, a
+spread or computed key inside `authentication` or `schemes`, or a scheme whose value is not a
+`bearer({ ... })` call imported from `@routa-ts/core`. Scheme names and descriptors are
+contract facts, so Routa reads them without running `src/routa.ts`.
+
+**Fix:** write `authentication` as an object literal, or a `const` object literal it can
+follow, with a plain key for each scheme and a `bearer({ ... })` call, or a `const` bound to
+one, as its value.
+
+### `ROUTA_AUTH_CONFIG_INVALID`
+
+The `authentication` config has no `principal`, declares no schemes, or names a scheme with a
+character other than letters, digits, `.`, `-`, and `_`. A scheme name is the OpenAPI
+security scheme key.
+
+**Fix:** add a principal schema, declare at least one scheme, or rename the scheme.
+
+### `ROUTA_AUTH_TRANSPORT_OVERLAP`
+
+Two schemes read the same credential, such as two `bearer()` schemes that both read
+`Authorization: Bearer`. Routa could not tell which authenticator owns a token.
+
+**Fix:** keep one Bearer scheme and accept every token format in its authenticator.
+
+### `ROUTA_AUTH_CHALLENGE_INVALID`
+
+A scheme's `challenge` override is not a literal object, declares a key other than `realm`, or
+has a `realm` that is not a string literal of printable ASCII without `"` or `\`.
+
+```ts
+// Fails: the realm is computed
+bearer({ challenge: { realm: process.env.REALM }, authenticate });
+```
+
+**Fix:** write a literal such as `challenge: { realm: "api" }`. A challenge is public, so it
+holds no runtime values.
+
+### `ROUTA_AUTH_NOT_CONFIGURED`
+
+A route uses `requireAuth()`, but `src/routa.ts` configures no `authentication`, so no request
+could ever pass the guard.
+
+**Fix:** configure [`authentication`](/docs/reference/configuration/#authentication) in
+`createRouta`, or remove the guard.
+
+### `ROUTA_AUTH_SCHEME_UNKNOWN`
+
+`requireAuth({ schemes: [...] })` lists a name `src/routa.ts` does not declare. The message
+lists the declared schemes.
+
+**Fix:** use a declared scheme name. TypeScript reports the same mistake once
+`.routa/routes.gen.ts` is current.
+
+### `ROUTA_AUTH_REQUIREMENT_EMPTY`
+
+`requireAuth({ schemes: [] })` allows no schemes, so it would reject every request.
+
+**Fix:** list at least one scheme, or call `requireAuth()` to accept any configured scheme.
+
+### `ROUTA_AUTH_REQUIREMENT_UNRESOLVED`
+
+`requireAuth` receives options `routa check` cannot read, such as `requireAuth(options)` or
+`requireAuth({ schemes: allowed })`.
+
+**Fix:** call `requireAuth()`, or list scheme names inline:
+`requireAuth({ schemes: ["userToken"] })`.
+
+### `ROUTA_AUTH_REQUIREMENT_UNSUPPORTED`
+
+A folder `middleware.ts` exports a `requireAuth()` guard. Folder middleware cannot require
+authentication yet, so the guard would never run and its routes would stay public.
+
+**Fix:** write `requireAuth()` inline in the `middleware` of each route root or method it
+protects.
 
 ## Services
 

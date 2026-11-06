@@ -174,6 +174,76 @@ member follows it, so `routa check` warns with
 Startup refuses services that `routa generate` did not read, and generated services that
 `src/routa.ts` no longer configures.
 
+## `authentication`
+
+```ts
+authentication?: {
+	principal: PrincipalSchema;
+	schemes: Record<string, CredentialScheme>;
+}
+```
+
+Turns on credential orchestration for every route. Routa reads each request's credential,
+calls your authenticator once, validates the principal it returns, and gives every handler
+`ctx.auth`. Omit it and no route has `ctx.auth`: an application without `authentication`
+behaves exactly as before, and `requireAuth` fails `routa check`.
+
+| Field       | Purpose                                                                                     |
+| ----------- | ------------------------------------------------------------------------------------------- |
+| `principal` | One Zod schema whose output has string `id` and `type` fields. It validates every principal |
+| `schemes`   | Credential schemes keyed by name. Each name is also the OpenAPI security scheme key         |
+
+Declare schemes with [`bearer`](/docs/reference/core/#bearer), which reads
+`Authorization: Bearer <token>`. One Bearer scheme per application: a second one reads the same
+credential and fails `routa check` with
+[`ROUTA_AUTH_TRANSPORT_OVERLAP`](/docs/reference/diagnostics/#routa_auth_transport_overlap).
+A scheme name uses only letters, digits, `.`, `-`, and `_`.
+
+```ts title="src/routa.ts"
+import { bearer, createRouta } from "@routa-ts/core";
+import { z } from "zod";
+import { verifyAccessToken } from "./tokens.js";
+
+const Principal = z.discriminatedUnion("type", [
+	z.object({ type: z.literal("user"), id: z.string(), email: z.string() }),
+	z.object({ type: z.literal("service"), id: z.string() }),
+]);
+
+export default createRouta({
+	authentication: {
+		principal: Principal,
+		schemes: {
+			userToken: bearer({
+				challenge: { realm: "api" },
+				authenticate: async (token) => {
+					const user = await verifyAccessToken(token);
+					return user
+						? { type: "authenticated", principal: { type: "user", id: user.id, email: user.email } }
+						: { type: "rejected" };
+				},
+			}),
+		},
+	},
+});
+```
+
+`verifyAccessToken` stands for your own verification code, such as a JWT library call;
+Routa verifies nothing itself. TypeScript checks each authenticator's principal against the
+principal schema's input, and a rejection carries no other fields. The second argument holds
+the configured logger and, when `src/routa.ts` declares them, the
+[application services](/docs/concepts/services/).
+
+`routa check` reads scheme names, descriptor kinds, and challenge overrides from source,
+because they change the HTTP contract. Write `authentication` as an object literal in
+`createRouta`, or as a `const` object literal you pass or spread into it, with a plain key for
+each scheme and a `bearer({ ... })` call, or a `const` bound to one, as its value. Anything it
+cannot read fails with
+[`ROUTA_AUTH_CONFIG_UNRESOLVED`](/docs/reference/diagnostics/#routa_auth_config_unresolved).
+Authenticators are ordinary runtime functions and may use any expression. Startup refuses
+authentication that `routa generate` did not read, and scheme names that differ from the
+generated ones. [Runtime behavior](/docs/reference/runtime-behavior/#authentication) describes
+how each request's credential resolves.
+
 ## Environment Variables
 
 Environment variables are read at server start and take precedence over `src/routa.ts`.
@@ -183,8 +253,8 @@ Environment variables are read at server start and take precedence over `src/rou
 | `HOST`   | `host`    | `127.0.0.1` |
 | `PORT`   | `port`    | `3000`      |
 
-There is no environment override for `logger`, `lifecycleHeaders`, `responseValidation`, or
-`services`; branch on your own variables inside `src/routa.ts` instead.
+There is no environment override for `logger`, `lifecycleHeaders`, `responseValidation`,
+`services`, or `authentication`; branch on your own variables inside `src/routa.ts` instead.
 
 ## Precedence
 

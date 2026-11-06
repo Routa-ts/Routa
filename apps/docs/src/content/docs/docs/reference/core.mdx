@@ -12,17 +12,19 @@ than bundled.
 
 <PackageManagers type="add" args="@routa-ts/core hono zod" />
 
-| Entry point                    | Contents                                                                                                                                |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `@routa-ts/core`               | `createRouta`, `defineServices`, `createRoute`, `createRouteRoot`, `createRouteRootFactory`, `createMiddleware`, and the contract types |
-| `@routa-ts/core/hono`          | `createHonoApp`, `createApplication`, `isBodylessStatus`                                                                                |
-| `@routa-ts/core/logger`        | `createLogger` and the logger types                                                                                                     |
-| `@routa-ts/core/query/helpers` | `Sort`, `Fields`                                                                                                                        |
+| Entry point                    | Contents                                                                                                                                                         |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@routa-ts/core`               | `createRouta`, `defineServices`, `createRoute`, `createRouteRoot`, `createRouteRootFactory`, `createMiddleware`, `bearer`, `requireAuth`, and the contract types |
+| `@routa-ts/core/hono`          | `createHonoApp`, `createApplication`, `isBodylessStatus`                                                                                                         |
+| `@routa-ts/core/logger`        | `createLogger` and the logger types                                                                                                                              |
+| `@routa-ts/core/query/helpers` | `Sort`, `Fields`                                                                                                                                                 |
 
 ## `createRouta`
 
 ```ts
-function createRouta<const TConfig extends RoutaConfig>(config: TConfig): TConfig & RoutaConfig
+function createRouta<const TConfig extends RoutaConfig>(
+	config: TConfig & AuthenticationChecks<NoInfer<TConfig>>,
+): TConfig & RoutaConfig
 ```
 
 Preserves an application configuration object with Routa's typing. Export the result as
@@ -36,6 +38,10 @@ the default export of `src/routa.ts`, which the runtime imports at boot.
 | `lifecycleHeaders`   | `boolean`                    | `false`                 |
 | `responseValidation` | `"development" \| "always"`  | `"development"`         |
 | `services`           | `ApplicationServicesFactory` | None                    |
+| `authentication`     | `AuthenticationConfig`       | None                    |
+
+`AuthenticationChecks` fails a scheme whose authenticator returns a principal the principal
+schema does not accept as input, or a rejection with fields besides `type`.
 
 ```ts title="src/routa.ts"
 import { createRouta } from "@routa-ts/core";
@@ -414,6 +420,142 @@ export const withClock = defineClockMiddleware({
 });
 ```
 
+## `bearer`
+
+```ts
+function bearer<const TResult extends AuthenticationResult>(options: {
+	challenge?: { realm?: string };
+	authenticate: (
+		credential: string,
+		context: AuthenticatorContext,
+	) => TResult | Promise<TResult>;
+}): BearerScheme<TResult>
+
+type AuthenticationResult<TPrincipal = unknown> =
+	| { readonly type: "authenticated"; readonly principal: TPrincipal }
+	| { readonly type: "rejected" }
+```
+
+Declares a credential scheme that reads `Authorization: Bearer <token>`. Place it in
+`authentication.schemes` in `createRouta`, keyed by the scheme name. Routa extracts the token,
+calls `authenticate` once per request that presents one, and parses an authenticated
+principal with the principal schema.
+
+| Option         | Type                                            | Purpose                                                             |
+| -------------- | ----------------------------------------------- | ------------------------------------------------------------------- |
+| `challenge`    | `{ realm?: string }`                            | Static challenge override; a literal read by `routa check`          |
+| `authenticate` | `(credential, context) => AuthenticationResult` | Your verification code: return a principal candidate or a rejection |
+
+`context` holds `logger` and, when `src/routa.ts` declares them, the application `services`.
+It has no route-file or method services and no request. Return `{ type: "rejected" }` for a
+credential that is not valid. Throw only for unexpected failures, which stay `500` responses.
+`realm` must be printable ASCII without `"` or `\`.
+
+```ts title="src/routa.ts"
+import { bearer, createRouta } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouta({
+	authentication: {
+		principal: z.object({ type: z.literal("service"), id: z.string() }),
+		schemes: {
+			serviceToken: bearer({
+				challenge: { realm: "internal" },
+				authenticate: (token) =>
+					token === process.env.SERVICE_TOKEN
+						? { type: "authenticated", principal: { type: "service", id: "billing" } }
+						: { type: "rejected" },
+			}),
+		},
+	},
+});
+```
+
+**Errors:** throws a `TypeError` when `authenticate` is not a function, or when `challenge`
+declares a key other than `realm` or an invalid realm.
+
+## `requireAuth`
+
+```ts
+function requireAuth(options?: { schemes: readonly SchemeName[] }): RequireAuthMiddleware
+```
+
+A middleware guard that returns `authenticationRequired` (`401`) for an anonymous request and
+lets an authenticated one continue. The middleware after it and the handler see `ctx.auth`
+narrowed to `{ status: "authenticated", scheme, principal }`. Omit `options` to accept any
+configured scheme, or list the accepted schemes inline; `SchemeName` is the union of names
+`routa generate` read from `src/routa.ts`.
+
+Write the call inline in a route root's or a `createRoute`'s `middleware`, so `routa check`
+can read it. It requires [`authentication`](/docs/reference/configuration/#authentication) in
+`createRouta`.
+
+```ts title="src/routes/projects/route.ts"
+import { createRoute, createRouteRoot, requireAuth } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/projects")({
+	post: createRoute({
+		middleware: [requireAuth()],
+		input: { body: z.object({ name: z.string() }) },
+		responses: { created: { status: 201, schema: z.object({ owner: z.string() }) } },
+		run: ({ ctx }) => ({ type: "created", data: { owner: ctx.auth.principal.id } }),
+	}),
+});
+```
+
+The guard owns the `authenticationRequired` outcome, so a route outcome with that name is a
+type error. Its `401` carries a `WWW-Authenticate` challenge for the accepted schemes; see
+[Runtime behavior](/docs/reference/runtime-behavior/#outcomes-and-challenges).
+
+**Errors:** throws a `TypeError` for an empty `schemes` list. `routa check` reports
+`ROUTA_AUTH_NOT_CONFIGURED`, `ROUTA_AUTH_SCHEME_UNKNOWN`, `ROUTA_AUTH_REQUIREMENT_EMPTY`,
+`ROUTA_AUTH_REQUIREMENT_UNRESOLVED`, and, for a guard a folder `middleware.ts` exports,
+`ROUTA_AUTH_REQUIREMENT_UNSUPPORTED`. Registration throws when authentication is not
+configured or the guard names an undeclared scheme.
+
+<Aside type="caution" title="Inline guards only">
+	`requireAuth` works inline at route and method level. A folder `middleware.ts` cannot
+	export it yet.
+</Aside>
+
+## `AuthContext`
+
+```ts
+type AuthContext<TScheme extends string = string, TPrincipal = Principal> =
+	| AnonymousAuthContext
+	| AuthenticatedAuthContext<TScheme, TPrincipal>
+
+type AnonymousAuthContext = { readonly status: "anonymous" }
+
+type AuthenticatedAuthContext<TScheme extends string = string, TPrincipal = Principal> = {
+	readonly status: "authenticated"
+	readonly scheme: TScheme
+	readonly principal: TPrincipal
+}
+```
+
+The type of `ctx.auth`. It exists only when `src/routa.ts` configures authentication;
+otherwise reading `ctx.auth` is a type error. `.routa/routes.gen.ts` types it for each
+operation: an operation without `requireAuth` gets `AuthContext`, and an operation behind
+`requireAuth` gets `AuthenticatedAuthContext`. `TPrincipal` is the principal schema's output.
+Middleware reads `ctx.auth` by declaring `requires: ["auth"]` and sees `AuthContext`.
+
+```ts title="src/routes/me/route.ts"
+import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/me")({
+	get: createRoute({
+		responses: { ok: { status: 200, schema: z.object({ id: z.string().nullable() }) } },
+		run: ({ ctx }) => ({
+			type: "ok",
+			data: { id: ctx.auth.status === "authenticated" ? ctx.auth.principal.id : null },
+		}),
+	}),
+});
+```
+
 ## `createCookie`
 
 ```ts
@@ -518,10 +660,13 @@ factory. Call it directly in tests of routes that use no application services.
 | `options.lifecycleHeaders`   | `boolean`                   | Emit `Deprecation`, `Sunset`, and `Link`            |
 | `options.responseValidation` | `"development" \| "always"` | Response schema policy; defaults to `"development"` |
 | `options.runtimeMode`        | `"dev" \| "start"`          | Explicit mode; defaults to `"dev"` for direct use   |
+| `options.authentication`     | `AuthenticationConfig`      | Resolves `ctx.auth` and enforces `requireAuth`      |
 
 Registration throws for an explicitly declared `options` method, a duplicate
 method-and-path pair, a `GET` or `HEAD` contract declaring a body, and duplicate reject
-keys within one chain.
+keys within one chain. With `authentication`, it also throws for an invalid configuration,
+a route outcome named `authenticationFailed` or `authenticationRequired`, and middleware that
+provides `auth`. Without it, a `requireAuth` guard throws.
 
 ```ts
 type RouteServices = {
@@ -619,7 +764,7 @@ test application runs the same routes, middleware chains, and services as the se
 
 It loads `.routa/routes.gen.ts`, each route file, its filesystem middleware, and
 `src/routa.ts`, then calls `createApplication` with the configured logger, lifecycle
-headers, response validation, and services. It returns a `ProjectApplication`:
+headers, response validation, services, and authentication. It returns a `ProjectApplication`:
 
 ```ts
 type ProjectApplication = {
@@ -646,8 +791,8 @@ const { application } = await createProjectApplication(
 
 It rejects before any factory runs when a replacement names a path, method, or scope that
 declares no services, or holds a key it does not read. It rejects when a route file or
-`src/routa.ts` disagrees with the generated metadata, and with the errors of
-`createApplication`.
+`src/routa.ts` disagrees with the generated metadata, including authentication scheme names
+that differ from `routaAuthenticationSchemes`, and with the errors of `createApplication`.
 
 ## `createTestApplication`
 
@@ -1120,7 +1265,11 @@ export function findItem(id: string): ItemResult {
 `MiddlewareRunArgs`, `MiddlewareNext`, `MiddlewareContinuation`, `MiddlewareProvidesSpec`, `MiddlewareProvidesKeys`,
 `MiddlewareProvidedCtx`, `MiddlewareProvides`, `MiddlewareRejectsSpec`,
 `MiddlewareRejectResult`, `MiddlewareOpenApi`, `InferMiddlewareCtx`, `CookieConfig`,
-`CookieHandle`, `CookieEffect`, `CookieSameSite`, `RequiredCookie`, `AnyCookie`, and `Register`.
+`CookieHandle`, `CookieEffect`, `CookieSameSite`, `RequiredCookie`, `AnyCookie`,
+`AuthenticationConfig`, `AuthenticationResult`, `Authenticator`, `AuthenticatorContext`,
+`BearerChallenge`, `BearerOptions`, `BearerScheme`, `CredentialScheme`, `Principal`,
+`PrincipalSchema`, `PrincipalOf`, `AuthContext`, `AnonymousAuthContext`,
+`AuthenticatedAuthContext`, `RequireAuthOptions`, `RequireAuthMiddleware`, and `Register`.
 
 From `@routa-ts/core/hono`: `HonoRoute`, `CreateHonoAppOptions`, `CreateApplicationOptions`,
 `ApplicationServicesDeclaration`, `RequestServicesDeclaration`, `RouteServices`,
