@@ -240,7 +240,7 @@ const requirements = new WeakMap<object, { readonly schemes?: readonly string[] 
 
 /**
  * A middleware guard that rejects anonymous requests with `authenticationRequired` (`401`) and
- * narrows `ctx.auth` to authenticated for the middleware after it and the handler. It requires
+ * narrows the handler's `ctx.auth` to authenticated. It requires
  * `authentication` in `createRouta`. Write it inline in a route's or method's `middleware`, so
  * `routa check` can read it.
  *
@@ -599,8 +599,16 @@ export class AuthenticatorError extends Error {
 		cause: unknown,
 	) {
 		super(`Authenticator for scheme "${scheme}" threw.`);
-		this.errorName = cause instanceof Error ? cause.name : typeof cause;
+		this.errorName = cause instanceof Error ? safeErrorName(cause.name) : typeof cause;
 	}
+}
+
+/**
+ * An error class name such as `TypeError`, or `Error` when the name is anything else, because
+ * application code sets `name` and it could carry a credential.
+ */
+function safeErrorName(name: unknown): string {
+	return typeof name === "string" && /^[A-Za-z_$][\w$]{0,63}$/.test(name) ? name : "Error";
 }
 
 /**

@@ -235,6 +235,24 @@ describe("authenticator failures", () => {
 		expect(logged).not.toContain("provider said");
 	});
 
+	it("logs a thrown error's name only when it is a plain identifier", async () => {
+		const { app, events } = serveWith(() => {
+			const error = new Error("hidden");
+			error.name = "ProviderFailure: secret-token-value";
+			throw error;
+		});
+
+		const response = await app.request("/whoami", {
+			headers: { authorization: "Bearer secret-token-value" },
+		});
+
+		expect(response.status).toBe(500);
+		expect(events.find((event) => event.event === "http.error")?.data).toMatchObject({
+			cause: "Error",
+		});
+		expect(JSON.stringify(events)).not.toContain("secret-token-value");
+	});
+
 	it("reports a principal that fails the principal schema as a contract violation", async () => {
 		const { app, events } = serveWith(() => ({
 			type: "authenticated",
