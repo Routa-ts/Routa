@@ -518,9 +518,206 @@ allow.
 
 `routa scaffold` received a file that is not `.yaml`, `.yml`, or `.json`.
 
+**Fix:** pass a `.yaml`, `.yml`, or `.json` file.
+
 ### `ROUTA_OPENAPI_FILE_NOT_FOUND`
 
 The OpenAPI file path does not exist relative to the project root.
+
+**Fix:** pass a path relative to the project root.
+
+### `ROUTA_OPENAPI_BASELINE_INVALID_JSON`
+
+`routa openapi breaking` could not parse `.routa/openapi-baseline.json`.
+
+**Fix:** fix the JSON syntax, or replace the baseline with
+`routa openapi breaking --update-baseline`, which writes the current contract without
+reading the old file.
+
+## OpenAPI Scaffold Input
+
+`routa scaffold` checks the OpenAPI file before it writes anything and stops at the first
+problem. Each code below names the location in the file.
+
+### `ROUTA_OPENAPI_PARSE_ERROR`
+
+The OpenAPI file is not valid YAML or JSON. The message includes the parser error.
+
+**Fix:** fix the syntax the parser reports, then rerun `routa scaffold`.
+
+### `ROUTA_OPENAPI_MISSING_PATHS`
+
+The document has no top-level `paths` object. When route keys such as `/users` sit at the root, the message shows them nested under `paths`.
+
+**Fix:** add `openapi`, `info`, and `paths` at the top level, and nest every route under `paths`.
+
+### `ROUTA_OPENAPI_INVALID_PATHS`
+
+The top-level `paths` value is not an object.
+
+**Fix:** make `paths` an object that maps URL paths to their methods.
+
+### `ROUTA_OPENAPI_MISSING_OPENAPI_VERSION`
+
+The document has no top-level `openapi` field.
+
+**Fix:** add `openapi: 3.1.0` at the top of the file.
+
+### `ROUTA_OPENAPI_MISSING_INFO`
+
+The top-level `info` field is missing or is not an object.
+
+**Fix:** add an `info` object with `title` and `version`.
+
+### `ROUTA_OPENAPI_INVALID_PATH_KEY`
+
+A key under `paths` does not start with `/`.
+
+**Fix:** start every path key with `/`, such as `/users`.
+
+### `ROUTA_OPENAPI_INVALID_PATH_ITEM`
+
+A path's value is not an object of HTTP method operations.
+
+**Fix:** put operations such as `get` or `post` under the path.
+
+### `ROUTA_OPENAPI_UNSAFE_PATH_SEGMENT`
+
+A path segment is `.`, `..`, or contains a backslash or NUL character. Routa turns paths into `src/routes` directories, so a segment must stay inside the project.
+
+**Fix:** rename the segment.
+
+### `ROUTA_OPENAPI_OPTIONS_AUTOMATIC`
+
+The document declares an `options` operation. Routa answers `OPTIONS` at runtime from the path's methods.
+
+**Fix:** remove the `options` operation.
+
+### `ROUTA_OPENAPI_UNSUPPORTED_METHOD`
+
+A key under a path is not a supported HTTP method, or is one in the wrong case, such as `GET`.
+
+**Fix:** use a lowercase supported method: `get`, `post`, `put`, `patch`, `delete`, or `head`.
+
+### `ROUTA_OPENAPI_INVALID_OPERATION`
+
+A method's value is not an operation object.
+
+**Fix:** make the method an object with `operationId` and `responses`.
+
+### `ROUTA_OPENAPI_MISSING_OPERATION_ID`
+
+An operation has no `operationId`. Routa names generated schemas and route code after it.
+
+**Fix:** add the `operationId` the message suggests, or your own.
+
+### `ROUTA_OPENAPI_DUPLICATE_OPERATION_ID`
+
+Two operations share an `operationId`. The message names both locations.
+
+**Fix:** give each operation a unique `operationId`.
+
+### `ROUTA_OPENAPI_GET_BODY_UNSUPPORTED`
+
+A `get` operation declares a `requestBody`. Routa route contracts do not accept a body on `GET`.
+
+**Fix:** move the data into query parameters, or use another method.
+
+### `ROUTA_OPENAPI_NO_SUPPORTED_OPERATIONS`
+
+The document has no operation Routa can scaffold.
+
+**Fix:** add at least one supported method under `paths`.
+
+### `ROUTA_OPENAPI_INVALID_PARAMETERS`
+
+A path-level or operation `parameters` field is not an array.
+
+**Fix:** make `parameters` an array, or remove the field.
+
+### `ROUTA_OPENAPI_PATH_PARAMETER_REQUIRED`
+
+A path parameter does not set `required: true`. OpenAPI path parameters are always required.
+
+**Fix:** add `required: true` to the parameter.
+
+### `ROUTA_OPENAPI_MISSING_PATH_PARAMETER`
+
+The path has a `{name}` segment with no matching `in: path` parameter.
+
+**Fix:** add a parameter entry such as `{ name, in: path, required: true, schema: { type: string } }`.
+
+### `ROUTA_OPENAPI_UNUSED_PATH_PARAMETER`
+
+A path parameter is declared but its `{name}` segment does not appear in the path.
+
+**Fix:** add the segment to the path, or remove the parameter.
+
+### `ROUTA_OPENAPI_UNSUPPORTED_PARAMETER_SCHEMA`
+
+A parameter's schema is not a string, number, integer, boolean, or enum. Parameters arrive as single string values.
+
+**Fix:** use a scalar schema, or move structured data into the request body.
+
+### `ROUTA_OPENAPI_INVALID_REQUEST_BODY`
+
+`requestBody.content` is not an object.
+
+**Fix:** make `requestBody.content` an object with an `application/json` entry.
+
+### `ROUTA_OPENAPI_UNSUPPORTED_REQUEST_MEDIA_TYPE`
+
+`requestBody.content` has a media type other than `application/json`.
+
+**Fix:** declare the request body as `application/json`.
+
+### `ROUTA_OPENAPI_MISSING_RESPONSES`
+
+An operation has no `responses`, or an empty `responses` object.
+
+**Fix:** declare at least one response, such as `"200": { description: OK }`.
+
+### `ROUTA_OPENAPI_INVALID_RESPONSE_STATUS`
+
+A response key is not a three-digit status from `100` to `599`. Ranges such as `2XX` and `default` are not supported.
+
+**Fix:** use explicit numeric status keys such as `"200"` or `"404"`.
+
+### `ROUTA_OPENAPI_INVALID_RESPONSE_CONTENT`
+
+A response's `content` is present but is not an object.
+
+**Fix:** make `content` an object with an `application/json` entry, or remove it for a bodyless response.
+
+### `ROUTA_OPENAPI_UNSUPPORTED_RESPONSE_MEDIA_TYPE`
+
+A response's `content` has a media type other than `application/json`.
+
+**Fix:** declare the response body as `application/json`.
+
+### `ROUTA_OPENAPI_UNSUPPORTED_SCHEMA`
+
+A schema uses a feature scaffolding cannot translate: `allOf`, `oneOf` without a usable discriminator, a type array with more than one non-null entry, the OpenAPI 3.0 `nullable` flag, `additionalProperties` beside fixed properties, or a non-scalar `const`. The message names the feature.
+
+**Fix:** rewrite the schema with the supported forms the message lists, such as `type: ["string", "null"]` in place of `nullable`.
+
+### `ROUTA_OPENAPI_UNSUPPORTED_REF`
+
+A `$ref` points outside `#/components/schemas/`.
+
+**Fix:** use local refs such as `#/components/schemas/User`.
+
+### `ROUTA_OPENAPI_MISSING_REF`
+
+A local `$ref` names a component schema that does not exist.
+
+**Fix:** add the component under `components.schemas`, or point the ref at an existing one.
+
+### `ROUTA_OPENAPI_INVALID_TYPESCRIPT_IDENTIFIER`
+
+An `operationId`, parameter, or component name produces a name that is not a valid TypeScript identifier.
+
+**Fix:** rename it in the OpenAPI file.
 
 ## Scaffolding
 
@@ -540,6 +737,18 @@ missing. Routa refuses to overwrite or remove it because local edits may be lost
 **Fix:** move the edits into application-owned modules, then regenerate. Run with
 `--preview` first to see the full list. If the hash is missing, restore
 `.routa/manifest.json` from version control before regenerating.
+
+### `ROUTA_SCAFFOLD_PATH_OUTSIDE_PROJECT`
+
+Scaffolding computed a file path outside the project root and refused to touch it.
+
+**Fix:** check the paths in the OpenAPI file and the entries in `.routa/manifest.json`; every generated file must stay inside the project.
+
+### `ROUTA_MANIFEST_INVALID`
+
+`.routa/manifest.json` is not valid JSON.
+
+**Fix:** fix the JSON syntax, or restore the file from version control. Deleting the manifest makes the next scaffold treat every generated file as new.
 
 ## Non-Coded Failures
 

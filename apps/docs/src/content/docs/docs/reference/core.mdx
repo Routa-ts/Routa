@@ -156,6 +156,38 @@ export const getStatus = createRoute({
 ## `ResponseBuilders`
 
 ```ts
+type ResponseBuilders<TResponses extends RouteResponses> = {
+	readonly [K in Exclude<keyof TResponses & string, OutcomesWithRequiredCookies<TResponses>>]:
+		TResponses[K] extends { readonly schema: infer TSchema extends ZodType }
+			? (
+					data: SchemaOutput<TSchema>,
+					...headers: BuilderHeaderArgs<TResponses[K]>
+				) => Extract<OutcomeResult<K, TResponses[K]>, { readonly data: unknown }>
+			: (...headers: BuilderHeaderArgs<TResponses[K]>) => OutcomeResult<K, TResponses[K]>
+}
+
+// Internal helpers, not exported
+type BuilderHeaderArgs<TOutcome> = TOutcome extends { readonly headers: infer THeaders extends ZodType }
+	? {} extends SchemaOutput<THeaders>
+		? [headers?: SchemaOutput<THeaders>] // every declared header is optional
+		: [headers: SchemaOutput<THeaders>]
+	: [] // no headers declared
+
+type OutcomesWithRequiredCookies<TResponses extends RouteResponses> = {
+	[K in keyof TResponses & string]: TResponses[K] extends {
+		readonly cookies: readonly (infer TEntry)[]
+	}
+		? Extract<TEntry, { readonly required: true }> extends never
+			? never
+			: K
+		: never
+}[keyof TResponses & string]
+```
+
+An outcome that lists a required cookie has no builder. Return its result object instead, so
+you can set the cookie effect.
+
+```ts
 import { createRoute } from "@routa-ts/core";
 import { z } from "zod";
 
@@ -191,7 +223,8 @@ built-in outcome names, and middleware rejects do not add builder methods.
 | `headers` | Selected outcome `headers` output type | Response headers, when the outcome declares any |
 
 An outcome without a `schema` has a builder with no data parameter, such as
-`response.noContent()`. A builder returns `{ type, data, headers }`, or `{ type, headers }`
+`response.noContent()`. An outcome that declares a required cookie has no builder; return
+its result object so you can set the cookie effect. A builder returns `{ type, data, headers }`, or `{ type, headers }`
 for an outcome without a schema (`headers` appears only when you pass it), without sending a response. Return that result from
 `run` to select the outcome. Routa applies the declared status, configured response
 validation, and JSON serialization. Existing object returns remain supported.
@@ -401,6 +434,35 @@ function createCookie<const TConfig extends CookieConfig>(
 | `maxAge`      | `number`                       | No       | Non-negative whole seconds                           |
 | `expires`     | `string`                       | No       | ISO 8601 date-time, such as `"2030-01-01T00:00:00Z"` |
 | `partitioned` | `boolean`                      | No       | Adds `Partitioned`; requires `secure: true`          |
+
+```ts
+type CookieSameSite = "strict" | "lax" | "none"
+
+type CookieHandle<TConfig extends CookieConfig> = Readonly<TConfig> & {
+	set(value: SchemaOutput<TConfig["schema"]>): CookieEffect<CookieHandle<TConfig>>
+	clear(): CookieEffect<CookieHandle<TConfig>>
+}
+
+type CookieEffect<THandle = AnyCookie> = {
+	readonly kind: "set" | "clear"
+	readonly cookie: THandle
+	readonly value?: unknown
+}
+
+type AnyCookie = Readonly<CookieConfig> & {
+	set(value: never): CookieEffect<any>
+	clear(): CookieEffect<any>
+}
+
+type RequiredCookie<THandle extends AnyCookie = AnyCookie> = {
+	readonly handle: THandle
+	readonly required: true
+}
+```
+
+`CookieConfig` is the field table above. `AnyCookie` accepts any handle, and a
+`RequiredCookie` entry in an outcome's `cookies` makes the outcome return an effect for that
+handle.
 
 The handle exposes `set(value)` and `clear()`. Both are pure: they return a `CookieEffect`
 bound to the handle, and Routa turns the effects an outcome returns into repeated
@@ -959,6 +1021,91 @@ export const ordersServices: ServicesFactory<"/orders"> = ({ ctx, onCleanup }) =
 **Errors:** when the factory throws or returns different names, Routa skips the rest of the
 request, releases the scopes the request started, and responds with the standard `500`
 problem.
+
+## Response Types
+
+```ts
+type RouteOutcome = {
+	status: number
+	description?: string
+	schema?: ZodType
+	headers?: ZodObject
+	cookies?: readonly (AnyCookie | RequiredCookie)[]
+}
+
+type RouteResponses = Record<string, RouteOutcome>
+type MiddlewareRejectsSpec = RouteResponses
+
+type OutcomeResult<TName extends string, TOutcome> = (TOutcome extends {
+	readonly schema: infer TSchema extends ZodType
+}
+	? { readonly type: TName; readonly data: SchemaOutput<TSchema> }
+	: { readonly type: TName; readonly data?: never })
+	& OutcomeHeaders<TOutcome>
+	& OutcomeCookies<TOutcome>
+
+// Internal helpers, not exported
+type OutcomeHeaders<TOutcome> = TOutcome extends { readonly headers: infer THeaders extends ZodType }
+	? {} extends SchemaOutput<THeaders>
+		? { readonly headers?: SchemaOutput<THeaders> }
+		: { readonly headers: SchemaOutput<THeaders> }
+	: { readonly headers?: never }
+
+type OutcomeCookies<TOutcome> = TOutcome extends { readonly cookies: readonly (infer TEntry)[] }
+	? Extract<TEntry, { readonly required: true }> extends never
+		? { readonly cookies?: readonly CookieEffect[] }
+		: { readonly cookies: readonly CookieEffect[] } // must include an effect for each required cookie
+	: { readonly cookies?: never }
+
+type RoutaResult<TResponses extends RouteResponses> = {
+	[K in keyof TResponses]: OutcomeResult<K, TResponses[K]>
+}[keyof TResponses]
+
+type RouteRunResult<TResponses extends RouteResponses> = RoutaResult<TResponses>
+type InferResponse<TResponses extends RouteResponses> = RouteRunResult<TResponses>
+
+type MiddlewareRejectResult<TRejects extends MiddlewareRejectsSpec> =
+	keyof TRejects extends never ? never : RoutaResult<TRejects>
+
+type ResponseChecks<TResponses extends RouteResponses> = {
+	readonly [K in keyof TResponses]: OutcomeChecks<TResponses[K]>
+}
+```
+
+A schema-less outcome forbids `data`, an outcome without headers forbids `headers`, and an
+outcome without cookies forbids `cookies`. The source uses named error types for those fields
+so the compiler message names the outcome; the block shows them as `never`.
+
+| Type                     | Meaning                                                                      |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| `RouteOutcome`           | One named outcome in `responses` or `rejects`                                |
+| `RouteResponses`         | A route's `responses` map, keyed by outcome name                             |
+| `MiddlewareRejectsSpec`  | A middleware's `rejects` map, with the same shape                            |
+| `OutcomeResult`          | The result object that selects one outcome                                   |
+| `RoutaResult`            | The union of every outcome's result                                          |
+| `RouteRunResult`         | What a route's `run` returns                                                 |
+| `InferResponse`          | The same union, named for use outside a route                                |
+| `MiddlewareRejectResult` | What a middleware `run` returns to reject, or `never` when it declares none  |
+| `ResponseChecks`         | Compile-time rules for declared outcomes; a valid outcome adds no constraint |
+
+Use `InferResponse` to type a function that chooses an outcome outside the handler:
+
+```ts
+import type { InferResponse, RouteResponses } from "@routa-ts/core";
+import { z } from "zod";
+
+export const itemResponses = {
+	success: { status: 200, schema: z.object({ id: z.string() }) },
+	notFound: { status: 404 },
+} as const satisfies RouteResponses;
+
+/** { type: "success"; data: { id: string } } | { type: "notFound" } */
+export type ItemResult = InferResponse<typeof itemResponses>;
+
+export function findItem(id: string): ItemResult {
+	return id === "1" ? { type: "success", data: { id } } : { type: "notFound" };
+}
+```
 
 ## Exported Types
 
