@@ -35,18 +35,29 @@ route `deprecation` metadata marks the operation deprecated.
 ### Authentication
 
 When `src/routa.ts` configures [`authentication`](/docs/reference/configuration/#authentication),
-`components.securitySchemes` declares each scheme under its name, such as
-`userToken: { type: "http", scheme: "bearer" }`, and every operation documents its security:
+`components.securitySchemes` declares each scheme under its name, in priority order:
 
-| Operation             | `security`                | `401` outcomes                                      |
-| --------------------- | ------------------------- | --------------------------------------------------- |
-| Without `requireAuth` | `[{}, { userToken: [] }]` | `authenticationFailed`                              |
-| Behind `requireAuth`  | `[{ userToken: [] }]`     | `authenticationFailed` and `authenticationRequired` |
+| Descriptor                  | Security Scheme Object                           |
+| --------------------------- | ------------------------------------------------ |
+| `bearer()`                  | `{ type: "http", scheme: "bearer" }`             |
+| `apiKey({ header })`        | `{ type: "apiKey", in: "header", name: header }` |
+| `sessionCookie({ cookie })` | `{ type: "apiKey", in: "cookie", name: cookie }` |
+
+Every operation documents its security as separate alternatives, one per accepted scheme, in
+priority order. OpenAPI reads them with OR semantics: any one of them suffices. With
+`userToken`, `session`, and `serviceKey` configured:
+
+| Operation                                      | `security`                                                     | `401` outcomes                                      |
+| ---------------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------- |
+| Without `requireAuth`                          | `[{}, { userToken: [] }, { session: [] }, { serviceKey: [] }]` | `authenticationFailed`                              |
+| Behind `requireAuth()`                         | `[{ userToken: [] }, { session: [] }, { serviceKey: [] }]`     | `authenticationFailed` and `authenticationRequired` |
+| Behind `requireAuth({ schemes: ["session"] })` | `[{ session: [] }]`                                            | `authenticationFailed` and `authenticationRequired` |
 
 The empty requirement `{}` says the operation also accepts requests without a credential.
 Each `401` outcome documents its problem body and a required `WWW-Authenticate` header, and
 the two compose under one status like any other outcomes. Routa places each problem body in
-`components.schemas` as `RoutaAuthenticationFailed` or `RoutaAuthenticationRequired` and
+`components.schemas` as `RoutaAuthenticationFailed`, `RoutaAuthenticationRequired`, or
+`RoutaAmbiguousCredentials` and
 refers to it, so a discriminator `mapping` can select it beside any other component under the
 same status. When a Routa body is one of the alternatives, the problem `type` is the
 discriminator if it qualifies:
@@ -68,8 +79,11 @@ discriminator if it qualifies:
 ```
 
 A schema of yours that claims one of these component names fails with
-`ROUTA_SCHEMA_COMPONENT_COLLISION`. A `HEAD` operation documents the outcomes as one bodyless
-response. Middleware `openapi.security` still applies: Routa enforces
+`ROUTA_SCHEMA_COMPONENT_COLLISION`. With
+`multipleCredentials: "reject"`, an operation that accepts two or more schemes also documents
+`ambiguousCredentials` as its `400` problem body, without a challenge; an operation that
+accepts one scheme cannot return it, so it does not list it. A `HEAD` operation documents each
+status as one bodyless response. Middleware `openapi.security` still applies: Routa enforces
 authentication in addition to your middleware, so each middleware requirement combines with
 each authentication alternative. `[{ tenantKey: [] }]` on a public operation becomes
 `[{ tenantKey: [] }, { tenantKey: [], userToken: [] }]`.
