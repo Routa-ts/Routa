@@ -96,7 +96,6 @@ export const routaRoutes = [
 			"get": [],
 			"delete": []
 		},
-		"middlewareFiles": [],
 		"ctx": [],
 		"groups": [],
 		"segments": [

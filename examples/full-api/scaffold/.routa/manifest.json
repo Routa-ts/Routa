@@ -30,7 +30,7 @@
 			"path": ".routa/routes.gen.ts",
 			"source": "openapi.yaml",
 			"kind": "route-metadata",
-			"sha256": "27f218e3916b6f2dd24751b99628e0a97fa79841fccf2461ea9c3e16974b425c"
+			"sha256": "cfa033fc5fc7d2b060deb68d7d1e0158ce383a12fbeae20c22b749ddba5e307b"
 		},
 		{
 			"path": ".routa/openapi-baseline.json",

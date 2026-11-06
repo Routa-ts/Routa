@@ -54,7 +54,10 @@ type RouteMetadata = {
 	readonly methods: readonly string[];
 	readonly middleware?: readonly MiddlewareReference[];
 	readonly methodMiddleware?: Readonly<Record<string, readonly MiddlewareReference[]>>;
-	/** Every folder `middleware.ts` on the route's path, including those with no listed export. */
+	/**
+	 * Every folder `middleware.ts` on the route's path, including those with no listed export.
+	 * Generated only when the project configures authentication.
+	 */
 	readonly middlewareFiles?: readonly string[];
 	readonly services?: {
 		readonly routeFile?: ServiceNamesMetadata;
@@ -93,7 +96,11 @@ export async function buildProjectApplication(
 	const metadata = (await load(".routa/routes.gen.ts")) as MetadataModule;
 	const replacements = options.replacements ?? {};
 	assertReplacements(replacements, metadata);
-	const routes = await loadRoutes(load, metadata.routaRoutes, replacements);
+	// The metadata declares schemes exactly when src/routa.ts configures authentication, which
+	// assertAuthenticationMetadata confirms. Without it, no guard can run, so none is checked.
+	const routes = await loadRoutes(load, metadata.routaRoutes, replacements, {
+		checkFolderGuards: metadata.routaAuthenticationSchemes !== undefined,
+	});
 	const config = ((await load("src/routa.ts")) as { default?: RoutaConfig }).default ?? {};
 	const logger = config.logger === false ? undefined : (config.logger ?? createLogger());
 	const services = pairServices(config.services, metadata.routaApplicationServices, {
@@ -289,12 +296,15 @@ function pairServices(
  * Assembles the Hono route list: each route module's method contracts, with the filesystem,
  * route-file, and method middleware chained in order and each scope's services paired.
  *
+ * @param options - Whether to refuse folder `requireAuth` guards the metadata does not list,
+ *   which matters only when the project configures authentication
  * @throws If a route file does not export a default route config or is missing a method contract
  */
 async function loadRoutes(
 	load: ProjectModuleLoader,
 	metadata: readonly RouteMetadata[],
 	replacements: ServiceReplacements,
+	options: { readonly checkFolderGuards: boolean },
 ): Promise<HonoRoute[]> {
 	const routes: HonoRoute[] = [];
 
@@ -325,7 +335,9 @@ async function loadRoutes(
 			// by older generators that omitted middleware fields.
 			const chainMetadata = route.methodMiddleware?.[key] ?? route.middleware ?? [];
 			const fileMiddleware = await loadFileMiddleware(load, route.file, chainMetadata);
-			await assertFolderGuardsListed(load, route, chainMetadata);
+			if (options.checkFolderGuards) {
+				await assertFolderGuardsListed(load, route, chainMetadata);
+			}
 			const routeMiddleware = routeConfig.middleware ?? [];
 			const middleware = [...fileMiddleware, ...routeMiddleware, ...(contract.middleware ?? [])];
 			const methodServices = pairServices(
