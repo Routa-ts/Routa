@@ -295,6 +295,7 @@ describe("applications without authentication", () => {
 	it("keep compiling without ctx.auth and reject requireAuth", async () => {
 		const cwd = project({
 			"src/routa.ts": plainConfig,
+			"src/routes/middleware.ts": "export {};\n",
 			"src/routes/me/route.ts": `import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
@@ -312,7 +313,10 @@ export default createRouteRoot("/me")({
 		});
 
 		expectPassed(await run(["check"], { cwd }));
-		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).not.toContain("auth");
+		const generated = readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8");
+		expect(generated).not.toContain("auth");
+		// Only an application with authentication checks folder middleware for guards at startup.
+		expect(generated).not.toContain("middlewareFiles");
 
 		expect(
 			diagnostics({

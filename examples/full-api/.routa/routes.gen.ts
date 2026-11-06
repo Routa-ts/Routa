@@ -191,11 +191,6 @@ export const routaRoutes = [
 				}
 			]
 		},
-		"middlewareFiles": [
-			"src/routes/middleware.ts",
-			"src/routes/(private)/middleware.ts",
-			"src/routes/(private)/admin/middleware.ts"
-		],
 		"ctx": [
 			"admin",
 			"auth",
@@ -398,11 +393,6 @@ export const routaRoutes = [
 				}
 			]
 		},
-		"middlewareFiles": [
-			"src/routes/middleware.ts",
-			"src/routes/(private)/middleware.ts",
-			"src/routes/(private)/admin/middleware.ts"
-		],
 		"ctx": [
 			"admin",
 			"auth",
@@ -590,9 +580,6 @@ export const routaRoutes = [
 				}
 			]
 		},
-		"middlewareFiles": [
-			"src/routes/middleware.ts"
-		],
 		"ctx": [
 			"requestId",
 			"session"
@@ -689,9 +676,6 @@ export const routaRoutes = [
 				}
 			]
 		},
-		"middlewareFiles": [
-			"src/routes/middleware.ts"
-		],
 		"ctx": [
 			"requestId",
 			"session"
@@ -792,9 +776,6 @@ export const routaRoutes = [
 				}
 			]
 		},
-		"middlewareFiles": [
-			"src/routes/middleware.ts"
-		],
 		"ctx": [
 			"requestId",
 			"session"
@@ -895,9 +876,6 @@ export const routaRoutes = [
 				}
 			]
 		},
-		"middlewareFiles": [
-			"src/routes/middleware.ts"
-		],
 		"ctx": [
 			"requestId",
 			"session"
@@ -995,9 +973,6 @@ export const routaRoutes = [
 				}
 			]
 		},
-		"middlewareFiles": [
-			"src/routes/middleware.ts"
-		],
 		"ctx": [
 			"requestId",
 			"session"
@@ -1180,9 +1155,6 @@ export const routaRoutes = [
 				}
 			]
 		},
-		"middlewareFiles": [
-			"src/routes/middleware.ts"
-		],
 		"ctx": [
 			"requestId",
 			"session"
@@ -1279,9 +1251,6 @@ export const routaRoutes = [
 				}
 			]
 		},
-		"middlewareFiles": [
-			"src/routes/middleware.ts"
-		],
 		"ctx": [
 			"requestId",
 			"session"
@@ -1666,11 +1635,6 @@ export const routaRoutes = [
 				}
 			]
 		},
-		"middlewareFiles": [
-			"src/routes/middleware.ts",
-			"src/routes/(private)/middleware.ts",
-			"src/routes/(private)/tenants/$tenantId/middleware.ts"
-		],
 		"services": {
 			"routeFile": {
 				"file": "src/services.ts",
@@ -2173,11 +2137,6 @@ export const routaRoutes = [
 				}
 			]
 		},
-		"middlewareFiles": [
-			"src/routes/middleware.ts",
-			"src/routes/(private)/middleware.ts",
-			"src/routes/(private)/tenants/$tenantId/middleware.ts"
-		],
 		"ctx": [
 			"auth",
 			"projectPermissions",

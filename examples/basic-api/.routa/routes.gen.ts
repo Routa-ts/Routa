@@ -27,7 +27,6 @@ export const routaRoutes = [
 		"methodMiddleware": {
 			"get": []
 		},
-		"middlewareFiles": [],
 		"ctx": [],
 		"groups": [],
 		"segments": [
@@ -58,7 +57,6 @@ export const routaRoutes = [
 		"methodMiddleware": {
 			"get": []
 		},
-		"middlewareFiles": [],
 		"ctx": [],
 		"groups": [],
 		"segments": [
@@ -101,7 +99,6 @@ export const routaRoutes = [
 			"get": [],
 			"post": []
 		},
-		"middlewareFiles": [],
 		"ctx": [],
 		"groups": [],
 		"segments": [
@@ -156,7 +153,6 @@ export const routaRoutes = [
 			"patch": [],
 			"delete": []
 		},
-		"middlewareFiles": [],
 		"ctx": [],
 		"groups": [],
 		"segments": [
@@ -188,7 +184,6 @@ export const routaRoutes = [
 		"methodMiddleware": {
 			"get": []
 		},
-		"middlewareFiles": [],
 		"ctx": [],
 		"groups": [],
 		"segments": [

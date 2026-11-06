@@ -131,7 +131,7 @@ function projectModules(routes: readonly RouteMetadata[]): string[] {
 	for (const route of routes) {
 		files.add(route.file);
 
-		for (const file of route.middlewareFiles) {
+		for (const file of route.middlewareFiles ?? []) {
 			files.add(file);
 		}
 

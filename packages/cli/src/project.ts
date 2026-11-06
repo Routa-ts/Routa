@@ -80,8 +80,9 @@ export type RouteMetadata = {
 	/**
 	 * Every folder `middleware.ts` on the route's path, root first, including files with no export
 	 * Routa reads. Startup loads each one and refuses a `requireAuth` guard export the chain omits.
+	 * Written only when the project configures authentication, the one case a guard can run.
 	 */
-	middlewareFiles: string[];
+	middlewareFiles?: string[];
 	/** The service contracts the route file declares, when it declares any. */
 	services?: RouteServicesMetadata;
 	deprecations?: Record<string, RouteDeprecationMetadata | undefined>;
@@ -552,7 +553,7 @@ function validateRuntimeOutput(
 				runtimeFiles.add(middleware.file);
 			}
 		}
-		for (const file of route.middlewareFiles) {
+		for (const file of route.middlewareFiles ?? []) {
 			runtimeFiles.add(file);
 		}
 	}
@@ -1155,7 +1156,7 @@ function discoverRoutes(
 					: {}),
 				middleware,
 				methodMiddleware,
-				middlewareFiles,
+				...(authentication && { middlewareFiles }),
 				...(services.services && { services: services.services }),
 				ctx,
 				groups,

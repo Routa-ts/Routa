@@ -134,7 +134,6 @@ function routesMetadataSource(): string {
 			},
 			middleware: [],
 			methodMiddleware: { get: [] },
-			middlewareFiles: [],
 			ctx: [],
 			groups: [],
 			segments: ["status"],

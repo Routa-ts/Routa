@@ -1866,7 +1866,6 @@ ${Array.from(schemaExports.entries())
 			inputs: inputsByMethod,
 			middleware: [],
 			methodMiddleware: Object.fromEntries(operations.map(([method]) => [method, []])),
-			middlewareFiles: [],
 			ctx: [],
 			groups: [],
 			segments: routeDirSegments(openApiPath),
