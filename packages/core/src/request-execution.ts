@@ -248,7 +248,7 @@ async function runWithMiddleware(
 
 	async function startStage(scope: RequestScope, stage: Stage): Promise<Stage> {
 		assertServicesKept(stage);
-		const earlier = withoutFramework(stage.ctx);
+		const earlier = withoutFramework(stage);
 		const factoryCtx = { ...earlier, logger };
 		exposeFramework(factoryCtx, stage);
 		Object.freeze(factoryCtx);
@@ -384,10 +384,15 @@ function assertServicesKept(stage: Stage): void {
 	}
 }
 
-/** Copies a context without `services` and `auth`, which each stage exposes for itself. */
-function withoutFramework(ctx: Record<string, unknown>): Record<string, unknown> {
+/**
+ * Copies a stage's context without `services`, and without `auth` when Routa owns it, which each
+ * stage exposes for itself. Without authentication, `auth` is ordinary middleware context.
+ */
+function withoutFramework(stage: Stage): Record<string, unknown> {
 	return Object.fromEntries(
-		Object.entries(ctx).filter(([key]) => key !== "services" && key !== "auth"),
+		Object.entries(stage.ctx).filter(
+			([key]) => key !== "services" && (key !== "auth" || stage.auth === undefined),
+		),
 	);
 }
 
