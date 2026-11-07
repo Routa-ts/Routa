@@ -64,6 +64,7 @@ type MetadataModule = {
 	routaRoutes: readonly RouteMetadata[];
 	routaApplicationServices?: readonly string[];
 	routaAuthenticationSchemes?: readonly string[];
+	routaMultipleCredentials?: string;
 };
 
 type Middleware = NonNullable<HonoRoute["contract"]["middleware"]>[number];
@@ -99,7 +100,7 @@ export async function buildProjectApplication(
 		declare: "Declare services in the createRouta object with defineServices<Contract>()",
 		replacement: replacements.services,
 	});
-	assertAuthenticationMetadata(config.authentication, metadata.routaAuthenticationSchemes);
+	assertAuthenticationMetadata(config.authentication, metadata);
 	const application = await createApplication(routes, {
 		runtimeMode: options.runtimeMode,
 		...(config.authentication && { authentication: config.authentication }),
@@ -114,15 +115,18 @@ export async function buildProjectApplication(
 
 /**
  * Checks that `src/routa.ts` configures the authentication schemes `routa generate` read, in the
- * same priority order, so types, OpenAPI, and the running application describe one contract.
+ * same priority order and multiple-credential mode, so types, OpenAPI, and the running
+ * application describe one contract.
  *
  * @throws When only one side declares authentication, the configuration is invalid, or their
- *   scheme names or priority differ
+ *   scheme names, priority, or multiple-credential mode differ
  */
 function assertAuthenticationMetadata(
 	authentication: RoutaConfig["authentication"],
-	generated: readonly string[] | undefined,
+	metadata: MetadataModule,
 ): void {
+	const generated = metadata.routaAuthenticationSchemes;
+
 	if (authentication === undefined) {
 		if (generated) {
 			throw new Error(
@@ -139,12 +143,19 @@ function assertAuthenticationMetadata(
 		);
 	}
 
-	const configured = runtimeAuthentication(authentication).schemes.map((scheme) => scheme.name);
+	const runtime = runtimeAuthentication(authentication);
+	const configured = runtime.schemes.map((scheme) => scheme.name);
 	const quoted = (names: readonly string[]) => names.map((name) => JSON.stringify(name)).join(", ");
 
 	if (quoted(configured) !== quoted(generated)) {
 		throw new Error(
 			`src/routa.ts configures authentication schemes ${quoted(configured)}, but .routa/routes.gen.ts declares ${quoted(generated)}. Run routa generate.`,
+		);
+	}
+
+	if (runtime.multipleCredentials !== metadata.routaMultipleCredentials) {
+		throw new Error(
+			`src/routa.ts configures multipleCredentials ${JSON.stringify(runtime.multipleCredentials)}, but .routa/routes.gen.ts declares ${JSON.stringify(metadata.routaMultipleCredentials)}. Run routa generate.`,
 		);
 	}
 }

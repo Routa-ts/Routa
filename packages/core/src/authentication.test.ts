@@ -658,6 +658,7 @@ describe("project applications", () => {
 			".routa/routes.gen.ts": () =>
 				Promise.resolve({
 					routaAuthenticationSchemes: ["userToken"],
+					routaMultipleCredentials: "priority",
 					routaRoutes: [
 						{ file: "src/routes/projects/route.ts", path: "/projects", methods: ["POST"] },
 					],
@@ -699,6 +700,10 @@ describe("project applications", () => {
 			[
 				{ metadata: { routaAuthenticationSchemes: ["adminToken"] } },
 				'src/routa.ts configures authentication schemes "userToken", but .routa/routes.gen.ts declares "adminToken". Run routa generate.',
+			],
+			[
+				{ config: { authentication: { ...authentication, multipleCredentials: "reject" } } },
+				'src/routa.ts configures multipleCredentials "reject", but .routa/routes.gen.ts declares "priority". Run routa generate.',
 			],
 		];
 

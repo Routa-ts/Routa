@@ -3441,6 +3441,8 @@ export type RoutaApplicationServices = ${contractTypeReference(services)};
 	const authenticationSource = authentication
 		? `export const routaAuthenticationSchemes = ${JSON.stringify(names, null, "\t")} as const;
 
+export const routaMultipleCredentials = ${JSON.stringify(authentication.multipleCredentials)} as const;
+
 /** The principal schema's output, from the authentication config in \`src/routa.ts\`. */
 export type RoutaPrincipal = import("@routa-ts/core").PrincipalOf<typeof import("../src/routa.js").default>;
 

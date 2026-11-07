@@ -1042,6 +1042,9 @@ describe("session-cookie and API-key authentication in a project", () => {
 		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
 			'export const routaAuthenticationSchemes = [\n\t"session",\n\t"userToken",\n\t"serviceKey"\n] as const;',
 		);
+		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
+			'export const routaMultipleCredentials = "reject" as const;',
+		);
 
 		const { application } = await createProjectApplication(cwd, cwd, "dev");
 		const request = async (method: string, headers: Record<string, string>) => {
