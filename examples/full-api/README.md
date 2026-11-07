@@ -37,11 +37,13 @@ Runtime configuration is executable and typed in `src/routa.ts`:
 | Zod parsing and coercion                                                | `verbose` uses `z.stringbool()`; scaffold query parameters generate boolean/number coercion          |
 | Global, group, segment, route, and method middleware                    | `src/routes/middleware.ts`, `(private)`, `admin`, tenant, and project contracts                      |
 | Middleware `requires`, `provides`, typed rejects, security, permissions | `src/middleware` and private route graph                                                             |
+| Authentication: principal union, Bearer, API key, session, custom       | `src/routa.ts`, `src/identities.ts`, `GET /whoami`, and `pnpm auth:exercise`                         |
+| Inherited, nested, and method-level `requireAuth`                       | `(private)/middleware.ts`, `(private)/tenants/$tenantId/middleware.ts`, `admin/reports.ts`           |
 | Typed application services                                              | `src/services.ts` declares `AppServices`; project routes call `ctx.services.projects`                |
 | Route-file and method services                                          | The projects route file builds `tenantProjects` per request; its `POST` adds `audit` with cleanup    |
 | Middleware service requirements                                         | `withProjectList` in `src/middleware/projects.ts` requires `tenantProjects` on the projects `GET`    |
 | Generated test application                                              | `.routa/testing.gen.ts` exports `createTestApp` and a `ServicesFactory` type per services scope      |
-| Response cookies set and cleared through `createCookie` handles         | `src/cookies.ts`; `POST` and `DELETE /auth/session`; the auth reject clears a stale session cookie   |
+| Response cookies set and cleared through `createCookie` handles         | `src/cookies.ts`; `POST` and `DELETE /auth/session`                                                  |
 | Bodyless outcomes                                                       | `DELETE /auth/session`, project `DELETE`, and showcase `HEAD` return `204` with no body              |
 | `Fields()` and `Sort()` query helpers                                   | `GET /tenants/:tenantId/projects`                                                                    |
 | Directory, flat, dynamic-flat, group, and dynamic-segment routing       | `status/route.ts`, `legacy.ts`, `legacy.$id.ts`, `(private)`, `$tenantId`                            |
@@ -59,20 +61,21 @@ Runtime configuration is executable and typed in `src/routa.ts`:
 src/routes/
   middleware.ts
   status/route.ts
-  auth/session/route.ts                  # GET, POST sign-in, DELETE sign-out
+  whoami/route.ts                        # public: anonymous or authenticated ctx.auth
+  auth/session/route.ts                  # POST sign-in, DELETE sign-out
   demo/route.ts
   logger-showcase/route.ts             # opt-in RoutaLogger capability exercise
   showcase/$itemId/route.ts              # GET, PUT, HEAD; OPTIONS is automatic
   legacy.ts                               # flat route; local replacement
   legacy.$id.ts                           # dynamic flat route; external replacement
   (private)/
-    middleware.ts
+    middleware.ts                         # requireAuth(): any scheme
     admin/
       middleware.ts
       audit-events/route.ts
-      reports.ts                          # nested flat route
+      reports.ts                          # nested flat route; Bearer-only method
     tenants/$tenantId/
-      middleware.ts
+      middleware.ts                       # requireAuth: session or serviceKey
       projects/route.ts                   # GET, POST
       projects/$projectId/route.ts        # GET, PATCH, DELETE
 ```
@@ -180,13 +183,34 @@ curl -s -i -X POST -H 'Content-Type: application/json' \
   -d "{\"token\":\"$TOKEN\"}" http://127.0.0.1:3000/auth/session   # 200 + session, signed_in
 curl -s -i -X DELETE http://127.0.0.1:3000/auth/session           # bodyless 204 clearing both
 curl -s -i -H 'Cookie: session=expired' \
-  http://127.0.0.1:3000/tenants/acme/projects                     # typed 401 clearing both
+  http://127.0.0.1:3000/tenants/acme/projects                     # 401 authenticationFailed
 ```
+
+Routa's `401` responses set no cookies, so a stale `session` cookie is no longer cleared on `401`. Sign-in and sign-out run under automatic authentication too: a request that still carries an invalid session cookie gets `401` before the handler runs.
+
+Authentication with every credential scheme. All of these credentials are demonstration values, unfit for production:
+
+```sh
+CERT=$(node -p 'encodeURIComponent(require("fs").readFileSync("scripts/demo-client-cert.pem", "utf8"))')
+curl -s http://127.0.0.1:3000/whoami                                         # anonymous
+curl -s -H "Cookie: session=$WRITER" http://127.0.0.1:3000/whoami             # session
+curl -s -H 'Authorization: Bearer demo-token-admin' http://127.0.0.1:3000/whoami # accountToken
+curl -s -H 'X-API-Key: demo-key-acme-sync' http://127.0.0.1:3000/whoami       # serviceKey
+curl -s -H "X-Client-Cert: $CERT" http://127.0.0.1:3000/whoami                # clientCert (custom)
+curl -s -i -H 'Authorization: Bearer wrong' http://127.0.0.1:3000/whoami      # 401, invalid_token
+curl -s -i -H "Cookie: session=$WRITER" -H 'X-API-Key: demo-key-acme-sync' \
+  http://127.0.0.1:3000/tenants/acme/projects                     # 400 ambiguousCredentials
+curl -s -i -H 'Authorization: Bearer demo-token-acme-writer' \
+  http://127.0.0.1:3000/tenants/acme/projects                     # 401: Bearer not accepted here
+curl -s -H 'Authorization: Bearer demo-token-admin' http://127.0.0.1:3000/admin/reports
+```
+
+`pnpm auth:exercise` asserts the whole credential matrix through `createTestApp`, with no server.
 
 Middleware scopes, permissions, helpers, and bodyless DELETE:
 
 ```sh
-curl -s -i http://127.0.0.1:3000/tenants/acme/projects             # typed 401 clearing signed_in
+curl -s -i http://127.0.0.1:3000/tenants/acme/projects             # 401 authenticationRequired
 curl -s -H "Cookie: session=$WRITER" \
   'http://127.0.0.1:3000/tenants/acme/projects?fields=id,%20name&sort=-name'
 curl -s -i -X POST -H "Cookie: session=$SESSION" \
@@ -199,7 +223,6 @@ curl -s -i -X DELETE -H "Cookie: session=$WRITER" \
   http://127.0.0.1:3000/tenants/acme/projects/project_1           # bodyless 204
 curl -s -H "Cookie: session=$SESSION" \
   'http://127.0.0.1:3000/admin/audit-events?limit=2'
-curl -s -H "Cookie: session=$SESSION" http://127.0.0.1:3000/admin/reports
 ```
 
 Deprecation lifecycle headers:
@@ -248,6 +271,7 @@ pnpm scaffold:preview
 pnpm openapi:check
 pnpm openapi:breaking
 pnpm logger:exercise       # while the opt-in local showcase server is running
+pnpm auth:exercise         # the authentication credential matrix, no server needed
 pnpm routes
 pnpm routes:json
 ```

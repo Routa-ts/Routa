@@ -11,7 +11,10 @@ export const withProjectScope = createMiddleware({
 		}),
 	},
 	run: async ({ ctx, next }) => {
-		const canWrite = ctx.auth.userId === `${ctx.tenant.id}:writer`;
+		const canWrite =
+			ctx.auth.status === "authenticated"
+			&& ctx.auth.principal.type === "account"
+			&& ctx.auth.principal.id === `${ctx.tenant.id}:writer`;
 
 		return next({
 			projectScope: {

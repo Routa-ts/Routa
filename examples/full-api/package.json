@@ -19,6 +19,7 @@
 		"routes": "routa routes",
 		"routes:json": "routa routes --format json",
 		"logger:exercise": "node scripts/exercise-logger.mjs",
+		"auth:exercise": "tsx scripts/exercise-auth.ts",
 		"mint-session": "node scripts/mint-session.mjs"
 	},
 	"dependencies": {
