@@ -1984,7 +1984,7 @@ export function guardFor(scheme: "a" | "b") {
 		}
 	});
 
-	it("reports guards built through factories, aliases, and destructuring at any depth", () => {
+	it("reports guards built through factories, aliases, destructuring, and let bindings at any depth", () => {
 		const builds = {
 			code: "ROUTA_AUTH_REQUIREMENT_UNRESOLVED",
 			message: `${folder} exports signedIn, which builds a requireAuth() guard routa check cannot read, so the guard would not run.`,
@@ -2014,6 +2014,17 @@ export function guardFor() {
 			],
 			["export const { signedIn } = { signedIn: requireAuth() };", {}],
 			["const { guard } = { guard: requireAuth() };\nexport const signedIn = guard;", {}],
+			// Code can reassign a let or var binding after Routa reads it.
+			["export let signedIn = requireAuth();", {}],
+			["let guard = requireAuth();\nexport const signedIn = guard;", {}],
+			["var guard = requireAuth();\nexport { guard as signedIn };", {}],
+			[
+				'export { signedIn } from "../../guards.js";',
+				{
+					"src/guards.ts":
+						'import { requireAuth } from "@routa-ts/core";\n\nexport let signedIn = requireAuth();\n',
+				},
+			],
 		];
 
 		for (const [exports, files] of cases) {
