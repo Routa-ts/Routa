@@ -438,6 +438,11 @@ describe("authentication diagnostics", () => {
 				'Authentication scheme "userToken" declares a challenge override that is not a literal object.',
 				'const challenge = { realm: "api" };',
 			],
+			[
+				'{ principal: Principal, schemes: { userToken: bearer({ challenge() { return { realm: "api" }; }, authenticate: reject }) } }',
+				"ROUTA_AUTH_CHALLENGE_INVALID",
+				'Authentication scheme "userToken" declares a challenge override that is not a literal object.',
+			],
 		];
 
 		for (const [authentication, code, message, prelude] of cases) {
@@ -499,6 +504,22 @@ export default createRouta({ ...base, port: 3000 });
 		});
 
 		const validation = validateProject(cwd, { write: false });
+
+		expect(validation.diagnostics).toEqual([]);
+		expect(validation.authentication).toEqual({
+			schemes: [{ name: "userToken", kind: "bearer", realm: "api" }],
+		});
+	});
+
+	it("reads an authenticate method like an authenticate property", () => {
+		const validation = validateProject(
+			project({
+				"src/routa.ts": configWith(
+					'{ principal: Principal, schemes: { userToken: bearer({ challenge: { realm: "api" }, async authenticate(token) { return token === "t" ? { type: "authenticated", principal: { id: token, type: "user" } } : { type: "rejected" }; } }) } }',
+				),
+			}),
+			{ write: false },
+		);
 
 		expect(validation.diagnostics).toEqual([]);
 		expect(validation.authentication).toEqual({

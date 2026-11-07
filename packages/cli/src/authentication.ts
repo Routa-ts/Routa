@@ -198,16 +198,24 @@ function readObject(
 	return ts.isExpression(node) ? spreadObject(cwd, file, node, parser, 0) : undefined;
 }
 
-/** Whether an object has a spread, computed key, method, or accessor that could hide a fact. */
-function hasUnreadableMember(object: ts.ObjectLiteralExpression): boolean {
+/**
+ * Whether an object has a spread, computed key, method, or accessor that could hide a fact.
+ *
+ * @param methods - Whether a method with a plain name is readable, as in descriptor options
+ */
+function hasUnreadableMember(object: ts.ObjectLiteralExpression, methods = false): boolean {
 	return object.properties.some(
 		(property) =>
-			!(ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property))
+			!(
+				ts.isPropertyAssignment(property)
+				|| ts.isShorthandPropertyAssignment(property)
+				|| (methods && ts.isMethodDeclaration(property))
+			)
 			|| propertyName(property.name) === undefined,
 	);
 }
 
-/** The value of a named member, including a shorthand one. */
+/** The value of a named member, including a shorthand one, or the method that declares it. */
 function memberNode(object: ts.ObjectLiteralExpression, name: string): ts.Node | undefined {
 	for (const property of object.properties) {
 		if (ts.isPropertyAssignment(property) && propertyName(property.name) === name) {
@@ -216,6 +224,10 @@ function memberNode(object: ts.ObjectLiteralExpression, name: string): ts.Node |
 
 		if (ts.isShorthandPropertyAssignment(property) && propertyName(property.name) === name) {
 			return property.name;
+		}
+
+		if (ts.isMethodDeclaration(property) && propertyName(property.name) === name) {
+			return property;
 		}
 	}
 }
@@ -230,8 +242,9 @@ function bearerDescriptor(
 	const read = (node: ts.Expression) => {
 		const call = coreCall(node, "bearer");
 		const options = call && objectLiteral(call.arguments[0]);
-		// A spread or computed key could hide or replace the challenge override.
-		return options && !hasUnreadableMember(options) ? options : undefined;
+		// A spread or computed key could hide or replace the challenge override. A method, such as
+		// authenticate(token) { ... }, declares a function, which is never a contract fact.
+		return options && !hasUnreadableMember(options, true) ? options : undefined;
 	};
 	const node = unwrapExpression(expression);
 
