@@ -198,18 +198,20 @@ calls one authenticator once, validates the principal it returns, and gives ever
 | `priority`            | The order Routa selects among presented credentials. Lists every scheme once. Defaults to declaration order |
 | `multipleCredentials` | `"priority"` (default) authenticates the first presented credential by priority. `"reject"` answers `400`   |
 
-Declare schemes with three built-in descriptors. Each takes the same `authenticate` function
-and returns the same result shape.
+Declare schemes with three built-in descriptors, or with `custom` for any other credential.
+Each takes the same `authenticate` function and returns the same result shape.
 
-| Descriptor                                                         | Reads                           | Challenge |
-| ------------------------------------------------------------------ | ------------------------------- | --------- |
-| [`bearer`](/docs/reference/core/#bearer)                           | `Authorization: Bearer <token>` | `Bearer`  |
-| [`apiKey({ header })`](/docs/reference/core/#apikey)               | The value of one request header | `ApiKey`  |
-| [`sessionCookie({ cookie })`](/docs/reference/core/#sessioncookie) | The value of one request cookie | `Session` |
+| Descriptor                                                         | Reads                                                       | Challenge       |
+| ------------------------------------------------------------------ | ----------------------------------------------------------- | --------------- |
+| [`bearer`](/docs/reference/core/#bearer)                           | `Authorization: Bearer <token>`                             | `Bearer`        |
+| [`apiKey({ header })`](/docs/reference/core/#apikey)               | The value of one request header                             | `ApiKey`        |
+| [`sessionCookie({ cookie })`](/docs/reference/core/#sessioncookie) | The value of one request cookie                             | `Session`       |
+| [`custom({ transport, openapi })`](/docs/reference/core/#custom)   | One declared header, `Authorization` auth-scheme, or cookie | The scheme name |
 
 Each scheme needs its own transport. Two Bearer schemes, two API-key schemes whose headers
-match ignoring case, two session schemes with the same cookie, and an API-key header named
-`Authorization` or `Cookie` all fail `routa check` with
+match ignoring case, two session schemes with the same cookie, an API-key header named
+`Authorization` or `Cookie`, and a custom transport another scheme already reads all fail
+`routa check` with
 [`ROUTA_AUTH_TRANSPORT_OVERLAP`](/docs/reference/diagnostics/#routa_auth_transport_overlap).
 Verify several token or key formats inside one authenticator instead. A scheme name starts
 with a letter and uses only letters, digits, `.`, `-`, and `_`. A header or cookie name is an
@@ -276,15 +278,17 @@ answer `ambiguousCredentials` (`400`) instead, before any authenticator runs.
 [Runtime behavior](/docs/reference/runtime-behavior/#credential-selection) gives the full
 selection rules.
 
-`routa check` reads scheme names, descriptor kinds, header and cookie names, challenge
-overrides, `priority`, and `multipleCredentials` from source, because they change the HTTP
-contract. Write `authentication` as an object literal in `createRouta`, or as a `const` object
+`routa check` reads scheme names, descriptor kinds, header and cookie names, custom
+transports and `openapi` metadata, challenge overrides, `priority`, and `multipleCredentials`
+from source, because they change the HTTP contract. Write `authentication` as an object literal in `createRouta`, or as a `const` object
 literal you pass or spread into it, with a plain key for each scheme and a `bearer({ ... })`,
-`apiKey({ ... })`, or `sessionCookie({ ... })` call, or a `const` bound to one, as its value.
-Write `header`, `cookie`, `priority`, and `multipleCredentials` as literals. Anything it cannot
+`apiKey({ ... })`, `sessionCookie({ ... })`, or `custom({ ... })` call, or a `const` bound to
+one, as its value. Write `header`, `cookie`, `transport`, `openapi`, `priority`, and
+`multipleCredentials` as literals. Anything it cannot
 read fails with
 [`ROUTA_AUTH_CONFIG_UNRESOLVED`](/docs/reference/diagnostics/#routa_auth_config_unresolved).
-Authenticators are ordinary runtime functions and may use any expression. Startup refuses
+Authenticators and custom extractors are ordinary runtime functions and may use any
+expression. Startup refuses
 authentication that `routa generate` did not read, and scheme names or a priority order that
 differ from the generated ones.
 [Runtime behavior](/docs/reference/runtime-behavior/#authentication) describes how each

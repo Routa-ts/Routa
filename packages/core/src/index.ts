@@ -33,6 +33,7 @@ export type {
 	CustomOptions,
 	CustomScheme,
 	CustomTransport,
+	ExtractedCredential,
 	Principal,
 	PrincipalOf,
 	PrincipalSchema,

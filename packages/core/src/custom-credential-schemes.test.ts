@@ -421,6 +421,35 @@ describe("custom scheme failures", () => {
 		expect(invalid.logs).toContain("does not match the principal schema");
 	});
 
+	it("gives the extractor the declared value alone and keeps contract facts out of its reach", async () => {
+		const received: unknown[][] = [];
+		const transport = { header: "x-signed" };
+		const openapi = { type: "apiKey" as const, in: "header" as const, name: "x-signed" };
+		const signed = custom({
+			transport,
+			openapi,
+			extract: (...args: [string]) => {
+				received.push(args);
+				return { type: "malformed" };
+			},
+			authenticate: () => ({ type: "rejected" }),
+		});
+		transport.header = "x-other";
+		openapi.name = "x-other";
+
+		expect(Object.isFrozen(signed)).toBe(true);
+		expect(Object.isFrozen(signed.transport)).toBe(true);
+		expect(signed.transport).toEqual({ header: "x-signed" });
+		expect(signed.openapi).toEqual({ type: "apiKey", in: "header", name: "x-signed" });
+
+		const setup = { calls: [], authentication: { principal: Principal, schemes: { signed } } };
+		expect(await send(whoami(), setup, { "x-signed": "value", "x-other": "o" })).toMatchObject({
+			status: 401,
+			challenge: "signed",
+		});
+		expect(received).toEqual([["value"]]);
+	});
+
 	it("gives the authenticator the extracted credential, not the extractor's result object", async () => {
 		const received: unknown[] = [];
 		const result = { type: "credential", credential: { id: "c1" } };
