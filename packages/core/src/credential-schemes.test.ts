@@ -115,7 +115,13 @@ describe("API-key and session-cookie schemes", () => {
 		expect(result).toEqual({
 			status: 200,
 			challenge: null,
-			body: { auth: { status: "authenticated", scheme: "session", principal: { type: "user", id: "user_2" } } },
+			body: {
+				auth: {
+					status: "authenticated",
+					scheme: "session",
+					principal: { type: "user", id: "user_2" },
+				},
+			},
 			calls: ["session"],
 		});
 	});
