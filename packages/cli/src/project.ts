@@ -29,6 +29,7 @@ import {
 	type AuthenticationMetadata,
 	type AuthenticationRequirementMetadata,
 	authenticationFailedDescription,
+	coreCall,
 	folderGuard,
 	rejectsAmbiguousCredentials,
 	requireAuthMiddleware,
@@ -1833,8 +1834,9 @@ function parseMiddlewareFile(
 		read(expression, from) !== undefined;
 
 	for (const exported of moduleExports(cwd, file, sourceFile, parser)) {
+		// The core requireAuth is a guard even when imported under the name createMiddleware.
 		const declaration =
-			exported.value && ts.isExpression(exported.value)
+			exported.value && ts.isExpression(exported.value) && !coreCall(exported.value, "requireAuth")
 				? read(exported.value, exported.file)
 				: undefined;
 
