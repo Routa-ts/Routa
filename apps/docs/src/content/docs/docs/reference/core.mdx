@@ -588,7 +588,10 @@ function, or `challenge` declares a key other than `realm` or an invalid realm.
 ## `custom`
 
 ```ts
-function custom<const TResult extends AuthenticationResult, TExtraction extends CustomExtraction>(options: {
+function custom<
+	const TResult extends AuthenticationResult,
+	TExtraction extends CustomExtraction = { type: "credential"; credential: string },
+>(options: {
 	transport: { header: string; scheme?: string } | { cookie: string };
 	challenge?: { scheme?: string; realm?: string };
 	openapi:
@@ -605,7 +608,19 @@ function custom<const TResult extends AuthenticationResult, TExtraction extends 
 type CustomExtraction<TCredential = unknown> =
 	| { type: "credential"; credential: TCredential }
 	| { type: "malformed" };
+
+// The credential type of each { type: "credential" } member; { type: "malformed" } adds nothing.
+type ExtractedCredential<TExtraction> = TExtraction extends {
+	type: "credential";
+	credential: infer TCredential;
+}
+	? TCredential
+	: never;
 ```
+
+`ExtractedCredential` is the type `authenticate` receives. For an `extract` that returns
+`{ type: "credential"; credential: { user: string; password: string } } | { type: "malformed" }`,
+it is `{ user: string; password: string }`. Without `extract`, it is `string`.
 
 Declares a credential scheme for a credential the built-in schemes do not read, such as HTTP
 Basic. Routa reads the one value the `transport` declares, passes it alone to `extract`, and
