@@ -295,25 +295,26 @@ describe("custom schemes in credential selection", () => {
 	});
 
 	it("selects by priority among a custom credential and a built-in one", async () => {
+		const calls: unknown[] = [];
 		const setup = {
-			calls: [] as unknown[],
+			calls,
 			authentication: {
 				principal: Principal,
 				schemes: {
 					serviceKey: apiKey({
 						header: "x-api-key",
-						authenticate: () => ({
-							type: "authenticated",
-							principal: { type: "service", id: "svc_1" },
-						}),
+						authenticate: (key) => {
+							calls.push(["serviceKey", key]);
+							return { type: "authenticated", principal: { type: "service", id: "svc_1" } };
+						},
 					}),
 					clientCert: custom({
 						transport: { header: "x-client-cert" },
 						openapi: { type: "mutualTLS" },
-						authenticate: () => ({
-							type: "authenticated",
-							principal: { type: "service", id: "svc_cert" },
-						}),
+						authenticate: (certificate) => {
+							calls.push(["clientCert", certificate]);
+							return { type: "authenticated", principal: { type: "service", id: "svc_cert" } };
+						},
 					}),
 				},
 				priority: ["clientCert", "serviceKey"],
@@ -321,13 +322,16 @@ describe("custom schemes in credential selection", () => {
 		};
 		const result = await send(whoami(), setup, { "x-api-key": "k", "x-client-cert": "c" });
 		expect(result.body.auth.scheme).toBe("clientCert");
+		expect(calls).toEqual([["clientCert", "c"]]);
 
+		calls.length = 0;
 		const strict = await send(
 			whoami(),
 			{ ...setup, authentication: { ...setup.authentication, multipleCredentials: "reject" } },
 			{ "x-api-key": "k", "x-client-cert": "c" },
 		);
 		expect(strict.status).toBe(400);
+		expect(calls).toEqual([]);
 	});
 
 	it("narrows a protected route to the custom scheme", async () => {
