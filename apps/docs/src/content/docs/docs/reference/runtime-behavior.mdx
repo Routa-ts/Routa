@@ -142,8 +142,8 @@ authenticator. Otherwise the scheme's authenticator alone runs: an accepted prin
 `ctx.auth` `{ status: "authenticated", scheme, principal }`, and a rejection returns
 `authenticationFailed`. Routa never falls back to another credential, and a presented
 credential that fails never downgrades to anonymous, on public operations and protected ones
-alike. Because resolution runs first, a request with an invalid credential receives `401`
-whatever its `Accept` header or body.
+alike. Because resolution runs first, a request it fails receives `authenticationFailed` or
+`ambiguousCredentials` whatever its `Accept` header or body.
 
 A credential of a scheme the operation does not accept never authenticates it. A route behind
 `requireAuth({ schemes: ["session"] })` that receives only a valid Bearer token returns
