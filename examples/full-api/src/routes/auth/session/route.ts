@@ -1,28 +1,13 @@
 import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { sessionCookie, signedInCookie } from "../../../cookies.js";
 import { verifySession } from "../../../session.js";
-import { GetSessionCookies, GetSessionResponse, SignInBody, SignInRejected } from "./schemas.js";
+import { SignedIn, SignInBody, SignInRejected } from "./schemas.js";
 
+// Sign-in and sign-out run under automatic authentication like every route, so a request that
+// still carries an invalid session cookie answers 401 before either handler runs.
 const route = createRouteRoot("/auth/session");
 
 export default route({
-	get: createRoute({
-		input: {
-			cookies: GetSessionCookies,
-		},
-		responses: {
-			success: {
-				status: 200,
-				schema: GetSessionResponse,
-			},
-		},
-		run: ({ ctx }) => {
-			return {
-				type: "success",
-				data: ctx.session,
-			};
-		},
-	}),
 	post: createRoute({
 		input: {
 			body: SignInBody,
@@ -31,7 +16,7 @@ export default route({
 			signedIn: {
 				status: 200,
 				description: "The token is valid, and the session cookies are set.",
-				schema: GetSessionResponse,
+				schema: SignedIn,
 				cookies: [
 					{ handle: sessionCookie, required: true },
 					{ handle: signedInCookie, required: true },
@@ -44,15 +29,18 @@ export default route({
 			},
 		},
 		run: ({ input, response }) => {
-			const verified = verifySession(input.body.token);
+			const accountId = verifySession(input.body.token).userId;
 
-			if (!verified.authenticated) {
-				return response.rejected({ message: "Invalid session token" });
+			if (!accountId) {
+				return response.rejected({
+					type: "https://full-api.example.invalid/problems/invalid-sign-in-token",
+					message: "Invalid session token",
+				});
 			}
 
 			return {
 				type: "signedIn",
-				data: verified,
+				data: { accountId },
 				cookies: [sessionCookie.set(input.body.token), signedInCookie.set("yes")],
 			};
 		},
