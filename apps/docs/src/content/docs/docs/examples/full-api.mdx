@@ -306,11 +306,13 @@ set-cookie: signed_in=yes; Path=/; Max-Age=3600; Secure; SameSite=Lax
 
 Both operations run under automatic authentication, like every route. A request that still
 carries an invalid session cookie, such as one signed with an old secret, answers
-`authenticationFailed` before the sign-in or sign-out handler runs, so the client must drop
-the cookie itself. Routa's `401` outcomes set no cookies, so unlike the application-owned guard
-this example used before, a `401` no longer clears the stale `session` cookie or the
-`signed_in` hint. Operations whose handler processes credentials itself, and authenticators
-that set or clear cookies, are not available yet.
+`authenticationFailed` before the sign-in or sign-out handler runs. Routa's `401` outcomes set
+no cookies, so unlike the application-owned guard this example used before, a `401` no longer
+clears the stale `session` cookie or the `signed_in` hint. A non-browser client recovers by
+dropping the cookie from its jar. Browser scripts cannot read or clear the `HttpOnly` session
+cookie, so a browser stays rejected until the cookie expires after its one-hour `Max-Age`, or
+until the user clears the site's cookies. Operations whose handler processes credentials
+itself, and authenticators that set or clear cookies, are not available yet.
 
 The sign-in rejection declares a literal `type`, because the same operation can also answer
 Routa's `authenticationFailed` with status `401`, and outcomes that share a status must be
