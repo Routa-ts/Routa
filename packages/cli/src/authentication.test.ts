@@ -2494,13 +2494,21 @@ describe("custom credential scheme diagnostics", () => {
 
 	it("reads extract and authenticate methods, but not a transport or openapi method", () => {
 		const methods = `${valid}, extract(value) { return { type: "credential", credential: value }; }, authenticate(credential) { return credential === "c" ? { type: "authenticated", principal: { id: credential, type: "user" } } : { type: "rejected" }; }`;
-		const validation = validateProject(project({ "src/routa.ts": config(`a: custom({ ${methods} })`) }), {
-			write: false,
-		});
+		const validation = validateProject(
+			project({ "src/routa.ts": config(`a: custom({ ${methods} })`) }),
+			{
+				write: false,
+			},
+		);
 
 		expect(validation.diagnostics).toEqual([]);
 		expect(validation.authentication?.schemes).toEqual([
-			{ name: "a", kind: "custom", transport: { header: "x-signed" }, openapi: { type: "mutualTLS" } },
+			{
+				name: "a",
+				kind: "custom",
+				transport: { header: "x-signed" },
+				openapi: { type: "mutualTLS" },
+			},
 		]);
 
 		for (const [options, message] of [
