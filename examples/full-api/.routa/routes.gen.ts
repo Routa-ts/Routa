@@ -1930,6 +1930,8 @@ export const routaAuthenticationSchemes = [
 	"clientCert"
 ] as const;
 
+export const routaMultipleCredentials = "reject" as const;
+
 /** The principal schema's output, from the authentication config in `src/routa.ts`. */
 export type RoutaPrincipal = import("@routa-ts/core").PrincipalOf<typeof import("../src/routa.js").default>;
 
