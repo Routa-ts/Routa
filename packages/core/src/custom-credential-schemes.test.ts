@@ -407,6 +407,28 @@ describe("custom scheme failures", () => {
 		}
 	});
 
+	it("answers 500 for an extractor promise and observes its rejection", async () => {
+		const unhandled: unknown[] = [];
+		const listener = (reason: unknown) => unhandled.push(reason);
+		process.on("unhandledRejection", listener);
+
+		try {
+			const { status, logs } = await logged(
+				failing(async () => {
+					throw new Error("provider could not parse secret-credential-value");
+				}),
+			);
+			await new Promise((resolve) => setTimeout(resolve, 10));
+
+			expect(status).toBe(500);
+			expect(logs).toContain("AuthenticationContractError");
+			expect(logs).not.toContain("secret-credential-value");
+			expect(unhandled).toEqual([]);
+		} finally {
+			process.off("unhandledRejection", listener);
+		}
+	});
+
 	it("keeps authenticator throws and invalid principals as distinct server errors", async () => {
 		const extract = (value: string) => ({ type: "credential", credential: value });
 		const thrown = await logged(
