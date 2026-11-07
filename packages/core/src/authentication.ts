@@ -94,6 +94,21 @@ type ResultOf<TScheme> = TScheme extends { readonly authenticate: Authenticator<
 	: never;
 
 /**
+ * The fields a rejection sets besides `type`, read from each union member on its own. A field
+ * TypeScript adds as `undefined` when it unifies object literals, such as `principal`, sets
+ * nothing.
+ */
+type RejectionFields<TResult> = TResult extends { readonly type: "authenticated" }
+	? never
+	: {
+			[K in keyof TResult]-?: K extends "type"
+				? never
+				: [TResult[K]] extends [undefined]
+					? never
+					: K;
+		}[keyof TResult];
+
+/**
  * Compile-time checks for `createRouta`: every scheme's authenticated principal must be a valid
  * input of the principal schema, and a rejection carries no other fields.
  */
@@ -111,10 +126,7 @@ export type AuthenticationChecks<TConfig> = TConfig extends {
 					] extends [z.input<TSchema>]
 						? unknown
 						: { readonly authenticate: Authenticator<AuthenticationResult<z.input<TSchema>>> })
-						& (Exclude<
-							keyof Exclude<ResultOf<TSchemes[K]>, { readonly type: "authenticated" }>,
-							"type" | "principal"
-						> extends never
+						& ([RejectionFields<ResultOf<TSchemes[K]>>] extends [never]
 							? unknown
 							: {
 									readonly 'A rejection is { type: "rejected" } with no other fields, so no failure detail reaches the response.': never;

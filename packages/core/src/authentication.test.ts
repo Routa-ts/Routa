@@ -740,6 +740,32 @@ describe("authentication configuration (types)", () => {
 
 			createRouta({
 				authentication: {
+					principal: Principal,
+					schemes: {
+						// @ts-expect-error A declared union cannot hide a detailed rejection beside a plain one.
+						userToken: bearer({
+							authenticate: (): { type: "rejected" } | { type: "rejected"; reason: string } => ({
+								type: "rejected",
+							}),
+						}),
+					},
+				},
+			});
+
+			createRouta({
+				authentication: {
+					principal: Principal,
+					schemes: {
+						// @ts-expect-error A rejection carries no principal.
+						userToken: bearer({
+							authenticate: () => ({ type: "rejected", principal: "unexpected" }),
+						}),
+					},
+				},
+			});
+
+			createRouta({
+				authentication: {
 					// @ts-expect-error A principal schema's output has string id and type fields.
 					principal: z.object({ name: z.string() }),
 					schemes: { userToken: bearer({ authenticate: () => ({ type: "rejected" }) }) },
