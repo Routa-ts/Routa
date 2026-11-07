@@ -787,11 +787,12 @@ function requestedSchemes(call: ts.CallExpression): string[] | "unresolved" | un
 
 /**
  * Reads a folder `middleware.ts` export that is not a `createMiddleware` contract. A literal
- * `requireAuth(...)` call becomes the guard's metadata under its export name, also through `const`
- * aliases and re-exports. Routa runs only the exports it reads, so an export that builds a guard
- * any other way, such as through a factory or a destructuring, is an error: the routes below would
- * stay public. An exported function or class is not a guard, whatever it builds. Startup refuses
- * any guard export the metadata does not list, including one package code builds.
+ * `requireAuth(...)` call bound to a `const` becomes the guard's metadata under its export name,
+ * also through `const` aliases and re-exports. Routa runs only the exports it reads, so an export
+ * that builds a guard any other way, such as through a factory, a destructuring, or a `let`, is an
+ * error: the routes below would stay public. An exported function or class is not a guard, whatever
+ * it builds. Startup refuses any guard export the metadata does not list, including one package
+ * code builds.
  *
  * @param file - The folder `middleware.ts`, relative to the project root
  * @param exported - The export and the module that declares it
@@ -834,8 +835,8 @@ const maxAliasDepth = 8;
 
 /**
  * Classifies a folder export's value, following `const` aliases, imports, and re-exports: the
- * literal `requireAuth(...)` call it is bound to, `builds` when it builds a guard another way, or
- * `other`.
+ * literal `requireAuth(...)` call a `const` binds it to, `builds` when it builds a guard another
+ * way, or `other`.
  */
 function folderValue(
 	cwd: string,
@@ -851,13 +852,16 @@ function folderValue(
 		depth += 1
 	) {
 		const node = unwrapExpression(binding.value);
+		// Code can reassign a `let` or `var` binding after Routa reads it, so only a `const` holds
+		// the guard Routa reads.
+		const fixed = !reassignable(binding.value);
 
 		if (ts.isArrowFunction(node) || ts.isFunctionExpression(node) || ts.isClassExpression(node)) {
 			return "other";
 		}
 
 		if (!ts.isIdentifier(node)) {
-			const call = coreCall(node, "requireAuth");
+			const call = fixed && coreCall(node, "requireAuth");
 
 			if (call) {
 				return { file: binding.file, call };
@@ -869,7 +873,7 @@ function folderValue(
 				: "other";
 		}
 
-		if (coreExportName(node) !== undefined || depth === maxAliasDepth) {
+		if (!fixed || coreExportName(node) !== undefined || depth === maxAliasDepth) {
 			return buildsRequireAuth(cwd, binding.file, node, parser) ? "builds" : "other";
 		}
 
@@ -881,6 +885,13 @@ function folderValue(
 		&& buildsRequireAuth(cwd, binding.file, binding.from, parser)
 		? "builds"
 		: "other";
+}
+
+/** Whether a value initializes a `let` or `var` binding, which code can reassign. */
+function reassignable(value: ts.Node): boolean {
+	return (
+		ts.isVariableDeclaration(value.parent) && (value.parent.parent.flags & ts.NodeFlags.Const) === 0
+	);
 }
 
 /**

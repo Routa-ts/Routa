@@ -443,9 +443,9 @@ requirement, so allow the scheme in the folder guard when its routes need it.
 `requireAuth` receives options `routa check` cannot read, such as `requireAuth(options)`,
 `requireAuth({ ...options })`, or `requireAuth({ schemes: allowed })`. The same code reports a
 folder `middleware.ts` export that builds a guard without being a literal call bound to a
-`const`: a conditional, a destructuring, or a factory function that reaches `requireAuth` at
-any depth, through your project's functions, imports, and re-exports. Routa would not run that
-guard, and the routes below would stay public.
+`const`: a conditional, a destructuring, a `let` or `var` binding, or a factory call that
+reaches `requireAuth` at any depth, through your project's functions, imports, and
+re-exports. Routa would not run that guard, and the routes below would stay public.
 
 ```ts title="src/routes/(private)/middleware.ts"
 import { guardFor } from "../../guards.js";
