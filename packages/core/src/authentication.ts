@@ -475,8 +475,18 @@ async function authenticate(
 		throw new AuthenticatorError(scheme.name);
 	}
 
-	const type =
-		typeof result === "object" && result !== null ? (result as { type?: unknown }).type : undefined;
+	let type: unknown;
+
+	try {
+		type =
+			typeof result === "object" && result !== null ? (result as { type?: unknown }).type : undefined;
+	} catch {
+		// A getter threw. Its error may carry the credential, or a ZodError the generic error mapping
+		// would answer with 400 and its messages.
+		throw new AuthenticationContractError(
+			`Reading the result type from scheme "${scheme.name}" threw.`,
+		);
+	}
 
 	if (type === "rejected") {
 		return { failed: { challenge: bearerChallenge(scheme, "invalid_token") } };

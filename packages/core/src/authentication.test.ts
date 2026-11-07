@@ -358,6 +358,28 @@ describe("authenticator failures", () => {
 			name: "AuthenticationContractError",
 		});
 	});
+
+	it("keeps an error thrown while reading the result type a safe server error", async () => {
+		const { app, events } = serveWith(
+			() =>
+				({
+					get type() {
+						return z.string({ error: "provider said: secret-token-value" }).parse(42);
+					},
+				}) as never,
+		);
+
+		const response = await app.request("/whoami", {
+			headers: { authorization: "Bearer secret-token-value" },
+		});
+
+		expect(response.status).toBe(500);
+		expect(await response.text()).not.toContain("provider said");
+		expect(events.find((event) => event.event === "http.error")?.data).toMatchObject({
+			name: "AuthenticationContractError",
+		});
+		expect(JSON.stringify(events)).not.toContain("secret-token-value");
+	});
 });
 
 describe("principal and authenticator context", () => {
