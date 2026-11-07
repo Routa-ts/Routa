@@ -210,8 +210,7 @@ function hasUnreadableMember(object: ts.ObjectLiteralExpression, methods = false
 				ts.isPropertyAssignment(property)
 				|| ts.isShorthandPropertyAssignment(property)
 				|| (methods && ts.isMethodDeclaration(property))
-			)
-			|| propertyName(property.name) === undefined,
+			) || propertyName(property.name) === undefined,
 	);
 }
 
