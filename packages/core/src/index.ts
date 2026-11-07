@@ -27,6 +27,12 @@ export type {
 	BearerScheme,
 	CredentialChallenge,
 	CredentialScheme,
+	CustomChallenge,
+	CustomExtraction,
+	CustomOpenApi,
+	CustomOptions,
+	CustomScheme,
+	CustomTransport,
 	Principal,
 	PrincipalOf,
 	PrincipalSchema,
@@ -35,7 +41,7 @@ export type {
 	SessionCookieOptions,
 	SessionCookieScheme,
 } from "./authentication.js";
-export { apiKey, bearer, requireAuth, sessionCookie } from "./authentication.js";
+export { apiKey, bearer, custom, requireAuth, sessionCookie } from "./authentication.js";
 
 export type HttpMethod = "get" | "post" | "put" | "patch" | "delete" | "head";
 
