@@ -1333,18 +1333,13 @@ function extractCredential(
 		return { credential: value };
 	}
 
+	let result: unknown;
 	let type: unknown;
 	let credential: unknown;
 	let hasCredential = false;
 
 	try {
-		const result = Reflect.apply(scheme.extract, undefined, [value]);
-
-		if (result instanceof Promise) {
-			// extract is synchronous, so a promise is a contract error. Observe it so its rejection
-			// cannot surface as an unhandled rejection.
-			void Promise.prototype.then.call(result, undefined, () => {});
-		}
+		result = Reflect.apply(scheme.extract, undefined, [value]);
 
 		if (isRecord(result)) {
 			type = result.type;
@@ -1360,12 +1355,26 @@ function extractCredential(
 	}
 
 	if (!hasCredential) {
+		observe(result);
 		throw new AuthenticationContractError(
 			`Credential extraction for scheme "${scheme.name}" returned a result that is neither { type: "credential", credential } nor { type: "malformed" }.`,
 		);
 	}
 
 	return { credential };
+}
+
+/**
+ * Marks a promise or thenable an extractor returned as handled, so its rejection cannot surface
+ * as an unhandled rejection. `extract` is synchronous, so such a result is a contract error.
+ * `Promise.resolve` adopts a promise from any realm and any thenable, unlike `instanceof Promise`.
+ */
+function observe(result: unknown): void {
+	try {
+		void Promise.resolve(result).catch(() => {});
+	} catch {
+		// A promise whose constructor getter throws: the contract error stands.
+	}
 }
 
 async function authenticate(

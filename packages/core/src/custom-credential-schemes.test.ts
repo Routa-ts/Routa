@@ -1,3 +1,4 @@
+import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
 import { createHonoApp, type HonoRoute } from "./hono.js";
@@ -407,23 +408,40 @@ describe("custom scheme failures", () => {
 		}
 	});
 
-	it("answers 500 for an extractor promise and observes its rejection", async () => {
+	it("answers 500 for an extractor promise or thenable from any realm and observes its rejection", async () => {
 		const unhandled: unknown[] = [];
 		const listener = (reason: unknown) => unhandled.push(reason);
 		process.on("unhandledRejection", listener);
+		const reason = "provider could not parse secret-credential-value";
 
 		try {
-			const { status, logs } = await logged(
-				failing(async () => {
-					throw new Error("provider could not parse secret-credential-value");
-				}),
-			);
-			await new Promise((resolve) => setTimeout(resolve, 10));
+			for (const [name, extract] of [
+				[
+					"native",
+					async () => {
+						throw new Error(reason);
+					},
+				],
+				[
+					"cross-realm",
+					() => runInNewContext(`Promise.reject(new Error(${JSON.stringify(reason)}))`),
+				],
+				[
+					"thenable",
+					() => {
+						const rejected = Promise.reject(new Error(reason));
+						return { then: (resolve: never, reject: never) => rejected.then(resolve, reject) };
+					},
+				],
+			] as const) {
+				const { status, logs } = await logged(failing(extract));
+				await new Promise((resolve) => setTimeout(resolve, 10));
 
-			expect(status).toBe(500);
-			expect(logs).toContain("AuthenticationContractError");
-			expect(logs).not.toContain("secret-credential-value");
-			expect(unhandled).toEqual([]);
+				expect(status, name).toBe(500);
+				expect(logs, name).toContain("AuthenticationContractError");
+				expect(logs, name).not.toContain("secret-credential-value");
+				expect(unhandled, name).toEqual([]);
+			}
 		} finally {
 			process.off("unhandledRejection", listener);
 		}
