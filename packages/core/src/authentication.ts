@@ -534,7 +534,18 @@ async function authenticate(
 	}
 
 	// A schema typed through `any`, such as z.any(), can output a value without the base fields.
-	if (!isPrincipal(parsed.data)) {
+	let principal: boolean;
+
+	try {
+		principal = isPrincipal(parsed.data);
+	} catch {
+		// A getter on the parsed value threw; its error may carry application or provider detail.
+		throw new AuthenticationContractError(
+			`Reading the principal parsed from scheme "${scheme.name}" threw.`,
+		);
+	}
+
+	if (!principal) {
 		throw new AuthenticationContractError(
 			`The principal schema parsed the principal from scheme "${scheme.name}" to a value without string id and type fields.`,
 		);
