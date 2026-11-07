@@ -525,6 +525,7 @@ export default createRouta({ ...base, port: 3000 });
 		expect(validation.diagnostics).toEqual([]);
 		expect(validation.authentication).toEqual({
 			schemes: [{ name: "userToken", kind: "bearer", realm: "api" }],
+			multipleCredentials: "priority",
 		});
 	});
 
