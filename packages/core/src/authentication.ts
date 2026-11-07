@@ -1343,7 +1343,7 @@ function extractCredential(
 		if (result instanceof Promise) {
 			// extract is synchronous, so a promise is a contract error. Observe it so its rejection
 			// cannot surface as an unhandled rejection.
-			Promise.prototype.then.call(result, undefined, () => {});
+			void Promise.prototype.then.call(result, undefined, () => {});
 		}
 
 		if (isRecord(result)) {
