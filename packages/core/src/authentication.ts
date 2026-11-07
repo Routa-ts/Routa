@@ -923,7 +923,8 @@ function runtimeScheme(
 					: `the Authorization ${transport.scheme} credential`,
 		challenge: challenge?.scheme ?? kinds[kind].challenge ?? name,
 		realm: challenge?.realm,
-		extract: scheme.extract as RuntimeScheme["extract"],
+		// Only a custom scheme extracts; a built-in authenticator always receives the string it reads.
+		extract: kind === "custom" ? (scheme.extract as RuntimeScheme["extract"]) : undefined,
 		authenticate: scheme.authenticate as Authenticator<any, any>,
 	});
 }

@@ -505,6 +505,26 @@ describe("custom scheme failures", () => {
 		expect([second.status, second.challenge]).toEqual([401, "signed"]);
 	});
 
+	it("ignores an extract member on a built-in scheme", async () => {
+		const received: unknown[] = [];
+		const token = bearer({
+			authenticate: (value) => {
+				received.push(value);
+				return { type: "authenticated", principal: { type: "user", id: value } };
+			},
+		});
+		const extract = () => ({ type: "credential", credential: { id: "not-a-token" } });
+		const setup = {
+			calls: [],
+			authentication: { principal: Principal, schemes: { token: { ...token, extract } } },
+		};
+
+		const result = await send(whoami(), setup, { authorization: "Bearer user-token" });
+
+		expect(result).toMatchObject({ status: 200, body: { auth: { scheme: "token" } } });
+		expect(received).toEqual(["user-token"]);
+	});
+
 	it("gives the authenticator the extracted credential, not the extractor's result object", async () => {
 		const received: unknown[] = [];
 		const result = { type: "credential", credential: { id: "c1" } };
