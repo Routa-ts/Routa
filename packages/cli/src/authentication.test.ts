@@ -1136,23 +1136,24 @@ describe("session-cookie and API-key authentication in a project", () => {
 });
 
 describe("OpenAPI for session-cookie and API-key authentication", () => {
+	const ambiguousBody = {
+		type: "object",
+		required: ["type", "title", "status"],
+		properties: {
+			type: {
+				type: "string",
+				const: "https://routa-ts.dev/problems/ambiguous-credentials",
+			},
+			title: { type: "string", const: "Ambiguous credentials" },
+			status: { type: "number", const: 400 },
+		},
+	};
 	const ambiguous = {
 		description:
 			"Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
 		content: {
 			"application/json": {
-				schema: {
-					type: "object",
-					required: ["type", "title", "status"],
-					properties: {
-						type: {
-							type: "string",
-							const: "https://routa-ts.dev/problems/ambiguous-credentials",
-						},
-						title: { type: "string", const: "Ambiguous credentials" },
-						status: { type: "number", const: 400 },
-					},
-				},
+				schema: { $ref: "#/components/schemas/RoutaAmbiguousCredentials" },
 			},
 		},
 	};
@@ -1198,6 +1199,7 @@ export default createRouteRoot("/files")({
 		const operations = document.paths["/reports"];
 
 		expect(document["x-routa-diagnostics"]).toBeUndefined();
+		expect(document.components.schemas.RoutaAmbiguousCredentials).toEqual(ambiguousBody);
 		expect(operations.get.responses["400"]).toEqual(ambiguous);
 		expect(operations.put.responses["400"]).toEqual(ambiguous);
 		expect(operations.post.responses["400"]).toBeUndefined();
