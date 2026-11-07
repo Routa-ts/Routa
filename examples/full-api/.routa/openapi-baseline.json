@@ -51,26 +51,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
-										},
-										"title": {
-											"type": "string",
-											"const": "Ambiguous credentials"
-										},
-										"status": {
-											"type": "number",
-											"const": 400
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAmbiguousCredentials"
 								}
 							}
 						}
@@ -90,52 +71,18 @@
 								"schema": {
 									"oneOf": [
 										{
-											"type": "object",
-											"required": [
-												"type",
-												"title",
-												"status"
-											],
-											"properties": {
-												"type": {
-													"type": "string",
-													"const": "https://routa-ts.dev/problems/authentication-failed"
-												},
-												"title": {
-													"type": "string",
-													"const": "Authentication failed"
-												},
-												"status": {
-													"type": "number",
-													"const": 401
-												}
-											}
+											"$ref": "#/components/schemas/RoutaAuthenticationFailed"
 										},
 										{
-											"type": "object",
-											"required": [
-												"type",
-												"title",
-												"status"
-											],
-											"properties": {
-												"type": {
-													"type": "string",
-													"const": "https://routa-ts.dev/problems/authentication-required"
-												},
-												"title": {
-													"type": "string",
-													"const": "Authentication required"
-												},
-												"status": {
-													"type": "number",
-													"const": 401
-												}
-											}
+											"$ref": "#/components/schemas/RoutaAuthenticationRequired"
 										}
 									],
 									"discriminator": {
-										"propertyName": "title"
+										"propertyName": "type",
+										"mapping": {
+											"https://routa-ts.dev/problems/authentication-failed": "#/components/schemas/RoutaAuthenticationFailed",
+											"https://routa-ts.dev/problems/authentication-required": "#/components/schemas/RoutaAuthenticationRequired"
+										}
 									}
 								}
 							}
@@ -212,52 +159,18 @@
 								"schema": {
 									"oneOf": [
 										{
-											"type": "object",
-											"required": [
-												"type",
-												"title",
-												"status"
-											],
-											"properties": {
-												"type": {
-													"type": "string",
-													"const": "https://routa-ts.dev/problems/authentication-failed"
-												},
-												"title": {
-													"type": "string",
-													"const": "Authentication failed"
-												},
-												"status": {
-													"type": "number",
-													"const": 401
-												}
-											}
+											"$ref": "#/components/schemas/RoutaAuthenticationFailed"
 										},
 										{
-											"type": "object",
-											"required": [
-												"type",
-												"title",
-												"status"
-											],
-											"properties": {
-												"type": {
-													"type": "string",
-													"const": "https://routa-ts.dev/problems/authentication-required"
-												},
-												"title": {
-													"type": "string",
-													"const": "Authentication required"
-												},
-												"status": {
-													"type": "number",
-													"const": 401
-												}
-											}
+											"$ref": "#/components/schemas/RoutaAuthenticationRequired"
 										}
 									],
 									"discriminator": {
-										"propertyName": "title"
+										"propertyName": "type",
+										"mapping": {
+											"https://routa-ts.dev/problems/authentication-failed": "#/components/schemas/RoutaAuthenticationFailed",
+											"https://routa-ts.dev/problems/authentication-required": "#/components/schemas/RoutaAuthenticationRequired"
+										}
 									}
 								}
 							}
@@ -329,26 +242,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
-										},
-										"title": {
-											"type": "string",
-											"const": "Ambiguous credentials"
-										},
-										"status": {
-											"type": "number",
-											"const": 400
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAmbiguousCredentials"
 								}
 							}
 						}
@@ -368,52 +262,18 @@
 								"schema": {
 									"oneOf": [
 										{
-											"type": "object",
-											"required": [
-												"type",
-												"title",
-												"status"
-											],
-											"properties": {
-												"type": {
-													"type": "string",
-													"const": "https://routa-ts.dev/problems/authentication-failed"
-												},
-												"title": {
-													"type": "string",
-													"const": "Authentication failed"
-												},
-												"status": {
-													"type": "number",
-													"const": 401
-												}
-											}
+											"$ref": "#/components/schemas/RoutaAuthenticationFailed"
 										},
 										{
-											"type": "object",
-											"required": [
-												"type",
-												"title",
-												"status"
-											],
-											"properties": {
-												"type": {
-													"type": "string",
-													"const": "https://routa-ts.dev/problems/authentication-required"
-												},
-												"title": {
-													"type": "string",
-													"const": "Authentication required"
-												},
-												"status": {
-													"type": "number",
-													"const": 401
-												}
-											}
+											"$ref": "#/components/schemas/RoutaAuthenticationRequired"
 										}
 									],
 									"discriminator": {
-										"propertyName": "title"
+										"propertyName": "type",
+										"mapping": {
+											"https://routa-ts.dev/problems/authentication-failed": "#/components/schemas/RoutaAuthenticationFailed",
+											"https://routa-ts.dev/problems/authentication-required": "#/components/schemas/RoutaAuthenticationRequired"
+										}
 									}
 								}
 							}
@@ -478,26 +338,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
-										},
-										"title": {
-											"type": "string",
-											"const": "Ambiguous credentials"
-										},
-										"status": {
-											"type": "number",
-											"const": 400
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAmbiguousCredentials"
 								}
 							}
 						}
@@ -517,52 +358,18 @@
 								"schema": {
 									"oneOf": [
 										{
-											"type": "object",
-											"required": [
-												"type",
-												"title",
-												"status"
-											],
-											"properties": {
-												"type": {
-													"type": "string",
-													"const": "https://routa-ts.dev/problems/authentication-failed"
-												},
-												"title": {
-													"type": "string",
-													"const": "Authentication failed"
-												},
-												"status": {
-													"type": "number",
-													"const": 401
-												}
-											}
+											"$ref": "#/components/schemas/RoutaAuthenticationFailed"
 										},
 										{
-											"type": "object",
-											"required": [
-												"type",
-												"title",
-												"status"
-											],
-											"properties": {
-												"type": {
-													"type": "string",
-													"const": "https://routa-ts.dev/problems/authentication-required"
-												},
-												"title": {
-													"type": "string",
-													"const": "Authentication required"
-												},
-												"status": {
-													"type": "number",
-													"const": 401
-												}
-											}
+											"$ref": "#/components/schemas/RoutaAuthenticationRequired"
 										}
 									],
 									"discriminator": {
-										"propertyName": "title"
+										"propertyName": "type",
+										"mapping": {
+											"https://routa-ts.dev/problems/authentication-failed": "#/components/schemas/RoutaAuthenticationFailed",
+											"https://routa-ts.dev/problems/authentication-required": "#/components/schemas/RoutaAuthenticationRequired"
+										}
 									}
 								}
 							}
@@ -628,26 +435,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
-										},
-										"title": {
-											"type": "string",
-											"const": "Ambiguous credentials"
-										},
-										"status": {
-											"type": "number",
-											"const": 400
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAmbiguousCredentials"
 								}
 							}
 						}
@@ -667,52 +455,18 @@
 								"schema": {
 									"oneOf": [
 										{
-											"type": "object",
-											"required": [
-												"type",
-												"title",
-												"status"
-											],
-											"properties": {
-												"type": {
-													"type": "string",
-													"const": "https://routa-ts.dev/problems/authentication-failed"
-												},
-												"title": {
-													"type": "string",
-													"const": "Authentication failed"
-												},
-												"status": {
-													"type": "number",
-													"const": 401
-												}
-											}
+											"$ref": "#/components/schemas/RoutaAuthenticationFailed"
 										},
 										{
-											"type": "object",
-											"required": [
-												"type",
-												"title",
-												"status"
-											],
-											"properties": {
-												"type": {
-													"type": "string",
-													"const": "https://routa-ts.dev/problems/authentication-required"
-												},
-												"title": {
-													"type": "string",
-													"const": "Authentication required"
-												},
-												"status": {
-													"type": "number",
-													"const": 401
-												}
-											}
+											"$ref": "#/components/schemas/RoutaAuthenticationRequired"
 										}
 									],
 									"discriminator": {
-										"propertyName": "title"
+										"propertyName": "type",
+										"mapping": {
+											"https://routa-ts.dev/problems/authentication-failed": "#/components/schemas/RoutaAuthenticationFailed",
+											"https://routa-ts.dev/problems/authentication-required": "#/components/schemas/RoutaAuthenticationRequired"
+										}
 									}
 								}
 							}
@@ -812,26 +566,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
-										},
-										"title": {
-											"type": "string",
-											"const": "Ambiguous credentials"
-										},
-										"status": {
-											"type": "number",
-											"const": 400
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAmbiguousCredentials"
 								}
 							}
 						}
@@ -851,52 +586,18 @@
 								"schema": {
 									"oneOf": [
 										{
-											"type": "object",
-											"required": [
-												"type",
-												"title",
-												"status"
-											],
-											"properties": {
-												"type": {
-													"type": "string",
-													"const": "https://routa-ts.dev/problems/authentication-failed"
-												},
-												"title": {
-													"type": "string",
-													"const": "Authentication failed"
-												},
-												"status": {
-													"type": "number",
-													"const": 401
-												}
-											}
+											"$ref": "#/components/schemas/RoutaAuthenticationFailed"
 										},
 										{
-											"type": "object",
-											"required": [
-												"type",
-												"title",
-												"status"
-											],
-											"properties": {
-												"type": {
-													"type": "string",
-													"const": "https://routa-ts.dev/problems/authentication-required"
-												},
-												"title": {
-													"type": "string",
-													"const": "Authentication required"
-												},
-												"status": {
-													"type": "number",
-													"const": 401
-												}
-											}
+											"$ref": "#/components/schemas/RoutaAuthenticationRequired"
 										}
 									],
 									"discriminator": {
-										"propertyName": "title"
+										"propertyName": "type",
+										"mapping": {
+											"https://routa-ts.dev/problems/authentication-failed": "#/components/schemas/RoutaAuthenticationFailed",
+											"https://routa-ts.dev/problems/authentication-required": "#/components/schemas/RoutaAuthenticationRequired"
+										}
 									}
 								}
 							}
@@ -953,26 +654,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
-										},
-										"title": {
-											"type": "string",
-											"const": "Ambiguous credentials"
-										},
-										"status": {
-											"type": "number",
-											"const": 400
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAmbiguousCredentials"
 								}
 							}
 						}
@@ -992,52 +674,18 @@
 								"schema": {
 									"oneOf": [
 										{
-											"type": "object",
-											"required": [
-												"type",
-												"title",
-												"status"
-											],
-											"properties": {
-												"type": {
-													"type": "string",
-													"const": "https://routa-ts.dev/problems/authentication-failed"
-												},
-												"title": {
-													"type": "string",
-													"const": "Authentication failed"
-												},
-												"status": {
-													"type": "number",
-													"const": 401
-												}
-											}
+											"$ref": "#/components/schemas/RoutaAuthenticationFailed"
 										},
 										{
-											"type": "object",
-											"required": [
-												"type",
-												"title",
-												"status"
-											],
-											"properties": {
-												"type": {
-													"type": "string",
-													"const": "https://routa-ts.dev/problems/authentication-required"
-												},
-												"title": {
-													"type": "string",
-													"const": "Authentication required"
-												},
-												"status": {
-													"type": "number",
-													"const": 401
-												}
-											}
+											"$ref": "#/components/schemas/RoutaAuthenticationRequired"
 										}
 									],
 									"discriminator": {
-										"propertyName": "title"
+										"propertyName": "type",
+										"mapping": {
+											"https://routa-ts.dev/problems/authentication-failed": "#/components/schemas/RoutaAuthenticationFailed",
+											"https://routa-ts.dev/problems/authentication-required": "#/components/schemas/RoutaAuthenticationRequired"
+										}
 									}
 								}
 							}
@@ -1117,26 +765,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
-										},
-										"title": {
-											"type": "string",
-											"const": "Ambiguous credentials"
-										},
-										"status": {
-											"type": "number",
-											"const": 400
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAmbiguousCredentials"
 								}
 							}
 						}
@@ -1155,26 +784,7 @@
 								"schema": {
 									"oneOf": [
 										{
-											"type": "object",
-											"required": [
-												"type",
-												"title",
-												"status"
-											],
-											"properties": {
-												"type": {
-													"type": "string",
-													"const": "https://routa-ts.dev/problems/authentication-failed"
-												},
-												"title": {
-													"type": "string",
-													"const": "Authentication failed"
-												},
-												"status": {
-													"type": "number",
-													"const": 401
-												}
-											}
+											"$ref": "#/components/schemas/RoutaAuthenticationFailed"
 										},
 										{
 											"$ref": "#/components/schemas/SignInRejected"
@@ -1183,6 +793,7 @@
 									"discriminator": {
 										"propertyName": "type",
 										"mapping": {
+											"https://routa-ts.dev/problems/authentication-failed": "#/components/schemas/RoutaAuthenticationFailed",
 											"https://full-api.example.invalid/problems/invalid-sign-in-token": "#/components/schemas/SignInRejected"
 										}
 									}
@@ -1227,26 +838,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
-										},
-										"title": {
-											"type": "string",
-											"const": "Ambiguous credentials"
-										},
-										"status": {
-											"type": "number",
-											"const": 400
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAmbiguousCredentials"
 								}
 							}
 						}
@@ -1264,26 +856,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/authentication-failed"
-										},
-										"title": {
-											"type": "string",
-											"const": "Authentication failed"
-										},
-										"status": {
-											"type": "number",
-											"const": 401
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAuthenticationFailed"
 								}
 							}
 						}
@@ -1338,26 +911,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
-										},
-										"title": {
-											"type": "string",
-											"const": "Ambiguous credentials"
-										},
-										"status": {
-											"type": "number",
-											"const": 400
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAmbiguousCredentials"
 								}
 							}
 						}
@@ -1375,26 +929,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/authentication-failed"
-										},
-										"title": {
-											"type": "string",
-											"const": "Authentication failed"
-										},
-										"status": {
-											"type": "number",
-											"const": 401
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAuthenticationFailed"
 								}
 							}
 						}
@@ -1462,26 +997,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
-										},
-										"title": {
-											"type": "string",
-											"const": "Ambiguous credentials"
-										},
-										"status": {
-											"type": "number",
-											"const": 400
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAmbiguousCredentials"
 								}
 							}
 						}
@@ -1499,26 +1015,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/authentication-failed"
-										},
-										"title": {
-											"type": "string",
-											"const": "Authentication failed"
-										},
-										"status": {
-											"type": "number",
-											"const": 401
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAuthenticationFailed"
 								}
 							}
 						}
@@ -1571,26 +1068,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
-										},
-										"title": {
-											"type": "string",
-											"const": "Ambiguous credentials"
-										},
-										"status": {
-											"type": "number",
-											"const": 400
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAmbiguousCredentials"
 								}
 							}
 						}
@@ -1608,26 +1086,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/authentication-failed"
-										},
-										"title": {
-											"type": "string",
-											"const": "Authentication failed"
-										},
-										"status": {
-											"type": "number",
-											"const": 401
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAuthenticationFailed"
 								}
 							}
 						}
@@ -1679,26 +1138,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
-										},
-										"title": {
-											"type": "string",
-											"const": "Ambiguous credentials"
-										},
-										"status": {
-											"type": "number",
-											"const": 400
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAmbiguousCredentials"
 								}
 							}
 						}
@@ -1716,26 +1156,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/authentication-failed"
-										},
-										"title": {
-											"type": "string",
-											"const": "Authentication failed"
-										},
-										"status": {
-											"type": "number",
-											"const": 401
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAuthenticationFailed"
 								}
 							}
 						}
@@ -1805,26 +1226,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
-										},
-										"title": {
-											"type": "string",
-											"const": "Ambiguous credentials"
-										},
-										"status": {
-											"type": "number",
-											"const": 400
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAmbiguousCredentials"
 								}
 							}
 						}
@@ -1842,26 +1244,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/authentication-failed"
-										},
-										"title": {
-											"type": "string",
-											"const": "Authentication failed"
-										},
-										"status": {
-											"type": "number",
-											"const": 401
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAuthenticationFailed"
 								}
 							}
 						}
@@ -1931,26 +1314,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
-										},
-										"title": {
-											"type": "string",
-											"const": "Ambiguous credentials"
-										},
-										"status": {
-											"type": "number",
-											"const": 400
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAmbiguousCredentials"
 								}
 							}
 						}
@@ -1968,26 +1332,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/authentication-failed"
-										},
-										"title": {
-											"type": "string",
-											"const": "Authentication failed"
-										},
-										"status": {
-											"type": "number",
-											"const": 401
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAuthenticationFailed"
 								}
 							}
 						}
@@ -2076,26 +1421,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
-										},
-										"title": {
-											"type": "string",
-											"const": "Ambiguous credentials"
-										},
-										"status": {
-											"type": "number",
-											"const": 400
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAmbiguousCredentials"
 								}
 							}
 						}
@@ -2113,26 +1439,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/authentication-failed"
-										},
-										"title": {
-											"type": "string",
-											"const": "Authentication failed"
-										},
-										"status": {
-											"type": "number",
-											"const": 401
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAuthenticationFailed"
 								}
 							}
 						}
@@ -2174,26 +1481,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
-										},
-										"title": {
-											"type": "string",
-											"const": "Ambiguous credentials"
-										},
-										"status": {
-											"type": "number",
-											"const": 400
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAmbiguousCredentials"
 								}
 							}
 						}
@@ -2211,26 +1499,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"type",
-										"title",
-										"status"
-									],
-									"properties": {
-										"type": {
-											"type": "string",
-											"const": "https://routa-ts.dev/problems/authentication-failed"
-										},
-										"title": {
-											"type": "string",
-											"const": "Authentication failed"
-										},
-										"status": {
-											"type": "number",
-											"const": 401
-										}
-									}
+									"$ref": "#/components/schemas/RoutaAuthenticationFailed"
 								}
 							}
 						}
@@ -2443,6 +1712,72 @@
 					},
 					"active": {
 						"type": "boolean"
+					}
+				}
+			},
+			"RoutaAmbiguousCredentials": {
+				"type": "object",
+				"required": [
+					"type",
+					"title",
+					"status"
+				],
+				"properties": {
+					"type": {
+						"type": "string",
+						"const": "https://routa-ts.dev/problems/ambiguous-credentials"
+					},
+					"title": {
+						"type": "string",
+						"const": "Ambiguous credentials"
+					},
+					"status": {
+						"type": "number",
+						"const": 400
+					}
+				}
+			},
+			"RoutaAuthenticationFailed": {
+				"type": "object",
+				"required": [
+					"type",
+					"title",
+					"status"
+				],
+				"properties": {
+					"type": {
+						"type": "string",
+						"const": "https://routa-ts.dev/problems/authentication-failed"
+					},
+					"title": {
+						"type": "string",
+						"const": "Authentication failed"
+					},
+					"status": {
+						"type": "number",
+						"const": 401
+					}
+				}
+			},
+			"RoutaAuthenticationRequired": {
+				"type": "object",
+				"required": [
+					"type",
+					"title",
+					"status"
+				],
+				"properties": {
+					"type": {
+						"type": "string",
+						"const": "https://routa-ts.dev/problems/authentication-required"
+					},
+					"title": {
+						"type": "string",
+						"const": "Authentication required"
+					},
+					"status": {
+						"type": "number",
+						"const": 401
 					}
 				}
 			},
