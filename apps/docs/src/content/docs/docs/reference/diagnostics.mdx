@@ -643,8 +643,9 @@ One `components.schemas` key would hold two different schemas. This happens in t
   a query parameter and a JSON body. A schema such as `z.stringbool()` has a different shape
   in each, so it cannot be one component.
 - With `authentication` configured, one of your schemas claims a key that holds a Routa
-  problem body: `RoutaAuthenticationFailed`, or `RoutaAuthenticationRequired` when an
-  operation is behind `requireAuth`. See [Authentication](/docs/concepts/openapi/#authentication).
+  problem body: `RoutaAuthenticationFailed`, `RoutaAuthenticationRequired` when an
+  operation is behind `requireAuth`, or `RoutaAmbiguousCredentials` when strict mode can
+  return it. See [Authentication](/docs/concepts/openapi/#authentication).
 
 **Fix:** for two declarations, reuse one declaration, or give each a distinct
 `.meta({ id })`. For one declaration with different projections, write separate declarations
