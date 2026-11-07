@@ -6,6 +6,18 @@ import type { Diagnostic, MiddlewareMetadata } from "./project.js";
 import { routaConfigMember, spreadObject } from "./services.js";
 import * as ts from "./typescript.js";
 
+/**
+ * The one request value a custom scheme reads: a header, as written, with an optional
+ * `Authorization` auth-scheme, or a cookie.
+ */
+export type CustomTransportMetadata = { header: string; scheme?: string } | { cookie: string };
+
+/** A custom scheme's public OpenAPI Security Scheme, as written. */
+export type CustomOpenApiMetadata =
+	| { type: "http"; scheme: string; bearerFormat?: string; description?: string }
+	| { type: "apiKey"; in: "header" | "cookie"; name: string; description?: string }
+	| { type: "mutualTLS"; description?: string };
+
 /** One credential scheme `src/routa.ts` declares, read from source. */
 export type AuthenticationSchemeMetadata = {
 	name: string;
@@ -18,6 +30,13 @@ export type AuthenticationSchemeMetadata = {
 			/** As written; HTTP compares header names case-insensitively. */ header: string;
 	  }
 	| { kind: "sessionCookie"; cookie: string }
+	| {
+			kind: "custom";
+			transport: CustomTransportMetadata;
+			/** The challenge auth-scheme, when the scheme overrides its name. */
+			challengeScheme?: string;
+			openapi: CustomOpenApiMetadata;
+	  }
 );
 
 /** The application's authentication contract facts. */
@@ -54,11 +73,12 @@ const tokenNamePattern = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
 type SchemeKind = AuthenticationSchemeMetadata["kind"];
 
-/** Each kind's constructor, and the auth-scheme its challenges name. */
-const kinds: Record<SchemeKind, { call: string; challenge: string; article: string }> = {
+/** Each kind's constructor, and the auth-scheme its challenges name: for custom, the scheme name. */
+const kinds: Record<SchemeKind, { call: string; challenge?: string; article: string }> = {
 	bearer: { call: "bearer", challenge: "Bearer", article: "A" },
 	apiKey: { call: "apiKey", challenge: "ApiKey", article: "An" },
 	sessionCookie: { call: "sessionCookie", challenge: "Session", article: "A" },
+	custom: { call: "custom", article: "A" },
 };
 
 /**
@@ -161,7 +181,7 @@ export function applicationAuthentication(
 
 		if (!descriptor) {
 			unresolved(
-				`Authentication scheme "${name}" in ${configFile} is not a statically readable bearer(), apiKey(), or sessionCookie() call.`,
+				`Authentication scheme "${name}" in ${configFile} is not a statically readable bearer(), apiKey(), sessionCookie(), or custom() call.`,
 				schemes.file,
 			);
 			continue;
@@ -185,7 +205,24 @@ export function applicationAuthentication(
 			report(
 				"ROUTA_AUTH_CHALLENGE_INVALID",
 				`Authentication scheme "${name}" ${challenge.problem}`,
-				'Write the override as a literal, such as challenge: { realm: "api" }, with printable ASCII and no " or \\.',
+				descriptor.kind === "custom"
+					? 'Write the override as a literal, such as challenge: { scheme: "Basic", realm: "api" }, with an auth-scheme token and a realm of printable ASCII without " or \\.'
+					: 'Write the override as a literal, such as challenge: { realm: "api" }, with printable ASCII and no " or \\.',
+				descriptor.file,
+			);
+			continue;
+		}
+
+		const openapi: CustomOpenApiMetadata | SchemeProblem | undefined =
+			transport.kind === "custom"
+				? customOpenApi(descriptor.options, transport.transport)
+				: undefined;
+
+		if (openapi && "problem" in openapi) {
+			report(
+				openapi.code,
+				`Authentication scheme "${name}" ${openapi.problem}`,
+				openapi.suggestion,
 				descriptor.file,
 			);
 			continue;
@@ -194,7 +231,9 @@ export function applicationAuthentication(
 		const scheme = {
 			name,
 			...transport,
+			...(challenge.scheme === undefined ? {} : { challengeScheme: challenge.scheme }),
 			...(challenge.realm === undefined ? {} : { realm: challenge.realm }),
+			...(openapi && { openapi }),
 		} as AuthenticationSchemeMetadata;
 		const overlap = transportOverlap(scheme, metadata);
 
@@ -376,9 +415,15 @@ function schemeTransport(
 	| { kind: "bearer" }
 	| { kind: "apiKey"; header: string }
 	| { kind: "sessionCookie"; cookie: string }
-	| { code: string; problem: string; suggestion: string } {
+	| { kind: "custom"; transport: CustomTransportMetadata }
+	| SchemeProblem {
 	if (kind === "bearer") {
 		return { kind };
+	}
+
+	if (kind === "custom") {
+		const transport = customTransport(options);
+		return "problem" in transport ? transport : { kind, transport };
 	}
 
 	const [key, noun, example, grammar] =
@@ -408,7 +453,328 @@ function schemeTransport(
 	return kind === "apiKey" ? { kind, header: value.text } : { kind, cookie: value.text };
 }
 
-/** Why a scheme reads bytes another built-in scheme already reads, or `undefined`. */
+type SchemeProblem = { code: string; problem: string; suggestion: string };
+
+const customTransportSuggestion =
+	'Write the transport as a literal that names one header or cookie: { header: "x-client-cert" }, { header: "authorization", scheme: "Basic" }, or { cookie: "sid" }.';
+
+/**
+ * Reads a custom scheme's transport: a literal object with a header name and an optional
+ * `Authorization` auth-scheme, or a cookie name.
+ */
+function customTransport(
+	options: ts.ObjectLiteralExpression,
+): CustomTransportMetadata | SchemeProblem {
+	const problem = (code: string, text: string): SchemeProblem => ({
+		code,
+		problem: text,
+		suggestion: customTransportSuggestion,
+	});
+	const node = memberNode(options, "transport");
+
+	if (!node) {
+		return problem("ROUTA_AUTH_CONFIG_INVALID", "declares no transport.");
+	}
+
+	const object = objectLiteral(node);
+
+	if (!object || hasUnreadableMember(object)) {
+		return problem(
+			"ROUTA_AUTH_CONFIG_UNRESOLVED",
+			"declares a transport that is not a literal { header }, { header, scheme }, or { cookie } object.",
+		);
+	}
+
+	const keys = object.properties.map(
+		(property) => propertyName((property as ts.PropertyAssignment).name) as string,
+	);
+	const unknown = keys.find((key) => key !== "header" && key !== "scheme" && key !== "cookie");
+
+	if (unknown !== undefined) {
+		return problem(
+			"ROUTA_AUTH_CONFIG_INVALID",
+			`declares transport "${unknown}". A transport reads one header, with an optional Authorization scheme, or one cookie.`,
+		);
+	}
+
+	if (keys.includes("header") === keys.includes("cookie")) {
+		return problem(
+			"ROUTA_AUTH_CONFIG_INVALID",
+			keys.includes("header")
+				? "declares a transport with both header and cookie. Read one header or one cookie."
+				: "declares a transport without a header or cookie.",
+		);
+	}
+
+	const values: Record<string, string> = {};
+
+	for (const key of keys) {
+		const value = literalMember(object, key);
+
+		if (value === undefined) {
+			return problem(
+				"ROUTA_AUTH_CONFIG_UNRESOLVED",
+				`declares a transport ${key} that is not a string literal.`,
+			);
+		}
+
+		values[key] = value;
+	}
+
+	const { header, scheme, cookie } = values;
+
+	if (cookie !== undefined) {
+		return scheme !== undefined
+			? problem(
+					"ROUTA_AUTH_CONFIG_INVALID",
+					`declares transport scheme "${scheme}" on a cookie. A transport scheme applies only to the Authorization header.`,
+				)
+			: tokenNamePattern.test(cookie)
+				? { cookie }
+				: problem(
+						"ROUTA_AUTH_CONFIG_INVALID",
+						`declares transport cookie ${JSON.stringify(cookie)}, which is not a cookie name.`,
+					);
+	}
+
+	if (!tokenNamePattern.test(header!)) {
+		return problem(
+			"ROUTA_AUTH_CONFIG_INVALID",
+			`declares transport header ${JSON.stringify(header)}, which is not an HTTP header name.`,
+		);
+	}
+
+	if (scheme === undefined) {
+		return { header: header! };
+	}
+
+	if (header!.toLowerCase() !== "authorization") {
+		return problem(
+			"ROUTA_AUTH_CONFIG_INVALID",
+			`declares transport scheme ${JSON.stringify(scheme)} on the ${header!.toLowerCase()} header. A transport scheme applies only to the Authorization header.`,
+		);
+	}
+
+	return tokenNamePattern.test(scheme)
+		? { header: header!, scheme }
+		: problem(
+				"ROUTA_AUTH_CONFIG_INVALID",
+				`declares transport scheme ${JSON.stringify(scheme)}, which is not an HTTP auth-scheme.`,
+			);
+}
+
+/** The members each OpenAPI security scheme type accepts besides `type` and `description`. */
+const openapiMembers: Record<CustomOpenApiMetadata["type"], readonly string[]> = {
+	http: ["scheme", "bearerFormat"],
+	apiKey: ["in", "name"],
+	mutualTLS: [],
+};
+
+/**
+ * Reads a custom scheme's OpenAPI metadata: a literal Security Scheme Object that agrees with
+ * the transport. `http` describes one `Authorization` auth-scheme, `apiKey` a header or cookie
+ * the scheme reads whole, and `mutualTLS` a header other than `Authorization`, such as a trusted
+ * proxy's client-certificate header.
+ */
+function customOpenApi(
+	options: ts.ObjectLiteralExpression,
+	transport: CustomTransportMetadata,
+): CustomOpenApiMetadata | SchemeProblem {
+	const problem = (code: string, text: string): SchemeProblem => ({
+		code,
+		problem: text,
+		suggestion:
+			'Describe the public security scheme as a literal that agrees with the transport, such as openapi: { type: "http", scheme: "basic" } for { header: "authorization", scheme: "Basic" }, { type: "apiKey", in: "header", name: "x-signed" } for { header: "x-signed" }, or { type: "mutualTLS" } for a trusted proxy\'s client-certificate header.',
+	});
+	const invalid = (text: string) =>
+		problem("ROUTA_AUTH_CONFIG_INVALID", `declares openapi ${text}`);
+	const node = memberNode(options, "openapi");
+
+	if (!node) {
+		return problem("ROUTA_AUTH_CONFIG_INVALID", "declares no openapi metadata.");
+	}
+
+	const object = objectLiteral(node);
+
+	if (!object || hasUnreadableMember(object)) {
+		return problem(
+			"ROUTA_AUTH_CONFIG_UNRESOLVED",
+			"declares openapi metadata that is not a literal object.",
+		);
+	}
+
+	const type = literalMember(object, "type") as CustomOpenApiMetadata["type"] | undefined;
+
+	if (type === undefined || !Object.hasOwn(openapiMembers, type)) {
+		return memberNode(object, "type") && type === undefined
+			? problem(
+					"ROUTA_AUTH_CONFIG_UNRESOLVED",
+					"declares openapi type that is not a string literal.",
+				)
+			: invalid(
+					type === undefined
+						? 'metadata without a type. Use "http", "apiKey", or "mutualTLS".'
+						: `type ${JSON.stringify(type)}. Use "http", "apiKey", or "mutualTLS".`,
+				);
+	}
+
+	const values: Record<string, string> = {};
+
+	for (const property of object.properties) {
+		const key = propertyName((property as ts.PropertyAssignment).name) as string;
+
+		if (key !== "type" && key !== "description" && !openapiMembers[type].includes(key)) {
+			return invalid(`"${key}", which { type: "${type}" } does not accept.`);
+		}
+
+		const value = literalMember(object, key);
+
+		if (value === undefined) {
+			return problem(
+				"ROUTA_AUTH_CONFIG_UNRESOLVED",
+				`declares openapi ${key} that is not a string literal.`,
+			);
+		}
+
+		values[key] = value;
+	}
+
+	const header = "header" in transport ? transport.header.toLowerCase() : undefined;
+	const authScheme = "header" in transport ? transport.scheme : undefined;
+
+	if (type === "http") {
+		const { scheme, bearerFormat } = values;
+
+		if (scheme === undefined || !tokenNamePattern.test(scheme)) {
+			return invalid('{ type: "http" } without an HTTP auth-scheme, such as scheme: "basic".');
+		}
+
+		if (authScheme?.toLowerCase() !== scheme.toLowerCase()) {
+			return invalid(
+				`{ type: "http" }, which needs an { header: "authorization", scheme } transport whose scheme is "${scheme}".`,
+			);
+		}
+
+		if (bearerFormat !== undefined && scheme.toLowerCase() !== "bearer") {
+			return invalid('bearerFormat, which applies only to scheme "bearer".');
+		}
+	}
+
+	if (type === "apiKey") {
+		if (authScheme !== undefined) {
+			return invalid(
+				`{ type: "apiKey" }, which cannot describe one Authorization auth-scheme. Use { type: "http", scheme: "${authScheme}" }.`,
+			);
+		}
+
+		const [location, name] =
+			"cookie" in transport ? ["cookie", transport.cookie] : ["header", transport.header];
+		const named =
+			location === "cookie" ? values.name === name : values.name?.toLowerCase() === header;
+
+		if (values.in !== location || !named) {
+			return invalid(
+				`{ type: "apiKey" }, which must name the transport: in: "${location}", name: "${name}".`,
+			);
+		}
+	}
+
+	if (type === "mutualTLS" && (header === undefined || header === "authorization")) {
+		return invalid(
+			`{ type: "mutualTLS" }, which needs a header transport other than Authorization, such as a trusted proxy's client-certificate header.`,
+		);
+	}
+
+	return values as CustomOpenApiMetadata;
+}
+
+/** A member's string literal value, or `undefined` when it is absent or anything else. */
+function literalMember(object: ts.ObjectLiteralExpression, name: string): string | undefined {
+	const node = memberNode(object, name);
+	const value = node && ts.isExpression(node) ? unwrapExpression(node) : undefined;
+	return value && ts.isStringLiteralLike(value) ? value.text : undefined;
+}
+
+/**
+ * Where a scheme's credential travels: a whole header, one `Authorization` auth-scheme, or a
+ * cookie. Header names and auth-schemes are lowercase.
+ */
+function transportOf(
+	scheme: AuthenticationSchemeMetadata,
+): { header: string; authScheme?: string } | { cookie: string } {
+	const transport: CustomTransportMetadata =
+		scheme.kind === "bearer"
+			? { header: "authorization", scheme: "Bearer" }
+			: scheme.kind === "apiKey"
+				? { header: scheme.header }
+				: scheme.kind === "sessionCookie"
+					? { cookie: scheme.cookie }
+					: scheme.transport;
+
+	return "cookie" in transport
+		? transport
+		: {
+				header: transport.header.toLowerCase(),
+				...(transport.scheme !== undefined && { authScheme: transport.scheme.toLowerCase() }),
+			};
+}
+
+/** What a scheme reads, for messages, such as `the x-api-key header`. */
+function reads(scheme: AuthenticationSchemeMetadata): string {
+	const transport =
+		scheme.kind === "custom"
+			? scheme.transport
+			: scheme.kind === "bearer"
+				? { header: "authorization", scheme: "Bearer" }
+				: undefined;
+
+	if (transport && "header" in transport && transport.scheme !== undefined) {
+		return `the Authorization ${transport.scheme} credential`;
+	}
+
+	const identity = transportOf(scheme);
+	return "cookie" in identity ? `the "${identity.cookie}" cookie` : `the ${identity.header} header`;
+}
+
+/**
+ * Whether two schemes read the same credential: the same cookie, or the same header unless each
+ * reads a different `Authorization` auth-scheme. A whole `Cookie` header reads every cookie.
+ */
+function overlaps(a: AuthenticationSchemeMetadata, b: AuthenticationSchemeMetadata): boolean {
+	const [left, right] = [transportOf(a), transportOf(b)];
+
+	if ("cookie" in left || "cookie" in right) {
+		return "cookie" in left && "cookie" in right
+			? left.cookie === right.cookie
+			: ("header" in left ? left : (right as { header: string })).header === "cookie";
+	}
+
+	return (
+		left.header === right.header
+		&& (left.authScheme === undefined
+			|| right.authScheme === undefined
+			|| left.authScheme === right.authScheme)
+	);
+}
+
+/** Whether a scheme reads part of a header: one cookie or one `Authorization` auth-scheme. */
+function readsPart(scheme: AuthenticationSchemeMetadata): boolean {
+	const transport = transportOf(scheme);
+	return "cookie" in transport || transport.authScheme !== undefined;
+}
+
+const overlapSuggestions: Record<SchemeKind, string> = {
+	bearer:
+		"Declare one Bearer scheme, and verify every token format it accepts in its authenticator.",
+	apiKey:
+		"Declare one API-key scheme per header, and verify every key format it accepts in its authenticator.",
+	sessionCookie:
+		"Declare one session scheme per cookie, and verify every session format it accepts in its authenticator.",
+	custom:
+		"Give each scheme its own transport, and verify every credential format it accepts in one authenticator. A custom transport without a scheme reads the whole header, and a Cookie header reads every cookie.",
+};
+
+/** Why a scheme reads a credential another scheme already reads, or `undefined`. */
 function transportOverlap(
 	scheme: AuthenticationSchemeMetadata,
 	earlier: readonly AuthenticationSchemeMetadata[],
@@ -431,35 +797,18 @@ function transportOverlap(
 		};
 	}
 
-	const other = earlier.find(
-		(item) =>
-			item.kind === scheme.kind
-			&& (item.kind !== "apiKey" || item.header.toLowerCase() === header)
-			&& (item.kind !== "sessionCookie" || item.cookie === (scheme as { cookie?: string }).cookie),
-	);
+	const other = earlier.find((item) => overlaps(item, scheme));
 
 	if (!other) {
 		return undefined;
 	}
 
-	const both = `Authentication schemes "${other.name}" and "${scheme.name}" both read`;
-	return scheme.kind === "bearer"
-		? {
-				message: `${both} the Authorization Bearer credential.`,
-				suggestion:
-					"Declare one Bearer scheme, and verify every token format it accepts in its authenticator.",
-			}
-		: scheme.kind === "apiKey"
-			? {
-					message: `${both} the ${header} header.`,
-					suggestion:
-						"Declare one API-key scheme per header, and verify every key format it accepts in its authenticator.",
-				}
-			: {
-					message: `${both} the "${scheme.cookie}" cookie.`,
-					suggestion:
-						"Declare one session scheme per cookie, and verify every session format it accepts in its authenticator.",
-				};
+	// Name the narrower credential both read, such as the cookie a whole Cookie header includes.
+	const shared = readsPart(scheme) && !readsPart(other) ? reads(scheme) : reads(other);
+	return {
+		message: `Authentication schemes "${other.name}" and "${scheme.name}" both read ${shared}.`,
+		suggestion: overlapSuggestions[other.kind === scheme.kind ? scheme.kind : "custom"],
+	};
 }
 
 /** A node read as an object literal: written in place, or a `const` bound to one. */
@@ -540,11 +889,14 @@ function schemeDescriptor(
 	return descriptor && { file, ...descriptor };
 }
 
-/** Reads a challenge override: absent, or a literal object with only a literal realm. */
+/**
+ * Reads a challenge override: absent, or a literal object with only a literal realm, and for a
+ * custom scheme also a literal auth-scheme.
+ */
 function schemeChallenge(
 	kind: SchemeKind,
 	options: ts.ObjectLiteralExpression,
-): { realm?: string } | { problem: string } {
+): { scheme?: string; realm?: string } | { problem: string } {
 	const node = memberNode(options, "challenge");
 
 	if (!node) {
@@ -557,36 +909,42 @@ function schemeChallenge(
 		return { problem: "declares a challenge override that is not a literal object." };
 	}
 
-	let realm: string | undefined;
+	const accepted = kind === "custom" ? ["scheme", "realm"] : ["realm"];
+	const read: { scheme?: string; realm?: string } = {};
 
 	for (const property of challenge.properties) {
-		const key = propertyName((property as ts.PropertyAssignment).name);
+		const key = propertyName((property as ts.PropertyAssignment).name) as "scheme" | "realm";
 
-		if (key !== "realm") {
+		if (!accepted.includes(key)) {
 			return {
-				problem: `declares challenge "${key}". ${kinds[kind].article} ${kinds[kind].challenge} challenge override accepts only realm.`,
+				problem:
+					kind === "custom"
+						? `declares challenge "${key}". A custom challenge override accepts only scheme and realm.`
+						: `declares challenge "${key}". ${kinds[kind].article} ${kinds[kind].challenge} challenge override accepts only realm.`,
 			};
 		}
 
-		const value = ts.isPropertyAssignment(property)
-			? unwrapExpression(property.initializer)
-			: undefined;
+		const value = literalMember(challenge, key);
 
-		if (!value || !ts.isStringLiteralLike(value)) {
-			return { problem: "declares a challenge realm that is not a string literal." };
+		if (value === undefined) {
+			return { problem: `declares a challenge ${key} that is not a string literal.` };
 		}
 
-		if (!realmPattern.test(value.text)) {
+		if (key === "scheme" && !tokenNamePattern.test(value)) {
+			return { problem: "declares a challenge scheme that is not an HTTP auth-scheme." };
+		}
+
+		if (key === "realm" && !realmPattern.test(value)) {
 			return {
 				problem:
 					'declares a challenge realm that is empty or has a character outside printable ASCII, " or \\.',
 			};
 		}
 
-		realm = value.text;
+		read[key] = value;
 	}
 
-	return realm === undefined ? {} : { realm };
+	return read;
 }
 
 /**
