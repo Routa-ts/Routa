@@ -32,10 +32,10 @@ export type AuthenticatorContext = Register extends { applicationServices: infer
  * Application code that verifies one extracted credential. Throw for unexpected failures, which
  * stay server errors; return `{ type: "rejected" }` for a credential that is not valid.
  */
-export type Authenticator<TResult extends AuthenticationResult = AuthenticationResult> = (
-	credential: string,
-	context: AuthenticatorContext,
-) => MaybePromise<TResult>;
+export type Authenticator<
+	TResult extends AuthenticationResult = AuthenticationResult,
+	TCredential = string,
+> = (credential: TCredential, context: AuthenticatorContext) => MaybePromise<TResult>;
 
 /** A static challenge override. `realm` must be printable ASCII without `"` or `\`. */
 export type CredentialChallenge = { readonly realm?: string };
@@ -88,8 +88,97 @@ export type SessionCookieScheme<TResult extends AuthenticationResult = Authentic
 	readonly authenticate: Authenticator<TResult>;
 };
 
-/** A credential scheme descriptor, such as one {@link bearer}, {@link apiKey}, or {@link sessionCookie} returns. */
-export type CredentialScheme = BearerScheme<any> | ApiKeyScheme<any> | SessionCookieScheme<any>;
+/**
+ * The one request value a custom scheme reads: a request header, the credentials of one
+ * `Authorization` auth-scheme, such as `Basic`, or a request cookie. It is the scheme's identity,
+ * so no other scheme may read it.
+ */
+export type CustomTransport =
+	| { readonly header: string; readonly scheme?: string }
+	| { readonly cookie: string };
+
+/** A static challenge override for a custom scheme. Both fields are optional. */
+export type CustomChallenge = {
+	/** The auth-scheme the challenge names. Defaults to the registered scheme name. */
+	readonly scheme?: string;
+	/** Printable ASCII without `"` or `\`. */
+	readonly realm?: string;
+};
+
+/**
+ * The public OpenAPI Security Scheme a custom scheme documents. It must describe the transport:
+ * `http` an `Authorization` auth-scheme, `apiKey` the header or cookie, and `mutualTLS` a
+ * client-certificate header a trusted proxy sets.
+ */
+export type CustomOpenApi =
+	| {
+			readonly type: "http";
+			readonly scheme: string;
+			readonly bearerFormat?: string;
+			readonly description?: string;
+	  }
+	| {
+			readonly type: "apiKey";
+			readonly in: "header" | "cookie";
+			readonly name: string;
+			readonly description?: string;
+	  }
+	| { readonly type: "mutualTLS"; readonly description?: string };
+
+/** What a custom extractor returns: the credential it read, or that the value is malformed. */
+export type CustomExtraction<TCredential = unknown> =
+	| { readonly type: "credential"; readonly credential: TCredential }
+	| { readonly type: "malformed" };
+
+/** The credential type an extractor's result carries. */
+export type ExtractedCredential<TExtraction> = TExtraction extends {
+	readonly type: "credential";
+	readonly credential: infer TCredential;
+}
+	? TCredential
+	: never;
+
+export type CustomOptions<
+	TResult extends AuthenticationResult,
+	TExtraction extends CustomExtraction,
+> = {
+	/** The one request value the scheme reads, read from source. Write it as a literal. */
+	readonly transport: CustomTransport;
+	/** A static challenge override, read from source. Write it as a literal. */
+	readonly challenge?: CustomChallenge;
+	/** The public OpenAPI Security Scheme, read from source. Write it as a literal. */
+	readonly openapi: CustomOpenApi;
+	/**
+	 * Reads the credential from the transport's value, synchronously. It receives that value and
+	 * nothing else. Without it, the authenticator receives the value itself.
+	 */
+	readonly extract?: (value: string) => TExtraction;
+	/** Verifies the credential `extract` returns. */
+	readonly authenticate: Authenticator<TResult, ExtractedCredential<TExtraction>>;
+};
+
+/** A credential scheme whose credential the application extracts from one declared transport. */
+export type CustomScheme<
+	TResult extends AuthenticationResult = AuthenticationResult,
+	TCredential = any,
+> = {
+	readonly kind: "custom";
+	readonly transport: CustomTransport;
+	readonly challenge?: CustomChallenge | undefined;
+	readonly openapi: CustomOpenApi;
+	readonly extract?: ((value: string) => CustomExtraction<TCredential>) | undefined;
+	readonly authenticate: Authenticator<TResult, TCredential>;
+};
+
+/**
+ * A credential scheme descriptor, such as one {@link bearer}, {@link apiKey},
+ * {@link sessionCookie}, or {@link custom} returns.
+ */
+export type CredentialScheme =
+	| BearerScheme<any>
+	| ApiKeyScheme<any>
+	| SessionCookieScheme<any>
+	| CustomScheme<any, any>;
 
 /**
  * The `authentication` field of `createRouta`: one principal schema and the credential schemes,
@@ -135,7 +224,9 @@ export type PrincipalOf<TConfig> = TConfig extends {
 	? z.output<TSchema>
 	: never;
 
-type ResultOf<TScheme> = TScheme extends { readonly authenticate: Authenticator<infer TResult> }
+type ResultOf<TScheme> = TScheme extends {
+	readonly authenticate: Authenticator<infer TResult, any>;
+}
 	? TResult
 	: never;
 
@@ -172,7 +263,9 @@ export type AuthenticationChecks<TConfig> = TConfig extends {
 						Extract<ResultOf<TSchemes[K]>, { readonly type: "authenticated" }>["principal"],
 					] extends [z.input<TSchema>]
 						? unknown
-						: { readonly authenticate: Authenticator<AuthenticationResult<z.input<TSchema>>> })
+						: {
+								readonly authenticate: Authenticator<AuthenticationResult<z.input<TSchema>>, any>;
+							})
 						& ([RejectionFields<ResultOf<TSchemes[K]>>] extends [never]
 							? unknown
 							: {
@@ -227,13 +320,52 @@ export function sessionCookie<const TResult extends AuthenticationResult>(
 	}) as SessionCookieScheme<TResult>;
 }
 
+/**
+ * Declares a credential scheme that reads one declared transport: a request header, one
+ * `Authorization` auth-scheme, or a request cookie. Routa reads the value, passes it alone to
+ * `extract`, calls `authenticate` once with the credential `extract` returns, and parses an
+ * authenticated principal with the principal schema. The application owns reading and verifying
+ * the credential; the transport, challenge override, and OpenAPI metadata are contract facts.
+ *
+ * @throws {TypeError} When the transport, challenge override, or OpenAPI metadata is invalid,
+ *   `extract` is present but not a function, or `authenticate` is not a function
+ */
+export function custom<
+	const TResult extends AuthenticationResult,
+	TExtraction extends CustomExtraction = {
+		readonly type: "credential";
+		readonly credential: string;
+	},
+>(
+	options: CustomOptions<TResult, TExtraction>,
+): CustomScheme<TResult, ExtractedCredential<TExtraction>> {
+	const { transport, openapi, extract } = (options ?? {}) as Partial<
+		CustomOptions<TResult, CustomExtraction>
+	>;
+	return descriptor("custom", options, {
+		transport: copy(transport),
+		openapi: copy(openapi),
+		...(extract !== undefined && { extract }),
+	}) as CustomScheme<TResult, ExtractedCredential<TExtraction>>;
+}
+
+/** A frozen shallow copy of a contract-fact object, or the value itself when it is not one. */
+function copy(value: unknown): unknown {
+	return isRecord(value) ? Object.freeze({ ...value }) : value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 type SchemeKind = CredentialScheme["kind"];
 
-/** Each kind's constructor, and the auth-scheme its challenges name. */
-const kinds: Record<SchemeKind, { readonly call: string; readonly challenge: string }> = {
+/** Each kind's constructor, and the auth-scheme its challenges name: for custom, the scheme name. */
+const kinds: Record<SchemeKind, { readonly call: string; readonly challenge?: string }> = {
 	bearer: { call: "bearer()", challenge: "Bearer" },
 	apiKey: { call: "apiKey()", challenge: "ApiKey" },
 	sessionCookie: { call: "sessionCookie()", challenge: "Session" },
+	custom: { call: "custom()" },
 };
 
 /** "A Bearer" or "An ApiKey", for messages. */
@@ -242,7 +374,7 @@ const article = (scheme: string) => (scheme.startsWith("A") ? `An ${scheme}` : `
 function descriptor(
 	kind: SchemeKind,
 	options: { readonly challenge?: unknown; readonly authenticate?: unknown } | undefined,
-	transport: { readonly header?: unknown; readonly cookie?: unknown },
+	facts: Record<string, unknown>,
 ): CredentialScheme {
 	const { call } = kinds[kind];
 
@@ -250,8 +382,7 @@ function descriptor(
 		throw new TypeError(`${call} needs an authenticate function.`);
 	}
 
-	const problem =
-		transportProblem(kind, transport) ?? challengeProblem(options.challenge, kinds[kind].challenge);
+	const problem = schemeProblem(kind, { ...facts, challenge: options.challenge });
 
 	if (problem) {
 		throw new TypeError(`${call} ${problem}`);
@@ -259,15 +390,33 @@ function descriptor(
 
 	return Object.freeze({
 		kind,
-		...transport,
-		...(options.challenge !== undefined && {
-			challenge: Object.freeze({ ...(options.challenge as CredentialChallenge) }),
-		}),
+		...facts,
+		...(options.challenge !== undefined && { challenge: copy(options.challenge) }),
 		authenticate: options.authenticate,
 	}) as CredentialScheme;
 }
 
-/** RFC 9110 `token`, the grammar of header names and, in RFC 6265, of cookie names. */
+/**
+ * Why a descriptor's contract facts are invalid, or `undefined`. `routa check` reports the same
+ * rules.
+ */
+function schemeProblem(kind: SchemeKind, scheme: Record<string, unknown>): string | undefined {
+	if (kind !== "custom") {
+		return transportProblem(kind, scheme) ?? challengeProblem(scheme.challenge, kind);
+	}
+
+	const transport = scheme.transport as CustomTransport;
+	return (
+		customTransportProblem(transport)
+		?? challengeProblem(scheme.challenge, kind)
+		?? openapiProblem(scheme.openapi, transport)
+		?? (scheme.extract !== undefined && typeof scheme.extract !== "function"
+			? "extract must be a function when present."
+			: undefined)
+	);
+}
+
+/** RFC 9110 `token`, the grammar of header names, auth-schemes, and, in RFC 6265, cookie names. */
 const tokenNamePattern = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
 /** Why an API-key header or session cookie name is invalid, or `undefined`. */
@@ -286,6 +435,40 @@ function transportProblem(
 	return undefined;
 }
 
+/** Why a custom transport is invalid, or `undefined`. */
+function customTransportProblem(transport: unknown): string | undefined {
+	const keys = isRecord(transport) ? Object.keys(transport) : [];
+	const header =
+		keys.includes("header") && keys.every((key) => key === "header" || key === "scheme");
+
+	if (!header && !(keys.length === 1 && keys[0] === "cookie")) {
+		return 'transport must be { header: "x-name" }, { header: "authorization", scheme: "Basic" }, or { cookie: "name" }.';
+	}
+
+	const { cookie, scheme } = transport as { cookie?: unknown; scheme?: unknown };
+	const name = (transport as { header?: unknown }).header;
+
+	if (!header) {
+		return isTokenName(cookie)
+			? undefined
+			: 'transport cookie must be a cookie name, such as "sid".';
+	}
+
+	if (!isTokenName(name)) {
+		return 'transport header must be an HTTP header name, such as "x-client-cert".';
+	}
+
+	if (scheme !== undefined && name.toLowerCase() !== "authorization") {
+		return "transport scheme applies only to the Authorization header.";
+	}
+
+	if (scheme !== undefined && !isTokenName(scheme)) {
+		return 'transport scheme must be an HTTP auth-scheme, such as "Basic".';
+	}
+
+	return undefined;
+}
+
 function isTokenName(value: unknown): value is string {
 	return typeof value === "string" && tokenNamePattern.test(value);
 }
@@ -294,25 +477,114 @@ function isTokenName(value: unknown): value is string {
 const realmPattern = /^[\x20\x21\x23-\x5b\x5d-\x7e]+$/;
 
 /** Why a challenge override is invalid, or `undefined`. `routa check` reports the same rules. */
-function challengeProblem(challenge: unknown, scheme: string): string | undefined {
+function challengeProblem(challenge: unknown, kind: SchemeKind): string | undefined {
 	if (challenge === undefined) {
 		return undefined;
 	}
 
-	if (typeof challenge !== "object" || challenge === null || Array.isArray(challenge)) {
+	if (!isRecord(challenge)) {
 		return 'challenge must be an object such as { realm: "api" }.';
 	}
 
-	const unknown = Object.keys(challenge).find((key) => key !== "realm");
+	const accepted = kind === "custom" ? ["scheme", "realm"] : ["realm"];
+	const unknown = Object.keys(challenge).find((key) => !accepted.includes(key));
 
 	if (unknown !== undefined) {
-		return `challenge declares "${unknown}". ${article(scheme)} challenge override accepts only realm.`;
+		return kind === "custom"
+			? `challenge declares "${unknown}". A custom challenge override accepts only scheme and realm.`
+			: `challenge declares "${unknown}". ${article(kinds[kind].challenge!)} challenge override accepts only realm.`;
 	}
 
-	const { realm } = challenge as { realm?: unknown };
+	const { realm, scheme } = challenge;
+
+	if (scheme !== undefined && !isTokenName(scheme)) {
+		return 'challenge scheme must be an HTTP auth-scheme, such as "Basic".';
+	}
 
 	if (realm !== undefined && (typeof realm !== "string" || !realmPattern.test(realm))) {
 		return 'challenge realm must be a non-empty string of printable ASCII without " or \\.';
+	}
+
+	return undefined;
+}
+
+/** The members each OpenAPI security scheme type accepts besides `type` and `description`. */
+const openapiMembers: Record<CustomOpenApi["type"], readonly string[]> = {
+	http: ["scheme", "bearerFormat"],
+	apiKey: ["in", "name"],
+	mutualTLS: [],
+};
+
+/**
+ * Why a custom scheme's OpenAPI metadata is invalid or disagrees with its transport, or
+ * `undefined`. `http` describes one `Authorization` auth-scheme, `apiKey` a header or cookie the
+ * scheme reads whole, and `mutualTLS` a header other than `Authorization`, such as a trusted
+ * proxy's client-certificate header.
+ */
+function openapiProblem(openapi: unknown, transport: CustomTransport): string | undefined {
+	if (!isRecord(openapi)) {
+		return 'openapi must describe the public security scheme, such as { type: "http", scheme: "basic" }.';
+	}
+
+	const type = openapi.type as CustomOpenApi["type"];
+
+	if (typeof type !== "string" || !Object.hasOwn(openapiMembers, type)) {
+		return 'openapi type must be "http", "apiKey", or "mutualTLS".';
+	}
+
+	const unknown = Object.keys(openapi).find(
+		(key) => key !== "type" && key !== "description" && !openapiMembers[type].includes(key),
+	);
+
+	if (unknown !== undefined) {
+		return `openapi declares "${unknown}", which { type: "${type}" } does not accept.`;
+	}
+
+	if (openapi.description !== undefined && typeof openapi.description !== "string") {
+		return "openapi description must be a string.";
+	}
+
+	const header = "header" in transport ? transport.header.toLowerCase() : undefined;
+	const authScheme = "header" in transport ? transport.scheme : undefined;
+
+	if (type === "http") {
+		const { scheme, bearerFormat } = openapi;
+
+		if (!isTokenName(scheme)) {
+			return 'openapi scheme must be an HTTP auth-scheme, such as "basic".';
+		}
+
+		if (authScheme?.toLowerCase() !== scheme.toLowerCase()) {
+			return `openapi { type: "http" } needs an { header: "authorization", scheme } transport whose scheme is "${scheme}".`;
+		}
+
+		if (bearerFormat !== undefined && typeof bearerFormat !== "string") {
+			return "openapi bearerFormat must be a string.";
+		}
+
+		if (bearerFormat !== undefined && scheme.toLowerCase() !== "bearer") {
+			return 'openapi bearerFormat applies only to scheme "bearer".';
+		}
+	}
+
+	if (type === "apiKey") {
+		if (authScheme !== undefined) {
+			return `openapi { type: "apiKey" } cannot describe one Authorization auth-scheme. Use { type: "http", scheme: "${authScheme}" }.`;
+		}
+
+		const [location, name] =
+			"cookie" in transport ? ["cookie", transport.cookie] : ["header", transport.header];
+		const named =
+			typeof openapi.name === "string"
+			&& (location === "cookie" ? openapi.name === name : openapi.name.toLowerCase() === header);
+
+		if (openapi.in !== location || !named) {
+			return `openapi { type: "apiKey" } must name the transport: in: "${location}", name: "${name}".`;
+		}
+	}
+
+	if (type === "mutualTLS" && (header === undefined || header === "authorization")) {
+		return `openapi { type: "mutualTLS" } needs a header transport other than Authorization, such as a trusted proxy's client-certificate header.`;
 	}
 
 	return undefined;
@@ -491,16 +763,26 @@ export function requireAuth<
 	);
 }
 
+/**
+ * Where a scheme's credential travels: a whole header, the credentials of one `Authorization`
+ * auth-scheme, or a cookie. Header names and auth-schemes are lowercase.
+ */
+type Transport =
+	| { readonly header: string; readonly authScheme?: string | undefined }
+	| { readonly cookie: string };
+
 /** One configured scheme, ready to extract and authenticate credentials. */
 type RuntimeScheme = {
 	readonly name: string;
 	readonly kind: SchemeKind;
-	/** The header an API-key scheme reads, lowercase. */
-	readonly header?: string | undefined;
-	/** The cookie a session scheme reads. */
-	readonly cookie?: string | undefined;
+	readonly transport: Transport;
+	/** What the scheme reads, for messages, such as `the x-api-key header`. */
+	readonly reads: string;
+	/** The auth-scheme its challenges name. */
+	readonly challenge: string;
 	readonly realm?: string | undefined;
-	readonly authenticate: Authenticator<any>;
+	readonly extract?: ((value: string) => unknown) | undefined;
+	readonly authenticate: Authenticator<any, any>;
 };
 
 /** A validated `authentication` configuration. */
@@ -552,14 +834,8 @@ export function runtimeAuthentication(config: unknown): RuntimeAuthentication {
 	const declared: RuntimeScheme[] = [];
 
 	for (const [name, value] of Object.entries(schemes)) {
-		const scheme = value as {
-			kind?: unknown;
-			header?: string;
-			cookie?: string;
-			challenge?: CredentialChallenge;
-			authenticate?: unknown;
-		} | null;
-		const kind = scheme?.kind as SchemeKind;
+		const scheme = (isRecord(value) ? value : {}) as Record<string, unknown>;
+		const kind = scheme.kind as SchemeKind;
 
 		if (!schemeNamePattern.test(name)) {
 			fail(
@@ -567,25 +843,23 @@ export function runtimeAuthentication(config: unknown): RuntimeAuthentication {
 			);
 		}
 
-		if (!Object.hasOwn(kinds, kind ?? "") || typeof scheme?.authenticate !== "function") {
-			fail(`scheme "${name}" must be declared with bearer(), apiKey(), or sessionCookie().`);
+		if (
+			typeof kind !== "string"
+			|| !Object.hasOwn(kinds, kind)
+			|| typeof scheme.authenticate !== "function"
+		) {
+			fail(
+				`scheme "${name}" must be declared with bearer(), apiKey(), sessionCookie(), or custom().`,
+			);
 		}
 
-		const problem =
-			transportProblem(kind, scheme!) ?? challengeProblem(scheme?.challenge, kinds[kind].challenge);
+		const problem = schemeProblem(kind, scheme);
 
 		if (problem) {
 			fail(`scheme "${name}" ${problem}`);
 		}
 
-		const runtime: RuntimeScheme = {
-			name,
-			kind,
-			...(kind === "apiKey" && { header: scheme!.header!.toLowerCase() }),
-			...(kind === "sessionCookie" && { cookie: scheme!.cookie }),
-			realm: scheme?.challenge?.realm,
-			authenticate: scheme!.authenticate as Authenticator<any>,
-		};
+		const runtime = runtimeScheme(name, kind, scheme);
 		const overlap = transportOverlap(runtime, declared);
 
 		if (overlap) {
@@ -614,34 +888,101 @@ export function runtimeAuthentication(config: unknown): RuntimeAuthentication {
 	});
 }
 
-/** Why a scheme reads bytes another built-in scheme already reads, or `undefined`. */
+/** One validated descriptor, ready to read requests. */
+function runtimeScheme(
+	name: string,
+	kind: SchemeKind,
+	scheme: Record<string, unknown>,
+): RuntimeScheme {
+	const challenge = scheme.challenge as CustomChallenge | undefined;
+	const transport: CustomTransport =
+		kind === "bearer"
+			? { header: "authorization", scheme: "Bearer" }
+			: kind === "apiKey"
+				? { header: scheme.header as string }
+				: kind === "sessionCookie"
+					? { cookie: scheme.cookie as string }
+					: (scheme.transport as CustomTransport);
+	const header = "header" in transport ? transport.header.toLowerCase() : undefined;
+
+	// Frozen, and application callbacks run without a receiver, so no extractor or authenticator can
+	// change the transport or challenge Routa validated.
+	return Object.freeze({
+		name,
+		kind,
+		transport: Object.freeze(
+			"cookie" in transport
+				? { cookie: transport.cookie }
+				: { header: header!, authScheme: transport.scheme?.toLowerCase() },
+		),
+		reads:
+			"cookie" in transport
+				? `the "${transport.cookie}" cookie`
+				: transport.scheme === undefined
+					? `the ${header} header`
+					: `the Authorization ${transport.scheme} credential`,
+		challenge: challenge?.scheme ?? kinds[kind].challenge ?? name,
+		realm: challenge?.realm,
+		// Only a custom scheme extracts; a built-in authenticator always receives the string it reads.
+		extract: kind === "custom" ? (scheme.extract as RuntimeScheme["extract"]) : undefined,
+		authenticate: scheme.authenticate as Authenticator<any, any>,
+	});
+}
+
+/**
+ * Whether two transports read the same credential: the same cookie, or the same header unless
+ * each reads a different `Authorization` auth-scheme. A whole `Cookie` header reads every cookie.
+ */
+function overlaps(a: Transport, b: Transport): boolean {
+	if ("cookie" in a || "cookie" in b) {
+		return "cookie" in a && "cookie" in b
+			? a.cookie === b.cookie
+			: ("header" in a ? a : (b as { header: string })).header === "cookie";
+	}
+
+	return (
+		a.header === b.header
+		&& (a.authScheme === undefined || b.authScheme === undefined || a.authScheme === b.authScheme)
+	);
+}
+
+/** Whether a transport reads part of a header: one cookie or one `Authorization` auth-scheme. */
+const isPart = (transport: Transport) =>
+	"cookie" in transport || transport.authScheme !== undefined;
+
+const overlapAdvice: Record<SchemeKind, string> = {
+	bearer: "Verify every token format in one authenticator.",
+	apiKey: "Verify every key format in one authenticator.",
+	sessionCookie: "Verify every session format in one authenticator.",
+	custom:
+		"Give each scheme its own transport, and verify every credential format in one authenticator.",
+};
+
+/** Why a scheme reads a credential another scheme already reads, or `undefined`. */
 function transportOverlap(
 	scheme: RuntimeScheme,
 	earlier: readonly RuntimeScheme[],
 ): string | undefined {
-	if (scheme.header === "authorization") {
+	const header = "header" in scheme.transport ? scheme.transport.header : undefined;
+
+	if (scheme.kind === "apiKey" && header === "authorization") {
 		return `scheme "${scheme.name}" reads the Authorization header, which carries Authorization-scheme credentials such as Bearer. Use bearer() for Bearer tokens.`;
 	}
 
-	if (scheme.header === "cookie") {
+	if (scheme.kind === "apiKey" && header === "cookie") {
 		return `scheme "${scheme.name}" reads the Cookie header, which carries cookies. Use sessionCookie() for a session cookie.`;
 	}
 
-	const other = earlier.find(
-		(item) =>
-			item.kind === scheme.kind && item.header === scheme.header && item.cookie === scheme.cookie,
-	);
+	const other = earlier.find((item) => overlaps(item.transport, scheme.transport));
 
 	if (!other) {
 		return undefined;
 	}
 
-	const both = `schemes "${other.name}" and "${scheme.name}" both read`;
-	return scheme.kind === "bearer"
-		? `${both} the Authorization Bearer credential. Verify every token format in one authenticator.`
-		: scheme.kind === "apiKey"
-			? `${both} the ${scheme.header} header. Verify every key format in one authenticator.`
-			: `${both} the "${scheme.cookie}" cookie. Verify every session format in one authenticator.`;
+	// Name the narrower credential both read, such as the cookie a whole Cookie header includes.
+	const shared = isPart(scheme.transport) && !isPart(other.transport) ? scheme.reads : other.reads;
+	const advice = overlapAdvice[other.kind === scheme.kind ? scheme.kind : "custom"];
+	return `schemes "${other.name}" and "${scheme.name}" both read ${shared}. ${advice}`;
 }
 
 /** Orders schemes by `priority`, which must list each exactly once; without it, as declared. */
@@ -815,10 +1156,10 @@ export function isAuthenticationGuard(item: unknown): boolean {
 }
 
 /**
- * A credential a request presents for one scheme, before any authenticator runs. Without a
- * `credential`, it is malformed.
+ * A credential a request presents for one scheme, before any extractor or authenticator runs.
+ * Without a `value`, it is malformed.
  */
-type Presented = { readonly scheme: RuntimeScheme; readonly credential?: string };
+type Presented = { readonly scheme: RuntimeScheme; readonly value?: string };
 
 // RFC 9110 separates an auth-scheme from its credential with spaces only.
 const authSchemePattern = /^([!#$%&'*+.^_`|~0-9A-Za-z-]+)(?: +(.*))?$/s;
@@ -829,10 +1170,11 @@ const tokenPattern = /^[A-Za-z0-9\-._~+/]+=*$/;
  * Reads each scheme's credential from the request, in priority order, and whether the request
  * carries an `Authorization` credential no configured scheme reads.
  *
- * A Bearer token that is empty or not an RFC 6750 `b64token` is malformed. An API-key header
- * that is empty or holds a comma is malformed: `Headers` joins a repeated header with `", "`, so
- * a comma means the key cannot be told apart from two keys. A session cookie that is empty or
- * repeated is malformed.
+ * A scheme's credential is presented when its header exists, its `Authorization` auth-scheme
+ * matches ignoring case, or its cookie exists. A Bearer token that is empty or not an RFC 6750
+ * `b64token` is malformed. Any other header value that is empty or holds a comma is malformed:
+ * `Headers` joins a repeated header with `", "`, so a comma means the value cannot be told apart
+ * from two values. A cookie that is empty or repeated is malformed.
  */
 function presentedCredentials(
 	schemes: readonly RuntimeScheme[],
@@ -840,40 +1182,43 @@ function presentedCredentials(
 ): { readonly credentials: readonly Presented[]; readonly unsupported: boolean } {
 	const authorization = request.headers.get("authorization");
 	const match = authorization === null ? null : authSchemePattern.exec(authorization.trim());
-	const isBearer = match?.[1]?.toLowerCase() === "bearer";
+	const authScheme = match?.[1]?.toLowerCase();
 	const credentials: Presented[] = [];
 	let cookies: Map<string, string[]> | undefined;
 
 	for (const scheme of schemes) {
-		if (scheme.kind === "bearer") {
-			if (isBearer) {
-				const token = match?.[2]?.trim() ?? "";
-				credentials.push(tokenPattern.test(token) ? { scheme, credential: token } : { scheme });
-			}
-		} else if (scheme.kind === "apiKey") {
-			const value = request.headers.get(scheme.header!);
+		const { transport } = scheme;
+		let value: string | null;
 
-			if (value !== null) {
-				credentials.push(
-					value === "" || value.includes(",") ? { scheme } : { scheme, credential: value },
-				);
-			}
-		} else {
+		if ("cookie" in transport) {
 			cookies ??= requestCookies(request);
-			const values = cookies.get(scheme.cookie!);
+			const values = cookies.get(transport.cookie);
+			value = values ? (values.length === 1 ? values[0]! : "") : null;
+		} else if (transport.authScheme !== undefined) {
+			value = authScheme === transport.authScheme ? (match?.[2]?.trim() ?? "") : null;
+		} else {
+			value = request.headers.get(transport.header);
+		}
 
-			if (values) {
-				credentials.push(
-					values.length === 1 && values[0] !== "" ? { scheme, credential: values[0]! } : { scheme },
-				);
-			}
+		if (value !== null) {
+			const wellFormed =
+				scheme.kind === "bearer"
+					? tokenPattern.test(value)
+					: value !== "" && ("cookie" in transport || !value.includes(","));
+			credentials.push(wellFormed ? { scheme, value } : { scheme });
 		}
 	}
 
 	return {
 		credentials,
 		unsupported:
-			authorization !== null && !(isBearer && schemes.some((scheme) => scheme.kind === "bearer")),
+			authorization !== null
+			&& !schemes.some(
+				({ transport }) =>
+					"header" in transport
+					&& transport.header === "authorization"
+					&& (transport.authScheme === undefined || transport.authScheme === authScheme),
+			),
 	};
 }
 
@@ -914,8 +1259,7 @@ function schemeChallenge(scheme: RuntimeScheme, invalid = false): string {
 		...(scheme.realm === undefined ? [] : [`realm="${scheme.realm}"`]),
 		...(invalid && scheme.kind === "bearer" ? ['error="invalid_token"'] : []),
 	];
-	const name = kinds[scheme.kind].challenge;
-	return parameters.length > 0 ? `${name} ${parameters.join(", ")}` : name;
+	return parameters.length > 0 ? `${scheme.challenge} ${parameters.join(", ")}` : scheme.challenge;
 }
 
 /** Challenges every scheme without error details, as for a missing or disallowed credential. */
@@ -962,29 +1306,84 @@ export async function resolveAuthentication(
 		return { ambiguous: true };
 	}
 
-	if (selected.credential === undefined) {
+	const credential =
+		selected.value === undefined ? undefined : extractCredential(selected.scheme, selected.value);
+
+	if (!credential) {
 		return { failed: { challenge: schemeChallenge(selected.scheme, true) } };
 	}
 
-	return await authenticate(authentication, selected.scheme, selected.credential, context);
+	return await authenticate(authentication, selected.scheme, credential.credential, context);
+}
+
+/**
+ * Reads the credential a scheme's extractor returns from the transport's value, or `undefined`
+ * when it reports the value malformed. Without an extractor, the value is the credential. The
+ * extractor receives the value alone, and its result is read once, so it cannot reach request
+ * state or answer differently later.
+ *
+ * @throws {AuthenticatorError} When the extractor throws
+ * @throws {AuthenticationContractError} When it returns anything else
+ */
+function extractCredential(
+	scheme: RuntimeScheme,
+	value: string,
+): { readonly credential: unknown } | undefined {
+	if (!scheme.extract) {
+		return { credential: value };
+	}
+
+	let type: unknown;
+	let credential: unknown;
+	let hasCredential = false;
+
+	try {
+		const result = Reflect.apply(scheme.extract, undefined, [value]);
+
+		if (result instanceof Promise) {
+			// extract is synchronous, so a promise is a contract error. Observe it so its rejection
+			// cannot surface as an unhandled rejection.
+			void Promise.prototype.then.call(result, undefined, () => {});
+		}
+
+		if (isRecord(result)) {
+			type = result.type;
+			hasCredential = type === "credential" && Object.hasOwn(result, "credential");
+			credential = hasCredential ? result.credential : undefined;
+		}
+	} catch {
+		throw new AuthenticatorError(scheme.name, "extract");
+	}
+
+	if (type === "malformed") {
+		return undefined;
+	}
+
+	if (!hasCredential) {
+		throw new AuthenticationContractError(
+			`Credential extraction for scheme "${scheme.name}" returned a result that is neither { type: "credential", credential } nor { type: "malformed" }.`,
+		);
+	}
+
+	return { credential };
 }
 
 async function authenticate(
 	authentication: RuntimeAuthentication,
 	scheme: RuntimeScheme,
-	credential: string,
+	credential: unknown,
 	context: { readonly logger: RoutaLogger; readonly services?: unknown },
 ): Promise<ResolvedAuthentication> {
 	let result: unknown;
 
 	try {
-		result = await scheme.authenticate(
+		result = await Reflect.apply(scheme.authenticate, undefined, [
 			credential,
 			Object.freeze({
 				logger: context.logger,
 				...(context.services === undefined ? {} : { services: context.services }),
 			}) as AuthenticatorContext,
-		);
+		]);
 	} catch {
 		throw new AuthenticatorError(scheme.name);
 	}
@@ -1112,15 +1511,22 @@ export function authenticationFailure(
 }
 
 /**
- * An authenticator threw. Routa answers with the generic `500` problem and logs only the scheme,
- * because anything the thrown value carries, including its message, stack, and name, is set by
- * application or provider code and may carry the credential.
+ * An authenticator or a custom scheme's extractor threw. Routa answers with the generic `500`
+ * problem and logs only the scheme, because anything the thrown value carries, including its
+ * message, stack, and name, is set by application or provider code and may carry the credential.
  */
 export class AuthenticatorError extends Error {
 	override readonly name = "AuthenticatorError";
 
-	constructor(readonly scheme: string) {
-		super(`Authenticator for scheme "${scheme}" threw.`);
+	constructor(
+		readonly scheme: string,
+		stage: "authenticate" | "extract" = "authenticate",
+	) {
+		super(
+			stage === "extract"
+				? `Credential extraction for scheme "${scheme}" threw.`
+				: `Authenticator for scheme "${scheme}" threw.`,
+		);
 	}
 }
 

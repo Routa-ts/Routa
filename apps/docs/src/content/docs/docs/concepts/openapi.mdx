@@ -42,6 +42,7 @@ When `src/routa.ts` configures [`authentication`](/docs/reference/configuration/
 | `bearer()`                  | `{ type: "http", scheme: "bearer" }`             |
 | `apiKey({ header })`        | `{ type: "apiKey", in: "header", name: header }` |
 | `sessionCookie({ cookie })` | `{ type: "apiKey", in: "cookie", name: cookie }` |
+| `custom({ openapi })`       | `openapi`, as written                            |
 
 Every operation documents its security as separate alternatives, one per accepted scheme, in
 priority order. OpenAPI reads them with OR semantics: any one of them suffices. With

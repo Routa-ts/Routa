@@ -103,19 +103,24 @@ When `src/routa.ts` configures [`authentication`](/docs/reference/configuration/
 Routa resolves every matched request's credentials before anything else reads the request.
 Each scheme reads its own transport:
 
-| Scheme          | Presented when                                  | Malformed, so its authenticator does not run                    |
-| --------------- | ----------------------------------------------- | --------------------------------------------------------------- |
-| `bearer`        | `Authorization` names the `Bearer` scheme       | The token is empty or not an RFC 6750 `b64token`                |
-| `apiKey`        | The configured header is present                | The value is empty, or holds a comma, as a repeated header does |
-| `sessionCookie` | The `Cookie` header carries the configured name | The value is empty, or the cookie appears more than once        |
+| Scheme          | Presented when                                                                                         | Malformed, so its authenticator does not run                                                                                         |
+| --------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `bearer`        | `Authorization` names the `Bearer` scheme                                                              | The token is empty or not an RFC 6750 `b64token`                                                                                     |
+| `apiKey`        | The configured header is present                                                                       | The value is empty, or holds a comma, as a repeated header does                                                                      |
+| `sessionCookie` | The `Cookie` header carries the configured name                                                        | The value is empty, or the cookie appears more than once                                                                             |
+| `custom`        | Its header is present, its `Authorization` auth-scheme matches ignoring case, or its cookie is present | The value is empty, a header value holds a comma, or the cookie appears more than once; or `extract` returns `{ type: "malformed" }` |
 
 `Headers` joins a repeated header into one value separated by `, `, so Routa cannot tell a
 repeated API-key header from a key that holds a comma. Both fail. A session cookie value is
 percent-decoded the same way as declared `cookies` input. An `Authorization` header that no
-configured scheme reads, such as `Basic …`, `Bearer …` without a Bearer scheme, or `Bearer`
-followed by a tab instead of spaces, is an unsupported credential.
+configured scheme reads, such as `Basic …` without a custom scheme for `Basic`, `Bearer …`
+without a Bearer scheme, or `Bearer` followed by a tab instead of spaces, is an unsupported
+credential. A custom transport `{ header: "authorization" }` without a `scheme` reads every
+`Authorization` header, so none is unsupported.
 
-The authenticator runs at most once per request. Routa parses an accepted principal once with
+A custom scheme's `extract` runs only for a selected, well-formed credential, receives the
+value alone, and returns before the authenticator runs. The authenticator runs at most once
+per request. Routa parses an accepted principal once with
 the principal schema, and `ctx.auth.principal` is the schema's output. `ctx.auth` is readonly:
 middleware cannot replace it, and writing it fails the request with the generic `500`.
 
@@ -166,9 +171,9 @@ Both `401` outcomes are problem documents with a `WWW-Authenticate` challenge:
 }
 ```
 
-Each scheme's challenge names its auth-scheme, `Bearer`, `ApiKey`, or `Session`, with
-`realm="…"` when the scheme declares a static
-[challenge override](/docs/reference/core/#bearer):
+Each scheme's challenge names its auth-scheme, `Bearer`, `ApiKey`, `Session`, or for a
+custom scheme its name or the override's `scheme`, with `realm="…"` when the scheme declares a
+static [challenge override](/docs/reference/core/#bearer):
 
 | Situation                                    | Outcome                  | `WWW-Authenticate`                                       |
 | -------------------------------------------- | ------------------------ | -------------------------------------------------------- |
@@ -176,6 +181,7 @@ Each scheme's challenge names its auth-scheme, `Bearer`, `ApiKey`, or `Session`,
 | Only unsupported or not-accepted credentials | `authenticationFailed`   | Every accepted scheme, in priority order                 |
 | Malformed or rejected Bearer token           | `authenticationFailed`   | `Bearer error="invalid_token"`, with the realm first     |
 | Malformed or rejected API key or session     | `authenticationFailed`   | That scheme alone: `ApiKey` or `Session`, with its realm |
+| Malformed or rejected custom credential      | `authenticationFailed`   | That scheme alone, such as `Basic realm="api"`           |
 
 Several challenges share one header, such as `Bearer realm="api", Session`. Routa adds
 `error="invalid_token"` to Bearer challenges only, and never adds `error_description`,
@@ -197,14 +203,18 @@ operation every authentication outcome keeps its status and challenge without a 
 
 ### Authenticator Failures
 
-| Authenticator behavior                                                                                | Response                     |
-| ----------------------------------------------------------------------------------------------------- | ---------------------------- |
-| Returns `{ type: "rejected" }`                                                                        | `401` `authenticationFailed` |
-| Throws                                                                                                | `500` `…/problems/internal`  |
-| Returns a principal the principal schema rejects, or parses to a value without string `id` and `type` | `500` `…/problems/internal`  |
-| Returns anything other than `authenticated` or `rejected`, or a result whose `type` throws when read  | `500` `…/problems/internal`  |
+| Authenticator behavior                                                                                | Response                                            |
+| ----------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Returns `{ type: "rejected" }`                                                                        | `401` `authenticationFailed`                        |
+| Throws                                                                                                | `500` `…/problems/internal`                         |
+| Returns a principal the principal schema rejects, or parses to a value without string `id` and `type` | `500` `…/problems/internal`                         |
+| Returns anything other than `authenticated` or `rejected`, or a result whose `type` throws when read  | `500` `…/problems/internal`                         |
+| A custom `extract` returns `{ type: "malformed" }`                                                    | `401` `authenticationFailed`; no authenticator runs |
+| A custom `extract` throws, or returns neither `credential` nor `malformed`, such as a promise         | `500` `…/problems/internal`; no authenticator runs  |
 
-An invalid result is an application contract violation, not a client error. A thrown error
+An invalid result is an application contract violation, not a client error. When an
+authenticator or extractor throws, the log names only the scheme, never the thrown value,
+which may carry the credential. A thrown error
 stays a server error so an outage at a provider never reads as a bad credential.
 
 ## Methods
