@@ -2492,6 +2492,33 @@ describe("custom credential scheme diagnostics", () => {
 	const token = "bearer({ authenticate: reject })";
 	const valid = 'transport: { header: "x-signed" }, openapi: { type: "mutualTLS" }';
 
+	it("reads extract and authenticate methods, but not a transport or openapi method", () => {
+		const methods = `${valid}, extract(value) { return { type: "credential", credential: value }; }, authenticate(credential) { return credential === "c" ? { type: "authenticated", principal: { id: credential, type: "user" } } : { type: "rejected" }; }`;
+		const validation = validateProject(project({ "src/routa.ts": config(`a: custom({ ${methods} })`) }), {
+			write: false,
+		});
+
+		expect(validation.diagnostics).toEqual([]);
+		expect(validation.authentication?.schemes).toEqual([
+			{ name: "a", kind: "custom", transport: { header: "x-signed" }, openapi: { type: "mutualTLS" } },
+		]);
+
+		for (const [options, message] of [
+			[
+				'transport() { return { header: "x-signed" }; }, openapi: { type: "mutualTLS" }',
+				'Authentication scheme "a" declares a transport that is not a literal { header }, { header, scheme }, or { cookie } object.',
+			],
+			[
+				'transport: { header: "x-signed" }, openapi() { return { type: "mutualTLS" }; }',
+				'Authentication scheme "a" declares openapi metadata that is not a literal object.',
+			],
+		]) {
+			expect(diagnostics({ "src/routa.ts": config(`a: ${scheme(options!)}`) }), options).toEqual([
+				{ code: "ROUTA_AUTH_CONFIG_UNRESOLVED", message },
+			]);
+		}
+	});
+
 	it("reports transports another scheme already reads", () => {
 		const cases: Array<[string, string]> = [
 			[
