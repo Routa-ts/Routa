@@ -320,11 +320,12 @@ as an application service instead.
 ### `ROUTA_AUTH_CONFIG_UNRESOLVED`
 
 `routa check` cannot read the `authentication` config in `src/routa.ts`, its `schemes`, a
-scheme name, a scheme's descriptor, an API-key `header` or session `cookie`, `priority`, or
-`multipleCredentials`. Examples: `authentication: makeAuthentication()`, a spread or computed
+scheme name, a scheme's descriptor, an API-key `header` or session `cookie`, a custom scheme's
+`transport` or `openapi` metadata, `priority`, or `multipleCredentials`. Examples: `authentication: makeAuthentication()`, a spread or computed
 key inside `authentication`, `schemes`, or a descriptor call's options, a scheme whose value is
-not a `bearer({ ... })`, `apiKey({ ... })`, or `sessionCookie({ ... })` call imported from
-`@routa-ts/core`, `header: process.env.HEADER`, or `priority: order`. These are contract facts,
+not a `bearer({ ... })`, `apiKey({ ... })`, `sessionCookie({ ... })`, or `custom({ ... })` call
+imported from `@routa-ts/core`, `header: process.env.HEADER`, `transport: certificateHeader`,
+or `priority: order`. These are contract facts,
 so Routa reads them without running `src/routa.ts`.
 
 ```text
@@ -334,7 +335,8 @@ ROUTA_AUTH_CONFIG_UNRESOLVED: The authentication priority in src/routa.ts is not
 
 **Fix:** write `authentication` as an object literal, or a `const` object literal it can
 follow, with a plain key for each scheme and a descriptor call, or a `const` bound to one, as
-its value. Write `header`, `cookie`, `priority`, and `multipleCredentials` as literals.
+its value. Write `header`, `cookie`, `transport`, `openapi`, `priority`, and
+`multipleCredentials` as literals.
 
 ### `ROUTA_AUTH_SPREAD_UNRESOLVED`
 
@@ -353,18 +355,26 @@ spread a `const` object literal Routa can follow.
 The `authentication` config has no `principal`, declares no schemes, names a scheme that does
 not start with a letter or has a character other than letters, digits, `.`, `-`, and `_`,
 declares an API-key `header` or session `cookie` that is not an RFC 9110 token, or sets
-`multipleCredentials` to a value other than `"priority"` or `"reject"`. A scheme name is the
+`multipleCredentials` to a value other than `"priority"` or `"reject"`. A custom scheme also
+fails when its `transport` is missing, names both or neither of a header and a cookie, uses a
+name or auth-scheme that is not a token, or puts `scheme` on a header other than
+`Authorization`, and when its `openapi` metadata is missing, has an unsupported type or member,
+or disagrees with the transport: `http` needs a matching `Authorization` auth-scheme, `apiKey`
+names the header or cookie the scheme reads whole, and `mutualTLS` needs a header other than
+`Authorization`. A scheme name is the
 OpenAPI security scheme key, and a leading letter keeps scheme order the same in source and at
 runtime.
 
 ```text
 ROUTA_AUTH_CONFIG_INVALID: Authentication scheme "serviceKey" declares header "x api key", which is not an HTTP header name.
 ROUTA_AUTH_CONFIG_INVALID: The authentication multipleCredentials in src/routa.ts is "first". Use "priority" or "reject".
+ROUTA_AUTH_CONFIG_INVALID: Authentication scheme "basicUser" declares openapi { type: "http" }, which needs an { header: "authorization", scheme } transport whose scheme is "basic".
 ```
 
 **Fix:** add a principal schema, declare at least one scheme, rename the scheme, use a header
-or cookie name of letters, digits, and ``!#$%&'*+-.^_`|~``, or set a supported
-`multipleCredentials` mode.
+or cookie name of letters, digits, and ``!#$%&'*+-.^_`|~``, set a supported
+`multipleCredentials` mode, or make a custom scheme's `openapi` metadata describe its
+transport.
 
 ### `ROUTA_AUTH_TRANSPORT_OVERLAP`
 
@@ -374,20 +384,28 @@ Two schemes read the same credential, so Routa could not tell which authenticato
 - two `apiKey()` schemes whose headers match ignoring case, such as `X-Api-Key` and `x-api-key`;
 - two `sessionCookie()` schemes with the same cookie name;
 - an `apiKey()` header named `Authorization`, which carries Authorization-scheme credentials
-  such as Bearer, or `Cookie`, which carries session cookies.
+  such as Bearer, or `Cookie`, which carries session cookies;
+- a `custom()` transport another scheme reads: `{ header: "authorization", scheme: "Bearer" }`
+  beside `bearer()`, the same header or the same header and auth-scheme as another custom
+  scheme, or a header an `apiKey()` reads, all ignoring case, or a cookie a `sessionCookie()`
+  or other custom scheme reads;
+- a `custom()` transport `{ header: "authorization" }` without a `scheme`, which reads the
+  whole header, beside `bearer()` or any other `Authorization` transport, or
+  `{ header: "cookie" }` beside any cookie transport.
 
 ```text
 ROUTA_AUTH_TRANSPORT_OVERLAP: Authentication schemes "partnerKey" and "serviceKey" both read the x-api-key header.
 ```
 
-**Fix:** keep one scheme per transport and accept every token, key, or session format in its
-authenticator. Read an API key from its own header, and use `bearer()` or `sessionCookie()` for
+**Fix:** keep one scheme per transport and accept every token, key, session, or credential
+format in its authenticator. Read an API key from its own header, and use `bearer()` or `sessionCookie()` for
 the `Authorization` and `Cookie` transports.
 
 ### `ROUTA_AUTH_CHALLENGE_INVALID`
 
 A scheme's `challenge` override is not a literal object, declares a key other than `realm`, or
-has a `realm` that is not a string literal of printable ASCII without `"` or `\`.
+`scheme` and `realm` for a custom scheme, has a `realm` that is not a string literal of
+printable ASCII without `"` or `\`, or has a custom `scheme` that is not an RFC 9110 token.
 
 ```ts
 // Fails: the realm is computed

@@ -66,10 +66,14 @@ Routa owns the HTTP boundary, so these are Routa's responsibility:
 
 Routa makes security _visible_ in the contract and in generated OpenAPI. When you configure
 [authentication](/docs/reference/configuration/#authentication), it also reads Bearer, API-key,
-and session-cookie credentials, selects one, rejects invalid ones, and enforces `requireAuth`.
+session-cookie, and custom credentials, selects one, rejects invalid ones, and enforces
+`requireAuth`.
 Routa never logs or echoes those credentials. These remain entirely yours:
 
-- Credential verification inside your authenticator, identity data, and session handling.
+- Credential verification inside your authenticator and custom extractors, identity data, and
+  session handling.
+- For a custom scheme that trusts a proxy-set header, such as a client certificate, the
+  proxy stripping client-supplied copies and only the proxy reaching the application.
 - Authorization rules and policy correctness. `openapi.permissions` is documentation, not
   enforcement.
 - Secret storage and rotation.

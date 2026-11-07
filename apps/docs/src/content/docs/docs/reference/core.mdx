@@ -585,6 +585,101 @@ export default createRouta({
 **Errors:** throws a `TypeError` when `cookie` is not a cookie name, `authenticate` is not a
 function, or `challenge` declares a key other than `realm` or an invalid realm.
 
+## `custom`
+
+```ts
+function custom<const TResult extends AuthenticationResult, TExtraction extends CustomExtraction>(options: {
+	transport: { header: string; scheme?: string } | { cookie: string };
+	challenge?: { scheme?: string; realm?: string };
+	openapi:
+		| { type: "http"; scheme: string; bearerFormat?: string; description?: string }
+		| { type: "apiKey"; in: "header" | "cookie"; name: string; description?: string }
+		| { type: "mutualTLS"; description?: string };
+	extract?: (value: string) => TExtraction;
+	authenticate: (
+		credential: ExtractedCredential<TExtraction>,
+		context: AuthenticatorContext,
+	) => TResult | Promise<TResult>;
+}): CustomScheme<TResult, ExtractedCredential<TExtraction>>
+
+type CustomExtraction<TCredential = unknown> =
+	| { type: "credential"; credential: TCredential }
+	| { type: "malformed" };
+```
+
+Declares a credential scheme for a credential the built-in schemes do not read, such as HTTP
+Basic. Routa reads the one value the `transport` declares, passes it alone to `extract`, and
+calls `authenticate` once with the credential `extract` returns. Selection, `priority`,
+`requireAuth`, principal parsing, `ctx.auth`, and OpenAPI treat the scheme like a built-in one.
+`authenticate`, `context`, and the result follow the same contract as [`bearer`](#bearer).
+[Custom Credential Schemes](/docs/guides/custom-credential-schemes/) has complete recipes.
+
+| Option         | Type                                                                 | Purpose                                                                 |
+| -------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `transport`    | `{ header }`, `{ header: "authorization", scheme }`, or `{ cookie }` | The one value the scheme reads; a literal read by `routa check`         |
+| `challenge`    | `{ scheme?: string; realm?: string }`                                | Static challenge override; a literal read by `routa check`              |
+| `openapi`      | A Security Scheme Object                                             | Public OpenAPI metadata that agrees with the transport; a literal       |
+| `extract`      | `(value: string) => CustomExtraction`                                | Optional, synchronous: turns the value into a credential or `malformed` |
+| `authenticate` | `(credential, context) => AuthenticationResult`                      | Your verification code: return a principal candidate or a rejection     |
+
+The transport is the scheme's identity, so no other scheme may read it:
+
+| Transport                                      | Reads                                                                           |
+| ---------------------------------------------- | ------------------------------------------------------------------------------- |
+| `{ header: "x-client-cert" }`                  | The whole header value. Header names compare ignoring case                      |
+| `{ header: "authorization", scheme: "Basic" }` | The credentials after `Basic`, when the auth-scheme matches ignoring case       |
+| `{ header: "authorization" }`                  | The whole `Authorization` header, whatever its auth-scheme                      |
+| `{ cookie: "sid" }`                            | The percent-decoded cookie value, as [`sessionCookie`](#sessioncookie) reads it |
+
+Header names, auth-schemes, and cookie names are RFC 9110 tokens, and `scheme` applies only to
+`Authorization`. An empty value, a header value with a comma, and a repeated cookie are
+malformed, and `extract` does not run. Without `extract`, `authenticate` receives the value as
+a string; with it, `authenticate` receives the `credential` it returns, typed. `extract`
+receives no request, headers, or context. `{ type: "malformed" }` answers
+`authenticationFailed`; a throw, or any other result such as a promise, answers `500`.
+
+A missing credential challenges the scheme name, such as `basicUser`, or the override's
+`scheme` with its `realm`; a failed one challenges the same, with no error details.
+
+`openapi` must describe the transport. `{ type: "http", scheme }` needs an `Authorization`
+transport with the same auth-scheme, ignoring case, and allows `bearerFormat` only for
+`bearer`. `{ type: "apiKey", in, name }` names the header or cookie the scheme reads whole.
+`{ type: "mutualTLS" }` needs a header other than `Authorization`: it documents a client
+certificate a trusted proxy verifies during the TLS handshake and forwards in that header.
+`description` is optional everywhere. Routa emits the object as written under
+`components.securitySchemes`.
+
+```ts title="src/routa.ts"
+import { createRouta, custom } from "@routa-ts/core";
+import { z } from "zod";
+import { decodeBasic } from "./basic.js";
+import { verifyPassword } from "./passwords.js";
+
+export default createRouta({
+	authentication: {
+		principal: z.object({ type: z.literal("user"), id: z.string() }),
+		schemes: {
+			basicUser: custom({
+				transport: { header: "authorization", scheme: "Basic" },
+				challenge: { scheme: "Basic", realm: "api" },
+				openapi: { type: "http", scheme: "basic" },
+				extract: (value) => decodeBasic(value),
+				authenticate: async ({ user, password }) => {
+					const account = await verifyPassword(user, password);
+					return account
+						? { type: "authenticated", principal: { type: "user", id: account.id } }
+						: { type: "rejected" };
+				},
+			}),
+		},
+	},
+});
+```
+
+**Errors:** throws a `TypeError` when the transport, challenge override, or `openapi` metadata
+is invalid or disagrees with the transport, `extract` is present but not a function, or
+`authenticate` is not a function.
+
 ## `requireAuth`
 
 ```ts
@@ -1415,7 +1510,9 @@ export function findItem(id: string): ItemResult {
 `CookieHandle`, `CookieEffect`, `CookieSameSite`, `RequiredCookie`, `AnyCookie`,
 `AuthenticationConfig`, `AuthenticationResult`, `Authenticator`, `AuthenticatorContext`,
 `CredentialChallenge`, `BearerOptions`, `BearerScheme`, `ApiKeyOptions`, `ApiKeyScheme`,
-`SessionCookieOptions`, `SessionCookieScheme`, `CredentialScheme`, `Principal`,
+`SessionCookieOptions`, `SessionCookieScheme`, `CustomOptions`, `CustomScheme`,
+`CustomTransport`, `CustomChallenge`, `CustomOpenApi`, `CustomExtraction`,
+`ExtractedCredential`, `CredentialScheme`, `Principal`,
 `PrincipalSchema`, `PrincipalOf`, `AuthContext`, `AnonymousAuthContext`,
 `AuthenticatedAuthContext`, `RequireAuthOptions`, `RequireAuthMiddleware`, and `Register`.
 
