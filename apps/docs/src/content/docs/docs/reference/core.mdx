@@ -917,7 +917,8 @@ const { application } = await createProjectApplication(
 It rejects before any factory runs when a replacement names a path, method, or scope that
 declares no services, or holds a key it does not read. It rejects when a route file or
 `src/routa.ts` disagrees with the generated metadata, including authentication scheme names
-or a priority order that differ from `routaAuthenticationSchemes`, and with the errors of
+or a priority order that differ from `routaAuthenticationSchemes` and a `multipleCredentials`
+mode that differs from `routaMultipleCredentials`, and with the errors of
 `createApplication`.
 
 ## `createTestApplication`
