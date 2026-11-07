@@ -384,7 +384,7 @@ export default createRouta(${config});
 			expect({
 				config,
 				diagnostics: validation.diagnostics,
-				warnings: validation.warnings,
+				warnings: validation.warnings.filter((item) => item.code.startsWith("ROUTA_SERVICES_")),
 			}).toEqual({
 				config,
 				diagnostics: [],

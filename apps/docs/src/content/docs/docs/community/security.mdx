@@ -64,10 +64,11 @@ Routa owns the HTTP boundary, so these are Routa's responsibility:
 
 ## What Your Application Secures
 
-Routa makes security _visible_ in the contract and in generated OpenAPI. It never
-implements any of it. These remain entirely yours:
+Routa makes security _visible_ in the contract and in generated OpenAPI. When you configure
+[authentication](/docs/reference/configuration/#authentication), it also reads Bearer
+credentials, rejects invalid ones, and enforces `requireAuth`. These remain entirely yours:
 
-- Authentication, credential verification, and session handling.
+- Credential verification inside your authenticator, identity data, and session handling.
 - Authorization rules and policy correctness. `openapi.permissions` is documentation, not
   enforcement.
 - Secret storage and rotation.

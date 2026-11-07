@@ -9,6 +9,10 @@ import {
 	routeConfigObject,
 	unwrapExpression,
 } from "./ast.js";
+import {
+	authenticationFailedDescription,
+	authenticationRequiredDescription,
+} from "./authentication.js";
 import { compareText } from "./compare-text.js";
 import {
 	cookieDeclaration,
@@ -69,6 +73,8 @@ type DeclaredCookie = ProjectedCookie & { declaration: string };
 /** One named outcome that can end an operation: a route outcome or a middleware reject. */
 type ProjectedOutcome = ProjectedResponse & {
 	name: string;
+	/** Every outcome a merged response stands for, when it stands for more than one. */
+	names?: readonly string[];
 	status: number;
 	/** Who declares it, for messages: `the route` or `middleware <name>`. */
 	producer: string;
@@ -108,6 +114,8 @@ export type ProjectedHeader = {
 export type ContractSchemaOptions = {
 	/** Whether `src/routa.ts` turns lifecycle headers on. */
 	lifecycleHeaders?: boolean;
+	/** Whether `src/routa.ts` configures authentication, so every operation can fail it. */
+	authentication?: boolean;
 };
 
 /**
@@ -149,14 +157,21 @@ export function projectContractSchemas(
 		for (const method of Object.keys(route.responses)) {
 			const contract = contracts[method];
 			const site = { file: route.file, routePath: route.path, method };
+			const chain = route.methodMiddleware[method] ?? route.middleware;
 			const rejects = projector.middlewareRejects(
-				route.methodMiddleware[method] ?? route.middleware,
+				chain,
 				site,
 				contract?.lifecycle ?? { owned: new Set() },
 			);
+			const authentication = options.authentication
+				? projector.routaOutcomes(authenticationOutcomes(chain, method))
+				: [];
 			methods[method] = {
 				input: contract?.input ?? {},
-				responses: projector.compose([...(contract?.outcomes ?? []), ...rejects], site),
+				responses: projector.compose(
+					[...(contract?.outcomes ?? []), ...rejects, ...authentication],
+					site,
+				),
 				...(contract?.deprecation ? { deprecation: contract.deprecation } : {}),
 			};
 		}
@@ -170,6 +185,66 @@ export function projectContractSchemas(
 		diagnostics: projector.diagnostics.filter((item) => item.severity === "error"),
 		warnings: projector.diagnostics.filter((item) => item.severity === "warning"),
 	};
+}
+
+/**
+ * The authentication outcomes Routa owns on an operation: `authenticationFailed` everywhere, and
+ * `authenticationRequired` behind a `requireAuth` guard. Each has a stable problem body and a
+ * required `WWW-Authenticate` challenge. HEAD responses have no body, so a HEAD operation
+ * documents them as one bodyless response.
+ */
+function authenticationOutcomes(
+	chain: readonly MiddlewareMetadata[],
+	method: string,
+): ProjectedOutcome[] {
+	const outcome = (name: string, problem: string, title: string, description: string) => ({
+		name,
+		status: 401,
+		producer: "Routa authentication",
+		label: `"${name}"`,
+		description,
+		schema: {
+			type: "object",
+			required: ["type", "title", "status"],
+			properties: {
+				type: { type: "string", const: `https://routa-ts.dev/problems/${problem}` },
+				title: { type: "string", const: title },
+				status: { type: "number", const: 401 },
+			},
+		},
+		headers: { "www-authenticate": { required: true, schema: { type: "string" } } },
+	});
+	const outcomes: ProjectedOutcome[] = [
+		outcome(
+			"authenticationFailed",
+			"authentication-failed",
+			"Authentication failed",
+			authenticationFailedDescription,
+		),
+		...(chain.some((item) => item.authentication)
+			? [
+					outcome(
+						"authenticationRequired",
+						"authentication-required",
+						"Authentication required",
+						authenticationRequiredDescription,
+					),
+				]
+			: []),
+	];
+
+	if (method !== "head") {
+		return outcomes;
+	}
+
+	const { schema: _schema, ...last } = outcomes.at(-1)!;
+	return [
+		{
+			...last,
+			names: outcomes.map((item) => item.name),
+			description: outcomes.map((item) => `- \`${item.name}\`: ${item.description}`).join("\n"),
+		},
+	];
 }
 
 type SchemaIo = "input" | "output";
@@ -211,6 +286,8 @@ type ComponentIdentity = {
 	file: string;
 	/** Where the declaration was read: a parameter, a request body, or a response. */
 	placement: string;
+	/** The Routa outcome whose problem body this component holds, when Routa owns it. */
+	routaOutcome?: string;
 };
 
 /**
@@ -604,6 +681,33 @@ class SchemaProjector {
 	}
 
 	/**
+	 * Places the body of each outcome Routa owns in `components.schemas` under `Routa` and the
+	 * outcome name, such as `RoutaAuthenticationFailed`, and refers to it there. A discriminator
+	 * maps values only to components, so a Routa body that shares a status stays selectable.
+	 */
+	routaOutcomes(outcomes: readonly ProjectedOutcome[]): ProjectedOutcome[] {
+		return outcomes.map((outcome) => {
+			if (!outcome.schema) {
+				return outcome;
+			}
+
+			const key = `Routa${outcome.name[0]!.toUpperCase()}${outcome.name.slice(1)}`;
+			this.registerComponent(
+				{
+					key,
+					explicit: true,
+					identity: `routa#${outcome.name}`,
+					file: "src/routa.ts",
+					placement: "a response",
+					routaOutcome: outcome.name,
+				},
+				outcome.schema,
+			);
+			return { ...outcome, schema: { $ref: `${componentPrefix}${key}` } };
+		});
+	}
+
+	/**
 	 * Composes an operation's effective outcomes into one Response Object per status.
 	 *
 	 * A status with one outcome keeps it. Outcomes that share a status compose only when every one
@@ -620,19 +724,23 @@ class SchemaProjector {
 		const byStatus = new Map<number, ProjectedOutcome[]>();
 
 		for (const outcome of outcomes) {
-			const earlier = byName.get(outcome.name);
+			const names = outcome.names ?? [outcome.name];
+			const taken = names.find((name) => byName.has(name));
 
-			if (earlier) {
+			if (taken !== undefined) {
 				this.operationProblem(site, {
 					code: "ROUTA_OUTCOME_NAME_COLLISION",
-					message: `Outcome "${outcome.name}" is declared by ${earlier.producer} and by ${outcome.producer}`,
+					message: `Outcome "${taken}" is declared by ${byName.get(taken)!.producer} and by ${outcome.producer}`,
 					suggestion:
 						"Every outcome that can end an operation needs its own name, because the handler result names its outcome. Rename one of them.",
 				});
 				continue;
 			}
 
-			byName.set(outcome.name, outcome);
+			for (const name of names) {
+				byName.set(name, outcome);
+			}
+
 			byStatus.set(outcome.status, [...(byStatus.get(outcome.status) ?? []), outcome]);
 		}
 
@@ -658,6 +766,7 @@ class SchemaProjector {
 		if (alternatives.length === 1) {
 			const {
 				name: _name,
+				names: _names,
 				status: _status,
 				producer: _producer,
 				label: _label,
@@ -717,8 +826,9 @@ class SchemaProjector {
 	/**
 	 * The discriminator for same-status body alternatives: a property every alternative requires
 	 * with a single literal value (string, number, or boolean), each value different as text,
-	 * because discriminator values compare as strings. When several qualify, the
-	 * lexicographically first name wins.
+	 * because discriminator values compare as strings. When several qualify, `type` wins if a
+	 * Routa problem body is among the alternatives, because it is the problem identifier;
+	 * otherwise the lexicographically first name wins.
 	 *
 	 * A referenced alternative is matched implicitly by its component name. When any referenced
 	 * alternative's value differs from its component name, `mapping` names every referenced
@@ -729,14 +839,21 @@ class SchemaProjector {
 	): { propertyName: string; mapping?: Record<string, string> } | undefined {
 		const literals = schemas.map((schema) => this.requiredLiterals(schema));
 		const [first, ...rest] = literals;
-		const propertyName = Array.from(first?.keys() ?? [])
+		const qualifying = Array.from(first?.keys() ?? [])
 			.filter((name) => {
 				const values = literals.map((properties) => properties.get(name));
 				return (
 					values.every((value) => value !== undefined) && new Set(values).size === values.length
 				);
 			})
-			.sort(compareText)[0];
+			.sort(compareText);
+		const routaProblem = schemas.some(
+			(schema) =>
+				typeof schema.$ref === "string"
+				&& this.components.get(schema.$ref.replace(componentPrefix, ""))?.routaOutcome
+					!== undefined,
+		);
+		const propertyName = routaProblem && qualifying.includes("type") ? "type" : qualifying[0];
 
 		if (rest.length === 0 || propertyName === undefined) {
 			return undefined;
@@ -2752,6 +2869,21 @@ class SchemaProjector {
 				});
 			}
 
+			return;
+		}
+
+		const routaOutcome = existing.routaOutcome ?? component.routaOutcome;
+
+		if (routaOutcome !== undefined) {
+			const { file } = existing.routaOutcome === undefined ? existing : component;
+			pushUnique(this.diagnostics, {
+				code: "ROUTA_SCHEMA_COMPONENT_COLLISION",
+				severity: "error",
+				message: `A schema in ${file} claims component ${component.key}, which holds Routa's ${routaOutcome} problem body.`,
+				file,
+				suggestion:
+					"Rename the export, or give the schema a different .meta({ id }). Routa never renames components.",
+			});
 			return;
 		}
 
