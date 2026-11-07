@@ -2021,6 +2021,25 @@ export function guardFor() {
 		}
 	});
 
+	it("leaves exported functions that build guards alone", () => {
+		expect(
+			diagnostics(
+				guarded(`export const guardFor = () => requireAuth();
+export const strictGuardFor = function () {
+\treturn requireAuth({ schemes: ["a"] });
+};
+const memberGuardFor = () => requireAuth();
+export { memberGuardFor as aliasedGuardFor };
+export const signedIn = guardFor();`),
+			),
+		).toEqual([
+			{
+				code: "ROUTA_AUTH_REQUIREMENT_UNRESOLVED",
+				message: `${folder} exports signedIn, which builds a requireAuth() guard routa check cannot read, so the guard would not run.`,
+			},
+		]);
+	});
+
 	it("reads re-exports whose module declares a type of the same name first", () => {
 		const validation = validateProject(
 			project(
