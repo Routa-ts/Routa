@@ -2051,6 +2051,16 @@ export const signedIn = guardFor();`),
 		]);
 	});
 
+	it("does not read a property name that matches a guard as a reference to it", () => {
+		expect(
+			diagnostics(
+				guarded(`export const signedIn = requireAuth({ schemes: ["a"] });
+export const meta = { signedIn: true, label: "staff" };
+export const label = meta.signedIn ? "guarded" : "open";`),
+			),
+		).toEqual([]);
+	});
+
 	it("reads re-exports whose module declares a type of the same name first", () => {
 		const validation = validateProject(
 			project(

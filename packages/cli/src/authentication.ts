@@ -915,6 +915,10 @@ function buildsRequireAuth(
 		}
 
 		if (ts.isIdentifier(child)) {
+			if (namesOnly(child)) {
+				return false;
+			}
+
 			const binding = localBinding(cwd, file, child.getSourceFile(), child.text, parser);
 
 			if (binding === "none" || seen.has(`${binding.file}\0${binding.name}`)) {
@@ -930,6 +934,25 @@ function buildsRequireAuth(
 	};
 
 	return visit(node);
+}
+
+/**
+ * Whether an identifier only names something, such as a property key or a `.member`, rather than
+ * referring to a binding, so `{ signedIn: true }` beside a `signedIn` guard is not a reference.
+ */
+function namesOnly(identifier: ts.Identifier): boolean {
+	const { parent } = identifier;
+	return (
+		((ts.isPropertyAssignment(parent)
+			|| ts.isPropertyDeclaration(parent)
+			|| ts.isPropertySignatureDeclaration(parent)
+			|| ts.isMethodDeclaration(parent)
+			|| ts.isGetAccessorDeclaration(parent)
+			|| ts.isSetAccessorDeclaration(parent)
+			|| ts.isPropertyAccessExpression(parent))
+			&& parent.name === identifier)
+		|| (ts.isBindingElement(parent) && parent.propertyName === identifier)
+	);
 }
 
 /**
