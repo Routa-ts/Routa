@@ -321,9 +321,10 @@ What changes with the move:
 
 Routa makes security context and early responses visible at the HTTP boundary. Without
 `authentication` in `createRouta`, Routa never authenticates a request: middleware such as
-the example above owns it. With it, Routa reads Bearer, API-key, and session-cookie
-credentials, calls one authenticator, and enforces [`requireAuth`](/docs/reference/core/#requireauth)
-inline and in folders. Your application still owns
+the example above owns it. With it, Routa reads Bearer, API-key, session-cookie, and
+custom credentials, calls one authenticator, and enforces
+[`requireAuth`](/docs/reference/core/#requireauth) inline and in folders; see
+[Authentication](/docs/concepts/authentication/). Your application still owns
 credential verification, authorization rules, policy correctness, and secrets.
 
 <Aside type="caution" title="v0 status">

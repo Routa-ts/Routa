@@ -810,6 +810,119 @@ export default createRouteRoot("/me")({
 });
 ```
 
+## Authentication Types
+
+```ts
+type Principal = { readonly id: string; readonly type: string }
+type PrincipalSchema = z.ZodType<{ id: string; type: string }, any>
+type PrincipalOf<TConfig> = TConfig extends {
+	readonly authentication: { readonly principal: infer TSchema extends z.ZodTypeAny }
+}
+	? z.output<TSchema>
+	: never
+
+type AuthenticatorContext = { readonly logger: RoutaLogger; readonly services: Readonly<AppServices> }
+type Authenticator<TResult extends AuthenticationResult = AuthenticationResult, TCredential = string> =
+	(credential: TCredential, context: AuthenticatorContext) => TResult | Promise<TResult>
+
+type CredentialChallenge = { readonly realm?: string }
+type CustomChallenge = { readonly scheme?: string; readonly realm?: string }
+type CustomTransport = { readonly header: string; readonly scheme?: string } | { readonly cookie: string }
+type ExtractedCredential<TExtraction> = TExtraction extends {
+	readonly type: "credential"
+	readonly credential: infer TCredential
+}
+	? TCredential
+	: never
+
+type CredentialScheme = BearerScheme | ApiKeyScheme | SessionCookieScheme | CustomScheme
+type RequireAuthOptions<TSchemes extends readonly string[]> = { readonly schemes: TSchemes }
+type RequireAuthMiddleware = MiddlewareContract<
+	readonly [],
+	Record<never, never>,
+	{
+		readonly authenticationRequired: {
+			readonly status: 401
+			readonly description: "Authentication is required: the request presented no credential."
+			readonly schema: z.ZodObject<{
+				type: z.ZodLiteral<"https://routa-ts.dev/problems/authentication-required">
+				title: z.ZodLiteral<"Authentication required">
+				status: z.ZodLiteral<401>
+			}>
+			readonly headers: z.ZodObject<{ "www-authenticate": z.ZodString }>
+		}
+	},
+	undefined
+>
+```
+
+The types behind [`authentication`](/docs/reference/configuration/#authentication) and the
+constructors above. You rarely write them: `createRouta`, the descriptors, and
+`.routa/routes.gen.ts` infer them. Annotate with them when an authenticator or extractor lives
+in its own module.
+
+| Type                                                                      | Describes                                                                                             |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `Principal`                                                               | What every principal carries: a stable `id`, and a `type` that may discriminate callers               |
+| `PrincipalSchema`                                                         | The Zod schema `authentication.principal` accepts; its output must have string `id` and `type`        |
+| `PrincipalOf<TConfig>`                                                    | The principal schema's output for a `createRouta` configuration, such as `PrincipalOf<typeof config>` |
+| `AuthenticationResult<TPrincipal>`                                        | What an authenticator returns; see [`bearer`](#bearer)                                                |
+| `Authenticator<TResult, TCredential>`                                     | An authenticator function. `TCredential` is `string`, or the credential a custom `extract` returns    |
+| `AuthenticatorContext`                                                    | The second argument: `logger`, and `services` when `src/routa.ts` declares application services       |
+| `AuthenticationConfig`                                                    | The `authentication` field; see [Configuration](/docs/reference/configuration/#authentication)        |
+| `CredentialChallenge`, `CustomChallenge`                                  | Static challenge overrides for the built-in descriptors and for [`custom`](#custom)                   |
+| `CustomTransport`, `CustomOpenApi`, `CustomExtraction`                    | The `transport`, `openapi`, and `extract` result of [`custom`](#custom)                               |
+| `ExtractedCredential<TExtraction>`                                        | The credential type an extraction result carries                                                      |
+| `BearerOptions`, `ApiKeyOptions`, `SessionCookieOptions`, `CustomOptions` | Each constructor's options                                                                            |
+| `BearerScheme`, `ApiKeyScheme`, `SessionCookieScheme`, `CustomScheme`     | The frozen descriptor each constructor returns, with its `kind` and contract facts                    |
+| `CredentialScheme`                                                        | Any descriptor; the value type of `authentication.schemes`                                            |
+| `RequireAuthOptions`, `RequireAuthMiddleware`                             | The [`requireAuth`](#requireauth) options and the middleware contract it returns                      |
+| `AuthContext`, `AnonymousAuthContext`, `AuthenticatedAuthContext`         | The type of `ctx.auth`; see [`AuthContext`](#authcontext)                                             |
+
+An authenticator in its own module, typed against the application's principal. Export the
+principal schema from its own module and derive the type from it: `src/routa.ts` imports the
+authenticator, so typing it with `PrincipalOf<typeof config>` would make the configuration's
+type depend on itself. Use `PrincipalOf<typeof config>` in modules `src/routa.ts` does not
+import, such as route files.
+
+```ts title="src/principal.ts"
+import { z } from "zod";
+
+export const Principal = z.discriminatedUnion("type", [
+	z.object({ type: z.literal("account"), id: z.string() }),
+	z.object({ type: z.literal("service"), id: z.string() }),
+]);
+
+export type AppPrincipal = z.input<typeof Principal>;
+```
+
+```ts title="src/authenticators.ts"
+import type { AuthenticationResult, Authenticator } from "@routa-ts/core";
+import type { AppPrincipal } from "./principal.js";
+
+export const authenticateKey: Authenticator<AuthenticationResult<AppPrincipal>> = (key, { logger }) => {
+	if (key !== process.env.SERVICE_KEY) {
+		logger.info("auth.key_rejected", "An API key was rejected.");
+		return { type: "rejected" };
+	}
+
+	return { type: "authenticated", principal: { type: "service", id: "billing" } };
+};
+```
+
+```ts title="src/routa.ts"
+import { apiKey, createRouta } from "@routa-ts/core";
+import { authenticateKey } from "./authenticators.js";
+import { Principal } from "./principal.js";
+
+export default createRouta({
+	authentication: {
+		principal: Principal,
+		schemes: { serviceKey: apiKey({ header: "x-api-key", authenticate: authenticateKey }) },
+	},
+});
+```
+
 ## `createCookie`
 
 ```ts

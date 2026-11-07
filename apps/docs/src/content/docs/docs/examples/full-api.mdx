@@ -1,14 +1,14 @@
 ---
 title: Full API
-description: A Routa example exercising middleware, services, groups, deprecation, and logging.
+description: A Routa example exercising authentication, middleware, services, groups, deprecation, and logging.
 ---
 
 import { Aside, CardGrid, FileTree, LinkCard } from "@astrojs/starlight/components";
 
-`examples/full-api` in the Routa repository exercises the whole public surface: layered
-middleware, route groups, tenant-scoped context, typed services, flat and directory routing,
-response cookies, deprecation metadata, automatic `OPTIONS`, scaffold workflows, and a custom
-logger adapter.
+`examples/full-api` in the Routa repository exercises the whole public surface:
+authentication with four credential schemes, layered middleware, route groups, tenant-scoped
+context, typed services, flat and directory routing, response cookies, deprecation metadata,
+automatic `OPTIONS`, scaffold workflows, and a custom logger adapter.
 
 ```sh
 vp install --frozen-lockfile
@@ -24,41 +24,49 @@ once at startup, so export it before you start the server.
 
 <FileTree>
 - src/
-  - routa.ts host, port, logger, lifecycleHeaders
+  - routa.ts host, port, logger, lifecycleHeaders, authentication
+  - identities.ts demo credential lookups the authenticators call
+  - session.ts signed demo session tokens
   - cookies.ts `createCookie` handles
   - logger.ts optional Pino adapter
   - services.ts service contracts and the application factory
   - middleware/ application-owned middleware
   - routes/
-    - middleware.ts `withRequest`, `withSession`
+    - middleware.ts `withRequest`
     - status/
+    - whoami/ public route that reads `ctx.auth`
     - auth/
       - session/ sign in and sign out with cookies
     - legacy.ts flat route with deprecation
     - legacy.$id.ts flat route with a dynamic segment
     - (private)/
-      - middleware.ts `withAuth`
+      - middleware.ts `signedIn`: `requireAuth()`
       - admin/
         - middleware.ts `withAdmin`
         - audit-events/
-        - reports.ts
+        - reports.ts Bearer-only method
       - tenants/
         - $tenantId/
-          - middleware.ts `withTenant`
+          - middleware.ts `tenantCredentials`, `withTenant`
           - projects/ route-file and method services
     - showcase/
       - $itemId/
         - route.ts
     - logger-showcase/
       - route.ts
+- scripts/
+  - exercise-auth.ts the credential matrix, asserted
+  - mint-session.mjs signs a demo session token
+  - demo-client-cert.pem a demo client certificate, without its key
 </FileTree>
 
 ## How It Works
 
 The middleware chain accumulates down the tree. `src/routes/middleware.ts` provides
-`requestId` and `session` for everything. `(private)/middleware.ts` adds `auth`, and
-`(private)/admin/middleware.ts` adds `admin` on top of it. By the time
-`audit-events/route.ts` runs, `ctx` carries all four keys and each one is typed.
+`requestId` for everything. Routa resolves `ctx.auth` before any middleware runs.
+`(private)/middleware.ts` requires authentication, and `(private)/admin/middleware.ts` adds
+`admin` on top of it. By the time `audit-events/route.ts` runs, `ctx` carries `requestId`,
+`auth`, and `admin`, and each one is typed.
 
 `(private)` is a route group: it shapes the middleware tree without appearing in any URL.
 `/admin/audit-events` is the real path, not `/private/admin/audit-events`.
@@ -66,36 +74,40 @@ The middleware chain accumulates down the tree. `src/routes/middleware.ts` provi
 `src/routes/legacy.ts` and `legacy.$id.ts` use flat routing in the same project as the
 directory-style routes, which is the clearest demonstration that the two styles mix.
 
-Each `middleware.ts` re-exports contracts from `src/middleware/`, keeping the routing tree
-declarative while the implementations live in application-owned modules.
+Each application-owned `middleware.ts` export re-exports a contract from `src/middleware/`,
+keeping the routing tree declarative while the implementations live in application modules.
+The `requireAuth` guards are declared in the folders themselves, where `routa check` reads them.
 
 ## What to Study
 
-| File                                                   | Shows                                                                 |
-| ------------------------------------------------------ | --------------------------------------------------------------------- |
-| `src/routes/middleware.ts`                             | Root middleware applied to every route                                |
-| `src/cookies.ts`                                       | Shared `createCookie` handles with static security attributes         |
-| `src/routes/auth/session/route.ts`                     | Outcomes that set and clear cookies, including a bodyless `204`       |
-| `src/middleware/auth.ts`                               | A middleware reject with a body that also clears a cookie             |
-| `src/middleware/context.ts`                            | Middleware `input` reading headers and cookies                        |
-| `src/middleware/admin.ts`                              | `requires`, `provides`, `rejects`, and `openapi.permissions` together |
-| `src/routes/(private)/tenants/$tenantId/middleware.ts` | Context derived from a path parameter                                 |
-| `src/routes/legacy.ts`                                 | Deprecation metadata with a replacement                               |
-| `src/services.ts`                                      | Service contracts, their named helpers, and the application factory   |
-| `src/middleware/projects.ts`                           | `withProjectList`, a middleware that requires a service               |
-| `src/logger.ts`                                        | Adapting Pino to the `RoutaLogger` contract                           |
-| `src/routes/showcase/$itemId/route.ts`                 | Logging from a handler through `ctx.logger`                           |
+| File                                                   | Shows                                                               |
+| ------------------------------------------------------ | ------------------------------------------------------------------- |
+| `src/routa.ts`                                         | A principal union and four credential schemes, in strict mode       |
+| `src/identities.ts`                                    | Verification the application owns, behind a service                 |
+| `src/routes/whoami/route.ts`                           | A public handler that branches on `ctx.auth.status`                 |
+| `src/routes/(private)/middleware.ts`                   | A folder `requireAuth()` that protects every route below            |
+| `src/routes/(private)/tenants/$tenantId/middleware.ts` | A nested guard narrowing to two schemes, beside tenant loading      |
+| `src/routes/(private)/admin/reports.ts`                | A method-level Bearer-only guard                                    |
+| `src/middleware/admin.ts`                              | Authorization reading `ctx.auth`, with `rejects` and permissions    |
+| `src/routes/auth/session/route.ts`                     | Outcomes that set and clear cookies, including a bodyless `204`     |
+| `src/cookies.ts`                                       | Shared `createCookie` handles with static security attributes       |
+| `src/middleware/context.ts`                            | Middleware `input` reading a header                                 |
+| `src/routes/legacy.ts`                                 | Deprecation metadata with a replacement                             |
+| `src/services.ts`                                      | Service contracts, their named helpers, and the application factory |
+| `src/middleware/projects.ts`                           | `withProjectList`, a middleware that requires a service             |
+| `src/logger.ts`                                        | Adapting Pino to the `RoutaLogger` contract                         |
+| `src/routes/showcase/$itemId/route.ts`                 | Logging from a handler through `ctx.logger`                         |
 
 ## Services
 
 The project routes read their data through [services](/docs/concepts/services/) at all
 three scopes, each declared through a named helper from `src/services.ts`:
 
-| Scope       | Declared in                                  | Service          | Built                     |
-| ----------- | -------------------------------------------- | ---------------- | ------------------------- |
-| Application | `src/routa.ts`, `services: appServices`      | `projects`       | Once, before listening    |
-| Route file  | The `/tenants/:tenantId/projects` route root | `tenantProjects` | Once per projects request |
-| Method      | That file's `post`                           | `audit`          | Once per `POST` request   |
+| Scope       | Declared in                                  | Service                  | Built                     |
+| ----------- | -------------------------------------------- | ------------------------ | ------------------------- |
+| Application | `src/routa.ts`, `services: appServices`      | `projects`, `identities` | Once, before listening    |
+| Route file  | The `/tenants/:tenantId/projects` route root | `tenantProjects`         | Once per projects request |
+| Method      | That file's `post`                           | `audit`                  | Once per `POST` request   |
 
 The route file's factory reads `ctx.tenant`, which filesystem middleware resolved, and
 `ctx.services.projects` to bind the catalog to one tenant. The `POST` factory registers an
@@ -105,19 +117,180 @@ serialized. `withProjectList` declares `ProjectListRequirements`, the slice of
 services already exist. The generated `.routa/testing.gen.ts` exports `createTestApp` and a
 `ServicesFactory` type for each of the three scopes.
 
-## Session Cookies
+## Authentication
 
-`POST /auth/session` exchanges a demo token for two cookies: the `HttpOnly` session token and
-a `signed_in` hint that browser code can read. Each one arrives as its own `Set-Cookie`
-field. With the server running, mint a token and send it from a second terminal that uses
-the same secret:
+`src/routa.ts` configures one principal schema, a union of `account` and `service`, and four
+credential schemes. Each authenticator calls `ctx.services.identities`, an application service,
+to decide who the credential belongs to; Routa only finds the credential and calls it.
+
+| Scheme         | Descriptor                             | Demo credential                                         | Principal           |
+| -------------- | -------------------------------------- | ------------------------------------------------------- | ------------------- |
+| `accountToken` | `bearer`, realm `full-api`             | `Authorization: Bearer demo-token-admin`                | account `admin`     |
+| `session`      | `sessionCookie` on `session`           | `Cookie: session=<token from mint-session>`             | account, as minted  |
+| `serviceKey`   | `apiKey` on `x-api-key`                | `X-API-Key: demo-key-acme-sync`                         | service `acme:sync` |
+| `clientCert`   | `custom`, header `x-client-cert`, mTLS | `X-Client-Cert: <percent-encoded demo-client-cert.pem>` | service `reports`   |
+
+`demo-token-acme-writer` is a second Bearer token, for account `acme:writer`. `priority` is
+`accountToken`, `session`, `serviceKey`, `clientCert`, which differs from the declaration order,
+so challenges and OpenAPI alternatives show it. `multipleCredentials` is `"reject"`.
+
+The routes cover each part of the model in the
+[Authentication concept](/docs/concepts/authentication/):
+
+| Operation                               | Accepts                      | Demonstrates                                          |
+| --------------------------------------- | ---------------------------- | ----------------------------------------------------- |
+| `GET /whoami`                           | Any scheme, or none          | Anonymous and authenticated context on a public route |
+| `GET /admin/audit-events`               | Any scheme, from `(private)` | Inherited `requireAuth()`, then app-owned `withAdmin` |
+| `GET /admin/reports`                    | `accountToken`               | A method-level guard narrowing the inherited one      |
+| `/tenants/:tenantId/projects` and below | `session`, `serviceKey`      | A nested folder guard, beside app-owned `withTenant`  |
+| `POST`, `DELETE /auth/session`          | Any scheme, or none          | Sign-in and sign-out under automatic authentication   |
+
+Admin access, tenant loading, and project write permission stay application middleware that
+reads `ctx.auth.principal`. A valid client certificate authenticates as service `reports`, and
+`withAdmin` still answers `403`: authentication is not authorization.
+
+## Credential Matrix
+
+Start the server as shown at the top of this page. In a second terminal, from the repository
+root, prepare the demo credentials:
 
 ```sh
 cd examples/full-api
 export ROUTA_DEMO_SESSION_SECRET=dev-secret
-TOKEN=$(node scripts/mint-session.mjs acme:writer)
+SESSION=$(node scripts/mint-session.mjs acme:writer)
+CERT=$(node -p 'encodeURIComponent(require("fs").readFileSync("scripts/demo-client-cert.pem", "utf8"))')
+```
+
+A public route without a credential is anonymous, and each scheme authenticates it:
+
+```sh
+curl -s http://127.0.0.1:3000/whoami
+curl -s -H "Cookie: session=$SESSION" http://127.0.0.1:3000/whoami
+curl -s -H 'Authorization: Bearer demo-token-admin' http://127.0.0.1:3000/whoami
+curl -s -H 'X-API-Key: demo-key-acme-sync' http://127.0.0.1:3000/whoami
+curl -s -H "X-Client-Cert: $CERT" http://127.0.0.1:3000/whoami
+```
+
+```txt
+{"status":"anonymous"}
+{"status":"authenticated","scheme":"session","principal":{"type":"account","id":"acme:writer"}}
+{"status":"authenticated","scheme":"accountToken","principal":{"type":"account","id":"admin"}}
+{"status":"authenticated","scheme":"serviceKey","principal":{"type":"service","id":"acme:sync"}}
+{"status":"authenticated","scheme":"clientCert","principal":{"type":"service","id":"reports"}}
+```
+
+An invalid credential fails even on the public route, and challenges only its scheme:
+
+```sh
+curl -s -i -H 'Authorization: Bearer wrong' http://127.0.0.1:3000/whoami
+```
+
+```txt
+HTTP/1.1 401 Unauthorized
+content-type: application/json; charset=utf-8
+www-authenticate: Bearer realm="full-api", error="invalid_token"
+
+{"type":"https://routa-ts.dev/problems/authentication-failed","title":"Authentication failed","status":401}
+```
+
+The tenant area challenges only the schemes it accepts, and in strict mode answers `400` to
+two of them on one request:
+
+```sh
+curl -s -i http://127.0.0.1:3000/tenants/acme/projects
+curl -s -i -H "Cookie: session=$SESSION" -H 'X-API-Key: demo-key-acme-sync' \
+	http://127.0.0.1:3000/tenants/acme/projects
+```
+
+```txt
+HTTP/1.1 401 Unauthorized
+content-type: application/json; charset=utf-8
+www-authenticate: Session, ApiKey
+
+{"type":"https://routa-ts.dev/problems/authentication-required","title":"Authentication required","status":401}
+
+HTTP/1.1 400 Bad Request
+content-type: application/json; charset=utf-8
+
+{"type":"https://routa-ts.dev/problems/ambiguous-credentials","title":"Ambiguous credentials","status":400}
+```
+
+The Bearer-only reports method rejects a valid session, because the method does not accept
+the scheme:
+
+```sh
+curl -s -i -H "Cookie: session=$(node scripts/mint-session.mjs admin)" http://127.0.0.1:3000/admin/reports
+curl -s -H 'Authorization: Bearer demo-token-admin' http://127.0.0.1:3000/admin/reports
+```
+
+```txt
+HTTP/1.1 401 Unauthorized
+content-type: application/json; charset=utf-8
+www-authenticate: Bearer realm="full-api"
+
+{"type":"https://routa-ts.dev/problems/authentication-failed","title":"Authentication failed","status":401}
+{"actorId":"admin","role":"owner"}
+```
+
+The full matrix:
+
+| Request                                            | Status | Outcome or result                                   | `WWW-Authenticate`                                     | Authenticators run   |
+| -------------------------------------------------- | ------ | --------------------------------------------------- | ------------------------------------------------------ | -------------------- |
+| `/whoami`, no credential                           | `200`  | `anonymous`                                         | None                                                   | None                 |
+| `/admin/audit-events`, no credential               | `401`  | `authenticationRequired`                            | `Bearer realm="full-api", Session, ApiKey, clientCert` | None                 |
+| `/tenants/acme/projects`, no credential            | `401`  | `authenticationRequired`                            | `Session, ApiKey`                                      | None                 |
+| `/whoami`, one valid credential of any scheme      | `200`  | `authenticated` with that scheme                    | None                                                   | That scheme's, once  |
+| `/whoami`, `Cookie: session=expired`               | `401`  | `authenticationFailed`                              | `Session`                                              | `session`, once      |
+| `/whoami`, a wrong Bearer token                    | `401`  | `authenticationFailed`                              | `Bearer realm="full-api", error="invalid_token"`       | `accountToken`, once |
+| `/whoami`, a wrong API key                         | `401`  | `authenticationFailed`                              | `ApiKey`                                               | `serviceKey`, once   |
+| `/whoami`, `X-Client-Cert: not-a-certificate`      | `401`  | `authenticationFailed`; `extract` rejects it        | `clientCert`                                           | None                 |
+| `/whoami`, Bearer token and session                | `400`  | `ambiguousCredentials`                              | None                                                   | None                 |
+| `/tenants/acme/projects`, session or API key       | `200`  | Projects                                            | None                                                   | That scheme's, once  |
+| `/tenants/acme/projects`, Bearer token only        | `401`  | `authenticationFailed`                              | `Session, ApiKey`                                      | None                 |
+| `/tenants/acme/projects`, Bearer token and session | `200`  | Projects; the Bearer token is ignored               | None                                                   | `session`, once      |
+| `POST /tenants/acme/projects`, API key             | `403`  | `withProjectPermissions` denies service `acme:sync` | None                                                   | `serviceKey`, once   |
+| `/tenants/acme/projects`, session and API key      | `400`  | `ambiguousCredentials`                              | None                                                   | None                 |
+| `/admin/reports`, admin Bearer token               | `200`  | Report                                              | None                                                   | `accountToken`, once |
+| `/admin/reports`, writer Bearer token              | `403`  | `withAdmin` denies account `acme:writer`            | None                                                   | `accountToken`, once |
+| `/admin/reports`, admin session                    | `401`  | `authenticationFailed`                              | `Bearer realm="full-api"`                              | None                 |
+| `/admin/audit-events`, demo certificate            | `403`  | `withAdmin` denies service `reports`                | None                                                   | `clientCert`, once   |
+| `POST /auth/session`, valid token                  | `200`  | Signed in; sets `session` and `signed_in`           | None                                                   | None                 |
+| `/whoami`, the `session` cookie sign-in set        | `200`  | `authenticated` with `session`                      | None                                                   | `session`, once      |
+| `POST /auth/session`, invalid token                | `401`  | The route's `rejected` outcome; no cookies          | None                                                   | None                 |
+| `POST /auth/session` with `session=expired`        | `401`  | `authenticationFailed`, before the handler          | `Session`                                              | `session`, once      |
+
+`scripts/exercise-auth.ts` sends every row through the generated `createTestApp`, replacing the
+`identities` service with one that counts calls, and asserts the status, the complete body,
+the challenge, every `Set-Cookie` header, and the calls. The repository's `vp run verify` runs it:
+
+```sh
+vp run --filter full-api auth:exercise
+```
+
+```txt
+ok   200 public, no credential: ran={}
+ok   401 protected, no credential: authentication-required challenge=Bearer realm="full-api", Session, ApiKey, clientCert ran={}
+ok   401 tenant area, no credential: authentication-required challenge=Session, ApiKey ran={}
+…
+ok   400 tenant area, session and API key: ambiguous-credentials ran={}
+…
+ok   401 sign-in with a stale session cookie (known limit): authentication-failed challenge=Session ran={"session":1}
+All 28 authentication cases passed.
+```
+
+With `multipleCredentials: "priority"` instead, the two `400` rows would authenticate the first
+scheme by `priority`: the Bearer token on `/whoami`, and the session on the tenant route. Only
+that one authenticator would run, and a failure would not fall back to the other credential.
+
+## Session Cookies
+
+`POST /auth/session` exchanges a demo token for two cookies: the `HttpOnly` session token and
+a `signed_in` hint that browser code can read. Each one arrives as its own `Set-Cookie`
+field:
+
+```sh
 curl -i -X POST -H 'Content-Type: application/json' \
-	-d "{\"token\":\"$TOKEN\"}" http://127.0.0.1:3000/auth/session
+	-d "{\"token\":\"$SESSION\"}" http://127.0.0.1:3000/auth/session
 ```
 
 ```txt
@@ -125,11 +298,25 @@ HTTP/1.1 200 OK
 content-type: application/json; charset=utf-8
 set-cookie: session=demo-user%3Aacme%3Awriter.…; Path=/; Max-Age=3600; HttpOnly; Secure; SameSite=Lax
 set-cookie: signed_in=yes; Path=/; Max-Age=3600; Secure; SameSite=Lax
+
+{"accountId":"acme:writer"}
 ```
 
-`DELETE /auth/session` answers a bodyless `204` that clears both. A request to a private
-route without a session that verifies gets the auth middleware's `401` reject, which clears
-the `signed_in` hint and any session cookie the request sent.
+`DELETE /auth/session` answers a bodyless `204` that clears both.
+
+Both operations run under automatic authentication, like every route. A request that still
+carries an invalid session cookie, such as one signed with an old secret, answers
+`authenticationFailed` before the sign-in or sign-out handler runs. Routa's `401` outcomes set
+no cookies, so unlike the application-owned guard this example used before, a `401` no longer
+clears the stale `session` cookie or the `signed_in` hint. A non-browser client recovers by
+dropping the cookie from its jar. Browser scripts cannot read or clear the `HttpOnly` session
+cookie, so a browser stays rejected until the cookie expires after its one-hour `Max-Age`, or
+until the user clears the site's cookies. Operations whose handler processes credentials
+itself, and authenticators that set or clear cookies, are not available yet.
+
+The sign-in rejection declares a literal `type`, because the same operation can also answer
+Routa's `authenticationFailed` with status `401`, and outcomes that share a status must be
+distinguishable.
 
 ## The Logger Showcase
 
@@ -160,14 +347,21 @@ and depends on no logging package, so the adapter in `src/logger.ts` is a demons
 rather than a requirement.
 
 <Aside type="caution" title="Demonstration credentials">
-	The session middleware in this example verifies a signed demo token from an environment
-	variable. It illustrates where authentication attaches, and it is not an authentication
-	implementation to copy.
+	Every credential in this example is a fixed demonstration value: the Bearer tokens and API
+	key in `src/identities.ts`, the session secret you export, and the certificate in
+	`scripts/demo-client-cert.pem`. None is suitable for production. The `x-client-cert` header
+	is trustworthy only behind a TLS proxy that overwrites any copy a client sends; this example
+	has no such proxy, so any local client can set it.
 </Aside>
 
 ## Next Steps
 
 <CardGrid>
+	<LinkCard
+		title="Authentication"
+		href="/docs/concepts/authentication/"
+		description="The model the credential matrix exercises."
+	/>
 	<LinkCard
 		title="Middleware"
 		href="/docs/concepts/middleware/"

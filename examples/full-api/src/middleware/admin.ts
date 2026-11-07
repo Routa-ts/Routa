@@ -18,7 +18,13 @@ export const withAdmin = createMiddleware({
 		},
 	},
 	run: async ({ ctx, next }) => {
-		if (ctx.auth.userId !== "admin") {
+		// Routa authenticated the request; deciding who administers is application authorization.
+		const isAdmin =
+			ctx.auth.status === "authenticated"
+			&& ctx.auth.principal.type === "account"
+			&& ctx.auth.principal.id === "admin";
+
+		if (!isAdmin) {
 			return {
 				type: "forbidden",
 				data: {

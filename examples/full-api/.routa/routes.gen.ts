@@ -12,6 +12,7 @@ export const routaRoutes = [
 		"responses": {
 			"get": [
 				200,
+				400,
 				401,
 				403
 			]
@@ -41,46 +42,28 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/routes/middleware.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			},
-			{
 				"file": "src/routes/(private)/middleware.ts",
-				"name": "requireAuth",
-				"requires": [
-					"session"
-				],
-				"provides": [
-					"auth"
-				],
-				"providesTypes": {
-					"auth": "{\n\treadonly \"userId\": string;\n}"
-				},
+				"name": "signedIn",
+				"requires": [],
+				"provides": [],
+				"providesTypes": {},
 				"rejects": [
 					{
-						"type": "unauthorized",
+						"type": "authenticationRequired",
 						"status": 401,
-						"schema": "z.object({ message: z.string() })"
+						"description": "Authentication is required: the request presented no credential."
 					}
 				],
-				"security": [
-					{
-						"sessionCookie": []
-					}
-				],
-				"permissions": []
+				"security": [],
+				"permissions": [],
+				"authentication": {
+					"schemes": [
+						"accountToken",
+						"session",
+						"serviceKey",
+						"clientCert"
+					]
+				}
 			},
 			{
 				"file": "src/routes/(private)/admin/middleware.ts",
@@ -124,46 +107,28 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
 					"file": "src/routes/(private)/middleware.ts",
-					"name": "requireAuth",
-					"requires": [
-						"session"
-					],
-					"provides": [
-						"auth"
-					],
-					"providesTypes": {
-						"auth": "{\n\treadonly \"userId\": string;\n}"
-					},
+					"name": "signedIn",
+					"requires": [],
+					"provides": [],
+					"providesTypes": {},
 					"rejects": [
 						{
-							"type": "unauthorized",
+							"type": "authenticationRequired",
 							"status": 401,
-							"schema": "z.object({ message: z.string() })"
+							"description": "Authentication is required: the request presented no credential."
 						}
 					],
-					"security": [
-						{
-							"sessionCookie": []
-						}
-					],
-					"permissions": []
+					"security": [],
+					"permissions": [],
+					"authentication": {
+						"schemes": [
+							"accountToken",
+							"session",
+							"serviceKey",
+							"clientCert"
+						]
+					}
 				},
 				{
 					"file": "src/routes/(private)/admin/middleware.ts",
@@ -191,11 +156,14 @@ export const routaRoutes = [
 				}
 			]
 		},
+		"middlewareFiles": [
+			"src/routes/middleware.ts",
+			"src/routes/(private)/middleware.ts",
+			"src/routes/(private)/admin/middleware.ts"
+		],
 		"ctx": [
 			"admin",
-			"auth",
-			"requestId",
-			"session"
+			"requestId"
 		],
 		"groups": [
 			"(private)"
@@ -243,46 +211,28 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/routes/middleware.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			},
-			{
 				"file": "src/routes/(private)/middleware.ts",
-				"name": "requireAuth",
-				"requires": [
-					"session"
-				],
-				"provides": [
-					"auth"
-				],
-				"providesTypes": {
-					"auth": "{\n\treadonly \"userId\": string;\n}"
-				},
+				"name": "signedIn",
+				"requires": [],
+				"provides": [],
+				"providesTypes": {},
 				"rejects": [
 					{
-						"type": "unauthorized",
+						"type": "authenticationRequired",
 						"status": 401,
-						"schema": "z.object({ message: z.string() })"
+						"description": "Authentication is required: the request presented no credential."
 					}
 				],
-				"security": [
-					{
-						"sessionCookie": []
-					}
-				],
-				"permissions": []
+				"security": [],
+				"permissions": [],
+				"authentication": {
+					"schemes": [
+						"accountToken",
+						"session",
+						"serviceKey",
+						"clientCert"
+					]
+				}
 			},
 			{
 				"file": "src/routes/(private)/admin/middleware.ts",
@@ -326,46 +276,28 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
 					"file": "src/routes/(private)/middleware.ts",
-					"name": "requireAuth",
-					"requires": [
-						"session"
-					],
-					"provides": [
-						"auth"
-					],
-					"providesTypes": {
-						"auth": "{\n\treadonly \"userId\": string;\n}"
-					},
+					"name": "signedIn",
+					"requires": [],
+					"provides": [],
+					"providesTypes": {},
 					"rejects": [
 						{
-							"type": "unauthorized",
+							"type": "authenticationRequired",
 							"status": 401,
-							"schema": "z.object({ message: z.string() })"
+							"description": "Authentication is required: the request presented no credential."
 						}
 					],
-					"security": [
-						{
-							"sessionCookie": []
-						}
-					],
-					"permissions": []
+					"security": [],
+					"permissions": [],
+					"authentication": {
+						"schemes": [
+							"accountToken",
+							"session",
+							"serviceKey",
+							"clientCert"
+						]
+					}
 				},
 				{
 					"file": "src/routes/(private)/admin/middleware.ts",
@@ -390,14 +322,38 @@ export const routaRoutes = [
 					"permissions": [
 						"audit.read"
 					]
+				},
+				{
+					"file": "src/routes/(private)/admin/reports.ts",
+					"name": "requireAuth",
+					"requires": [],
+					"provides": [],
+					"providesTypes": {},
+					"rejects": [
+						{
+							"type": "authenticationRequired",
+							"status": 401,
+							"description": "Authentication is required: the request presented no credential."
+						}
+					],
+					"security": [],
+					"permissions": [],
+					"authentication": {
+						"schemes": [
+							"accountToken"
+						]
+					}
 				}
 			]
 		},
+		"middlewareFiles": [
+			"src/routes/middleware.ts",
+			"src/routes/(private)/middleware.ts",
+			"src/routes/(private)/admin/middleware.ts"
+		],
 		"ctx": [
 			"admin",
-			"auth",
-			"requestId",
-			"session"
+			"requestId"
 		],
 		"groups": [
 			"(private)"
@@ -411,30 +367,22 @@ export const routaRoutes = [
 		"file": "src/routes/auth/session/route.ts",
 		"path": "/auth/session",
 		"methods": [
-			"GET",
 			"POST",
 			"DELETE"
 		],
 		"responses": {
-			"get": [
-				200
-			],
 			"post": [
 				200,
+				400,
 				401
 			],
 			"delete": [
-				204
+				204,
+				400,
+				401
 			]
 		},
 		"inputs": {
-			"get": {
-				"params": false,
-				"query": false,
-				"headers": false,
-				"cookies": true,
-				"body": false
-			},
 			"post": {
 				"params": false,
 				"query": false,
@@ -464,57 +412,9 @@ export const routaRoutes = [
 				"rejects": [],
 				"security": [],
 				"permissions": []
-			},
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
 			}
 		],
 		"methodMiddleware": {
-			"get": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			],
 			"post": [
 				{
 					"file": "src/routes/middleware.ts",
@@ -525,22 +425,6 @@ export const routaRoutes = [
 					],
 					"providesTypes": {
 						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
 					},
 					"rejects": [],
 					"security": [],
@@ -561,28 +445,14 @@ export const routaRoutes = [
 					"rejects": [],
 					"security": [],
 					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
 				}
 			]
 		},
+		"middlewareFiles": [
+			"src/routes/middleware.ts"
+		],
 		"ctx": [
-			"requestId",
-			"session"
+			"requestId"
 		],
 		"groups": [],
 		"segments": [
@@ -598,7 +468,9 @@ export const routaRoutes = [
 		],
 		"responses": {
 			"get": [
-				200
+				200,
+				400,
+				401
 			]
 		},
 		"inputs": {
@@ -624,22 +496,6 @@ export const routaRoutes = [
 				"rejects": [],
 				"security": [],
 				"permissions": []
-			},
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
 			}
 		],
 		"methodMiddleware": {
@@ -657,28 +513,14 @@ export const routaRoutes = [
 					"rejects": [],
 					"security": [],
 					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
 				}
 			]
 		},
+		"middlewareFiles": [
+			"src/routes/middleware.ts"
+		],
 		"ctx": [
-			"requestId",
-			"session"
+			"requestId"
 		],
 		"groups": [],
 		"segments": [
@@ -693,7 +535,9 @@ export const routaRoutes = [
 		],
 		"responses": {
 			"get": [
-				200
+				200,
+				400,
+				401
 			]
 		},
 		"inputs": {
@@ -724,22 +568,6 @@ export const routaRoutes = [
 				"rejects": [],
 				"security": [],
 				"permissions": []
-			},
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
 			}
 		],
 		"methodMiddleware": {
@@ -757,28 +585,14 @@ export const routaRoutes = [
 					"rejects": [],
 					"security": [],
 					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
 				}
 			]
 		},
+		"middlewareFiles": [
+			"src/routes/middleware.ts"
+		],
 		"ctx": [
-			"requestId",
-			"session"
+			"requestId"
 		],
 		"groups": [],
 		"segments": [
@@ -793,7 +607,9 @@ export const routaRoutes = [
 		],
 		"responses": {
 			"get": [
-				200
+				200,
+				400,
+				401
 			]
 		},
 		"inputs": {
@@ -824,22 +640,6 @@ export const routaRoutes = [
 				"rejects": [],
 				"security": [],
 				"permissions": []
-			},
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
 			}
 		],
 		"methodMiddleware": {
@@ -857,28 +657,14 @@ export const routaRoutes = [
 					"rejects": [],
 					"security": [],
 					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
 				}
 			]
 		},
+		"middlewareFiles": [
+			"src/routes/middleware.ts"
+		],
 		"ctx": [
-			"requestId",
-			"session"
+			"requestId"
 		],
 		"groups": [],
 		"segments": [
@@ -895,6 +681,8 @@ export const routaRoutes = [
 		"responses": {
 			"post": [
 				200,
+				400,
+				401,
 				403
 			]
 		},
@@ -921,22 +709,6 @@ export const routaRoutes = [
 				"rejects": [],
 				"security": [],
 				"permissions": []
-			},
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
 			}
 		],
 		"methodMiddleware": {
@@ -954,28 +726,14 @@ export const routaRoutes = [
 					"rejects": [],
 					"security": [],
 					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
 				}
 			]
 		},
+		"middlewareFiles": [
+			"src/routes/middleware.ts"
+		],
 		"ctx": [
-			"requestId",
-			"session"
+			"requestId"
 		],
 		"groups": [],
 		"segments": [
@@ -993,13 +751,19 @@ export const routaRoutes = [
 		"responses": {
 			"get": [
 				200,
+				400,
+				401,
 				404
 			],
 			"put": [
-				200
+				200,
+				400,
+				401
 			],
 			"head": [
-				204
+				204,
+				400,
+				401
 			]
 		},
 		"inputs": {
@@ -1039,22 +803,6 @@ export const routaRoutes = [
 				"rejects": [],
 				"security": [],
 				"permissions": []
-			},
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
 			}
 		],
 		"methodMiddleware": {
@@ -1068,22 +816,6 @@ export const routaRoutes = [
 					],
 					"providesTypes": {
 						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
 					},
 					"rejects": [],
 					"security": [],
@@ -1104,22 +836,6 @@ export const routaRoutes = [
 					"rejects": [],
 					"security": [],
 					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
 				}
 			],
 			"head": [
@@ -1136,28 +852,14 @@ export const routaRoutes = [
 					"rejects": [],
 					"security": [],
 					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
 				}
 			]
 		},
+		"middlewareFiles": [
+			"src/routes/middleware.ts"
+		],
 		"ctx": [
-			"requestId",
-			"session"
+			"requestId"
 		],
 		"groups": [],
 		"segments": [
@@ -1173,7 +875,9 @@ export const routaRoutes = [
 		],
 		"responses": {
 			"get": [
-				200
+				200,
+				400,
+				401
 			]
 		},
 		"inputs": {
@@ -1199,22 +903,6 @@ export const routaRoutes = [
 				"rejects": [],
 				"security": [],
 				"permissions": []
-			},
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
 			}
 		],
 		"methodMiddleware": {
@@ -1232,28 +920,14 @@ export const routaRoutes = [
 					"rejects": [],
 					"security": [],
 					"permissions": []
-				},
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
 				}
 			]
 		},
+		"middlewareFiles": [
+			"src/routes/middleware.ts"
+		],
 		"ctx": [
-			"requestId",
-			"session"
+			"requestId"
 		],
 		"groups": [],
 		"segments": [
@@ -1270,10 +944,12 @@ export const routaRoutes = [
 		"responses": {
 			"get": [
 				200,
+				400,
 				401
 			],
 			"post": [
 				201,
+				400,
 				401,
 				403
 			]
@@ -1310,54 +986,55 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/routes/middleware.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			},
-			{
 				"file": "src/routes/(private)/middleware.ts",
-				"name": "requireAuth",
-				"requires": [
-					"session"
-				],
-				"provides": [
-					"auth"
-				],
-				"providesTypes": {
-					"auth": "{\n\treadonly \"userId\": string;\n}"
-				},
+				"name": "signedIn",
+				"requires": [],
+				"provides": [],
+				"providesTypes": {},
 				"rejects": [
 					{
-						"type": "unauthorized",
+						"type": "authenticationRequired",
 						"status": 401,
-						"schema": "z.object({ message: z.string() })"
+						"description": "Authentication is required: the request presented no credential."
 					}
 				],
-				"security": [
+				"security": [],
+				"permissions": [],
+				"authentication": {
+					"schemes": [
+						"accountToken",
+						"session",
+						"serviceKey",
+						"clientCert"
+					]
+				}
+			},
+			{
+				"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
+				"name": "tenantCredentials",
+				"requires": [],
+				"provides": [],
+				"providesTypes": {},
+				"rejects": [
 					{
-						"sessionCookie": []
+						"type": "authenticationRequired",
+						"status": 401,
+						"description": "Authentication is required: the request presented no credential."
 					}
 				],
-				"permissions": []
+				"security": [],
+				"permissions": [],
+				"authentication": {
+					"schemes": [
+						"session",
+						"serviceKey"
+					]
+				}
 			},
 			{
 				"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
 				"name": "withTenant",
-				"requires": [
-					"auth",
-					"session"
-				],
+				"requires": [],
 				"provides": [
 					"tenant"
 				],
@@ -1403,54 +1080,55 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
 					"file": "src/routes/(private)/middleware.ts",
-					"name": "requireAuth",
-					"requires": [
-						"session"
-					],
-					"provides": [
-						"auth"
-					],
-					"providesTypes": {
-						"auth": "{\n\treadonly \"userId\": string;\n}"
-					},
+					"name": "signedIn",
+					"requires": [],
+					"provides": [],
+					"providesTypes": {},
 					"rejects": [
 						{
-							"type": "unauthorized",
+							"type": "authenticationRequired",
 							"status": 401,
-							"schema": "z.object({ message: z.string() })"
+							"description": "Authentication is required: the request presented no credential."
 						}
 					],
-					"security": [
+					"security": [],
+					"permissions": [],
+					"authentication": {
+						"schemes": [
+							"accountToken",
+							"session",
+							"serviceKey",
+							"clientCert"
+						]
+					}
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
+					"name": "tenantCredentials",
+					"requires": [],
+					"provides": [],
+					"providesTypes": {},
+					"rejects": [
 						{
-							"sessionCookie": []
+							"type": "authenticationRequired",
+							"status": 401,
+							"description": "Authentication is required: the request presented no credential."
 						}
 					],
-					"permissions": []
+					"security": [],
+					"permissions": [],
+					"authentication": {
+						"schemes": [
+							"session",
+							"serviceKey"
+						]
+					}
 				},
 				{
 					"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
 					"name": "withTenant",
-					"requires": [
-						"auth",
-						"session"
-					],
+					"requires": [],
 					"provides": [
 						"tenant"
 					],
@@ -1534,54 +1212,55 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
 					"file": "src/routes/(private)/middleware.ts",
-					"name": "requireAuth",
-					"requires": [
-						"session"
-					],
-					"provides": [
-						"auth"
-					],
-					"providesTypes": {
-						"auth": "{\n\treadonly \"userId\": string;\n}"
-					},
+					"name": "signedIn",
+					"requires": [],
+					"provides": [],
+					"providesTypes": {},
 					"rejects": [
 						{
-							"type": "unauthorized",
+							"type": "authenticationRequired",
 							"status": 401,
-							"schema": "z.object({ message: z.string() })"
+							"description": "Authentication is required: the request presented no credential."
 						}
 					],
-					"security": [
+					"security": [],
+					"permissions": [],
+					"authentication": {
+						"schemes": [
+							"accountToken",
+							"session",
+							"serviceKey",
+							"clientCert"
+						]
+					}
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
+					"name": "tenantCredentials",
+					"requires": [],
+					"provides": [],
+					"providesTypes": {},
+					"rejects": [
 						{
-							"sessionCookie": []
+							"type": "authenticationRequired",
+							"status": 401,
+							"description": "Authentication is required: the request presented no credential."
 						}
 					],
-					"permissions": []
+					"security": [],
+					"permissions": [],
+					"authentication": {
+						"schemes": [
+							"session",
+							"serviceKey"
+						]
+					}
 				},
 				{
 					"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
 					"name": "withTenant",
-					"requires": [
-						"auth",
-						"session"
-					],
+					"requires": [],
 					"provides": [
 						"tenant"
 					],
@@ -1635,6 +1314,11 @@ export const routaRoutes = [
 				}
 			]
 		},
+		"middlewareFiles": [
+			"src/routes/middleware.ts",
+			"src/routes/(private)/middleware.ts",
+			"src/routes/(private)/tenants/$tenantId/middleware.ts"
+		],
 		"services": {
 			"routeFile": {
 				"file": "src/services.ts",
@@ -1654,13 +1338,11 @@ export const routaRoutes = [
 			}
 		},
 		"ctx": [
-			"auth",
 			"projectList",
 			"projectListMode",
 			"projectPermissions",
 			"projectScope",
 			"requestId",
-			"session",
 			"tenant"
 		],
 		"groups": [
@@ -1683,15 +1365,18 @@ export const routaRoutes = [
 		"responses": {
 			"get": [
 				200,
+				400,
 				401
 			],
 			"patch": [
 				200,
+				400,
 				401,
 				403
 			],
 			"delete": [
 				204,
+				400,
 				401,
 				403
 			]
@@ -1735,54 +1420,55 @@ export const routaRoutes = [
 				"permissions": []
 			},
 			{
-				"file": "src/routes/middleware.ts",
-				"name": "withSession",
-				"requires": [
-					"requestId"
-				],
-				"provides": [
-					"session"
-				],
-				"providesTypes": {
-					"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			},
-			{
 				"file": "src/routes/(private)/middleware.ts",
-				"name": "requireAuth",
-				"requires": [
-					"session"
-				],
-				"provides": [
-					"auth"
-				],
-				"providesTypes": {
-					"auth": "{\n\treadonly \"userId\": string;\n}"
-				},
+				"name": "signedIn",
+				"requires": [],
+				"provides": [],
+				"providesTypes": {},
 				"rejects": [
 					{
-						"type": "unauthorized",
+						"type": "authenticationRequired",
 						"status": 401,
-						"schema": "z.object({ message: z.string() })"
+						"description": "Authentication is required: the request presented no credential."
 					}
 				],
-				"security": [
+				"security": [],
+				"permissions": [],
+				"authentication": {
+					"schemes": [
+						"accountToken",
+						"session",
+						"serviceKey",
+						"clientCert"
+					]
+				}
+			},
+			{
+				"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
+				"name": "tenantCredentials",
+				"requires": [],
+				"provides": [],
+				"providesTypes": {},
+				"rejects": [
 					{
-						"sessionCookie": []
+						"type": "authenticationRequired",
+						"status": 401,
+						"description": "Authentication is required: the request presented no credential."
 					}
 				],
-				"permissions": []
+				"security": [],
+				"permissions": [],
+				"authentication": {
+					"schemes": [
+						"session",
+						"serviceKey"
+					]
+				}
 			},
 			{
 				"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
 				"name": "withTenant",
-				"requires": [
-					"auth",
-					"session"
-				],
+				"requires": [],
 				"provides": [
 					"tenant"
 				],
@@ -1828,54 +1514,55 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
 					"file": "src/routes/(private)/middleware.ts",
-					"name": "requireAuth",
-					"requires": [
-						"session"
-					],
-					"provides": [
-						"auth"
-					],
-					"providesTypes": {
-						"auth": "{\n\treadonly \"userId\": string;\n}"
-					},
+					"name": "signedIn",
+					"requires": [],
+					"provides": [],
+					"providesTypes": {},
 					"rejects": [
 						{
-							"type": "unauthorized",
+							"type": "authenticationRequired",
 							"status": 401,
-							"schema": "z.object({ message: z.string() })"
+							"description": "Authentication is required: the request presented no credential."
 						}
 					],
-					"security": [
+					"security": [],
+					"permissions": [],
+					"authentication": {
+						"schemes": [
+							"accountToken",
+							"session",
+							"serviceKey",
+							"clientCert"
+						]
+					}
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
+					"name": "tenantCredentials",
+					"requires": [],
+					"provides": [],
+					"providesTypes": {},
+					"rejects": [
 						{
-							"sessionCookie": []
+							"type": "authenticationRequired",
+							"status": 401,
+							"description": "Authentication is required: the request presented no credential."
 						}
 					],
-					"permissions": []
+					"security": [],
+					"permissions": [],
+					"authentication": {
+						"schemes": [
+							"session",
+							"serviceKey"
+						]
+					}
 				},
 				{
 					"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
 					"name": "withTenant",
-					"requires": [
-						"auth",
-						"session"
-					],
+					"requires": [],
 					"provides": [
 						"tenant"
 					],
@@ -1920,54 +1607,55 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
 					"file": "src/routes/(private)/middleware.ts",
-					"name": "requireAuth",
-					"requires": [
-						"session"
-					],
-					"provides": [
-						"auth"
-					],
-					"providesTypes": {
-						"auth": "{\n\treadonly \"userId\": string;\n}"
-					},
+					"name": "signedIn",
+					"requires": [],
+					"provides": [],
+					"providesTypes": {},
 					"rejects": [
 						{
-							"type": "unauthorized",
+							"type": "authenticationRequired",
 							"status": 401,
-							"schema": "z.object({ message: z.string() })"
+							"description": "Authentication is required: the request presented no credential."
 						}
 					],
-					"security": [
+					"security": [],
+					"permissions": [],
+					"authentication": {
+						"schemes": [
+							"accountToken",
+							"session",
+							"serviceKey",
+							"clientCert"
+						]
+					}
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
+					"name": "tenantCredentials",
+					"requires": [],
+					"provides": [],
+					"providesTypes": {},
+					"rejects": [
 						{
-							"sessionCookie": []
+							"type": "authenticationRequired",
+							"status": 401,
+							"description": "Authentication is required: the request presented no credential."
 						}
 					],
-					"permissions": []
+					"security": [],
+					"permissions": [],
+					"authentication": {
+						"schemes": [
+							"session",
+							"serviceKey"
+						]
+					}
 				},
 				{
 					"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
 					"name": "withTenant",
-					"requires": [
-						"auth",
-						"session"
-					],
+					"requires": [],
 					"provides": [
 						"tenant"
 					],
@@ -2036,54 +1724,55 @@ export const routaRoutes = [
 					"permissions": []
 				},
 				{
-					"file": "src/routes/middleware.ts",
-					"name": "withSession",
-					"requires": [
-						"requestId"
-					],
-					"provides": [
-						"session"
-					],
-					"providesTypes": {
-						"session": "{\n\treadonly \"authenticated\": boolean;\n\treadonly \"userId\"?: string | undefined;\n}"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
 					"file": "src/routes/(private)/middleware.ts",
-					"name": "requireAuth",
-					"requires": [
-						"session"
-					],
-					"provides": [
-						"auth"
-					],
-					"providesTypes": {
-						"auth": "{\n\treadonly \"userId\": string;\n}"
-					},
+					"name": "signedIn",
+					"requires": [],
+					"provides": [],
+					"providesTypes": {},
 					"rejects": [
 						{
-							"type": "unauthorized",
+							"type": "authenticationRequired",
 							"status": 401,
-							"schema": "z.object({ message: z.string() })"
+							"description": "Authentication is required: the request presented no credential."
 						}
 					],
-					"security": [
+					"security": [],
+					"permissions": [],
+					"authentication": {
+						"schemes": [
+							"accountToken",
+							"session",
+							"serviceKey",
+							"clientCert"
+						]
+					}
+				},
+				{
+					"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
+					"name": "tenantCredentials",
+					"requires": [],
+					"provides": [],
+					"providesTypes": {},
+					"rejects": [
 						{
-							"sessionCookie": []
+							"type": "authenticationRequired",
+							"status": 401,
+							"description": "Authentication is required: the request presented no credential."
 						}
 					],
-					"permissions": []
+					"security": [],
+					"permissions": [],
+					"authentication": {
+						"schemes": [
+							"session",
+							"serviceKey"
+						]
+					}
 				},
 				{
 					"file": "src/routes/(private)/tenants/$tenantId/middleware.ts",
 					"name": "withTenant",
-					"requires": [
-						"auth",
-						"session"
-					],
+					"requires": [],
 					"provides": [
 						"tenant"
 					],
@@ -2137,12 +1826,15 @@ export const routaRoutes = [
 				}
 			]
 		},
+		"middlewareFiles": [
+			"src/routes/middleware.ts",
+			"src/routes/(private)/middleware.ts",
+			"src/routes/(private)/tenants/$tenantId/middleware.ts"
+		],
 		"ctx": [
-			"auth",
 			"projectPermissions",
 			"projectScope",
 			"requestId",
-			"session",
 			"tenant"
 		],
 		"groups": [
@@ -2154,82 +1846,156 @@ export const routaRoutes = [
 			"projects",
 			"$projectId"
 		]
+	},
+	{
+		"file": "src/routes/whoami/route.ts",
+		"path": "/whoami",
+		"methods": [
+			"GET"
+		],
+		"responses": {
+			"get": [
+				200,
+				400,
+				401
+			]
+		},
+		"inputs": {
+			"get": {
+				"params": false,
+				"query": false,
+				"headers": false,
+				"cookies": false,
+				"body": false
+			}
+		},
+		"middleware": [
+			{
+				"file": "src/routes/middleware.ts",
+				"name": "withRequest",
+				"requires": [],
+				"provides": [
+					"requestId"
+				],
+				"providesTypes": {
+					"requestId": "string"
+				},
+				"rejects": [],
+				"security": [],
+				"permissions": []
+			}
+		],
+		"methodMiddleware": {
+			"get": [
+				{
+					"file": "src/routes/middleware.ts",
+					"name": "withRequest",
+					"requires": [],
+					"provides": [
+						"requestId"
+					],
+					"providesTypes": {
+						"requestId": "string"
+					},
+					"rejects": [],
+					"security": [],
+					"permissions": []
+				}
+			]
+		},
+		"middlewareFiles": [
+			"src/routes/middleware.ts"
+		],
+		"ctx": [
+			"requestId"
+		],
+		"groups": [],
+		"segments": [
+			"whoami"
+		]
 	}
 ] as const;
 
 export const routaApplicationServices = [
+	"identities",
 	"projects"
 ] as const;
 
 export type RoutaApplicationServices = import("../src/services.js").AppServices;
 
+export const routaAuthenticationSchemes = [
+	"accountToken",
+	"session",
+	"serviceKey",
+	"clientCert"
+] as const;
+
+export const routaMultipleCredentials = "reject" as const;
+
+/** The principal schema's output, from the authentication config in `src/routa.ts`. */
+export type RoutaPrincipal = import("@routa-ts/core").PrincipalOf<typeof import("../src/routa.js").default>;
+
+export type RoutaAuthenticationScheme = "accountToken" | "session" | "serviceKey" | "clientCert";
+
+/** `ctx.auth` on an operation no requireAuth guard protects. */
+export type RoutaAuth = import("@routa-ts/core").AuthContext<RoutaAuthenticationScheme, RoutaPrincipal>;
+
 export type AdminAuditEventsCtx = {
 	"admin": unknown;
-	"auth": unknown;
 	"requestId": unknown;
-	"session": unknown;
 };
 
 export type AdminReportsCtx = {
 	"admin": unknown;
-	"auth": unknown;
 	"requestId": unknown;
-	"session": unknown;
 };
 
 export type AuthSessionCtx = {
 	"requestId": unknown;
-	"session": unknown;
 };
 
 export type DemoCtx = {
 	"requestId": unknown;
-	"session": unknown;
 };
 
 export type LegacyCtx = {
 	"requestId": unknown;
-	"session": unknown;
 };
 
 export type LegacyIdCtx = {
 	"requestId": unknown;
-	"session": unknown;
 };
 
 export type LoggerShowcaseCtx = {
 	"requestId": unknown;
-	"session": unknown;
 };
 
 export type ShowcaseItemIdCtx = {
 	"requestId": unknown;
-	"session": unknown;
 };
 
 export type StatusCtx = {
 	"requestId": unknown;
-	"session": unknown;
 };
 
 export type TenantsTenantIdProjectsCtx = {
-	"auth": unknown;
 	"projectList": unknown;
 	"projectListMode": unknown;
 	"projectPermissions": unknown;
 	"projectScope": unknown;
 	"requestId": unknown;
-	"session": unknown;
 	"tenant": unknown;
 };
 
 export type TenantsTenantIdProjectsProjectIdCtx = {
-	"auth": unknown;
 	"projectPermissions": unknown;
 	"projectScope": unknown;
 	"requestId": unknown;
-	"session": unknown;
 	"tenant": unknown;
+};
+
+export type WhoamiCtx = {
+	"requestId": unknown;
 };
 
 export type RoutaRouteCtxByPath = {
@@ -2238,79 +2004,43 @@ export type RoutaRouteCtxByPath = {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"auth": {
-				readonly "userId": string;
-			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 		post: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"auth": {
-				readonly "userId": string;
-			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 		put: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"auth": {
-				readonly "userId": string;
-			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 		patch: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"auth": {
-				readonly "userId": string;
-			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 		delete: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"auth": {
-				readonly "userId": string;
-			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 		head: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"auth": {
-				readonly "userId": string;
-			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 	};
 	"/admin/reports": {
@@ -2318,394 +2048,229 @@ export type RoutaRouteCtxByPath = {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"auth": {
-				readonly "userId": string;
-			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken", RoutaPrincipal>;
 		};
 		post: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"auth": {
-				readonly "userId": string;
-			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 		put: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"auth": {
-				readonly "userId": string;
-			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 		patch: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"auth": {
-				readonly "userId": string;
-			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 		delete: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"auth": {
-				readonly "userId": string;
-			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 		head: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"auth": {
-				readonly "userId": string;
-			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 	};
 	"/auth/session": {
 		get: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		post: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		put: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		patch: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		delete: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		head: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 	};
 	"/demo": {
 		get: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		post: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		put: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		patch: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		delete: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		head: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 	};
 	"/legacy": {
 		get: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		post: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		put: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		patch: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		delete: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		head: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 	};
 	"/legacy/:id": {
 		get: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		post: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		put: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		patch: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		delete: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		head: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 	};
 	"/logger-showcase": {
 		get: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		post: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		put: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		patch: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		delete: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		head: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 	};
 	"/showcase/:itemId": {
 		get: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		post: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		put: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		patch: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		delete: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		head: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 	};
 	"/status": {
 		get: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		post: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		put: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		patch: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		delete: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 		head: {
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
+			readonly "auth": RoutaAuth;
 		};
 	};
 	"/tenants/:tenantId/projects": {
 		get: {
-			"auth": {
-				readonly "userId": string;
-			};
 			"projectList": Array<{
 				readonly "id": string;
 				readonly "tenantId": string;
@@ -2721,20 +2286,14 @@ export type RoutaRouteCtxByPath = {
 				readonly "canWrite": boolean;
 			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"session" | "serviceKey", RoutaPrincipal>;
 			readonly "services": Readonly<RoutaApplicationServices & import("../src/services.js").ProjectRouteServices>;
 		};
 		post: {
-			"auth": {
-				readonly "userId": string;
-			};
 			"projectPermissions": {
 				readonly "canRead": boolean;
 				readonly "canWrite": boolean;
@@ -2744,152 +2303,104 @@ export type RoutaRouteCtxByPath = {
 				readonly "canWrite": boolean;
 			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"session" | "serviceKey", RoutaPrincipal>;
 			readonly "services": Readonly<RoutaApplicationServices & import("../src/services.js").ProjectRouteServices & import("../src/services.js").ProjectWriteServices>;
 		};
 		put: {
-			"auth": {
-				readonly "userId": string;
-			};
 			"projectScope": {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"session" | "serviceKey", RoutaPrincipal>;
 			readonly "services": Readonly<RoutaApplicationServices & import("../src/services.js").ProjectRouteServices>;
 		};
 		patch: {
-			"auth": {
-				readonly "userId": string;
-			};
 			"projectScope": {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"session" | "serviceKey", RoutaPrincipal>;
 			readonly "services": Readonly<RoutaApplicationServices & import("../src/services.js").ProjectRouteServices>;
 		};
 		delete: {
-			"auth": {
-				readonly "userId": string;
-			};
 			"projectScope": {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"session" | "serviceKey", RoutaPrincipal>;
 			readonly "services": Readonly<RoutaApplicationServices & import("../src/services.js").ProjectRouteServices>;
 		};
 		head: {
-			"auth": {
-				readonly "userId": string;
-			};
 			"projectScope": {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"session" | "serviceKey", RoutaPrincipal>;
 			readonly "services": Readonly<RoutaApplicationServices & import("../src/services.js").ProjectRouteServices>;
 		};
 	};
 	"/tenants/:tenantId/projects/:projectId": {
 		get: {
-			"auth": {
-				readonly "userId": string;
-			};
 			"projectScope": {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"session" | "serviceKey", RoutaPrincipal>;
 		};
 		post: {
-			"auth": {
-				readonly "userId": string;
-			};
 			"projectScope": {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"session" | "serviceKey", RoutaPrincipal>;
 		};
 		put: {
-			"auth": {
-				readonly "userId": string;
-			};
 			"projectScope": {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"session" | "serviceKey", RoutaPrincipal>;
 		};
 		patch: {
-			"auth": {
-				readonly "userId": string;
-			};
 			"projectPermissions": {
 				readonly "canRead": boolean;
 				readonly "canWrite": boolean;
@@ -2899,19 +2410,13 @@ export type RoutaRouteCtxByPath = {
 				readonly "canWrite": boolean;
 			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"session" | "serviceKey", RoutaPrincipal>;
 		};
 		delete: {
-			"auth": {
-				readonly "userId": string;
-			};
 			"projectPermissions": {
 				readonly "canRead": boolean;
 				readonly "canWrite": boolean;
@@ -2921,32 +2426,49 @@ export type RoutaRouteCtxByPath = {
 				readonly "canWrite": boolean;
 			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"session" | "serviceKey", RoutaPrincipal>;
 		};
 		head: {
-			"auth": {
-				readonly "userId": string;
-			};
 			"projectScope": {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"session" | "serviceKey", RoutaPrincipal>;
+		};
+	};
+	"/whoami": {
+		get: {
+			"requestId": string;
+			readonly "auth": RoutaAuth;
+		};
+		post: {
+			"requestId": string;
+			readonly "auth": RoutaAuth;
+		};
+		put: {
+			"requestId": string;
+			readonly "auth": RoutaAuth;
+		};
+		patch: {
+			"requestId": string;
+			readonly "auth": RoutaAuth;
+		};
+		delete: {
+			"requestId": string;
+			readonly "auth": RoutaAuth;
+		};
+		head: {
+			"requestId": string;
+			readonly "auth": RoutaAuth;
 		};
 	};
 };
@@ -2954,37 +2476,25 @@ export type RoutaRouteCtxByPath = {
 export type RoutaFactoryCtxByPath = {
 	"/tenants/:tenantId/projects": {
 		routeFile: {
-			"auth": {
-				readonly "userId": string;
-			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"session" | "serviceKey", RoutaPrincipal>;
 			readonly "services": Readonly<RoutaApplicationServices>;
 		};
 		post: {
-			"auth": {
-				readonly "userId": string;
-			};
 			"projectScope": {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
 			"requestId": string;
-			"session": {
-				readonly "authenticated": boolean;
-				readonly "userId"?: string | undefined;
-			};
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
 			};
+			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"session" | "serviceKey", RoutaPrincipal>;
 			readonly "services": Readonly<RoutaApplicationServices & import("../src/services.js").ProjectRouteServices>;
 		};
 	};
@@ -3004,9 +2514,7 @@ export type RoutaCtxByKey = {
 	"admin": {
 		readonly "role": "owner";
 	};
-	"auth": {
-		readonly "userId": string;
-	};
+	"auth": RoutaAuth;
 	"projectList": Array<{
 		readonly "id": string;
 		readonly "tenantId": string;
@@ -3026,10 +2534,6 @@ export type RoutaCtxByKey = {
 		readonly "canWrite": boolean;
 	};
 	"requestId": string;
-	"session": {
-		readonly "authenticated": boolean;
-		readonly "userId"?: string | undefined;
-	};
 	"tenant": {
 		readonly "id": string;
 		readonly "name": string;
@@ -3042,5 +2546,6 @@ declare module "@routa-ts/core" {
 		ctxByKey: RoutaCtxByKey;
 		applicationServices: RoutaApplicationServices;
 		factoryCtxByPath: RoutaFactoryCtxByPath;
+		authentication: { schemes: RoutaAuthenticationScheme; principal: RoutaPrincipal };
 	}
 }
