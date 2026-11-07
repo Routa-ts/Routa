@@ -669,8 +669,8 @@ factory. Call it directly in tests of routes that use no application services.
 Registration throws for an explicitly declared `options` method, a duplicate
 method-and-path pair, a `GET` or `HEAD` contract declaring a body, and duplicate reject
 keys within one chain. With `authentication`, it also throws for an invalid configuration,
-a route outcome named `authenticationFailed` or `authenticationRequired`, and middleware that
-provides `auth`. Without it, a `requireAuth` guard throws.
+a route outcome named `authenticationFailed`, one named `authenticationRequired` behind a
+`requireAuth` guard, and middleware that provides `auth`. Without it, a `requireAuth` guard throws.
 
 ```ts
 type RouteServices = {
