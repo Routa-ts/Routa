@@ -519,9 +519,25 @@ async function authenticate(
 		);
 	}
 
+	// A schema typed through `any`, such as z.any(), can output a value without the base fields.
+	if (!isPrincipal(parsed.data)) {
+		throw new AuthenticationContractError(
+			`The principal schema parsed the principal from scheme "${scheme.name}" to a value without string id and type fields.`,
+		);
+	}
+
 	return {
 		auth: Object.freeze({ status: "authenticated", scheme: scheme.name, principal: parsed.data }),
 	};
+}
+
+/** Whether a value carries the string `id` and `type` every principal has. */
+function isPrincipal(value: unknown): boolean {
+	const { id, type } = (typeof value === "object" && value !== null ? value : {}) as {
+		id?: unknown;
+		type?: unknown;
+	};
+	return typeof id === "string" && typeof type === "string";
 }
 
 /**

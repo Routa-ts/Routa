@@ -146,12 +146,12 @@ Both outcomes are `401` problem documents with a `WWW-Authenticate` challenge:
 
 ### Authenticator Failures
 
-| Authenticator behavior                                                                               | Response                     |
-| ---------------------------------------------------------------------------------------------------- | ---------------------------- |
-| Returns `{ type: "rejected" }`                                                                       | `401` `authenticationFailed` |
-| Throws                                                                                               | `500` `…/problems/internal`  |
-| Returns a principal the principal schema rejects                                                     | `500` `…/problems/internal`  |
-| Returns anything other than `authenticated` or `rejected`, or a result whose `type` throws when read | `500` `…/problems/internal`  |
+| Authenticator behavior                                                                                | Response                     |
+| ----------------------------------------------------------------------------------------------------- | ---------------------------- |
+| Returns `{ type: "rejected" }`                                                                        | `401` `authenticationFailed` |
+| Throws                                                                                                | `500` `…/problems/internal`  |
+| Returns a principal the principal schema rejects, or parses to a value without string `id` and `type` | `500` `…/problems/internal`  |
+| Returns anything other than `authenticated` or `rejected`, or a result whose `type` throws when read  | `500` `…/problems/internal`  |
 
 An invalid result is an application contract violation, not a client error. A thrown error
 stays a server error so an outage at a provider never reads as a bad credential.

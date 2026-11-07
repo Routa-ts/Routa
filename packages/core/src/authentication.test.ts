@@ -380,6 +380,30 @@ describe("authenticator failures", () => {
 		});
 		expect(JSON.stringify(events)).not.toContain("secret-token-value");
 	});
+
+	it("reports a principal schema output without string id and type as a contract violation", async () => {
+		const events: RoutaLogEvent[] = [];
+		const app = createHonoApp([whoami], {
+			logger: createLogger({ sink: (event) => events.push(event) }),
+			authentication: {
+				principal: z.any(),
+				schemes: {
+					userToken: bearer({
+						authenticate: () => ({ type: "authenticated", principal: { name: "Ada" } }),
+					}),
+				},
+			},
+		});
+
+		const response = await app.request("/whoami", { headers: { authorization: "Bearer abc" } });
+
+		expect(response.status).toBe(500);
+		expect(events.find((event) => event.event === "http.error")?.data).toMatchObject({
+			error:
+				'The principal schema parsed the principal from scheme "userToken" to a value without string id and type fields.',
+			name: "AuthenticationContractError",
+		});
+	});
 });
 
 describe("principal and authenticator context", () => {
