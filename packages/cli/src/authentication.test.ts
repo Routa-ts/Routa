@@ -2056,6 +2056,26 @@ export const audit = createMiddleware({ run: ({ next }) => next() });
 		]);
 	});
 
+	it("reads requireAuth imported under the name createMiddleware as a guard", () => {
+		const validation = validateProject(
+			project(
+				guarded(`import { requireAuth as createMiddleware } from "@routa-ts/core";
+
+export const signedIn = createMiddleware({ schemes: ["a"] });`),
+			),
+			{ write: false },
+		);
+
+		expect(validation.diagnostics).toEqual([]);
+		expect(validation.routes[0]!.middleware).toEqual([
+			expect.objectContaining({
+				file: folder,
+				name: "signedIn",
+				authentication: { schemes: ["a"] },
+			}),
+		]);
+	});
+
 	it("leaves folder exports that cannot be guards alone", () => {
 		expect(
 			diagnostics(
