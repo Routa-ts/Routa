@@ -1,7 +1,7 @@
 /**
  * Sends the authentication credential matrix through the generated test application and asserts
- * each response: status, problem type, selected scheme, WWW-Authenticate, and which
- * authenticators ran. Every credential here is a demonstration value, unfit for production.
+ * each response: status, complete body, WWW-Authenticate, Set-Cookie, and which authenticators
+ * ran. Every credential here is a demonstration value, unfit for production.
  *
  * Usage: pnpm auth:exercise
  */
@@ -80,6 +80,14 @@ const problemBodies: Record<string, unknown> = {
 		status: 400,
 	},
 };
+/** The demo tenant's project list, before and after the writer creates "Launch". */
+const acmePortal = {
+	id: "project_1",
+	tenantId: "acme",
+	name: "Tenant acme acme:active Portal",
+	status: "active",
+};
+const acmeProjects = { projects: [acmePortal], selectedFields: ["id", "name", "status"] };
 const allChallenges = 'Bearer realm="full-api", Session, ApiKey, clientCert';
 const tenantChallenges = "Session, ApiKey";
 
@@ -88,6 +96,8 @@ type Case = {
 	method?: string;
 	path: string;
 	headers?: Record<string, string>;
+	/** Send the cookies the previous response set, as a browser would. */
+	replayCookies?: boolean;
 	body?: unknown;
 	status: number;
 	/** The problem `type` the body carries, for framework outcomes. */
@@ -96,7 +106,11 @@ type Case = {
 	scheme?: Scheme;
 	/** The principal GET /whoami reports with `scheme`. */
 	principal?: { type: "account" | "service"; id: string };
+	/** The complete body of any other response; omitted means no body. */
+	response?: unknown;
 	challenge?: string;
+	/** Every Set-Cookie header, in order; omitted means none. */
+	setCookies?: string[];
 	/** How many times each authenticator ran; omitted schemes ran zero times. */
 	ran: Partial<Record<Scheme, number>>;
 };
@@ -200,6 +214,7 @@ const cases: Case[] = [
 		path: "/tenants/acme/projects",
 		headers: credentials.writerSession,
 		status: 200,
+		response: acmeProjects,
 		ran: { session: 1 },
 	},
 	{
@@ -207,6 +222,7 @@ const cases: Case[] = [
 		path: "/tenants/acme/projects",
 		headers: credentials.serviceKey,
 		status: 200,
+		response: acmeProjects,
 		ran: { serviceKey: 1 },
 	},
 	{
@@ -216,7 +232,18 @@ const cases: Case[] = [
 		headers: { ...credentials.writerSession, "content-type": "application/json" },
 		body: { name: "Launch" },
 		status: 201,
+		response: { id: "project_new", tenantId: "acme", name: "Launch", status: "active" },
 		ran: { session: 1 },
+	},
+	{
+		name: "tenant area, write with a service key (application denies it)",
+		method: "POST",
+		path: "/tenants/acme/projects",
+		headers: { ...credentials.serviceKey, "content-type": "application/json" },
+		body: { name: "Launch" },
+		status: 403,
+		response: { message: "Write access required for this tenant" },
+		ran: { serviceKey: 1 },
 	},
 	{
 		name: "tenant area, disallowed Bearer token",
@@ -232,6 +259,7 @@ const cases: Case[] = [
 		path: "/tenants/acme/projects",
 		headers: { ...credentials.writerToken, ...credentials.writerSession },
 		status: 200,
+		response: acmeProjects,
 		ran: { session: 1 },
 	},
 	// Strict mode: two allowed credentials answer 400 before any authenticator runs.
@@ -257,6 +285,15 @@ const cases: Case[] = [
 		path: "/admin/reports",
 		headers: credentials.adminToken,
 		status: 200,
+		response: { actorId: "admin", role: "owner" },
+		ran: { accountToken: 1 },
+	},
+	{
+		name: "reports, valid Bearer token for a non-admin account",
+		path: "/admin/reports",
+		headers: credentials.writerToken,
+		status: 403,
+		response: { message: "Admin access required" },
 		ran: { accountToken: 1 },
 	},
 	{
@@ -282,6 +319,7 @@ const cases: Case[] = [
 		path: "/admin/audit-events",
 		headers: credentials.clientCert,
 		status: 403,
+		response: { message: "Admin access required" },
 		ran: { clientCert: 1 },
 	},
 	// Sign-in runs under automatic authentication. A stale cookie fails before the handler.
@@ -292,6 +330,33 @@ const cases: Case[] = [
 		headers: { "content-type": "application/json" },
 		body: { token: sign("acme:writer") },
 		status: 200,
+		response: { accountId: "acme:writer" },
+		setCookies: [
+			`session=${encodeURIComponent(sign("acme:writer"))}; Path=/; Max-Age=3600; HttpOnly; Secure; SameSite=Lax`,
+			"signed_in=yes; Path=/; Max-Age=3600; Secure; SameSite=Lax",
+		],
+		ran: {},
+	},
+	{
+		name: "public, the session cookie sign-in set",
+		path: "/whoami",
+		replayCookies: true,
+		status: 200,
+		scheme: "session",
+		principal: { type: "account", id: "acme:writer" },
+		ran: { session: 1 },
+	},
+	{
+		name: "sign-in, clean request with an invalid token",
+		method: "POST",
+		path: "/auth/session",
+		headers: { "content-type": "application/json" },
+		body: { token: "not-a-session-token" },
+		status: 401,
+		response: {
+			type: "https://full-api.example.invalid/problems/invalid-sign-in-token",
+			message: "Invalid session token",
+		},
 		ran: {},
 	},
 	{
@@ -308,12 +373,16 @@ const cases: Case[] = [
 ];
 
 let failures = 0;
+let previousSetCookies: string[] = [];
 
 for (const testCase of cases) {
 	calls.clear();
+	const replayed = testCase.replayCookies
+		? { cookie: previousSetCookies.map((header) => header.split(";")[0]).join("; ") }
+		: {};
 	const response = await app.request(testCase.path, {
 		method: testCase.method ?? "GET",
-		headers: testCase.headers ?? {},
+		headers: { ...testCase.headers, ...replayed },
 		...(testCase.body === undefined ? {} : { body: JSON.stringify(testCase.body) }),
 	});
 	const text = await response.text();
@@ -322,25 +391,24 @@ for (const testCase of cases) {
 		: undefined;
 	const ran = Object.fromEntries(calls);
 	const challenge = response.headers.get("www-authenticate") ?? undefined;
+	previousSetCookies = response.headers.getSetCookie();
 
 	try {
 		assert.equal(response.status, testCase.status, "status");
 		assert.equal(challenge, testCase.challenge, "www-authenticate");
+		assert.deepEqual(previousSetCookies, testCase.setCookies ?? [], "set-cookie");
 		assert.deepEqual(ran, testCase.ran, "authenticators run");
-
-		if (testCase.problem) {
-			assert.deepEqual(body, problemBodies[testCase.problem], "problem body");
-		}
-
-		if (testCase.path === "/whoami" && testCase.status === 200) {
-			assert.deepEqual(
-				body,
-				testCase.scheme
-					? { status: "authenticated", scheme: testCase.scheme, principal: testCase.principal }
-					: { status: "anonymous" },
-				"ctx.auth",
-			);
-		}
+		assert.deepEqual(
+			body,
+			testCase.problem
+				? problemBodies[testCase.problem]
+				: testCase.path === "/whoami" && testCase.status === 200
+					? testCase.scheme
+						? { status: "authenticated", scheme: testCase.scheme, principal: testCase.principal }
+						: { status: "anonymous" }
+					: testCase.response,
+			"body",
+		);
 
 		const detail = [
 			testCase.problem?.replace("https://routa-ts.dev/problems/", ""),

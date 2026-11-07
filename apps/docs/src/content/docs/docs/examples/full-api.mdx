@@ -234,29 +234,34 @@ www-authenticate: Bearer realm="full-api"
 
 The full matrix:
 
-| Request                                            | Status | Outcome or result                            | `WWW-Authenticate`                                     | Authenticators run   |
-| -------------------------------------------------- | ------ | -------------------------------------------- | ------------------------------------------------------ | -------------------- |
-| `/whoami`, no credential                           | `200`  | `anonymous`                                  | None                                                   | None                 |
-| `/admin/audit-events`, no credential               | `401`  | `authenticationRequired`                     | `Bearer realm="full-api", Session, ApiKey, clientCert` | None                 |
-| `/tenants/acme/projects`, no credential            | `401`  | `authenticationRequired`                     | `Session, ApiKey`                                      | None                 |
-| `/whoami`, one valid credential of any scheme      | `200`  | `authenticated` with that scheme             | None                                                   | That scheme's, once  |
-| `/whoami`, `Cookie: session=expired`               | `401`  | `authenticationFailed`                       | `Session`                                              | `session`, once      |
-| `/whoami`, a wrong Bearer token                    | `401`  | `authenticationFailed`                       | `Bearer realm="full-api", error="invalid_token"`       | `accountToken`, once |
-| `/whoami`, a wrong API key                         | `401`  | `authenticationFailed`                       | `ApiKey`                                               | `serviceKey`, once   |
-| `/whoami`, `X-Client-Cert: not-a-certificate`      | `401`  | `authenticationFailed`; `extract` rejects it | `clientCert`                                           | None                 |
-| `/whoami`, Bearer token and session                | `400`  | `ambiguousCredentials`                       | None                                                   | None                 |
-| `/tenants/acme/projects`, session or API key       | `200`  | Projects                                     | None                                                   | That scheme's, once  |
-| `/tenants/acme/projects`, Bearer token only        | `401`  | `authenticationFailed`                       | `Session, ApiKey`                                      | None                 |
-| `/tenants/acme/projects`, Bearer token and session | `200`  | Projects; the Bearer token is ignored        | None                                                   | `session`, once      |
-| `/tenants/acme/projects`, session and API key      | `400`  | `ambiguousCredentials`                       | None                                                   | None                 |
-| `/admin/reports`, admin Bearer token               | `200`  | Report                                       | None                                                   | `accountToken`, once |
-| `/admin/reports`, admin session                    | `401`  | `authenticationFailed`                       | `Bearer realm="full-api"`                              | None                 |
-| `/admin/audit-events`, demo certificate            | `403`  | `withAdmin` denies service `reports`         | None                                                   | `clientCert`, once   |
-| `POST /auth/session` with `session=expired`        | `401`  | `authenticationFailed`, before the handler   | `Session`                                              | `session`, once      |
+| Request                                            | Status | Outcome or result                                   | `WWW-Authenticate`                                     | Authenticators run   |
+| -------------------------------------------------- | ------ | --------------------------------------------------- | ------------------------------------------------------ | -------------------- |
+| `/whoami`, no credential                           | `200`  | `anonymous`                                         | None                                                   | None                 |
+| `/admin/audit-events`, no credential               | `401`  | `authenticationRequired`                            | `Bearer realm="full-api", Session, ApiKey, clientCert` | None                 |
+| `/tenants/acme/projects`, no credential            | `401`  | `authenticationRequired`                            | `Session, ApiKey`                                      | None                 |
+| `/whoami`, one valid credential of any scheme      | `200`  | `authenticated` with that scheme                    | None                                                   | That scheme's, once  |
+| `/whoami`, `Cookie: session=expired`               | `401`  | `authenticationFailed`                              | `Session`                                              | `session`, once      |
+| `/whoami`, a wrong Bearer token                    | `401`  | `authenticationFailed`                              | `Bearer realm="full-api", error="invalid_token"`       | `accountToken`, once |
+| `/whoami`, a wrong API key                         | `401`  | `authenticationFailed`                              | `ApiKey`                                               | `serviceKey`, once   |
+| `/whoami`, `X-Client-Cert: not-a-certificate`      | `401`  | `authenticationFailed`; `extract` rejects it        | `clientCert`                                           | None                 |
+| `/whoami`, Bearer token and session                | `400`  | `ambiguousCredentials`                              | None                                                   | None                 |
+| `/tenants/acme/projects`, session or API key       | `200`  | Projects                                            | None                                                   | That scheme's, once  |
+| `/tenants/acme/projects`, Bearer token only        | `401`  | `authenticationFailed`                              | `Session, ApiKey`                                      | None                 |
+| `/tenants/acme/projects`, Bearer token and session | `200`  | Projects; the Bearer token is ignored               | None                                                   | `session`, once      |
+| `POST /tenants/acme/projects`, API key             | `403`  | `withProjectPermissions` denies service `acme:sync` | None                                                   | `serviceKey`, once   |
+| `/tenants/acme/projects`, session and API key      | `400`  | `ambiguousCredentials`                              | None                                                   | None                 |
+| `/admin/reports`, admin Bearer token               | `200`  | Report                                              | None                                                   | `accountToken`, once |
+| `/admin/reports`, writer Bearer token              | `403`  | `withAdmin` denies account `acme:writer`            | None                                                   | `accountToken`, once |
+| `/admin/reports`, admin session                    | `401`  | `authenticationFailed`                              | `Bearer realm="full-api"`                              | None                 |
+| `/admin/audit-events`, demo certificate            | `403`  | `withAdmin` denies service `reports`                | None                                                   | `clientCert`, once   |
+| `POST /auth/session`, valid token                  | `200`  | Signed in; sets `session` and `signed_in`           | None                                                   | None                 |
+| `/whoami`, the `session` cookie sign-in set        | `200`  | `authenticated` with `session`                      | None                                                   | `session`, once      |
+| `POST /auth/session`, invalid token                | `401`  | The route's `rejected` outcome; no cookies          | None                                                   | None                 |
+| `POST /auth/session` with `session=expired`        | `401`  | `authenticationFailed`, before the handler          | `Session`                                              | `session`, once      |
 
 `scripts/exercise-auth.ts` sends every row through the generated `createTestApp`, replacing the
-`identities` service with one that counts calls, and asserts the status, problem type, scheme,
-challenge, and calls. The repository's `vp run verify` runs it:
+`identities` service with one that counts calls, and asserts the status, the complete body,
+the challenge, every `Set-Cookie` header, and the calls. The repository's `vp run verify` runs it:
 
 ```sh
 vp run --filter full-api auth:exercise
@@ -270,7 +275,7 @@ ok   401 tenant area, no credential: authentication-required challenge=Session, 
 ok   400 tenant area, session and API key: ambiguous-credentials ran={}
 …
 ok   401 sign-in with a stale session cookie (known limit): authentication-failed challenge=Session ran={"session":1}
-All 24 authentication cases passed.
+All 28 authentication cases passed.
 ```
 
 With `multipleCredentials: "priority"` instead, the two `400` rows would authenticate the first
