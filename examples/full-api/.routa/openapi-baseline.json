@@ -10,7 +10,16 @@
 				"operationId": "getAdminAuditEvents",
 				"security": [
 					{
-						"sessionCookie": []
+						"accountToken": []
+					},
+					{
+						"session": []
+					},
+					{
+						"serviceKey": []
+					},
+					{
+						"clientCert": []
 					}
 				],
 				"x-routa-authz": [
@@ -37,11 +46,40 @@
 							}
 						}
 					},
+					"400": {
+						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
+										},
+										"title": {
+											"type": "string",
+											"const": "Ambiguous credentials"
+										},
+										"status": {
+											"type": "number",
+											"const": 400
+										}
+									}
+								}
+							}
+						}
+					},
 					"401": {
-						"description": "Unauthorized",
+						"description": "- `authenticationFailed`: Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.\n- `authenticationRequired`: Authentication is required: the request presented no credential.",
 						"headers": {
-							"Set-Cookie": {
-								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+							"www-authenticate": {
+								"required": true,
 								"schema": {
 									"type": "string"
 								}
@@ -50,14 +88,54 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"message"
-									],
-									"properties": {
-										"message": {
-											"type": "string"
+									"oneOf": [
+										{
+											"type": "object",
+											"required": [
+												"type",
+												"title",
+												"status"
+											],
+											"properties": {
+												"type": {
+													"type": "string",
+													"const": "https://routa-ts.dev/problems/authentication-failed"
+												},
+												"title": {
+													"type": "string",
+													"const": "Authentication failed"
+												},
+												"status": {
+													"type": "number",
+													"const": 401
+												}
+											}
+										},
+										{
+											"type": "object",
+											"required": [
+												"type",
+												"title",
+												"status"
+											],
+											"properties": {
+												"type": {
+													"type": "string",
+													"const": "https://routa-ts.dev/problems/authentication-required"
+												},
+												"title": {
+													"type": "string",
+													"const": "Authentication required"
+												},
+												"status": {
+													"type": "number",
+													"const": 401
+												}
+											}
 										}
+									],
+									"discriminator": {
+										"propertyName": "title"
 									}
 								}
 							}
@@ -89,7 +167,7 @@
 				"operationId": "getAdminReports",
 				"security": [
 					{
-						"sessionCookie": []
+						"accountToken": []
 					}
 				],
 				"x-routa-authz": [
@@ -120,10 +198,10 @@
 						}
 					},
 					"401": {
-						"description": "Unauthorized",
+						"description": "- `authenticationFailed`: Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.\n- `authenticationRequired`: Authentication is required: the request presented no credential.",
 						"headers": {
-							"Set-Cookie": {
-								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+							"www-authenticate": {
+								"required": true,
 								"schema": {
 									"type": "string"
 								}
@@ -132,14 +210,54 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"message"
-									],
-									"properties": {
-										"message": {
-											"type": "string"
+									"oneOf": [
+										{
+											"type": "object",
+											"required": [
+												"type",
+												"title",
+												"status"
+											],
+											"properties": {
+												"type": {
+													"type": "string",
+													"const": "https://routa-ts.dev/problems/authentication-failed"
+												},
+												"title": {
+													"type": "string",
+													"const": "Authentication failed"
+												},
+												"status": {
+													"type": "number",
+													"const": 401
+												}
+											}
+										},
+										{
+											"type": "object",
+											"required": [
+												"type",
+												"title",
+												"status"
+											],
+											"properties": {
+												"type": {
+													"type": "string",
+													"const": "https://routa-ts.dev/problems/authentication-required"
+												},
+												"title": {
+													"type": "string",
+													"const": "Authentication required"
+												},
+												"status": {
+													"type": "number",
+													"const": 401
+												}
+											}
 										}
+									],
+									"discriminator": {
+										"propertyName": "title"
 									}
 								}
 							}
@@ -171,7 +289,10 @@
 				"operationId": "getTenantsTenantIdProjectsProjectId",
 				"security": [
 					{
-						"sessionCookie": []
+						"session": []
+					},
+					{
+						"serviceKey": []
 					}
 				],
 				"parameters": [
@@ -203,11 +324,40 @@
 							}
 						}
 					},
+					"400": {
+						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
+										},
+										"title": {
+											"type": "string",
+											"const": "Ambiguous credentials"
+										},
+										"status": {
+											"type": "number",
+											"const": 400
+										}
+									}
+								}
+							}
+						}
+					},
 					"401": {
-						"description": "Unauthorized",
+						"description": "- `authenticationFailed`: Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.\n- `authenticationRequired`: Authentication is required: the request presented no credential.",
 						"headers": {
-							"Set-Cookie": {
-								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+							"www-authenticate": {
+								"required": true,
 								"schema": {
 									"type": "string"
 								}
@@ -216,14 +366,54 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"message"
-									],
-									"properties": {
-										"message": {
-											"type": "string"
+									"oneOf": [
+										{
+											"type": "object",
+											"required": [
+												"type",
+												"title",
+												"status"
+											],
+											"properties": {
+												"type": {
+													"type": "string",
+													"const": "https://routa-ts.dev/problems/authentication-failed"
+												},
+												"title": {
+													"type": "string",
+													"const": "Authentication failed"
+												},
+												"status": {
+													"type": "number",
+													"const": 401
+												}
+											}
+										},
+										{
+											"type": "object",
+											"required": [
+												"type",
+												"title",
+												"status"
+											],
+											"properties": {
+												"type": {
+													"type": "string",
+													"const": "https://routa-ts.dev/problems/authentication-required"
+												},
+												"title": {
+													"type": "string",
+													"const": "Authentication required"
+												},
+												"status": {
+													"type": "number",
+													"const": 401
+												}
+											}
 										}
+									],
+									"discriminator": {
+										"propertyName": "title"
 									}
 								}
 							}
@@ -235,7 +425,10 @@
 				"operationId": "patchTenantsTenantIdProjectsProjectId",
 				"security": [
 					{
-						"sessionCookie": []
+						"session": []
+					},
+					{
+						"serviceKey": []
 					}
 				],
 				"x-routa-authz": [
@@ -280,11 +473,40 @@
 							}
 						}
 					},
+					"400": {
+						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
+										},
+										"title": {
+											"type": "string",
+											"const": "Ambiguous credentials"
+										},
+										"status": {
+											"type": "number",
+											"const": 400
+										}
+									}
+								}
+							}
+						}
+					},
 					"401": {
-						"description": "Unauthorized",
+						"description": "- `authenticationFailed`: Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.\n- `authenticationRequired`: Authentication is required: the request presented no credential.",
 						"headers": {
-							"Set-Cookie": {
-								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+							"www-authenticate": {
+								"required": true,
 								"schema": {
 									"type": "string"
 								}
@@ -293,14 +515,54 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"message"
-									],
-									"properties": {
-										"message": {
-											"type": "string"
+									"oneOf": [
+										{
+											"type": "object",
+											"required": [
+												"type",
+												"title",
+												"status"
+											],
+											"properties": {
+												"type": {
+													"type": "string",
+													"const": "https://routa-ts.dev/problems/authentication-failed"
+												},
+												"title": {
+													"type": "string",
+													"const": "Authentication failed"
+												},
+												"status": {
+													"type": "number",
+													"const": 401
+												}
+											}
+										},
+										{
+											"type": "object",
+											"required": [
+												"type",
+												"title",
+												"status"
+											],
+											"properties": {
+												"type": {
+													"type": "string",
+													"const": "https://routa-ts.dev/problems/authentication-required"
+												},
+												"title": {
+													"type": "string",
+													"const": "Authentication required"
+												},
+												"status": {
+													"type": "number",
+													"const": 401
+												}
+											}
 										}
+									],
+									"discriminator": {
+										"propertyName": "title"
 									}
 								}
 							}
@@ -330,7 +592,10 @@
 				"operationId": "deleteTenantsTenantIdProjectsProjectId",
 				"security": [
 					{
-						"sessionCookie": []
+						"session": []
+					},
+					{
+						"serviceKey": []
 					}
 				],
 				"x-routa-authz": [
@@ -358,11 +623,40 @@
 					"204": {
 						"description": "Success"
 					},
+					"400": {
+						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
+										},
+										"title": {
+											"type": "string",
+											"const": "Ambiguous credentials"
+										},
+										"status": {
+											"type": "number",
+											"const": 400
+										}
+									}
+								}
+							}
+						}
+					},
 					"401": {
-						"description": "Unauthorized",
+						"description": "- `authenticationFailed`: Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.\n- `authenticationRequired`: Authentication is required: the request presented no credential.",
 						"headers": {
-							"Set-Cookie": {
-								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+							"www-authenticate": {
+								"required": true,
 								"schema": {
 									"type": "string"
 								}
@@ -371,14 +665,54 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"message"
-									],
-									"properties": {
-										"message": {
-											"type": "string"
+									"oneOf": [
+										{
+											"type": "object",
+											"required": [
+												"type",
+												"title",
+												"status"
+											],
+											"properties": {
+												"type": {
+													"type": "string",
+													"const": "https://routa-ts.dev/problems/authentication-failed"
+												},
+												"title": {
+													"type": "string",
+													"const": "Authentication failed"
+												},
+												"status": {
+													"type": "number",
+													"const": 401
+												}
+											}
+										},
+										{
+											"type": "object",
+											"required": [
+												"type",
+												"title",
+												"status"
+											],
+											"properties": {
+												"type": {
+													"type": "string",
+													"const": "https://routa-ts.dev/problems/authentication-required"
+												},
+												"title": {
+													"type": "string",
+													"const": "Authentication required"
+												},
+												"status": {
+													"type": "number",
+													"const": 401
+												}
+											}
 										}
+									],
+									"discriminator": {
+										"propertyName": "title"
 									}
 								}
 							}
@@ -410,7 +744,10 @@
 				"operationId": "getTenantsTenantIdProjects",
 				"security": [
 					{
-						"sessionCookie": []
+						"session": []
+					},
+					{
+						"serviceKey": []
 					}
 				],
 				"parameters": [
@@ -470,11 +807,40 @@
 							}
 						}
 					},
+					"400": {
+						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
+										},
+										"title": {
+											"type": "string",
+											"const": "Ambiguous credentials"
+										},
+										"status": {
+											"type": "number",
+											"const": 400
+										}
+									}
+								}
+							}
+						}
+					},
 					"401": {
-						"description": "Unauthorized",
+						"description": "- `authenticationFailed`: Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.\n- `authenticationRequired`: Authentication is required: the request presented no credential.",
 						"headers": {
-							"Set-Cookie": {
-								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+							"www-authenticate": {
+								"required": true,
 								"schema": {
 									"type": "string"
 								}
@@ -483,14 +849,54 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"message"
-									],
-									"properties": {
-										"message": {
-											"type": "string"
+									"oneOf": [
+										{
+											"type": "object",
+											"required": [
+												"type",
+												"title",
+												"status"
+											],
+											"properties": {
+												"type": {
+													"type": "string",
+													"const": "https://routa-ts.dev/problems/authentication-failed"
+												},
+												"title": {
+													"type": "string",
+													"const": "Authentication failed"
+												},
+												"status": {
+													"type": "number",
+													"const": 401
+												}
+											}
+										},
+										{
+											"type": "object",
+											"required": [
+												"type",
+												"title",
+												"status"
+											],
+											"properties": {
+												"type": {
+													"type": "string",
+													"const": "https://routa-ts.dev/problems/authentication-required"
+												},
+												"title": {
+													"type": "string",
+													"const": "Authentication required"
+												},
+												"status": {
+													"type": "number",
+													"const": 401
+												}
+											}
 										}
+									],
+									"discriminator": {
+										"propertyName": "title"
 									}
 								}
 							}
@@ -502,7 +908,10 @@
 				"operationId": "postTenantsTenantIdProjects",
 				"security": [
 					{
-						"sessionCookie": []
+						"session": []
+					},
+					{
+						"serviceKey": []
 					}
 				],
 				"x-routa-authz": [
@@ -539,11 +948,40 @@
 							}
 						}
 					},
+					"400": {
+						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
+										},
+										"title": {
+											"type": "string",
+											"const": "Ambiguous credentials"
+										},
+										"status": {
+											"type": "number",
+											"const": 400
+										}
+									}
+								}
+							}
+						}
+					},
 					"401": {
-						"description": "Unauthorized",
+						"description": "- `authenticationFailed`: Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.\n- `authenticationRequired`: Authentication is required: the request presented no credential.",
 						"headers": {
-							"Set-Cookie": {
-								"description": "Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: \"session\" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); \"signed_in\" (Secure, SameSite=Lax, Path=/, Max-Age=3600).",
+							"www-authenticate": {
+								"required": true,
 								"schema": {
 									"type": "string"
 								}
@@ -552,14 +990,54 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"type": "object",
-									"required": [
-										"message"
-									],
-									"properties": {
-										"message": {
-											"type": "string"
+									"oneOf": [
+										{
+											"type": "object",
+											"required": [
+												"type",
+												"title",
+												"status"
+											],
+											"properties": {
+												"type": {
+													"type": "string",
+													"const": "https://routa-ts.dev/problems/authentication-failed"
+												},
+												"title": {
+													"type": "string",
+													"const": "Authentication failed"
+												},
+												"status": {
+													"type": "number",
+													"const": 401
+												}
+											}
+										},
+										{
+											"type": "object",
+											"required": [
+												"type",
+												"title",
+												"status"
+											],
+											"properties": {
+												"type": {
+													"type": "string",
+													"const": "https://routa-ts.dev/problems/authentication-required"
+												},
+												"title": {
+													"type": "string",
+													"const": "Authentication required"
+												},
+												"status": {
+													"type": "number",
+													"const": 401
+												}
+											}
 										}
+									],
+									"discriminator": {
+										"propertyName": "title"
 									}
 								}
 							}
@@ -587,33 +1065,23 @@
 			}
 		},
 		"/auth/session": {
-			"get": {
-				"operationId": "getAuthSession",
-				"parameters": [
-					{
-						"name": "session",
-						"in": "cookie",
-						"required": false,
-						"schema": {
-							"type": "string"
-						}
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Success",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/Session"
-								}
-							}
-						}
-					}
-				}
-			},
 			"post": {
 				"operationId": "postAuthSession",
+				"security": [
+					{},
+					{
+						"accountToken": []
+					},
+					{
+						"session": []
+					},
+					{
+						"serviceKey": []
+					},
+					{
+						"clientCert": []
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -639,17 +1107,85 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "#/components/schemas/Session"
+									"$ref": "#/components/schemas/SignedIn"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
+										},
+										"title": {
+											"type": "string",
+											"const": "Ambiguous credentials"
+										},
+										"status": {
+											"type": "number",
+											"const": 400
+										}
+									}
 								}
 							}
 						}
 					},
 					"401": {
-						"description": "The token is not a valid demo session token.",
+						"description": "- `authenticationFailed`: Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.\n- `rejected`: The token is not a valid demo session token.",
+						"headers": {
+							"www-authenticate": {
+								"schema": {
+									"type": "string"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "#/components/schemas/SignInRejected"
+									"oneOf": [
+										{
+											"type": "object",
+											"required": [
+												"type",
+												"title",
+												"status"
+											],
+											"properties": {
+												"type": {
+													"type": "string",
+													"const": "https://routa-ts.dev/problems/authentication-failed"
+												},
+												"title": {
+													"type": "string",
+													"const": "Authentication failed"
+												},
+												"status": {
+													"type": "number",
+													"const": 401
+												}
+											}
+										},
+										{
+											"$ref": "#/components/schemas/SignInRejected"
+										}
+									],
+									"discriminator": {
+										"propertyName": "type",
+										"mapping": {
+											"https://full-api.example.invalid/problems/invalid-sign-in-token": "#/components/schemas/SignInRejected"
+										}
+									}
 								}
 							}
 						}
@@ -658,6 +1194,21 @@
 			},
 			"delete": {
 				"operationId": "deleteAuthSession",
+				"security": [
+					{},
+					{
+						"accountToken": []
+					},
+					{
+						"session": []
+					},
+					{
+						"serviceKey": []
+					},
+					{
+						"clientCert": []
+					}
+				],
 				"responses": {
 					"204": {
 						"description": "The session cookies are cleared.",
@@ -670,6 +1221,72 @@
 								}
 							}
 						}
+					},
+					"400": {
+						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
+										},
+										"title": {
+											"type": "string",
+											"const": "Ambiguous credentials"
+										},
+										"status": {
+											"type": "number",
+											"const": 400
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.",
+						"headers": {
+							"www-authenticate": {
+								"required": true,
+								"schema": {
+									"type": "string"
+								}
+							}
+						},
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/authentication-failed"
+										},
+										"title": {
+											"type": "string",
+											"const": "Authentication failed"
+										},
+										"status": {
+											"type": "number",
+											"const": 401
+										}
+									}
+								}
+							}
+						}
 					}
 				}
 			}
@@ -677,6 +1294,21 @@
 		"/demo": {
 			"get": {
 				"operationId": "getDemo",
+				"security": [
+					{},
+					{
+						"accountToken": []
+					},
+					{
+						"session": []
+					},
+					{
+						"serviceKey": []
+					},
+					{
+						"clientCert": []
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Success",
@@ -700,6 +1332,72 @@
 								}
 							}
 						}
+					},
+					"400": {
+						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
+										},
+										"title": {
+											"type": "string",
+											"const": "Ambiguous credentials"
+										},
+										"status": {
+											"type": "number",
+											"const": 400
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.",
+						"headers": {
+							"www-authenticate": {
+								"required": true,
+								"schema": {
+									"type": "string"
+								}
+							}
+						},
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/authentication-failed"
+										},
+										"title": {
+											"type": "string",
+											"const": "Authentication failed"
+										},
+										"status": {
+											"type": "number",
+											"const": 401
+										}
+									}
+								}
+							}
+						}
 					}
 				}
 			}
@@ -707,6 +1405,21 @@
 		"/legacy/{id}": {
 			"get": {
 				"operationId": "getLegacyId",
+				"security": [
+					{},
+					{
+						"accountToken": []
+					},
+					{
+						"session": []
+					},
+					{
+						"serviceKey": []
+					},
+					{
+						"clientCert": []
+					}
+				],
 				"deprecated": true,
 				"x-routa-sunset": "2027-06-01",
 				"x-routa-replacement": "https://api.example.invalid/migrations/legacy-projects",
@@ -743,6 +1456,72 @@
 								}
 							}
 						}
+					},
+					"400": {
+						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
+										},
+										"title": {
+											"type": "string",
+											"const": "Ambiguous credentials"
+										},
+										"status": {
+											"type": "number",
+											"const": 400
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.",
+						"headers": {
+							"www-authenticate": {
+								"required": true,
+								"schema": {
+									"type": "string"
+								}
+							}
+						},
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/authentication-failed"
+										},
+										"title": {
+											"type": "string",
+											"const": "Authentication failed"
+										},
+										"status": {
+											"type": "number",
+											"const": 401
+										}
+									}
+								}
+							}
+						}
 					}
 				}
 			}
@@ -750,6 +1529,21 @@
 		"/legacy": {
 			"get": {
 				"operationId": "getLegacy",
+				"security": [
+					{},
+					{
+						"accountToken": []
+					},
+					{
+						"session": []
+					},
+					{
+						"serviceKey": []
+					},
+					{
+						"clientCert": []
+					}
+				],
 				"deprecated": true,
 				"x-routa-sunset": "2027-01-01",
 				"x-routa-replacement": "/status",
@@ -771,6 +1565,72 @@
 								}
 							}
 						}
+					},
+					"400": {
+						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
+										},
+										"title": {
+											"type": "string",
+											"const": "Ambiguous credentials"
+										},
+										"status": {
+											"type": "number",
+											"const": 400
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.",
+						"headers": {
+							"www-authenticate": {
+								"required": true,
+								"schema": {
+									"type": "string"
+								}
+							}
+						},
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/authentication-failed"
+										},
+										"title": {
+											"type": "string",
+											"const": "Authentication failed"
+										},
+										"status": {
+											"type": "number",
+											"const": 401
+										}
+									}
+								}
+							}
+						}
 					}
 				}
 			}
@@ -778,6 +1638,21 @@
 		"/logger-showcase": {
 			"post": {
 				"operationId": "postLoggerShowcase",
+				"security": [
+					{},
+					{
+						"accountToken": []
+					},
+					{
+						"session": []
+					},
+					{
+						"serviceKey": []
+					},
+					{
+						"clientCert": []
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -799,6 +1674,72 @@
 							}
 						}
 					},
+					"400": {
+						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
+										},
+										"title": {
+											"type": "string",
+											"const": "Ambiguous credentials"
+										},
+										"status": {
+											"type": "number",
+											"const": 400
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.",
+						"headers": {
+							"www-authenticate": {
+								"required": true,
+								"schema": {
+									"type": "string"
+								}
+							}
+						},
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/authentication-failed"
+										},
+										"title": {
+											"type": "string",
+											"const": "Authentication failed"
+										},
+										"status": {
+											"type": "number",
+											"const": 401
+										}
+									}
+								}
+							}
+						}
+					},
 					"403": {
 						"description": "Disabled",
 						"content": {
@@ -815,6 +1756,21 @@
 		"/showcase/{itemId}": {
 			"get": {
 				"operationId": "getShowcaseItemId",
+				"security": [
+					{},
+					{
+						"accountToken": []
+					},
+					{
+						"session": []
+					},
+					{
+						"serviceKey": []
+					},
+					{
+						"clientCert": []
+					}
+				],
 				"parameters": [
 					{
 						"name": "itemId",
@@ -844,6 +1800,72 @@
 							}
 						}
 					},
+					"400": {
+						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
+										},
+										"title": {
+											"type": "string",
+											"const": "Ambiguous credentials"
+										},
+										"status": {
+											"type": "number",
+											"const": 400
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.",
+						"headers": {
+							"www-authenticate": {
+								"required": true,
+								"schema": {
+									"type": "string"
+								}
+							}
+						},
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/authentication-failed"
+										},
+										"title": {
+											"type": "string",
+											"const": "Authentication failed"
+										},
+										"status": {
+											"type": "number",
+											"const": 401
+										}
+									}
+								}
+							}
+						}
+					},
 					"404": {
 						"description": "Not found",
 						"content": {
@@ -858,6 +1880,21 @@
 			},
 			"put": {
 				"operationId": "putShowcaseItemId",
+				"security": [
+					{},
+					{
+						"accountToken": []
+					},
+					{
+						"session": []
+					},
+					{
+						"serviceKey": []
+					},
+					{
+						"clientCert": []
+					}
+				],
 				"parameters": [
 					{
 						"name": "itemId",
@@ -888,11 +1925,92 @@
 								}
 							}
 						}
+					},
+					"400": {
+						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
+										},
+										"title": {
+											"type": "string",
+											"const": "Ambiguous credentials"
+										},
+										"status": {
+											"type": "number",
+											"const": 400
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.",
+						"headers": {
+							"www-authenticate": {
+								"required": true,
+								"schema": {
+									"type": "string"
+								}
+							}
+						},
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/authentication-failed"
+										},
+										"title": {
+											"type": "string",
+											"const": "Authentication failed"
+										},
+										"status": {
+											"type": "number",
+											"const": 401
+										}
+									}
+								}
+							}
+						}
 					}
 				}
 			},
 			"head": {
 				"operationId": "headShowcaseItemId",
+				"security": [
+					{},
+					{
+						"accountToken": []
+					},
+					{
+						"session": []
+					},
+					{
+						"serviceKey": []
+					},
+					{
+						"clientCert": []
+					}
+				],
 				"parameters": [
 					{
 						"name": "itemId",
@@ -906,6 +2024,20 @@
 				"responses": {
 					"204": {
 						"description": "Success"
+					},
+					"400": {
+						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts."
+					},
+					"401": {
+						"description": "Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.",
+						"headers": {
+							"www-authenticate": {
+								"required": true,
+								"schema": {
+									"type": "string"
+								}
+							}
+						}
 					}
 				}
 			}
@@ -913,6 +2045,21 @@
 		"/status": {
 			"get": {
 				"operationId": "getStatus",
+				"security": [
+					{},
+					{
+						"accountToken": []
+					},
+					{
+						"session": []
+					},
+					{
+						"serviceKey": []
+					},
+					{
+						"clientCert": []
+					}
+				],
 				"responses": {
 					"200": {
 						"description": "Success",
@@ -920,6 +2067,170 @@
 							"application/json": {
 								"schema": {
 									"$ref": "#/components/schemas/Status"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
+										},
+										"title": {
+											"type": "string",
+											"const": "Ambiguous credentials"
+										},
+										"status": {
+											"type": "number",
+											"const": 400
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.",
+						"headers": {
+							"www-authenticate": {
+								"required": true,
+								"schema": {
+									"type": "string"
+								}
+							}
+						},
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/authentication-failed"
+										},
+										"title": {
+											"type": "string",
+											"const": "Authentication failed"
+										},
+										"status": {
+											"type": "number",
+											"const": 401
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/whoami": {
+			"get": {
+				"operationId": "getWhoami",
+				"security": [
+					{},
+					{
+						"accountToken": []
+					},
+					{
+						"session": []
+					},
+					{
+						"serviceKey": []
+					},
+					{
+						"clientCert": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Success",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/WhoAmIResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/ambiguous-credentials"
+										},
+										"title": {
+											"type": "string",
+											"const": "Ambiguous credentials"
+										},
+										"status": {
+											"type": "number",
+											"const": 400
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.",
+						"headers": {
+							"www-authenticate": {
+								"required": true,
+								"schema": {
+									"type": "string"
+								}
+							}
+						},
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"required": [
+										"type",
+										"title",
+										"status"
+									],
+									"properties": {
+										"type": {
+											"type": "string",
+											"const": "https://routa-ts.dev/problems/authentication-failed"
+										},
+										"title": {
+											"type": "string",
+											"const": "Authentication failed"
+										},
+										"status": {
+											"type": "number",
+											"const": 401
+										}
+									}
 								}
 							}
 						}
@@ -1135,20 +2446,6 @@
 					}
 				}
 			},
-			"Session": {
-				"type": "object",
-				"required": [
-					"authenticated"
-				],
-				"properties": {
-					"authenticated": {
-						"type": "boolean"
-					},
-					"userId": {
-						"type": "string"
-					}
-				}
-			},
 			"ShowcaseItem": {
 				"type": "object",
 				"required": [
@@ -1216,10 +2513,26 @@
 			"SignInRejected": {
 				"type": "object",
 				"required": [
+					"type",
 					"message"
 				],
 				"properties": {
+					"type": {
+						"type": "string",
+						"const": "https://full-api.example.invalid/problems/invalid-sign-in-token"
+					},
 					"message": {
+						"type": "string"
+					}
+				}
+			},
+			"SignedIn": {
+				"type": "object",
+				"required": [
+					"accountId"
+				],
+				"properties": {
+					"accountId": {
 						"type": "string"
 					}
 				}
@@ -1253,6 +2566,87 @@
 						]
 					}
 				}
+			},
+			"WhoAmIResponse": {
+				"oneOf": [
+					{
+						"type": "object",
+						"required": [
+							"status"
+						],
+						"properties": {
+							"status": {
+								"type": "string",
+								"const": "anonymous"
+							}
+						}
+					},
+					{
+						"type": "object",
+						"required": [
+							"status",
+							"scheme",
+							"principal"
+						],
+						"properties": {
+							"status": {
+								"type": "string",
+								"const": "authenticated"
+							},
+							"scheme": {
+								"type": "string",
+								"enum": [
+									"session",
+									"accountToken",
+									"serviceKey",
+									"clientCert"
+								]
+							},
+							"principal": {
+								"type": "object",
+								"required": [
+									"type",
+									"id"
+								],
+								"properties": {
+									"type": {
+										"type": "string",
+										"enum": [
+											"account",
+											"service"
+										]
+									},
+									"id": {
+										"type": "string"
+									}
+								}
+							}
+						}
+					}
+				],
+				"discriminator": {
+					"propertyName": "status"
+				}
+			}
+		},
+		"securitySchemes": {
+			"accountToken": {
+				"type": "http",
+				"scheme": "bearer"
+			},
+			"session": {
+				"type": "apiKey",
+				"in": "cookie",
+				"name": "session"
+			},
+			"serviceKey": {
+				"type": "apiKey",
+				"in": "header",
+				"name": "x-api-key"
+			},
+			"clientCert": {
+				"type": "mutualTLS",
+				"description": "A client certificate the TLS proxy verified."
 			}
 		}
 	}

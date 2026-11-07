@@ -1,7 +1,7 @@
 import { createCookie } from "@routa-ts/core";
 import { z } from "zod";
 
-/** The signed demo session token that `withSession` verifies. Browser scripts cannot read it. */
+/** The signed demo session token the `session` credential scheme reads. Browser scripts cannot read it. */
 export const sessionCookie = createCookie({
 	name: "session",
 	schema: z.string(),
