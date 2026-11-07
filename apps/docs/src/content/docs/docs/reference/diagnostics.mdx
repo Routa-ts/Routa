@@ -116,8 +116,9 @@ returns one that is not in its own `rejects`. The message lists the valid names.
 
 Two outcomes that can end the same operation share a name: a route outcome and a middleware
 reject, or the rejects of two middleware in one chain. With `authentication` configured, Routa
-owns `authenticationFailed` on every operation and `authenticationRequired` behind
-`requireAuth`, so a route outcome or reject cannot use those names. The handler result names
+owns `authenticationFailed` on every operation, `authenticationRequired` behind
+`requireAuth`, and, with `multipleCredentials: "reject"`, `ambiguousCredentials` on operations
+that accept two or more schemes, so a route outcome or reject cannot use those names. The handler result names
 its outcome, so the names must be distinct.
 
 **Fix:** rename one of them. A route does not need to redeclare a reject its middleware
@@ -319,15 +320,21 @@ as an application service instead.
 ### `ROUTA_AUTH_CONFIG_UNRESOLVED`
 
 `routa check` cannot read the `authentication` config in `src/routa.ts`, its `schemes`, a
-scheme name, or a scheme's descriptor. Examples: `authentication: makeAuthentication()`, a
-spread or computed key inside `authentication`, `schemes`, or a `bearer({ ... })` call's
-options, or a scheme whose value is not a `bearer({ ... })` call imported from
-`@routa-ts/core`. Scheme names and descriptors are
-contract facts, so Routa reads them without running `src/routa.ts`.
+scheme name, a scheme's descriptor, an API-key `header` or session `cookie`, `priority`, or
+`multipleCredentials`. Examples: `authentication: makeAuthentication()`, a spread or computed
+key inside `authentication`, `schemes`, or a descriptor call's options, a scheme whose value is
+not a `bearer({ ... })`, `apiKey({ ... })`, or `sessionCookie({ ... })` call imported from
+`@routa-ts/core`, `header: process.env.HEADER`, or `priority: order`. These are contract facts,
+so Routa reads them without running `src/routa.ts`.
+
+```text
+ROUTA_AUTH_CONFIG_UNRESOLVED: Authentication scheme "serviceKey" declares a header that is not a string literal.
+ROUTA_AUTH_CONFIG_UNRESOLVED: The authentication priority in src/routa.ts is not a literal list of scheme names.
+```
 
 **Fix:** write `authentication` as an object literal, or a `const` object literal it can
-follow, with a plain key for each scheme and a `bearer({ ... })` call, or a `const` bound to
-one, as its value.
+follow, with a plain key for each scheme and a descriptor call, or a `const` bound to one, as
+its value. Write `header`, `cookie`, `priority`, and `multipleCredentials` as literals.
 
 ### `ROUTA_AUTH_SPREAD_UNRESOLVED`
 
@@ -343,19 +350,39 @@ spread a `const` object literal Routa can follow.
 
 ### `ROUTA_AUTH_CONFIG_INVALID`
 
-The `authentication` config has no `principal`, declares no schemes, or names a scheme that
-does not start with a letter or has a character other than letters, digits, `.`, `-`, and `_`.
-A scheme name is the OpenAPI security scheme key, and a leading letter keeps scheme order the
-same in source and at runtime.
+The `authentication` config has no `principal`, declares no schemes, names a scheme that does
+not start with a letter or has a character other than letters, digits, `.`, `-`, and `_`,
+declares an API-key `header` or session `cookie` that is not an RFC 9110 token, or sets
+`multipleCredentials` to a value other than `"priority"` or `"reject"`. A scheme name is the
+OpenAPI security scheme key, and a leading letter keeps scheme order the same in source and at
+runtime.
 
-**Fix:** add a principal schema, declare at least one scheme, or rename the scheme.
+```text
+ROUTA_AUTH_CONFIG_INVALID: Authentication scheme "serviceKey" declares header "x api key", which is not an HTTP header name.
+ROUTA_AUTH_CONFIG_INVALID: The authentication multipleCredentials in src/routa.ts is "first". Use "priority" or "reject".
+```
+
+**Fix:** add a principal schema, declare at least one scheme, rename the scheme, use a header
+or cookie name of letters, digits, and ``!#$%&'*+-.^_`|~``, or set a supported
+`multipleCredentials` mode.
 
 ### `ROUTA_AUTH_TRANSPORT_OVERLAP`
 
-Two schemes read the same credential, such as two `bearer()` schemes that both read
-`Authorization: Bearer`. Routa could not tell which authenticator owns a token.
+Two schemes read the same credential, so Routa could not tell which authenticator owns it:
 
-**Fix:** keep one Bearer scheme and accept every token format in its authenticator.
+- two `bearer()` schemes, which both read `Authorization: Bearer`;
+- two `apiKey()` schemes whose headers match ignoring case, such as `X-Api-Key` and `x-api-key`;
+- two `sessionCookie()` schemes with the same cookie name;
+- an `apiKey()` header named `Authorization`, which carries Authorization-scheme credentials
+  such as Bearer, or `Cookie`, which carries session cookies.
+
+```text
+ROUTA_AUTH_TRANSPORT_OVERLAP: Authentication schemes "partnerKey" and "serviceKey" both read the x-api-key header.
+```
+
+**Fix:** keep one scheme per transport and accept every token, key, or session format in its
+authenticator. Read an API key from its own header, and use `bearer()` or `sessionCookie()` for
+the `Authorization` and `Cookie` transports.
 
 ### `ROUTA_AUTH_CHALLENGE_INVALID`
 
@@ -380,17 +407,35 @@ could ever pass the guard.
 
 ### `ROUTA_AUTH_SCHEME_UNKNOWN`
 
-`requireAuth({ schemes: [...] })` lists a name `src/routa.ts` does not declare. The message
-lists the declared schemes.
+`requireAuth({ schemes: [...] })` or `authentication.priority` lists a name `src/routa.ts`
+does not declare. For `requireAuth`, the message lists the declared schemes.
 
-**Fix:** use a declared scheme name. TypeScript reports the same mistake once
-`.routa/routes.gen.ts` is current.
+**Fix:** use a declared scheme name. TypeScript reports the same mistake in `priority`, and in
+`requireAuth` once `.routa/routes.gen.ts` is current.
+
+### `ROUTA_AUTH_PRIORITY_INVALID`
+
+`authentication.priority` lists a scheme more than once, or omits a declared scheme. Priority
+orders every scheme, so Routa never guesses where an unlisted one belongs.
+
+```text
+ROUTA_AUTH_PRIORITY_INVALID: The authentication priority in src/routa.ts omits "serviceKey".
+```
+
+**Fix:** list every declared scheme exactly once, or omit `priority` to use declaration order.
 
 ### `ROUTA_AUTH_REQUIREMENT_EMPTY`
 
-`requireAuth({ schemes: [] })` allows no schemes, so it would reject every request.
+`requireAuth({ schemes: [] })` allows no schemes, so it would reject every request. The same
+code reports an operation whose `requireAuth` guards, such as a route-level and a method-level
+one, allow no scheme in common.
 
-**Fix:** list at least one scheme, or call `requireAuth()` to accept any configured scheme.
+```text
+ROUTA_AUTH_REQUIREMENT_EMPTY: requireAuth() guards on GET /projects allow no scheme in common, so no request could pass them.
+```
+
+**Fix:** list at least one scheme, call `requireAuth()` to accept any configured scheme, or
+make the guards on one operation share a scheme.
 
 ### `ROUTA_AUTH_REQUIREMENT_UNRESOLVED`
 
@@ -598,8 +643,9 @@ One `components.schemas` key would hold two different schemas. This happens in t
   a query parameter and a JSON body. A schema such as `z.stringbool()` has a different shape
   in each, so it cannot be one component.
 - With `authentication` configured, one of your schemas claims a key that holds a Routa
-  problem body: `RoutaAuthenticationFailed`, or `RoutaAuthenticationRequired` when an
-  operation is behind `requireAuth`. See [Authentication](/docs/concepts/openapi/#authentication).
+  problem body: `RoutaAuthenticationFailed`, `RoutaAuthenticationRequired` when an
+  operation is behind `requireAuth`, or `RoutaAmbiguousCredentials` when strict mode can
+  return it. See [Authentication](/docs/concepts/openapi/#authentication).
 
 **Fix:** for two declarations, reuse one declaration, or give each a distinct
 `.meta({ id })`. For one declaration with different projections, write separate declarations

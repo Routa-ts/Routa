@@ -10,8 +10,11 @@ import {
 	unwrapExpression,
 } from "./ast.js";
 import {
+	ambiguousCredentialsDescription,
+	type AuthenticationMetadata,
 	authenticationFailedDescription,
 	authenticationRequiredDescription,
+	rejectsAmbiguousCredentials,
 } from "./authentication.js";
 import { compareText } from "./compare-text.js";
 import {
@@ -114,8 +117,8 @@ export type ProjectedHeader = {
 export type ContractSchemaOptions = {
 	/** Whether `src/routa.ts` turns lifecycle headers on. */
 	lifecycleHeaders?: boolean;
-	/** Whether `src/routa.ts` configures authentication, so every operation can fail it. */
-	authentication?: boolean;
+	/** The authentication `src/routa.ts` configures, so every operation can fail it. */
+	authentication?: AuthenticationMetadata;
 };
 
 /**
@@ -164,7 +167,7 @@ export function projectContractSchemas(
 				contract?.lifecycle ?? { owned: new Set() },
 			);
 			const authentication = options.authentication
-				? projector.routaOutcomes(authenticationOutcomes(chain, method))
+				? projector.routaOutcomes(authenticationOutcomes(chain, method, options.authentication))
 				: [];
 			methods[method] = {
 				input: contract?.input ?? {},
@@ -188,18 +191,26 @@ export function projectContractSchemas(
 }
 
 /**
- * The authentication outcomes Routa owns on an operation: `authenticationFailed` everywhere, and
- * `authenticationRequired` behind a `requireAuth` guard. Each has a stable problem body and a
- * required `WWW-Authenticate` challenge. HEAD responses have no body, so a HEAD operation
- * documents them as one bodyless response.
+ * The authentication outcomes Routa owns on an operation: `authenticationFailed` everywhere,
+ * `authenticationRequired` behind a `requireAuth` guard, and `ambiguousCredentials` in strict
+ * multiple-credential mode where more than one scheme is accepted. Each has a stable problem body;
+ * the `401` outcomes require a `WWW-Authenticate` challenge. HEAD responses have no body, so a
+ * HEAD operation documents each status as one bodyless response.
  */
 function authenticationOutcomes(
 	chain: readonly MiddlewareMetadata[],
 	method: string,
+	authentication: AuthenticationMetadata,
 ): ProjectedOutcome[] {
-	const outcome = (name: string, problem: string, title: string, description: string) => ({
+	const outcome = (
+		name: string,
+		status: number,
+		problem: string,
+		title: string,
+		description: string,
+	): ProjectedOutcome => ({
 		name,
-		status: 401,
+		status,
 		producer: "Routa authentication",
 		label: `"${name}"`,
 		description,
@@ -209,14 +220,17 @@ function authenticationOutcomes(
 			properties: {
 				type: { type: "string", const: `https://routa-ts.dev/problems/${problem}` },
 				title: { type: "string", const: title },
-				status: { type: "number", const: 401 },
+				status: { type: "number", const: status },
 			},
 		},
-		headers: { "www-authenticate": { required: true, schema: { type: "string" } } },
+		...(status === 401
+			? { headers: { "www-authenticate": { required: true, schema: { type: "string" } } } }
+			: {}),
 	});
 	const outcomes: ProjectedOutcome[] = [
 		outcome(
 			"authenticationFailed",
+			401,
 			"authentication-failed",
 			"Authentication failed",
 			authenticationFailedDescription,
@@ -225,9 +239,21 @@ function authenticationOutcomes(
 			? [
 					outcome(
 						"authenticationRequired",
+						401,
 						"authentication-required",
 						"Authentication required",
 						authenticationRequiredDescription,
+					),
+				]
+			: []),
+		...(rejectsAmbiguousCredentials(chain, authentication)
+			? [
+					outcome(
+						"ambiguousCredentials",
+						400,
+						"ambiguous-credentials",
+						"Ambiguous credentials",
+						ambiguousCredentialsDescription,
 					),
 				]
 			: []),
@@ -237,14 +263,17 @@ function authenticationOutcomes(
 		return outcomes;
 	}
 
-	const { schema: _schema, ...last } = outcomes.at(-1)!;
-	return [
-		{
-			...last,
-			names: outcomes.map((item) => item.name),
-			description: outcomes.map((item) => `- \`${item.name}\`: ${item.description}`).join("\n"),
-		},
-	];
+	return [...new Set(outcomes.map((item) => item.status))].map((status) => {
+		const group = outcomes.filter((item) => item.status === status);
+		const { schema: _schema, ...last } = group.at(-1)!;
+		return group.length === 1
+			? last
+			: {
+					...last,
+					names: group.map((item) => item.name),
+					description: group.map((item) => `- \`${item.name}\`: ${item.description}`).join("\n"),
+				};
+	});
 }
 
 type SchemaIo = "input" | "output";

@@ -12,12 +12,12 @@ than bundled.
 
 <PackageManagers type="add" args="@routa-ts/core hono zod" />
 
-| Entry point                    | Contents                                                                                                                                                         |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@routa-ts/core`               | `createRouta`, `defineServices`, `createRoute`, `createRouteRoot`, `createRouteRootFactory`, `createMiddleware`, `bearer`, `requireAuth`, and the contract types |
-| `@routa-ts/core/hono`          | `createHonoApp`, `createApplication`, `isBodylessStatus`                                                                                                         |
-| `@routa-ts/core/logger`        | `createLogger` and the logger types                                                                                                                              |
-| `@routa-ts/core/query/helpers` | `Sort`, `Fields`                                                                                                                                                 |
+| Entry point                    | Contents                                                                                                                                                                                    |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@routa-ts/core`               | `createRouta`, `defineServices`, `createRoute`, `createRouteRoot`, `createRouteRootFactory`, `createMiddleware`, `bearer`, `apiKey`, `sessionCookie`, `requireAuth`, and the contract types |
+| `@routa-ts/core/hono`          | `createHonoApp`, `createApplication`, `isBodylessStatus`                                                                                                                                    |
+| `@routa-ts/core/logger`        | `createLogger` and the logger types                                                                                                                                                         |
+| `@routa-ts/core/query/helpers` | `Sort`, `Fields`                                                                                                                                                                            |
 
 ## `createRouta`
 
@@ -41,7 +41,8 @@ the default export of `src/routa.ts`, which the runtime imports at boot.
 | `authentication`     | `AuthenticationConfig`       | None                    |
 
 `AuthenticationChecks` fails a scheme whose authenticator returns a principal the principal
-schema does not accept as input, or a rejection with fields besides `type`.
+schema does not accept as input, a rejection with fields besides `type`, or a `priority` entry
+that names no configured scheme.
 
 ```ts title="src/routa.ts"
 import { createRouta } from "@routa-ts/core";
@@ -474,6 +475,116 @@ export default createRouta({
 **Errors:** throws a `TypeError` when `authenticate` is not a function, or when `challenge`
 declares a key other than `realm` or an invalid realm.
 
+## `apiKey`
+
+```ts
+function apiKey<const TResult extends AuthenticationResult>(options: {
+	header: string;
+	challenge?: { realm?: string };
+	authenticate: (
+		credential: string,
+		context: AuthenticatorContext,
+	) => TResult | Promise<TResult>;
+}): ApiKeyScheme<TResult>
+```
+
+Declares a credential scheme that reads an API key from one request header. Routa passes the
+header's value to `authenticate` once per request that selects it, and parses an
+authenticated principal with the principal schema. `authenticate`, `context`, and the result
+follow the same contract as [`bearer`](#bearer).
+
+| Option         | Type                                            | Purpose                                                             |
+| -------------- | ----------------------------------------------- | ------------------------------------------------------------------- |
+| `header`       | `string`                                        | The header that carries the key, such as `"x-api-key"`; a literal   |
+| `challenge`    | `{ realm?: string }`                            | Static challenge override; a literal read by `routa check`          |
+| `authenticate` | `(credential, context) => AuthenticationResult` | Your verification code: return a principal candidate or a rejection |
+
+The header name is an RFC 9110 token, compared ignoring case. It cannot be `Authorization` or
+`Cookie`, which Bearer and session schemes read. A missing credential challenges `ApiKey`, or
+`ApiKey realm="…"` with the override; a failed one challenges the same, with no error details.
+OpenAPI declares the scheme as `{ type: "apiKey", in: "header", name }`.
+
+```ts title="src/routa.ts"
+import { apiKey, createRouta } from "@routa-ts/core";
+import { z } from "zod";
+import { findServiceKey } from "./service-keys.js";
+
+export default createRouta({
+	authentication: {
+		principal: z.object({ type: z.literal("service"), id: z.string() }),
+		schemes: {
+			serviceKey: apiKey({
+				header: "x-api-key",
+				authenticate: async (key) => {
+					const service = await findServiceKey(key);
+					return service
+						? { type: "authenticated", principal: { type: "service", id: service.id } }
+						: { type: "rejected" };
+				},
+			}),
+		},
+	},
+});
+```
+
+**Errors:** throws a `TypeError` when `header` is not a header name, `authenticate` is not a
+function, or `challenge` declares a key other than `realm` or an invalid realm.
+
+## `sessionCookie`
+
+```ts
+function sessionCookie<const TResult extends AuthenticationResult>(options: {
+	cookie: string;
+	challenge?: { realm?: string };
+	authenticate: (
+		credential: string,
+		context: AuthenticatorContext,
+	) => TResult | Promise<TResult>;
+}): SessionCookieScheme<TResult>
+```
+
+Declares a credential scheme that reads a session from one request cookie. Routa passes the
+cookie's percent-decoded value to `authenticate` once per request that selects it, and parses
+an authenticated principal with the principal schema. Your application owns sessions: how it
+creates, stores, signs, and expires them. `authenticate`, `context`, and the result follow the
+same contract as [`bearer`](#bearer).
+
+| Option         | Type                                            | Purpose                                                             |
+| -------------- | ----------------------------------------------- | ------------------------------------------------------------------- |
+| `cookie`       | `string`                                        | The cookie that carries the session, such as `"session"`; a literal |
+| `challenge`    | `{ realm?: string }`                            | Static challenge override; a literal read by `routa check`          |
+| `authenticate` | `(credential, context) => AuthenticationResult` | Your verification code: return a principal candidate or a rejection |
+
+The cookie name is an RFC 6265 token, compared exactly. A missing credential challenges
+`Session`, or `Session realm="…"` with the override; a failed one challenges the same, with no
+error details. OpenAPI declares the scheme as `{ type: "apiKey", in: "cookie", name }`.
+
+```ts title="src/routa.ts"
+import { createRouta, sessionCookie } from "@routa-ts/core";
+import { z } from "zod";
+import { findSession } from "./sessions.js";
+
+export default createRouta({
+	authentication: {
+		principal: z.object({ type: z.literal("user"), id: z.string() }),
+		schemes: {
+			session: sessionCookie({
+				cookie: "session",
+				authenticate: async (value) => {
+					const session = await findSession(value);
+					return session
+						? { type: "authenticated", principal: { type: "user", id: session.userId } }
+						: { type: "rejected" };
+				},
+			}),
+		},
+	},
+});
+```
+
+**Errors:** throws a `TypeError` when `cookie` is not a cookie name, `authenticate` is not a
+function, or `challenge` declares a key other than `realm` or an invalid realm.
+
 ## `requireAuth`
 
 ```ts
@@ -507,15 +618,24 @@ export default createRouteRoot("/projects")({
 });
 ```
 
+Listing `schemes` restricts which credentials can authenticate the operation, not only who
+passes the guard. Routa selects only among credentials of the schemes every `requireAuth` on
+the operation allows, so `requireAuth({ schemes: ["session"] })` with a route-level
+`requireAuth({ schemes: ["session", "userToken"] })` accepts sessions alone, and a valid
+Bearer token there fails with `authenticationFailed`. See
+[Credential selection](/docs/reference/runtime-behavior/#credential-selection).
+
 The guard owns the `authenticationRequired` outcome, so a route outcome with that name is a
-type error. Its `401` carries a `WWW-Authenticate` challenge for the accepted schemes; see
+type error. Its `401` carries a `WWW-Authenticate` challenge for every accepted scheme, in
+priority order; see
 [Runtime behavior](/docs/reference/runtime-behavior/#outcomes-and-challenges).
 
 **Errors:** throws a `TypeError` for an empty `schemes` list. `routa check` reports
-`ROUTA_AUTH_NOT_CONFIGURED`, `ROUTA_AUTH_SCHEME_UNKNOWN`, `ROUTA_AUTH_REQUIREMENT_EMPTY`,
+`ROUTA_AUTH_NOT_CONFIGURED`, `ROUTA_AUTH_SCHEME_UNKNOWN`, `ROUTA_AUTH_REQUIREMENT_EMPTY` for an
+empty list or guards on one operation that allow no scheme in common,
 `ROUTA_AUTH_REQUIREMENT_UNRESOLVED`, and, for a guard a folder `middleware.ts` exports,
 `ROUTA_AUTH_REQUIREMENT_UNSUPPORTED`. Registration throws when authentication is not
-configured or the guard names an undeclared scheme.
+configured, a guard names an undeclared scheme, or the guards allow no scheme in common.
 
 <Aside type="caution" title="Inline guards only">
 	`requireAuth` works inline at route and method level. A folder `middleware.ts` cannot
@@ -670,7 +790,8 @@ Registration throws for an explicitly declared `options` method, a duplicate
 method-and-path pair, a `GET` or `HEAD` contract declaring a body, and duplicate reject
 keys within one chain. With `authentication`, it also throws for an invalid configuration,
 a route outcome named `authenticationFailed`, one named `authenticationRequired` behind a
-`requireAuth` guard, and middleware that provides `auth`. Without it, a `requireAuth` guard throws.
+`requireAuth` guard, a route outcome named `ambiguousCredentials` where strict mode can return
+it, and middleware that provides `auth`. Without it, a `requireAuth` guard throws.
 
 ```ts
 type RouteServices = {
@@ -796,7 +917,9 @@ const { application } = await createProjectApplication(
 It rejects before any factory runs when a replacement names a path, method, or scope that
 declares no services, or holds a key it does not read. It rejects when a route file or
 `src/routa.ts` disagrees with the generated metadata, including authentication scheme names
-that differ from `routaAuthenticationSchemes`, and with the errors of `createApplication`.
+or a priority order that differ from `routaAuthenticationSchemes` and a `multipleCredentials`
+mode that differs from `routaMultipleCredentials`, and with the errors of
+`createApplication`.
 
 ## `createTestApplication`
 
@@ -1271,7 +1394,8 @@ export function findItem(id: string): ItemResult {
 `MiddlewareRejectResult`, `MiddlewareOpenApi`, `InferMiddlewareCtx`, `CookieConfig`,
 `CookieHandle`, `CookieEffect`, `CookieSameSite`, `RequiredCookie`, `AnyCookie`,
 `AuthenticationConfig`, `AuthenticationResult`, `Authenticator`, `AuthenticatorContext`,
-`BearerChallenge`, `BearerOptions`, `BearerScheme`, `CredentialScheme`, `Principal`,
+`CredentialChallenge`, `BearerOptions`, `BearerScheme`, `ApiKeyOptions`, `ApiKeyScheme`,
+`SessionCookieOptions`, `SessionCookieScheme`, `CredentialScheme`, `Principal`,
 `PrincipalSchema`, `PrincipalOf`, `AuthContext`, `AnonymousAuthContext`,
 `AuthenticatedAuthContext`, `RequireAuthOptions`, `RequireAuthMiddleware`, and `Register`.
 

@@ -180,30 +180,45 @@ Startup refuses services that `routa generate` did not read, and generated servi
 authentication?: {
 	principal: PrincipalSchema;
 	schemes: Record<string, CredentialScheme>;
+	priority?: readonly string[];
+	multipleCredentials?: "priority" | "reject";
 }
 ```
 
-Turns on credential orchestration for every route. Routa reads each request's credential,
-calls your authenticator once, validates the principal it returns, and gives every handler
+Turns on credential orchestration for every route. Routa reads each request's credentials,
+calls one authenticator once, validates the principal it returns, and gives every handler
 `ctx.auth`. Omit it and Routa provides no `ctx.auth`: an application without
 `authentication` behaves exactly as before, its own middleware may still provide `auth`, and
 `requireAuth` fails `routa check`.
 
-| Field       | Purpose                                                                                     |
-| ----------- | ------------------------------------------------------------------------------------------- |
-| `principal` | One Zod schema whose output has string `id` and `type` fields. It validates every principal |
-| `schemes`   | Credential schemes keyed by name. Each name is also the OpenAPI security scheme key         |
+| Field                 | Purpose                                                                                                     |
+| --------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `principal`           | One Zod schema whose output has string `id` and `type` fields. It validates every principal                 |
+| `schemes`             | Credential schemes keyed by name. Each name is also the OpenAPI security scheme key                         |
+| `priority`            | The order Routa selects among presented credentials. Lists every scheme once. Defaults to declaration order |
+| `multipleCredentials` | `"priority"` (default) authenticates the first presented credential by priority. `"reject"` answers `400`   |
 
-Declare schemes with [`bearer`](/docs/reference/core/#bearer), which reads
-`Authorization: Bearer <token>`. One Bearer scheme per application: a second one reads the same
-credential and fails `routa check` with
+Declare schemes with three built-in descriptors. Each takes the same `authenticate` function
+and returns the same result shape.
+
+| Descriptor                                                         | Reads                           | Challenge |
+| ------------------------------------------------------------------ | ------------------------------- | --------- |
+| [`bearer`](/docs/reference/core/#bearer)                           | `Authorization: Bearer <token>` | `Bearer`  |
+| [`apiKey({ header })`](/docs/reference/core/#apikey)               | The value of one request header | `ApiKey`  |
+| [`sessionCookie({ cookie })`](/docs/reference/core/#sessioncookie) | The value of one request cookie | `Session` |
+
+Each scheme needs its own transport. Two Bearer schemes, two API-key schemes whose headers
+match ignoring case, two session schemes with the same cookie, and an API-key header named
+`Authorization` or `Cookie` all fail `routa check` with
 [`ROUTA_AUTH_TRANSPORT_OVERLAP`](/docs/reference/diagnostics/#routa_auth_transport_overlap).
-A scheme name starts with a letter and uses only letters, digits, `.`, `-`, and `_`.
+Verify several token or key formats inside one authenticator instead. A scheme name starts
+with a letter and uses only letters, digits, `.`, `-`, and `_`. A header or cookie name is an
+RFC 9110 token: letters, digits, and ``!#$%&'*+-.^_`|~``.
 
 ```ts title="src/routa.ts"
-import { bearer, createRouta } from "@routa-ts/core";
+import { apiKey, bearer, createRouta, sessionCookie } from "@routa-ts/core";
 import { z } from "zod";
-import { verifyAccessToken } from "./tokens.js";
+import { findServiceKey, findSession, verifyAccessToken } from "./credentials.js";
 
 const Principal = z.discriminatedUnion("type", [
 	z.object({ type: z.literal("user"), id: z.string(), email: z.string() }),
@@ -223,27 +238,57 @@ export default createRouta({
 						: { type: "rejected" };
 				},
 			}),
+			serviceKey: apiKey({
+				header: "x-api-key",
+				authenticate: async (key) => {
+					const service = await findServiceKey(key);
+					return service
+						? { type: "authenticated", principal: { type: "service", id: service.id } }
+						: { type: "rejected" };
+				},
+			}),
+			session: sessionCookie({
+				cookie: "session",
+				authenticate: async (value) => {
+					const user = await findSession(value);
+					return user
+						? { type: "authenticated", principal: { type: "user", id: user.id, email: user.email } }
+						: { type: "rejected" };
+				},
+			}),
 		},
+		priority: ["userToken", "session", "serviceKey"],
 	},
 });
 ```
 
-`verifyAccessToken` stands for your own verification code, such as a JWT library call;
-Routa verifies nothing itself. TypeScript checks each authenticator's principal against the
-principal schema's input, and a rejection carries no other fields. The second argument holds
-the configured logger and, when `src/routa.ts` declares them, the
-[application services](/docs/concepts/services/).
+`verifyAccessToken`, `findServiceKey`, and `findSession` stand for your own verification code,
+such as a JWT library call or a session store lookup; Routa verifies nothing itself. TypeScript
+checks each authenticator's principal against the principal schema's input, and a rejection
+carries no other fields. The second argument holds the configured logger and, when
+`src/routa.ts` declares them, the [application services](/docs/concepts/services/).
 
-`routa check` reads scheme names, descriptor kinds, and challenge overrides from source,
-because they change the HTTP contract. Write `authentication` as an object literal in
-`createRouta`, or as a `const` object literal you pass or spread into it, with a plain key for
-each scheme and a `bearer({ ... })` call, or a `const` bound to one, as its value. Anything it
-cannot read fails with
+When a request presents credentials of several schemes, Routa selects the first by `priority`
+and calls only that scheme's authenticator. A rejected selected credential fails; Routa never
+falls back to the next one. TypeScript rejects a `priority` entry that names no scheme, and
+`routa check` also reports a duplicate or missing entry. Set `multipleCredentials: "reject"` to
+answer `ambiguousCredentials` (`400`) instead, before any authenticator runs.
+[Runtime behavior](/docs/reference/runtime-behavior/#credential-selection) gives the full
+selection rules.
+
+`routa check` reads scheme names, descriptor kinds, header and cookie names, challenge
+overrides, `priority`, and `multipleCredentials` from source, because they change the HTTP
+contract. Write `authentication` as an object literal in `createRouta`, or as a `const` object
+literal you pass or spread into it, with a plain key for each scheme and a `bearer({ ... })`,
+`apiKey({ ... })`, or `sessionCookie({ ... })` call, or a `const` bound to one, as its value.
+Write `header`, `cookie`, `priority`, and `multipleCredentials` as literals. Anything it cannot
+read fails with
 [`ROUTA_AUTH_CONFIG_UNRESOLVED`](/docs/reference/diagnostics/#routa_auth_config_unresolved).
 Authenticators are ordinary runtime functions and may use any expression. Startup refuses
-authentication that `routa generate` did not read, and scheme names that differ from the
-generated ones. [Runtime behavior](/docs/reference/runtime-behavior/#authentication) describes
-how each request's credential resolves.
+authentication that `routa generate` did not read, and scheme names or a priority order that
+differ from the generated ones.
+[Runtime behavior](/docs/reference/runtime-behavior/#authentication) describes how each
+request's credentials resolve.
 
 ## Environment Variables
 

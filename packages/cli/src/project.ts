@@ -23,12 +23,16 @@ import {
 	unwrapExpression,
 } from "./ast.js";
 import {
+	allowedSchemes,
+	ambiguousCredentialsDescription,
 	applicationAuthentication,
 	type AuthenticationMetadata,
 	type AuthenticationRequirementMetadata,
 	authenticationFailedDescription,
 	filesystemRequirementDiagnostics,
+	rejectsAmbiguousCredentials,
 	requireAuthMiddleware,
+	requirementIntersectionDiagnostics,
 } from "./authentication.js";
 import { compareText } from "./compare-text.js";
 import { type ContractSchemaProjection, projectContractSchemas } from "./contract-schemas.js";
@@ -187,7 +191,7 @@ function validateProjectInSession(
 	const routes = discovery.routes;
 	const schemas = projectContractSchemas(cwd, routes, parser, {
 		lifecycleHeaders: lifecycleHeadersEnabled(cwd, parser),
-		...(authentication && { authentication: true }),
+		...(authentication && { authentication }),
 	});
 	const services = applicationServices(cwd, parser);
 	const discoveryWarnings = discovery.diagnostics.filter((item) => item.severity === "warning");
@@ -195,6 +199,7 @@ function validateProjectInSession(
 		...projectStructureDiagnostics(cwd),
 		...auth.diagnostics,
 		...discovery.diagnostics.filter((item) => item.severity !== "warning"),
+		...requirementIntersectionDiagnostics(routes, authentication),
 		...services.diagnostics,
 		...runResultShapeDiagnostics(cwd, parser),
 		...duplicateRouteDiagnostics(routes),
@@ -874,6 +879,15 @@ function routeReferenceMethod(
 					},
 				]
 			: []),
+		...(rejectsAmbiguousCredentials(middleware, authentication)
+			? [
+					{
+						type: "ambiguousCredentials",
+						status: 400,
+						description: ambiguousCredentialsDescription,
+					},
+				]
+			: []),
 		...middleware.flatMap((item) => item.rejects),
 	]);
 
@@ -1091,7 +1105,18 @@ function discoverRoutes(
 						method,
 						methodResponseStatuses(
 							// Every operation can fail authentication once credentials are resolved.
-							authentication ? [...metadata.responses, 401] : metadata.responses,
+							authentication
+								? [
+										...metadata.responses,
+										401,
+										...(rejectsAmbiguousCredentials(
+											methodMiddleware[method] ?? middleware,
+											authentication,
+										)
+											? [400]
+											: []),
+									]
+								: metadata.responses,
 							methodMiddleware[method] ?? middleware,
 						),
 					]),
@@ -3416,6 +3441,8 @@ export type RoutaApplicationServices = ${contractTypeReference(services)};
 	const authenticationSource = authentication
 		? `export const routaAuthenticationSchemes = ${JSON.stringify(names, null, "\t")} as const;
 
+export const routaMultipleCredentials = ${JSON.stringify(authentication.multipleCredentials)} as const;
+
 /** The principal schema's output, from the authentication config in \`src/routa.ts\`. */
 export type RoutaPrincipal = import("@routa-ts/core").PrincipalOf<typeof import("../src/routa.js").default>;
 
@@ -3428,7 +3455,7 @@ export type RoutaAuth = import("@routa-ts/core").AuthContext<RoutaAuthentication
 		: "";
 	return `${generatedHeader}export const routaRoutes = ${JSON.stringify(orderedRoutes, null, "\t")} as const;
 
-${servicesSource}${authenticationSource}${routeContextTypes(orderedRoutes, services !== undefined, authentication !== undefined)}
+${servicesSource}${authenticationSource}${routeContextTypes(orderedRoutes, services !== undefined, authentication)}
 `;
 }
 
@@ -3481,7 +3508,7 @@ function writeGeneratedFile(file: string, source: string): void {
 function routeContextTypes(
 	routes: RouteMetadata[],
 	application: boolean,
-	authenticated: boolean,
+	authentication: AuthenticationMetadata | undefined,
 ): string {
 	const ctxTypes = routes
 		.map((route) => {
@@ -3498,17 +3525,17 @@ function routeContextTypes(
 	const ctxMap = `export type RoutaRouteCtxByPath = {\n${routes
 		.map(
 			(route) =>
-				`\t${JSON.stringify(route.path)}: ${routeMethodCtxMap(route, application, authenticated)};`,
+				`\t${JSON.stringify(route.path)}: ${routeMethodCtxMap(route, application, authentication)};`,
 		)
 		.join("\n")}\n};`;
-	const ctxByKey = `export type RoutaCtxByKey = ${ctxByKeyType(routes, authenticated)};`;
+	const ctxByKey = `export type RoutaCtxByKey = ${ctxByKeyType(routes, authentication)};`;
 	const scoped = routes.filter((route) => route.services);
 	const factoryCtx =
 		scoped.length > 0
 			? `\n\nexport type RoutaFactoryCtxByPath = {\n${scoped
 					.map(
 						(route) =>
-							`\t${JSON.stringify(route.path)}: ${factoryCtxMap(route, application, authenticated)};`,
+							`\t${JSON.stringify(route.path)}: ${factoryCtxMap(route, application, authentication)};`,
 					)
 					.join("\n")}\n};`
 			: "";
@@ -3517,7 +3544,7 @@ function routeContextTypes(
 	const servicesRegistration = `${
 		application ? "\t\tapplicationServices: RoutaApplicationServices;\n" : ""
 	}${scoped.length > 0 ? "\t\tfactoryCtxByPath: RoutaFactoryCtxByPath;\n" : ""}${
-		authenticated
+		authentication
 			? "\t\tauthentication: { schemes: RoutaAuthenticationScheme; principal: RoutaPrincipal };\n"
 			: ""
 	}`;
@@ -3530,20 +3557,24 @@ function routeContextTypes(
  * middleware before it and the services of earlier scopes. The route file's factory follows the
  * filesystem middleware; each method's follows the route file's own middleware too.
  */
-function factoryCtxMap(route: RouteMetadata, application: boolean, authenticated: boolean): string {
+function factoryCtxMap(
+	route: RouteMetadata,
+	application: boolean,
+	authentication: AuthenticationMetadata | undefined,
+): string {
 	const { routeFile, methods = {} } = route.services ?? {};
 	const filesystem = route.middleware.filter((item) => item.file !== route.file);
 	const entries = [
 		...(routeFile
 			? [
-					`\t\trouteFile: ${ctxObjectType(filesystem, servicesType(application, []), authType(filesystem, authenticated))};`,
+					`\t\trouteFile: ${ctxObjectType(filesystem, servicesType(application, []), authType(filesystem, authentication))};`,
 				]
 			: []),
 		...Object.keys(methods)
 			.sort(compareText)
 			.map(
 				(method) =>
-					`\t\t${method}: ${ctxObjectType(route.middleware, servicesType(application, [routeFile]), authType(route.middleware, authenticated))};`,
+					`\t\t${method}: ${ctxObjectType(route.middleware, servicesType(application, [routeFile]), authType(route.middleware, authentication))};`,
 			),
 	];
 
@@ -3613,9 +3644,12 @@ function servicesType(
  * @param routes - Route metadata used to collect provided context keys and their inferred types
  * @returns A TypeScript object type string for the combined context map, or `{ readonly __empty?: never }` when no context is provided
  */
-function ctxByKeyType(routes: RouteMetadata[], authenticated: boolean): string {
+function ctxByKeyType(
+	routes: RouteMetadata[],
+	authentication: AuthenticationMetadata | undefined,
+): string {
 	// Middleware that requires ctx.auth sees it before any requireAuth guard narrows it.
-	const ctx = new Map<string, string>(authenticated ? [["auth", "RoutaAuth"]] : []);
+	const ctx = new Map<string, string>(authentication ? [["auth", "RoutaAuth"]] : []);
 
 	for (const route of routes) {
 		const chains = [route.middleware, ...Object.values(route.methodMiddleware)];
@@ -3648,13 +3682,13 @@ function ctxByKeyType(routes: RouteMetadata[], authenticated: boolean): string {
 function routeMethodCtxMap(
 	route: RouteMetadata,
 	application: boolean,
-	authenticated: boolean,
+	authentication: AuthenticationMetadata | undefined,
 ): string {
 	const methods: string[] = [];
 
 	for (const method of ["get", "post", "put", "patch", "delete", "head"]) {
 		methods.push(
-			`\t\t${method}: ${routeCtxTypeNameForMiddleware(route, method, application, authenticated)};`,
+			`\t\t${method}: ${routeCtxTypeNameForMiddleware(route, method, application, authentication)};`,
 		);
 	}
 
@@ -3673,14 +3707,14 @@ function routeCtxTypeNameForMiddleware(
 	route: RouteMetadata,
 	method: string,
 	application: boolean,
-	authenticated: boolean,
+	authentication: AuthenticationMetadata | undefined,
 ): string {
 	const chain = route.methodMiddleware[method] ?? route.middleware;
 	const services =
 		route.services
 		&& servicesType(application, [route.services.routeFile, route.services.methods?.[method]]);
 
-	return ctxObjectType(chain, services, authType(chain, authenticated));
+	return ctxObjectType(chain, services, authType(chain, authentication));
 }
 
 /**
@@ -3689,21 +3723,17 @@ function routeCtxTypeNameForMiddleware(
  */
 function authType(
 	chain: readonly MiddlewareMetadata[],
-	authenticated: boolean,
+	authentication: AuthenticationMetadata | undefined,
 ): string | undefined {
-	if (!authenticated) {
+	if (!authentication) {
 		return undefined;
 	}
 
-	const guards = chain.flatMap((item) =>
-		item.authentication ? [item.authentication.schemes] : [],
-	);
-
-	if (guards.length === 0) {
+	if (!chain.some((item) => item.authentication)) {
 		return "RoutaAuth";
 	}
 
-	const allowed = guards.reduce((left, right) => left.filter((name) => right.includes(name)));
+	const allowed = allowedSchemes(chain, authentication);
 	return `import("@routa-ts/core").AuthenticatedAuthContext<${allowed.map((name) => JSON.stringify(name)).join(" | ") || "never"}, RoutaPrincipal>`;
 }
 
