@@ -377,7 +377,7 @@ let previousSetCookies: string[] = [];
 
 for (const testCase of cases) {
 	calls.clear();
-	const replayed = testCase.replayCookies
+	const replayed: Record<string, string> = testCase.replayCookies
 		? { cookie: previousSetCookies.map((header) => header.split(";")[0]).join("; ") }
 		: {};
 	const response = await app.request(testCase.path, {
