@@ -333,6 +333,130 @@ export default createRouteRoot("/me")({
 	}, 30_000);
 });
 
+/** An application-owned guard, named like the built-in one, with its own 401 reject. */
+function applicationGuard(rejectSchema: string): string {
+	return `import { createMiddleware } from "@routa-ts/core";
+import { z } from "zod";
+
+export const requireAuth = createMiddleware({
+\tinput: { headers: z.object({ "x-session": z.string().optional() }) },
+\tprovides: { user: z.string() },
+\trejects: { unauthorized: { status: 401, schema: ${rejectSchema} } },
+\trun: ({ input, next }) =>
+\t\tinput.headers["x-session"] === "app-session"
+\t\t\t? next({ user: "app_user" })
+\t\t\t: ({ type: "unauthorized", data: { type: "unauthorized" } } as const),
+});
+`;
+}
+
+/** A route guarded by the application-owned middleware, reading what it provides. */
+function applicationGuardedRoute(readAuth: boolean): string {
+	return `import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+import { requireAuth } from "../../middleware/auth.js";
+
+export default createRouteRoot("/projects")({
+\tget: createRoute({
+\t\tmiddleware: [requireAuth],
+\t\tresponses: { ok: { status: 200, schema: z.object({ user: z.string(), auth: z.string() }) } },
+\t\trun: ({ ctx }) => ({
+\t\t\ttype: "ok",
+\t\t\tdata: { user: ctx.user, auth: ${readAuth ? "ctx.auth.status" : '"none"'} },
+\t\t}),
+\t}),
+});
+`;
+}
+
+describe("application-owned authentication middleware", () => {
+	const guardBody = 'z.object({ type: z.literal("unauthorized") })';
+
+	async function serve(cwd: string, headers: Record<string, string>) {
+		const { application } = await createProjectApplication(cwd, cwd, "dev");
+		try {
+			const response = await application.fetch(
+				new Request("http://localhost/projects", { headers }),
+			);
+			return {
+				status: response.status,
+				challenge: response.headers.get("www-authenticate"),
+				body: await response.json(),
+			};
+		} finally {
+			await application.dispose();
+		}
+	}
+
+	it("keeps working in an application without authentication", async () => {
+		const cwd = project({
+			"src/routa.ts": plainConfig,
+			"src/middleware/auth.ts": applicationGuard(guardBody),
+			"src/routes/projects/route.ts": applicationGuardedRoute(false),
+		});
+
+		expectPassed(await run(["check"], { cwd }));
+		expect(await serve(cwd, {})).toEqual({
+			status: 401,
+			challenge: null,
+			body: { type: "unauthorized" },
+		});
+		expect(await serve(cwd, { "x-session": "app-session" })).toEqual({
+			status: 200,
+			challenge: null,
+			body: { user: "app_user", auth: "none" },
+		});
+	}, 30_000);
+
+	it("keeps working beside configured authentication, which runs first", async () => {
+		const cwd = project({
+			"src/routa.ts": routaConfig,
+			"src/middleware/auth.ts": applicationGuard(guardBody),
+			"src/routes/projects/route.ts": applicationGuardedRoute(true),
+		});
+
+		expectPassed(await run(["check"], { cwd }));
+		// Routa reads it as ordinary middleware, not as the built-in guard.
+		expect(await serve(cwd, {})).toEqual({
+			status: 401,
+			challenge: null,
+			body: { type: "unauthorized" },
+		});
+		expect(await serve(cwd, { "x-session": "app-session" })).toEqual({
+			status: 200,
+			challenge: null,
+			body: { user: "app_user", auth: "anonymous" },
+		});
+		expect(
+			await serve(cwd, { "x-session": "app-session", authorization: "Bearer user-token" }),
+		).toEqual({ status: 200, challenge: null, body: { user: "app_user", auth: "authenticated" } });
+		// A presented invalid credential fails closed before application middleware runs.
+		expect(
+			await serve(cwd, { "x-session": "app-session", authorization: "Bearer expired" }),
+		).toEqual({
+			status: 401,
+			challenge: 'Bearer realm="api", error="invalid_token"',
+			body: {
+				type: "https://routa-ts.dev/problems/authentication-failed",
+				title: "Authentication failed",
+				status: 401,
+			},
+		});
+	}, 30_000);
+
+	it("must tell its 401 apart from authenticationFailed once authentication is configured", () => {
+		const codes = (config: string) =>
+			diagnostics({
+				"src/routa.ts": config,
+				"src/middleware/auth.ts": applicationGuard("z.object({ type: z.string() })"),
+				"src/routes/projects/route.ts": applicationGuardedRoute(false),
+			}).map(({ code }) => code);
+
+		expect(codes(plainConfig)).toEqual([]);
+		expect(codes(routaConfig)).toEqual(["ROUTA_RESPONSE_STATUS_AMBIGUOUS"]);
+	});
+});
+
 describe("authentication diagnostics", () => {
 	const bearerConfig = configWith(
 		"{ principal: Principal, schemes: { userToken: bearer({ authenticate: reject }) } }",

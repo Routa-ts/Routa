@@ -282,6 +282,10 @@ What changes with the move:
   documents with a `WWW-Authenticate` challenge, in place of the old middleware's reject. Every
   operation also documents `authenticationFailed`, since a presented invalid credential fails
   on public routes too.
+- A `401` reject or route outcome you keep must differ from Routa's problem documents by a
+  required literal property, such as `type: z.literal("unauthorized")`, or `routa check`
+  reports `ROUTA_RESPONSE_STATUS_AMBIGUOUS`. An outcome that reuses the name of one Routa adds
+  to the operation, such as `authenticationFailed`, reports `ROUTA_OUTCOME_NAME_COLLISION`.
 - Routa's authentication outcomes set no cookies, so a guard that cleared a stale session
   cookie on `401` no longer does.
 
