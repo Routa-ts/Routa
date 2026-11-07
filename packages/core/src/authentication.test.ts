@@ -174,15 +174,24 @@ describe("requireAuth", () => {
 
 describe("presented credentials fail closed", () => {
 	const cases = [
-		["a rejected token", "Bearer expired-token", 'Bearer error="invalid_token"'],
-		["a malformed token", "Bearer not a token", 'Bearer error="invalid_token"'],
-		["an empty Bearer credential", "Bearer", 'Bearer error="invalid_token"'],
-		["another authentication scheme", "Basic dXNlcjpwYXNz", "Bearer"],
+		["a rejected token", "Bearer expired-token", 'Bearer error="invalid_token"', 1],
+		["a malformed token", "Bearer not a token", 'Bearer error="invalid_token"', 0],
+		["an empty Bearer credential", "Bearer", 'Bearer error="invalid_token"', 0],
+		["another authentication scheme", "Basic dXNlcjpwYXNz", "Bearer", 0],
 	] as const;
 
-	for (const [label, header, challenge] of cases) {
+	for (const [label, header, challenge, expectedCalls] of cases) {
 		it(`returns authenticationFailed for ${label} on public and protected routes`, async () => {
-			const app = createHonoApp([whoami, protectedRoute], { authentication });
+			let calls = 0;
+			const counted = bearer({
+				authenticate: (token, context) => {
+					calls += 1;
+					return userToken.authenticate(token, context);
+				},
+			});
+			const app = createHonoApp([whoami, protectedRoute], {
+				authentication: { principal: Principal, schemes: { userToken: counted } },
+			});
 
 			for (const request of [
 				new Request("http://localhost/whoami", { headers: { authorization: header } }),
@@ -192,11 +201,13 @@ describe("presented credentials fail closed", () => {
 					body: JSON.stringify({ name: "Atlas" }),
 				}),
 			]) {
+				calls = 0;
 				const response = await app.request(request);
 
 				expect(response.status).toBe(401);
 				expect(response.headers.get("www-authenticate")).toBe(challenge);
 				expect(await response.json()).toEqual(failedBody);
+				expect(calls).toBe(expectedCalls);
 			}
 		});
 	}
