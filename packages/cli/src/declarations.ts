@@ -23,7 +23,7 @@ export type ModuleDeclaration<T = ts.ObjectLiteralExpression> = {
 
 /**
  * A name a module exports, and the node that gives its value where Routa can follow it: a
- * variable's initializer, or the function, class, enum, interface, or type declaration itself.
+ * variable's initializer, or the function, class, or enum declaration itself.
  */
 export type ModuleExport = {
 	/** The file that declares the value, or the module whose export Routa could not follow. */
@@ -42,10 +42,11 @@ export type ModuleExport = {
 };
 
 /**
- * Lists every named export of a module, following its re-exports: `export const`, exported
- * function, class, enum, interface, and type declarations, names exported later with
- * `export { name }`, named re-exports (aliases included), and `export *`. Type-only exports and
- * `export default` statements are left out.
+ * Lists every named runtime export of a module, following its re-exports: `export const`,
+ * exported function, class, and enum declarations, names exported later with `export { name }`,
+ * named re-exports (aliases included), and `export *`. Interfaces, type aliases, type-only
+ * exports, and `export default` statements are left out, so a type never shadows the value a
+ * module exports under the same name.
  *
  * Each branch of the walk carries its own copy of the visited files, so a cycle ends the branch
  * that closes it while sibling re-exports of the same module still resolve.
@@ -286,21 +287,14 @@ function variableBindings(
 	return names.map((name) => ({ file, name, from: declaration }));
 }
 
-/** A top-level declaration whose name holds a value or type rather than a variable's. */
+/** A top-level declaration other than a variable's that binds a runtime value to its name. */
 function isValueDeclaration(
 	statement: ts.Statement,
-): statement is
-	| ts.FunctionDeclaration
-	| ts.ClassDeclaration
-	| ts.EnumDeclaration
-	| ts.InterfaceDeclaration
-	| ts.TypeAliasDeclaration {
+): statement is ts.FunctionDeclaration | ts.ClassDeclaration | ts.EnumDeclaration {
 	return (
 		(ts.isFunctionDeclaration(statement)
 			|| ts.isClassDeclaration(statement)
-			|| ts.isEnumDeclaration(statement)
-			|| ts.isInterfaceDeclaration(statement)
-			|| ts.isTypeAliasDeclaration(statement))
+			|| ts.isEnumDeclaration(statement))
 		&& statement.name !== undefined
 	);
 }
