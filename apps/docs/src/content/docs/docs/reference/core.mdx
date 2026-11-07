@@ -854,13 +854,26 @@ in its own module.
 | `RequireAuthOptions`, `RequireAuthMiddleware`                             | The [`requireAuth`](#requireauth) options and the middleware contract it returns                      |
 | `AuthContext`, `AnonymousAuthContext`, `AuthenticatedAuthContext`         | The type of `ctx.auth`; see [`AuthContext`](#authcontext)                                             |
 
-An authenticator in its own module, typed against the application's principal:
+An authenticator in its own module, typed against the application's principal. Export the
+principal schema from its own module and derive the type from it: `src/routa.ts` imports the
+authenticator, so typing it with `PrincipalOf<typeof config>` would make the configuration's
+type depend on itself. Use `PrincipalOf<typeof config>` in modules `src/routa.ts` does not
+import, such as route files.
+
+```ts title="src/principal.ts"
+import { z } from "zod";
+
+export const Principal = z.discriminatedUnion("type", [
+	z.object({ type: z.literal("account"), id: z.string() }),
+	z.object({ type: z.literal("service"), id: z.string() }),
+]);
+
+export type AppPrincipal = z.input<typeof Principal>;
+```
 
 ```ts title="src/authenticators.ts"
-import type { AuthenticationResult, Authenticator, PrincipalOf } from "@routa-ts/core";
-import type config from "./routa.js";
-
-type AppPrincipal = PrincipalOf<typeof config>;
+import type { AuthenticationResult, Authenticator } from "@routa-ts/core";
+import type { AppPrincipal } from "./principal.js";
 
 export const authenticateKey: Authenticator<AuthenticationResult<AppPrincipal>> = (key, { logger }) => {
 	if (key !== process.env.SERVICE_KEY) {
@@ -870,6 +883,19 @@ export const authenticateKey: Authenticator<AuthenticationResult<AppPrincipal>> 
 
 	return { type: "authenticated", principal: { type: "service", id: "billing" } };
 };
+```
+
+```ts title="src/routa.ts"
+import { apiKey, createRouta } from "@routa-ts/core";
+import { authenticateKey } from "./authenticators.js";
+import { Principal } from "./principal.js";
+
+export default createRouta({
+	authentication: {
+		principal: Principal,
+		schemes: { serviceKey: apiKey({ header: "x-api-key", authenticate: authenticateKey }) },
+	},
+});
 ```
 
 ## `createCookie`

@@ -62,6 +62,24 @@ const credentials = {
 };
 
 const problem = (name: string) => `https://routa-ts.dev/problems/${name}`;
+/** The complete problem body each framework outcome sends: nothing about the credential. */
+const problemBodies: Record<string, unknown> = {
+	[problem("authentication-required")]: {
+		type: problem("authentication-required"),
+		title: "Authentication required",
+		status: 401,
+	},
+	[problem("authentication-failed")]: {
+		type: problem("authentication-failed"),
+		title: "Authentication failed",
+		status: 401,
+	},
+	[problem("ambiguous-credentials")]: {
+		type: problem("ambiguous-credentials"),
+		title: "Ambiguous credentials",
+		status: 400,
+	},
+};
 const allChallenges = 'Bearer realm="full-api", Session, ApiKey, clientCert';
 const tenantChallenges = "Session, ApiKey";
 
@@ -76,6 +94,8 @@ type Case = {
 	problem?: string;
 	/** The `scheme` GET /whoami reports. */
 	scheme?: Scheme;
+	/** The principal GET /whoami reports with `scheme`. */
+	principal?: { type: "account" | "service"; id: string };
 	challenge?: string;
 	/** How many times each authenticator ran; omitted schemes ran zero times. */
 	ran: Partial<Record<Scheme, number>>;
@@ -107,6 +127,7 @@ const cases: Case[] = [
 		headers: credentials.writerSession,
 		status: 200,
 		scheme: "session",
+		principal: { type: "account", id: "acme:writer" },
 		ran: { session: 1 },
 	},
 	{
@@ -115,6 +136,7 @@ const cases: Case[] = [
 		headers: credentials.adminToken,
 		status: 200,
 		scheme: "accountToken",
+		principal: { type: "account", id: "admin" },
 		ran: { accountToken: 1 },
 	},
 	{
@@ -123,6 +145,7 @@ const cases: Case[] = [
 		headers: credentials.serviceKey,
 		status: 200,
 		scheme: "serviceKey",
+		principal: { type: "service", id: "acme:sync" },
 		ran: { serviceKey: 1 },
 	},
 	{
@@ -131,6 +154,7 @@ const cases: Case[] = [
 		headers: credentials.clientCert,
 		status: 200,
 		scheme: "clientCert",
+		principal: { type: "service", id: "reports" },
 		ran: { clientCert: 1 },
 	},
 	// Invalid credentials fail closed, even on a public route, and challenge only their scheme.
@@ -305,15 +329,15 @@ for (const testCase of cases) {
 		assert.deepEqual(ran, testCase.ran, "authenticators run");
 
 		if (testCase.problem) {
-			assert.equal(body?.type, testCase.problem, "problem type");
+			assert.deepEqual(body, problemBodies[testCase.problem], "problem body");
 		}
 
 		if (testCase.path === "/whoami" && testCase.status === 200) {
 			assert.deepEqual(
+				body,
 				testCase.scheme
-					? { status: "authenticated", scheme: testCase.scheme }
+					? { status: "authenticated", scheme: testCase.scheme, principal: testCase.principal }
 					: { status: "anonymous" },
-				{ status: body?.status, ...(body?.scheme ? { scheme: body.scheme } : {}) },
 				"ctx.auth",
 			);
 		}
