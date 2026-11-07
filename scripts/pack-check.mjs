@@ -328,6 +328,7 @@ for (const [file, source] of Object.entries(authenticatedRoutes)) {
 
 run("vp", ["exec", "routa", "check"], authenticatedDir);
 run("vp", ["exec", "routa", "build"], authenticatedDir);
+checkAuthenticatedOpenApi(authenticatedDir);
 await smokeTestStart(authenticatedDir, checkAuthentication);
 process.stdout.write("Packed authenticated consumer passed.\n");
 
@@ -419,8 +420,7 @@ async function smokeTestStart(cwd, check) {
 						);
 					}
 
-					await check(port, controller.signal, output);
-					return;
+					break;
 				} finally {
 					clearTimeout(timeoutId);
 				}
@@ -443,6 +443,9 @@ async function smokeTestStart(cwd, check) {
 				throw error;
 			}
 		}
+
+		// Outside the readiness retries: a failing check reports its own error, never a timeout.
+		await check(port, AbortSignal.timeout(Math.max(1, deadline - Date.now())), output);
 	} finally {
 		if (process.platform !== "win32" && child.pid) {
 			try {
@@ -548,6 +551,47 @@ async function checkAuthentication(port, signal, output) {
 			);
 		}
 	}
+}
+
+/**
+ * Generates the authenticated consumer's OpenAPI through the packed CLI and checks its security
+ * schemes and each operation's security alternatives, then that `routa openapi check` agrees.
+ */
+function checkAuthenticatedOpenApi(cwd) {
+	run("vp", ["exec", "routa", "openapi", "breaking", "--update-baseline"], cwd);
+	const document = readJson(join(cwd, ".routa/openapi-baseline.json"));
+	const expected = {
+		securitySchemes: {
+			serviceKey: { type: "apiKey", in: "header", name: "x-api-key" },
+			userToken: { type: "http", scheme: "bearer" },
+		},
+		"/whoami": [{}, { userToken: [] }, { serviceKey: [] }],
+		"/me": [{ userToken: [] }, { serviceKey: [] }],
+		"/keys": [{ serviceKey: [] }],
+	};
+	const actual = {
+		securitySchemes: document.components?.securitySchemes,
+		...Object.fromEntries(
+			["/whoami", "/me", "/keys"].map((path) => [path, document.paths?.[path]?.get?.security]),
+		),
+	};
+
+	if (canonicalJson(actual) !== canonicalJson(expected)) {
+		throw new Error(
+			`Authenticated OpenAPI expected ${canonicalJson(expected)}, got ${canonicalJson(actual)}.`,
+		);
+	}
+
+	run("vp", ["exec", "routa", "openapi", "check"], cwd);
+}
+
+/** JSON with object keys sorted, so key order does not matter but array order does. */
+function canonicalJson(value) {
+	return JSON.stringify(value, (_key, item) =>
+		item && typeof item === "object" && !Array.isArray(item)
+			? Object.fromEntries(Object.entries(item).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+			: item,
+	);
 }
 
 function freePort() {
