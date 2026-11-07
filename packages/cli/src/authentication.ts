@@ -305,41 +305,75 @@ function bearerChallenge(
 }
 
 /**
- * The call when an expression calls a function its module imports from `@routa-ts/core` under
- * `name`, such as `bearer` or `requireAuth`, possibly aliased. An application function that
- * shares the name is not the core one.
+ * The call when an expression calls the `@routa-ts/core` function `name`, such as `bearer` or
+ * `requireAuth`: imported by name, possibly aliased, or called on a namespace import, as in
+ * `core.requireAuth()`. An application function that shares the name is not the core one.
  */
 export function coreCall(expression: ts.Expression, name: string): ts.CallExpression | undefined {
 	const node = unwrapExpression(expression);
+	return ts.isCallExpression(node) && coreExportName(unwrapExpression(node.expression)) === name
+		? node
+		: undefined;
+}
 
-	if (!ts.isCallExpression(node)) {
-		return undefined;
+/**
+ * The `@routa-ts/core` export a node names: a binding its module imports from core, possibly
+ * aliased, or a member of a namespace import of core, such as `core.requireAuth`.
+ */
+function coreExportName(node: ts.Node): string | undefined {
+	const imports = coreImports(node.getSourceFile());
+
+	if (ts.isIdentifier(node)) {
+		return imports.named.get(node.text);
 	}
 
-	const callee = unwrapExpression(node.expression);
+	return ts.isPropertyAccessExpression(node)
+		&& ts.isIdentifier(node.expression)
+		&& imports.namespaces.has(node.expression.text)
+		? node.name.text
+		: undefined;
+}
 
-	if (!ts.isIdentifier(callee)) {
-		return undefined;
+const coreImportsByFile = new WeakMap<
+	ts.SourceFile,
+	{ named: Map<string, string>; namespaces: Set<string> }
+>();
+
+/**
+ * What a module imports from `@routa-ts/core`: each local name and the export it names, and the
+ * names of its namespace imports.
+ */
+function coreImports(sourceFile: ts.SourceFile): {
+	named: Map<string, string>;
+	namespaces: Set<string>;
+} {
+	const cached = coreImportsByFile.get(sourceFile);
+
+	if (cached) {
+		return cached;
 	}
 
-	for (const statement of node.getSourceFile().statements) {
-		if (
+	const imports = { named: new Map<string, string>(), namespaces: new Set<string>() };
+
+	for (const statement of sourceFile.statements) {
+		const bindings =
 			ts.isImportDeclaration(statement)
 			&& ts.isStringLiteral(statement.moduleSpecifier)
 			&& statement.moduleSpecifier.text === coreModule
-			&& statement.importClause?.namedBindings
-			&& ts.isNamedImports(statement.importClause.namedBindings)
-			&& statement.importClause.namedBindings.elements.some(
-				(element) =>
-					element.name.text === callee.text
-					&& (element.propertyName?.text ?? element.name.text) === name,
-			)
-		) {
-			return node;
+				? statement.importClause?.namedBindings
+				: undefined;
+
+		if (bindings && ts.isNamespaceImport(bindings)) {
+			imports.namespaces.add(bindings.name.text);
+		} else if (bindings && ts.isNamedImports(bindings)) {
+			for (const element of bindings.elements) {
+				imports.named.set(element.name.text, element.propertyName?.text ?? element.name.text);
+			}
 		}
 	}
 
-	return undefined;
+	coreImportsByFile.set(sourceFile, imports);
+	return imports;
 }
 
 /**

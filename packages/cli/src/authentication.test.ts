@@ -565,6 +565,25 @@ export const signedIn = requireAuth();
 		]);
 	});
 
+	it("reports requireAuth called on a namespace import of core in folder middleware", () => {
+		expect(
+			diagnostics({
+				"src/routa.ts": bearerConfig,
+				"src/routes/(private)/middleware.ts": `import * as core from "@routa-ts/core";
+
+export const signedIn = core.requireAuth();
+`,
+				"src/routes/(private)/projects/route.ts": routeWith("", "createRoute, createRouteRoot"),
+			}),
+		).toEqual([
+			{
+				code: "ROUTA_AUTH_REQUIREMENT_UNSUPPORTED",
+				message:
+					"src/routes/(private)/middleware.ts exports requireAuth() as signedIn, but folder middleware cannot require authentication yet, so it would not run.",
+			},
+		]);
+	});
+
 	it("reserves ctx.auth and the authentication outcome names", () => {
 		const providesAuth = `import { createMiddleware } from "@routa-ts/core";
 import { z } from "zod";
