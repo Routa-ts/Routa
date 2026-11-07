@@ -35,24 +35,24 @@ the complete list.
 
 ### Implemented
 
-| Area            | v0 behavior                                                                                                                                                                             |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Runtime         | Hono, served through `@hono/node-server`                                                                                                                                                |
-| Schemas         | Zod `^4.6.7` for inputs, middleware context, rejects, and responses, with `.describe()` and `.meta()` metadata                                                                          |
-| Responses       | Named outcomes with a status, an optional JSON body, typed headers, and `createCookie` set and clear effects                                                                            |
-| Routing         | Directory style, flat style, dynamic `$` segments, and `(group)` folders                                                                                                                |
-| Methods         | `get`, `post`, `put`, `patch`, `delete`, and explicit `head`; `OPTIONS` is automatic                                                                                                    |
-| Middleware      | Typed `requires` / `provides` / `rejects`, folder inheritance, per-method chains; rejects are full outcomes                                                                             |
-| Services        | `defineServices` services per application, route file, or method, with cleanup and middleware requirements                                                                              |
-| Authentication  | Optional Bearer, API-key, session-cookie, and custom credentials with priority selection, one principal schema, typed `ctx.auth`, inline and folder `requireAuth`, and OpenAPI security |
-| OpenAPI in      | Scaffolding source from `.yaml`, `.yml`, and `.json` documents                                                                                                                          |
-| OpenAPI out     | Generation from source alone, same-status composition, drift checks, and breaking-change checks                                                                                         |
-| Generated files | `.routa/routes.gen.ts`, `.routa/testing.gen.ts`, `.routa/manifest.json`, `.routa/openapi-baseline.json`                                                                                 |
-| CLI             | `create`, `scaffold`, `dev`, `start`, `check`, `generate`, `build`, `routes`, `openapi check`, `openapi breaking`                                                                       |
-| Logging         | Backend-neutral `RoutaLogger` contract with a built-in console implementation                                                                                                           |
-| Lifecycle       | Route `deprecation` metadata with optional `Deprecation`, `Sunset`, and `Link` headers                                                                                                  |
-| Query helpers   | `Sort` and `Fields` parsers from `@routa-ts/core/query/helpers`                                                                                                                         |
-| Testing         | Generated `createTestApp` with in-memory requests, scope service replacement, and disposal                                                                                              |
+| Area            | v0 behavior                                                                                                                                                                                                                                              |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime         | Hono, served through `@hono/node-server`                                                                                                                                                                                                                 |
+| Schemas         | Zod `^4.6.7` for inputs, middleware context, rejects, and responses, with `.describe()` and `.meta()` metadata                                                                                                                                           |
+| Responses       | Named outcomes with a status, an optional JSON body, typed headers, and `createCookie` set and clear effects                                                                                                                                             |
+| Routing         | Directory style, flat style, dynamic `$` segments, and `(group)` folders                                                                                                                                                                                 |
+| Methods         | `get`, `post`, `put`, `patch`, `delete`, and explicit `head`; `OPTIONS` is automatic                                                                                                                                                                     |
+| Middleware      | Typed `requires` / `provides` / `rejects`, folder inheritance, per-method chains; rejects are full outcomes                                                                                                                                              |
+| Services        | `defineServices` services per application, route file, or method, with cleanup and middleware requirements                                                                                                                                               |
+| Authentication  | Optional [Bearer, API-key, session-cookie, and custom credentials](/docs/concepts/authentication/): one principal schema, typed `ctx.auth`, priority or strict selection, inline and folder `requireAuth` intersection, challenges, and OpenAPI security |
+| OpenAPI in      | Scaffolding source from `.yaml`, `.yml`, and `.json` documents                                                                                                                                                                                           |
+| OpenAPI out     | Generation from source alone, same-status composition, drift checks, and breaking-change checks                                                                                                                                                          |
+| Generated files | `.routa/routes.gen.ts`, `.routa/testing.gen.ts`, `.routa/manifest.json`, `.routa/openapi-baseline.json`                                                                                                                                                  |
+| CLI             | `create`, `scaffold`, `dev`, `start`, `check`, `generate`, `build`, `routes`, `openapi check`, `openapi breaking`                                                                                                                                        |
+| Logging         | Backend-neutral `RoutaLogger` contract with a built-in console implementation                                                                                                                                                                            |
+| Lifecycle       | Route `deprecation` metadata with optional `Deprecation`, `Sunset`, and `Link` headers                                                                                                                                                                   |
+| Query helpers   | `Sort` and `Fields` parsers from `@routa-ts/core/query/helpers`                                                                                                                                                                                          |
+| Testing         | Generated `createTestApp` with in-memory requests, scope service replacement, and disposal                                                                                                                                                               |
 
 ### Deferred
 
@@ -63,9 +63,12 @@ the complete list.
 - A typed test client and test runner integrations
 - Graceful shutdown; `routa dev` and `routa start` do not release application services on
   `SIGINT` or `SIGTERM`
-- Built-in auth provider integrations, and custom schemes that read more than one header or
-  cookie. Routa reads Bearer, API-key, session-cookie, and custom single-transport
-  credentials when you configure them, and your authenticator verifies them
+- Built-in auth provider integrations such as Better Auth, and custom schemes that read more
+  than one header or cookie. Routa reads Bearer, API-key, session-cookie, and custom
+  single-transport credentials when you configure them, and your authenticator verifies them
+- Operations whose handler processes credentials itself, such as a sign-in route that must
+  accept a request carrying a stale session cookie, and authenticators or guards that set or
+  clear cookies
 - Response caching, rate limiting, and broad observability features
 - A generated hosted API reference UI
 - Content types other than JSON at the request and response boundary, and streams, files,
