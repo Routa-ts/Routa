@@ -293,7 +293,9 @@ for (const testCase of cases) {
 		...(testCase.body === undefined ? {} : { body: JSON.stringify(testCase.body) }),
 	});
 	const text = await response.text();
-	const body = text ? (JSON.parse(text) as Record<string, unknown>) : undefined;
+	const body = text
+		? (JSON.parse(text) as { type?: string; status?: string; scheme?: string })
+		: undefined;
 	const ran = Object.fromEntries(calls);
 	const challenge = response.headers.get("www-authenticate") ?? undefined;
 
@@ -318,7 +320,7 @@ for (const testCase of cases) {
 
 		const detail = [
 			testCase.problem?.replace("https://routa-ts.dev/problems/", ""),
-			body?.scheme && `scheme=${String(body.scheme)}`,
+			body?.scheme && `scheme=${body.scheme}`,
 			challenge && `challenge=${challenge}`,
 			`ran=${JSON.stringify(ran)}`,
 		].filter(Boolean);
