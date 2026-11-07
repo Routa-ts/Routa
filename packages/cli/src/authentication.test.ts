@@ -772,6 +772,33 @@ export default createRouteRoot("/files")({
 		expect(breaking.stderr).not.toContain("GET /projects");
 	});
 
+	it("reports requireAuth behind application-owned security as newly requiring a credential", async () => {
+		const tenantKey = `import { createMiddleware } from "@routa-ts/core";
+
+export const withTenantKey = createMiddleware({
+\topenapi: { security: [{ tenantKey: [] }] },
+\trun: ({ next }) => next(),
+});
+`;
+		const cwd = project({
+			"src/routa.ts": plainConfig,
+			"src/routes/middleware.ts": tenantKey,
+			"src/routes/projects/route.ts": projectsRoute.replace("middleware: [requireAuth()],", ""),
+		});
+		mkdirSync(join(cwd, ".routa"), { recursive: true });
+		writeFileSync(join(cwd, ".routa/openapi-baseline.json"), JSON.stringify(generateOpenApi(cwd)));
+		writeFileSync(join(cwd, "src/routa.ts"), routaConfig);
+		writeFileSync(join(cwd, "src/routes/projects/route.ts"), projectsRoute);
+
+		const breaking = await run(["openapi", "breaking"], { cwd });
+
+		expect(breaking.code).toBe(1);
+		expect(breaking.stderr).toContain(
+			"OPENAPI_TIGHTER_AUTH: POST /projects now requires authentication",
+		);
+		expect(breaking.stderr).not.toContain("GET /projects");
+	});
+
 	it("combines application-owned middleware security with authentication", () => {
 		const document = generateOpenApi(
 			project({

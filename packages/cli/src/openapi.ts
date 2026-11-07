@@ -863,7 +863,7 @@ function requiredInputDiagnostics(
 		);
 	}
 
-	if (hasSecurity(current.security) && !hasSecurity(baseline.security)) {
+	if (tighterSecurity(baseline.security, current.security)) {
 		diagnostics.push(
 			`OPENAPI_TIGHTER_AUTH: ${method.toUpperCase()} ${path} now requires authentication`,
 		);
@@ -872,18 +872,35 @@ function requiredInputDiagnostics(
 	return diagnostics;
 }
 
-/** Whether security requires a credential: some requirement, and no empty one accepting none. */
-function hasSecurity(security: unknown): boolean {
-	return (
-		Array.isArray(security)
-		&& security.length > 0
-		&& !security.some(
-			(requirement) =>
-				typeof requirement === "object"
-				&& requirement !== null
-				&& Object.keys(requirement).length === 0,
-		)
+/**
+ * Whether security now refuses credentials it accepted: some baseline requirement no longer meets
+ * any current one, because each current requirement needs a scheme or scope it lacks.
+ */
+function tighterSecurity(baseline: unknown, current: unknown): boolean {
+	const required = securityRequirements(current);
+
+	return securityRequirements(baseline).some(
+		(held) =>
+			!required.some((requirement) =>
+				Object.entries(requirement).every(([scheme, scopes]) => {
+					const granted = held[scheme];
+					return (
+						Array.isArray(granted)
+						&& (!Array.isArray(scopes) || scopes.every((scope) => granted.includes(scope)))
+					);
+				}),
+			),
 	);
+}
+
+/** An operation's security alternatives. None, like `{}`, accepts a request without credentials. */
+function securityRequirements(security: unknown): Array<Record<string, unknown>> {
+	const requirements = Array.isArray(security)
+		? security.filter(
+				(item): item is Record<string, unknown> => typeof item === "object" && item !== null,
+			)
+		: [];
+	return requirements.length > 0 ? requirements : [{}];
 }
 
 function parameterKey(parameter: Record<string, unknown>): string | undefined {

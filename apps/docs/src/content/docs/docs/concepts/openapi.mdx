@@ -128,11 +128,12 @@ the baseline. Descriptions, `operationId`, `info`, and `servers` are not compare
 the generated `Set-Cookie` header description, which lists cookie names and attributes.
 Removing a response status or an operation's authentication from source is drift, because the
 current document no longer carries them over from the baseline. `openapi breaking` is
-narrower: it fails only for removed operations and for inputs that became required or
-newly require authentication, so it is the check to run in CI on every pull request. An
-operation whose `security` includes the empty requirement `{}` does not require
-authentication, so adding `authentication` to an application flags only the operations behind
-`requireAuth`.
+narrower: it fails only for removed operations, for inputs that became required, and for
+operations whose `security` refuses credentials the baseline accepted, so it is the check to
+run in CI on every pull request. Each requirement in `security` is one accepted set of
+credentials, and the empty requirement `{}` accepts a request without any. Adding
+`authentication` to an application flags only the operations behind `requireAuth`, including
+ones that already required an application credential such as a tenant key.
 
 ## OpenAPI to Source
 
