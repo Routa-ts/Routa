@@ -214,9 +214,10 @@ Routa runs only the folder exports `routa check` reads. It reads a guard written
   `const guard = requireAuth(); export const signedIn = guard;`
 - a re-export of either form: `export { member as signedIn } from "../../guards.js"`
 
-A guard built any other way, through a factory function at any depth, a conditional, or a
+A guard built any other way, through a factory call at any depth, a conditional, or a
 destructuring, fails with `ROUTA_AUTH_REQUIREMENT_UNRESOLVED`. `routa check` follows your
-project's functions, imports, and re-exports to find it, but not package code.
+project's functions, imports, and re-exports to find it, but not package code. Exporting a
+factory function itself is fine, since a function is not a guard.
 
 Startup is the backstop. For every route, Routa loads each folder `middleware.ts` above it and
 refuses to start when one exports a `requireAuth` guard the generated metadata does not list,

@@ -790,8 +790,8 @@ function requestedSchemes(call: ts.CallExpression): string[] | "unresolved" | un
  * `requireAuth(...)` call becomes the guard's metadata under its export name, also through `const`
  * aliases and re-exports. Routa runs only the exports it reads, so an export that builds a guard
  * any other way, such as through a factory or a destructuring, is an error: the routes below would
- * stay public. Startup refuses any guard export the metadata does not list, including one package
- * code builds.
+ * stay public. An exported function or class is not a guard, whatever it builds. Startup refuses
+ * any guard export the metadata does not list, including one package code builds.
  *
  * @param file - The folder `middleware.ts`, relative to the project root
  * @param exported - The export and the module that declares it
@@ -851,6 +851,10 @@ function folderValue(
 		depth += 1
 	) {
 		const node = unwrapExpression(binding.value);
+
+		if (ts.isArrowFunction(node) || ts.isFunctionExpression(node) || ts.isClassExpression(node)) {
+			return "other";
+		}
 
 		if (!ts.isIdentifier(node)) {
 			const call = coreCall(node, "requireAuth");
