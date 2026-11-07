@@ -134,7 +134,8 @@ guard applies. Only credentials of accepted schemes are eligible. For each reque
 | ------------------------------------------------------- | ----------------------------------------------------- |
 | None                                                    | `ctx.auth` is `{ status: "anonymous" }`               |
 | Only unsupported, or only of schemes not accepted       | `authenticationFailed`; no authenticator runs         |
-| One or more eligible, `multipleCredentials: "priority"` | The first eligible by `priority` is selected          |
+| Exactly one eligible, in either mode                    | It is selected                                        |
+| Two or more eligible, `multipleCredentials: "priority"` | The first eligible by `priority` is selected          |
 | Two or more eligible, `multipleCredentials: "reject"`   | `ambiguousCredentials` (`400`); no authenticator runs |
 
 Routa then checks the selected credential. A malformed one fails without calling the

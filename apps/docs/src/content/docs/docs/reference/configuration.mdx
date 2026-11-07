@@ -285,8 +285,9 @@ Write `header`, `cookie`, `priority`, and `multipleCredentials` as literals. Any
 read fails with
 [`ROUTA_AUTH_CONFIG_UNRESOLVED`](/docs/reference/diagnostics/#routa_auth_config_unresolved).
 Authenticators are ordinary runtime functions and may use any expression. Startup refuses
-authentication that `routa generate` did not read, and scheme names or a priority order that
-differ from the generated ones.
+authentication that `routa generate` did not read, and scheme names, a priority order, or a
+`multipleCredentials` mode that differ from the generated ones. Run `routa generate` after
+changing any of them.
 [Runtime behavior](/docs/reference/runtime-behavior/#authentication) describes how each
 request's credentials resolve.
 
