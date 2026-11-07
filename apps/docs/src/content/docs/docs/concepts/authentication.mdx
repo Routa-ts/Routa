@@ -1,0 +1,351 @@
+---
+title: Authentication
+description: How Routa finds a request's credential, runs your authenticator, and enforces requireAuth.
+---
+
+import { Aside, CardGrid, FileTree, LinkCard } from "@astrojs/starlight/components";
+
+Authentication in Routa is an optional contract at the HTTP boundary. You declare where
+credentials travel and supply the code that verifies them. Routa finds the credential on
+each request, calls your code once, and gives handlers a typed `ctx.auth`. Types, `routa check`,
+runtime behavior, and OpenAPI all derive from that one declaration.
+
+## The Model
+
+Authentication and enforcement are separate steps.
+
+**Routa authenticates every request automatically.** When `src/routa.ts` configures
+`authentication`, every matched request goes through credential resolution before input
+parsing and middleware. A request without a credential becomes anonymous. A request with a
+credential gets exactly one authenticator call, and either becomes authenticated or fails
+with `401`. A credential that fails never becomes anonymous, on public routes too.
+
+**`requireAuth` enforces.** It is a middleware guard that rejects anonymous requests. It can
+also restrict which schemes an operation accepts. Guards inherited from folders, on the
+route, and on the method intersect: an operation accepts only the schemes all of them allow.
+
+**Your application verifies.** An authenticator is your function. It receives the credential
+Routa extracted and returns either a principal or a rejection. Routa never checks a password,
+signature, or session store itself.
+
+The [full API example](/docs/examples/full-api/) uses this layout, and this page uses it as
+its running example:
+
+<FileTree>
+- src/
+  - routa.ts principal schema and four credential schemes
+  - identities.ts application-owned verification
+  - routes/
+    - whoami/route.ts public: anonymous or authenticated
+    - auth/session/route.ts public: sign in and sign out
+    - (private)/
+      - middleware.ts `requireAuth()`: any scheme
+      - admin/
+        - middleware.ts application-owned admin check
+        - audit-events/route.ts any scheme
+        - reports.ts method adds `requireAuth({ schemes: ["accountToken"] })`
+      - tenants/$tenantId/
+        - middleware.ts `requireAuth({ schemes: ["session", "serviceKey"] })`
+        - projects/route.ts session or serviceKey
+</FileTree>
+
+## Anatomy
+
+### Configuration
+
+`authentication` in `createRouta` holds one principal schema and the credential schemes,
+keyed by scheme name:
+
+```ts title="src/routa.ts"
+import { X509Certificate } from "node:crypto";
+import { apiKey, bearer, createRouta, custom, sessionCookie } from "@routa-ts/core";
+import { z } from "zod";
+import { appServices } from "./services.js";
+
+const Principal = z.discriminatedUnion("type", [
+	z.object({ type: z.literal("account"), id: z.string() }),
+	z.object({ type: z.literal("service"), id: z.string() }),
+]);
+
+export default createRouta({
+	services: appServices,
+	authentication: {
+		principal: Principal,
+		schemes: {
+			session: sessionCookie({
+				cookie: "session",
+				authenticate: (token, { services }) => {
+					const id = services.identities.accountForSession(token);
+					return id
+						? { type: "authenticated", principal: { type: "account", id } }
+						: { type: "rejected" };
+				},
+			}),
+			accountToken: bearer({
+				challenge: { realm: "full-api" },
+				authenticate: (token, { services }) => {
+					const id = services.identities.accountForToken(token);
+					return id
+						? { type: "authenticated", principal: { type: "account", id } }
+						: { type: "rejected" };
+				},
+			}),
+			serviceKey: apiKey({
+				header: "x-api-key",
+				authenticate: (key, { services }) => {
+					const id = services.identities.serviceForKey(key);
+					return id
+						? { type: "authenticated", principal: { type: "service", id } }
+						: { type: "rejected" };
+				},
+			}),
+			clientCert: custom({
+				transport: { header: "x-client-cert" },
+				openapi: { type: "mutualTLS", description: "A client certificate the TLS proxy verified." },
+				extract: (value) => {
+					try {
+						return { type: "credential", credential: new X509Certificate(decodeURIComponent(value)) };
+					} catch {
+						return { type: "malformed" };
+					}
+				},
+				authenticate: (certificate, { services }) => {
+					const id = services.identities.serviceForCertificate(certificate);
+					return id
+						? { type: "authenticated", principal: { type: "service", id } }
+						: { type: "rejected" };
+				},
+			}),
+		},
+		priority: ["accountToken", "session", "serviceKey", "clientCert"],
+		multipleCredentials: "reject",
+	},
+});
+```
+
+- The **principal schema** types and validates every principal. Its output has string `id` and
+  `type` fields, and `type` can discriminate kinds of caller, such as accounts and services.
+- Each **credential scheme** reads one transport. `bearer` reads `Authorization: Bearer`,
+  `apiKey` one header, `sessionCookie` one cookie, and `custom` one header, `Authorization`
+  auth-scheme, or cookie you declare. Two schemes cannot read the same transport.
+- The scheme name, such as `accountToken`, is the name `requireAuth`, `ctx.auth.scheme`, and
+  OpenAPI `components.securitySchemes` use.
+- An **authenticator** returns `{ type: "authenticated", principal }` or `{ type: "rejected" }`.
+  Its second argument carries the logger and the application services.
+
+Scheme names, kinds, headers, cookies, transports, challenge overrides, `priority`, and
+`multipleCredentials` are contract facts. `routa check` reads them from source, so write them
+as literals. Authenticators are ordinary runtime code.
+[Configuration](/docs/reference/configuration/#authentication) lists every field and default.
+
+### Automatic Authentication and `ctx.auth`
+
+`ctx.auth` is either `{ status: "anonymous" }` or
+`{ status: "authenticated", scheme, principal }`. Every operation has it, including public
+ones, and a handler branches on `status`:
+
+```ts title="src/routes/whoami/route.ts"
+import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { WhoAmIResponse } from "./schemas.js";
+
+export default createRouteRoot("/whoami")({
+	get: createRoute({
+		responses: { success: { status: 200, schema: WhoAmIResponse } },
+		run: ({ ctx, response }) => {
+			if (ctx.auth.status === "anonymous") {
+				return response.success({ status: "anonymous" });
+			}
+
+			const { scheme, principal } = ctx.auth;
+			return response.success({ status: "authenticated", scheme, principal });
+		},
+	}),
+});
+```
+
+`principal` is the principal schema's output, so `principal.type === "service"` narrows it
+like any discriminated union. Without `authentication` in `src/routa.ts`, `ctx.auth` does not
+exist and reading it is a type error.
+
+### `requireAuth` and Narrowing
+
+[`requireAuth`](/docs/reference/core/#requireauth) returns `authenticationRequired` (`401`) for
+an anonymous request. Behind it, handlers see only the authenticated branch, with
+`ctx.auth.scheme` narrowed to the schemes the operation accepts:
+
+```ts title="src/routes/(private)/middleware.ts"
+import { requireAuth } from "@routa-ts/core";
+
+export const signedIn = requireAuth();
+```
+
+```ts title="src/routes/(private)/tenants/$tenantId/middleware.ts"
+import { requireAuth } from "@routa-ts/core";
+
+export const tenantCredentials = requireAuth({ schemes: ["session", "serviceKey"] });
+
+export { withTenant } from "../../../../middleware/tenant.js";
+```
+
+A handler under the tenant folder reads `ctx.auth.principal` without a check, and its
+`ctx.auth.scheme` has the type `"session" | "serviceKey"`. Middleware that declares
+`requires: ["auth"]` is typed with the anonymous-or-authenticated union even after a guard,
+so it checks `ctx.auth.status` before it reads `principal`.
+
+### Intersection
+
+Every guard on an operation applies, from the root folder down to the method. The operation
+accepts only the schemes all of them allow, and Routa authenticates only credentials of
+those schemes:
+
+| Operation                         | Guards                                                                       | Accepts                                               |
+| --------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `GET /whoami`                     | None                                                                         | Every scheme, or no credential                        |
+| `GET /admin/audit-events`         | `(private)`                                                                  | `accountToken`, `session`, `serviceKey`, `clientCert` |
+| `GET /tenants/:tenantId/projects` | `(private)`, then the tenant folder                                          | `session`, `serviceKey`                               |
+| `GET /admin/reports`              | `(private)`, then `requireAuth({ schemes: ["accountToken"] })` on the method | `accountToken`                                        |
+
+A descendant can narrow an inherited requirement, but never remove or widen it. A guard that
+lists a scheme an earlier guard excludes gets the `ROUTA_AUTH_REQUIREMENT_WIDENED` warning, and
+guards that share no scheme fail with `ROUTA_AUTH_REQUIREMENT_EMPTY`. Putting the Bearer-only
+reports method under the tenant folder would fail that way, which is why it lives outside it.
+
+### Priority and Ambiguity
+
+A request can carry several credentials, such as a session cookie and a Bearer token. Routa
+first discards credentials of schemes the operation does not accept. What happens with the
+remaining ones depends on `multipleCredentials`:
+
+- `"priority"`, the default, selects the first presented scheme in `priority` order and calls
+  only its authenticator. A rejected credential fails; Routa never falls back to the next one.
+- `"reject"` answers `ambiguousCredentials` (`400`) when two or more remain, before any
+  authenticator runs.
+
+`priority` also orders challenges and OpenAPI security alternatives. It defaults to the order
+`schemes` declares them. A Bearer token sent beside a session cookie to a tenant route is
+discarded, because the tenant folder does not accept `accountToken`, so the session alone
+authenticates, even in strict mode.
+
+### Failures and Challenges
+
+Routa owns three outcomes, each a problem document:
+
+| Outcome                  | Status | When                                                                             |
+| ------------------------ | ------ | -------------------------------------------------------------------------------- |
+| `authenticationFailed`   | `401`  | A presented credential is malformed, unsupported, not accepted here, or rejected |
+| `authenticationRequired` | `401`  | A `requireAuth` guard receives an anonymous request                              |
+| `ambiguousCredentials`   | `400`  | Strict mode only: two or more accepted credentials on one request                |
+
+Every `401` carries a `WWW-Authenticate` challenge. A missing or unaccepted credential
+challenges every accepted scheme in priority order; a selected credential that fails
+challenges its scheme alone:
+
+```txt
+GET /admin/audit-events                        401  Bearer realm="full-api", Session, ApiKey, clientCert
+GET /tenants/acme/projects                     401  Session, ApiKey
+GET /whoami   Authorization: Bearer wrong      401  Bearer realm="full-api", error="invalid_token"
+GET /whoami   Cookie: session=expired          401  Session
+```
+
+Challenges name `Bearer`, `ApiKey`, `Session`, or a custom scheme's name, with a `realm` when
+the scheme declares a static override. They never carry a value from the request, the
+authenticator, or a provider. An authenticator that throws, or returns a principal the
+principal schema rejects, answers `500`: an outage never reads as a bad credential.
+[Runtime behavior](/docs/reference/runtime-behavior/#authentication) has the full tables.
+
+Routa's `401` outcomes appear on every operation. A route outcome of your own with status
+`401` must differ from them by a required literal property, such as `type`, or `routa check`
+reports `ROUTA_RESPONSE_STATUS_AMBIGUOUS`.
+
+### Custom Schemes
+
+A [`custom`](/docs/reference/core/#custom) scheme reads one transport you declare. Its
+`extract` function turns the raw value into a typed credential or reports it malformed, which
+answers `authenticationFailed` without calling the authenticator. Its `openapi` metadata is the
+public Security Scheme Object, and it must agree with the transport. After extraction, a custom
+scheme behaves like a built-in one in selection, priority, `requireAuth`, challenges, types,
+and OpenAPI.
+
+A custom scheme carries a credential over HTTP. It is not a login protocol. OAuth and OpenID
+Connect obtain a credential, which you then send as a Bearer token or a session. WebAuthn and
+passkeys are a sign-in flow your application or provider runs. HTTP Basic and proxy-verified
+client certificates are complete custom recipes. DPoP and HTTP message signatures need a second
+header, so a custom scheme covers only their primary credential. Mutual TLS itself happens at
+the TLS layer, in a proxy or platform. See
+[Custom Credential Schemes](/docs/guides/custom-credential-schemes/).
+
+### OpenAPI
+
+`components.securitySchemes` declares each scheme under its name. Each operation lists one
+security alternative per accepted scheme, which OpenAPI reads as "any one of these":
+
+```json
+"/whoami": { "get": { "security": [{}, { "accountToken": [] }, { "session": [] }, { "serviceKey": [] }, { "clientCert": [] }] } },
+"/tenants/{tenantId}/projects": { "get": { "security": [{ "session": [] }, { "serviceKey": [] }] } },
+"/admin/reports": { "get": { "security": [{ "accountToken": [] }] } }
+```
+
+The empty object `{}` marks a public operation: a credential is optional. Public operations
+document `authenticationFailed`; protected ones also document `authenticationRequired`; in
+strict mode, operations that accept two or more schemes document `ambiguousCredentials`. See
+[OpenAPI](/docs/concepts/openapi/#authentication).
+
+## Guarantees
+
+- Without `authentication`, nothing changes: no `ctx.auth`, no security metadata, and
+  `requireAuth` fails `routa check` with `ROUTA_AUTH_NOT_CONFIGURED`.
+- At most one authenticator runs per request, and only for a scheme the operation accepts.
+- A presented credential that fails answers `401`; it is never treated as anonymous.
+- `ctx.auth.principal` is always the principal schema's output.
+- Generated types, route metadata, runtime enforcement, challenges, and OpenAPI derive from the
+  same declarations, and `routa check` rejects unknown schemes, overlapping transports, and
+  guards that accept nothing. [Diagnostics](/docs/reference/diagnostics/) lists every
+  `ROUTA_AUTH_*` code.
+- Credentials, secrets, and authenticator errors never reach responses, challenges, logs, or
+  generated files.
+
+## What You Own
+
+- Verifying credentials: password hashes, token signatures, session lookups, key storage.
+- Identity data, accounts, services, and sessions, including how they are issued, stored,
+  expire, and are revoked.
+- Secrets and their rotation.
+- Authorization: roles, scopes, tenants, permissions, and policies. In the example, admin and
+  tenant write checks are ordinary middleware that read `ctx.auth`.
+- The trust model of a custom scheme, such as making sure only your TLS proxy can set a
+  client-certificate header.
+- Sign-in and sign-out flows, and any provider such as an OAuth server.
+
+<Aside type="caution" title="Status: implemented, with limits">
+	Automatic authentication, `requireAuth`, the four descriptors, priority, strict mode,
+	intersection, challenges, and OpenAPI ship today. Not yet available: an operation whose
+	handler processes credentials itself, so a sign-in or sign-out request that still carries an
+	invalid session cookie answers `401` before its handler runs; authenticators and guards that
+	set or clear cookies, so a `401` does not clear a stale session cookie; custom schemes that
+	read more than one header; and provider integrations such as Better Auth.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="Full API example"
+		href="/docs/examples/full-api/"
+		description="Run every credential flow on this page with curl."
+	/>
+	<LinkCard
+		title="Custom credential schemes"
+		href="/docs/guides/custom-credential-schemes/"
+		description="Recipes for HTTP Basic, client certificates, DPoP, and signatures."
+	/>
+	<LinkCard
+		title="requireAuth reference"
+		href="/docs/reference/core/#requireauth"
+		description="Every option, rule, and error of the guard."
+	/>
+	<LinkCard
+		title="Runtime behavior"
+		href="/docs/reference/runtime-behavior/#authentication"
+		description="Exact credential selection and challenge rules."
+	/>
+</CardGrid>
