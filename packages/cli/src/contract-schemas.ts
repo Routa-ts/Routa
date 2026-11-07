@@ -73,6 +73,8 @@ type DeclaredCookie = ProjectedCookie & { declaration: string };
 /** One named outcome that can end an operation: a route outcome or a middleware reject. */
 type ProjectedOutcome = ProjectedResponse & {
 	name: string;
+	/** Every outcome a merged response stands for, when it stands for more than one. */
+	names?: readonly string[];
 	status: number;
 	/** Who declares it, for messages: `the route` or `middleware <name>`. */
 	producer: string;
@@ -237,6 +239,7 @@ function authenticationOutcomes(
 	return [
 		{
 			...last,
+			names: outcomes.map((item) => item.name),
 			description: outcomes.map((item) => `- \`${item.name}\`: ${item.description}`).join("\n"),
 		},
 	];
@@ -690,19 +693,23 @@ class SchemaProjector {
 		const byStatus = new Map<number, ProjectedOutcome[]>();
 
 		for (const outcome of outcomes) {
-			const earlier = byName.get(outcome.name);
+			const names = outcome.names ?? [outcome.name];
+			const taken = names.find((name) => byName.has(name));
 
-			if (earlier) {
+			if (taken !== undefined) {
 				this.operationProblem(site, {
 					code: "ROUTA_OUTCOME_NAME_COLLISION",
-					message: `Outcome "${outcome.name}" is declared by ${earlier.producer} and by ${outcome.producer}`,
+					message: `Outcome "${taken}" is declared by ${byName.get(taken)!.producer} and by ${outcome.producer}`,
 					suggestion:
 						"Every outcome that can end an operation needs its own name, because the handler result names its outcome. Rename one of them.",
 				});
 				continue;
 			}
 
-			byName.set(outcome.name, outcome);
+			for (const name of names) {
+				byName.set(name, outcome);
+			}
+
 			byStatus.set(outcome.status, [...(byStatus.get(outcome.status) ?? []), outcome]);
 		}
 
@@ -728,6 +735,7 @@ class SchemaProjector {
 		if (alternatives.length === 1) {
 			const {
 				name: _name,
+				names: _names,
 				status: _status,
 				producer: _producer,
 				label: _label,

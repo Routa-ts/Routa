@@ -609,6 +609,27 @@ export const withAuth = createMiddleware({
 					'Outcome "authenticationFailed" is declared by the route and by Routa authentication',
 			},
 		]);
+		expect(
+			diagnostics({
+				"src/routa.ts": bearerConfig,
+				"src/routes/files/route.ts": `import { createRoute, createRouteRoot, requireAuth } from "@routa-ts/core";
+
+export default createRouteRoot("/files")({
+\thead: createRoute({
+\t\tmiddleware: [requireAuth()],
+\t\tresponses: { authenticationFailed: { status: 403 }, ok: { status: 200 } },
+\t\trun: () => ({ type: "ok" }),
+\t}),
+});
+`,
+			}),
+		).toEqual([
+			{
+				code: "ROUTA_OUTCOME_NAME_COLLISION",
+				message:
+					'Outcome "authenticationFailed" is declared by the route and by Routa authentication',
+			},
+		]);
 	});
 });
 
