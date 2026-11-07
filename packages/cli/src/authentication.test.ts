@@ -2290,6 +2290,17 @@ export default createRouteRoot("/account")({
 \t\t\t}
 
 \t\t\tconst scheme: "userToken" | "basicUser" = ctx.auth.scheme;
+\t\t\t// @ts-expect-error A public operation accepts either scheme.
+\t\t\tconst onlyBasic: "basicUser" = ctx.auth.scheme;
+\t\t\tvoid onlyBasic;
+
+\t\t\tif (ctx.auth.scheme === "basicUser") {
+\t\t\t\tconst type: "user" | "service" = ctx.auth.principal.type;
+\t\t\t\t// @ts-expect-error The principal is the user | service union.
+\t\t\t\tconst onlyUser: "user" = ctx.auth.principal.type;
+\t\t\t\tvoid [type, onlyUser];
+\t\t\t}
+
 \t\t\treturn { type: "ok", data: { who: \`\${scheme}:\${ctx.auth.principal.id}\` } };
 \t\t},
 \t}),
