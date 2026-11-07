@@ -210,7 +210,7 @@ operation every authentication outcome keeps its status and challenge without a 
 | Returns a principal the principal schema rejects, or parses to a value without string `id` and `type` | `500` `…/problems/internal`                         |
 | Returns anything other than `authenticated` or `rejected`, or a result whose `type` throws when read  | `500` `…/problems/internal`                         |
 | A custom `extract` returns `{ type: "malformed" }`                                                    | `401` `authenticationFailed`; no authenticator runs |
-| A custom `extract` throws, or returns anything else                                                   | `500` `…/problems/internal`; no authenticator runs  |
+| A custom `extract` throws, or returns neither `credential` nor `malformed`, such as a promise         | `500` `…/problems/internal`; no authenticator runs  |
 
 An invalid result is an application contract violation, not a client error. When an
 authenticator or extractor throws, the log names only the scheme, never the thrown value,
