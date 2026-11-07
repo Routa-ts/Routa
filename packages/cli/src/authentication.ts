@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { objectLiteral, propertyName, unwrapExpression } from "./ast.js";
-import { boundDeclaration, exportedDeclarations, parseTypeScriptFile } from "./declarations.js";
+import { boundDeclaration, localBinding, type ModuleExport } from "./declarations.js";
 import type { Diagnostic, MiddlewareMetadata } from "./project.js";
 import { routaConfigMember, spreadObject } from "./services.js";
 import * as ts from "./typescript.js";
@@ -590,53 +590,93 @@ function schemeChallenge(
 }
 
 /**
- * The call when an expression calls a function its module imports from `@routa-ts/core` under
- * `name`, such as `bearer` or `requireAuth`, possibly aliased. An application function that
- * shares the name is not the core one.
+ * The call when an expression calls the `@routa-ts/core` function `name`, such as `bearer` or
+ * `requireAuth`: imported by name, possibly aliased, or called on a namespace import, as in
+ * `core.requireAuth()`. An application function that shares the name is not the core one.
  */
 export function coreCall(expression: ts.Expression, name: string): ts.CallExpression | undefined {
 	const node = unwrapExpression(expression);
-
-	if (!ts.isCallExpression(node)) {
-		return undefined;
-	}
-
-	const callee = unwrapExpression(node.expression);
-
-	if (!ts.isIdentifier(callee)) {
-		return undefined;
-	}
-
-	for (const statement of node.getSourceFile().statements) {
-		if (
-			ts.isImportDeclaration(statement)
-			&& ts.isStringLiteral(statement.moduleSpecifier)
-			&& statement.moduleSpecifier.text === coreModule
-			&& statement.importClause?.namedBindings
-			&& ts.isNamedImports(statement.importClause.namedBindings)
-			&& statement.importClause.namedBindings.elements.some(
-				(element) =>
-					element.name.text === callee.text
-					&& (element.propertyName?.text ?? element.name.text) === name,
-			)
-		) {
-			return node;
-		}
-	}
-
-	return undefined;
+	return ts.isCallExpression(node) && coreExportName(unwrapExpression(node.expression)) === name
+		? node
+		: undefined;
 }
 
 /**
- * Reads an inline `requireAuth(...)` guard as middleware metadata, resolving its allowed schemes
- * against the configured ones. Returns `undefined` for any other expression.
+ * The `@routa-ts/core` export a node names: a binding its module imports from core, possibly
+ * aliased, or a member of a namespace import of core, such as `core.requireAuth`.
+ */
+function coreExportName(node: ts.Node): string | undefined {
+	const imports = coreImports(node.getSourceFile());
+
+	if (ts.isIdentifier(node)) {
+		return imports.named.get(node.text);
+	}
+
+	return ts.isPropertyAccessExpression(node)
+		&& ts.isIdentifier(node.expression)
+		&& imports.namespaces.has(node.expression.text)
+		? node.name.text
+		: undefined;
+}
+
+const coreImportsByFile = new WeakMap<
+	ts.SourceFile,
+	{ named: Map<string, string>; namespaces: Set<string> }
+>();
+
+/**
+ * What a module imports from `@routa-ts/core`: each local name and the export it names, and the
+ * names of its namespace imports.
+ */
+function coreImports(sourceFile: ts.SourceFile): {
+	named: Map<string, string>;
+	namespaces: Set<string>;
+} {
+	const cached = coreImportsByFile.get(sourceFile);
+
+	if (cached) {
+		return cached;
+	}
+
+	const imports = { named: new Map<string, string>(), namespaces: new Set<string>() };
+
+	for (const statement of sourceFile.statements) {
+		const bindings =
+			ts.isImportDeclaration(statement)
+			&& ts.isStringLiteral(statement.moduleSpecifier)
+			&& statement.moduleSpecifier.text === coreModule
+				? statement.importClause?.namedBindings
+				: undefined;
+
+		if (bindings && ts.isNamespaceImport(bindings)) {
+			imports.namespaces.add(bindings.name.text);
+		} else if (bindings && ts.isNamedImports(bindings)) {
+			for (const element of bindings.elements) {
+				imports.named.set(element.name.text, element.propertyName?.text ?? element.name.text);
+			}
+		}
+	}
+
+	coreImportsByFile.set(sourceFile, imports);
+	return imports;
+}
+
+/** The schemes each `requireAuth` guard lists, kept for guards that list them. */
+const listedSchemes = new WeakMap<MiddlewareMetadata, readonly string[]>();
+
+/**
+ * Reads a `requireAuth(...)` call as middleware metadata, resolving its allowed schemes against
+ * the configured ones. Returns `undefined` for any other expression.
  *
- * @param file - The route file the guard is written in, relative to the project root
+ * @param file - The module the call is written in, relative to the project root
+ * @param placement - Where the guard runs from: the route file and `requireAuth` for an inline
+ *   guard, or a folder `middleware.ts` and the name it exports the guard under
  */
 export function requireAuthMiddleware(
 	expression: ts.Expression,
 	file: string,
 	authentication: AuthenticationMetadata | undefined,
+	placement: { file: string; name: string } = { file, name: "requireAuth" },
 ): { metadata: MiddlewareMetadata; diagnostics: Diagnostic[] } | undefined {
 	const call = coreCall(expression, "requireAuth");
 
@@ -680,30 +720,32 @@ export function requireAuthMiddleware(
 		}
 	}
 
-	return {
-		metadata: {
-			file,
-			name: "requireAuth",
-			requires: [],
-			provides: [],
-			providesTypes: {},
-			rejects: [
-				{
-					type: "authenticationRequired",
-					status: 401,
-					description: authenticationRequiredDescription,
-				},
-			],
-			security: [],
-			permissions: [],
-			authentication: {
-				schemes: Array.isArray(requested)
-					? requested.filter((name) => configured.includes(name))
-					: configured,
+	const metadata: MiddlewareMetadata = {
+		...placement,
+		requires: [],
+		provides: [],
+		providesTypes: {},
+		rejects: [
+			{
+				type: "authenticationRequired",
+				status: 401,
+				description: authenticationRequiredDescription,
 			},
+		],
+		security: [],
+		permissions: [],
+		authentication: {
+			schemes: Array.isArray(requested)
+				? requested.filter((name) => configured.includes(name))
+				: configured,
 		},
-		diagnostics,
 	};
+
+	if (Array.isArray(requested)) {
+		listedSchemes.set(metadata, requested);
+	}
+
+	return { metadata, diagnostics };
 }
 
 /**
@@ -744,28 +786,173 @@ function requestedSchemes(call: ts.CallExpression): string[] | "unresolved" | un
 }
 
 /**
- * Reports a `requireAuth` guard a filesystem `middleware.ts` exports. Folder requirements are not
- * supported yet, and an export Routa does not read would never run, leaving its routes public.
+ * Reads a folder `middleware.ts` export that is not a `createMiddleware` contract. A literal
+ * `requireAuth(...)` call bound to a `const` becomes the guard's metadata under its export name,
+ * also through `const` aliases and re-exports. Routa runs only the exports it reads, so an export
+ * that builds a guard any other way, such as through a factory, a destructuring, or a `let`, is an
+ * error: the routes below would stay public. An exported function or class is not a guard, whatever
+ * it builds. Startup refuses any guard export the metadata does not list, including one package
+ * code builds.
  *
- * @param file - The middleware file, relative to the project root
+ * @param file - The folder `middleware.ts`, relative to the project root
+ * @param exported - The export and the module that declares it
+ * @param readsMiddleware - Whether an expression reads as a `createMiddleware` contract
  */
-export function filesystemRequirementDiagnostics(
+export function folderGuard(
 	cwd: string,
 	file: string,
+	exported: ModuleExport,
 	parser: ts.SourceFileParser,
-): Diagnostic[] {
-	const sourceFile = parseTypeScriptFile(join(cwd, file), parser);
-	const guards = exportedDeclarations(cwd, file, sourceFile, parser, (expression) =>
-		coreCall(expression, "requireAuth") ? true : undefined,
-	);
+	authentication: AuthenticationMetadata | undefined,
+	readsMiddleware: (expression: ts.Expression, file: string) => boolean,
+): { metadata?: MiddlewareMetadata; diagnostics: Diagnostic[] } {
+	const value = folderValue(cwd, exported, parser, readsMiddleware);
+	const name = exported.exportedName;
 
-	return guards.map((guard) => ({
-		code: "ROUTA_AUTH_REQUIREMENT_UNSUPPORTED",
-		severity: "error",
-		message: `${file} exports requireAuth() as ${guard.exportedName}, but folder middleware cannot require authentication yet, so it would not run.`,
-		file,
-		suggestion: "Write requireAuth() inline in the middleware of each route or method it protects.",
-	}));
+	if (value === "other") {
+		return { diagnostics: [] };
+	}
+
+	if (value !== "builds") {
+		return requireAuthMiddleware(value.call, value.file, authentication, { file, name })!;
+	}
+
+	return {
+		diagnostics: [
+			{
+				code: "ROUTA_AUTH_REQUIREMENT_UNRESOLVED",
+				severity: "error",
+				message: `${file} exports ${name}, which builds a requireAuth() guard routa check cannot read, so the guard would not run.`,
+				file,
+				suggestion: `Export a literal call, such as export const ${name} = requireAuth({ schemes: ["userToken"] }), with scheme names written inline.`,
+			},
+		],
+	};
+}
+
+/** How deep Routa follows `const` aliases before it stops reading a value. */
+const maxAliasDepth = 8;
+
+/**
+ * Classifies a folder export's value, following `const` aliases, imports, and re-exports: the
+ * literal `requireAuth(...)` call a `const` binds it to, `builds` when it builds a guard another
+ * way, or `other`.
+ */
+function folderValue(
+	cwd: string,
+	exported: ModuleExport,
+	parser: ts.SourceFileParser,
+	readsMiddleware: (expression: ts.Expression, file: string) => boolean,
+): { file: string; call: ts.CallExpression } | "other" | "builds" {
+	let binding: Omit<ModuleExport, "exportedName"> | "none" = exported;
+
+	for (
+		let depth = 0;
+		binding !== "none" && binding.value && ts.isExpression(binding.value);
+		depth += 1
+	) {
+		const node = unwrapExpression(binding.value);
+		// Code can reassign a `let` or `var` binding after Routa reads it, so only a `const` holds
+		// the guard Routa reads.
+		const fixed = !reassignable(binding.value);
+
+		if (ts.isArrowFunction(node) || ts.isFunctionExpression(node) || ts.isClassExpression(node)) {
+			return "other";
+		}
+
+		if (!ts.isIdentifier(node)) {
+			const call = fixed && coreCall(node, "requireAuth");
+
+			if (call) {
+				return { file: binding.file, call };
+			}
+
+			return !readsMiddleware(node, binding.file)
+				&& buildsRequireAuth(cwd, binding.file, node, parser)
+				? "builds"
+				: "other";
+		}
+
+		if (!fixed || coreExportName(node) !== undefined || depth === maxAliasDepth) {
+			return buildsRequireAuth(cwd, binding.file, node, parser) ? "builds" : "other";
+		}
+
+		binding = localBinding(cwd, binding.file, node.getSourceFile(), node.text, parser);
+	}
+
+	return binding !== "none"
+		&& binding.from
+		&& buildsRequireAuth(cwd, binding.file, binding.from, parser)
+		? "builds"
+		: "other";
+}
+
+/** Whether a value initializes a `let` or `var` binding, which code can reassign. */
+function reassignable(value: ts.Node): boolean {
+	return (
+		ts.isVariableDeclaration(value.parent) && (value.parent.parent.flags & ts.NodeFlags.Const) === 0
+	);
+}
+
+/**
+ * Whether a node builds a `requireAuth` guard: it names the core `requireAuth`, or names project
+ * code that does, followed through `const` bindings, functions, imports, and re-exports at any
+ * depth. Package code is not followed.
+ *
+ * @param file - The module the node is written in, relative to the project root
+ * @param seen - The bindings already followed, as `file\0name`
+ */
+function buildsRequireAuth(
+	cwd: string,
+	file: string,
+	node: ts.Node,
+	parser: ts.SourceFileParser,
+	seen = new Set<string>(),
+): boolean {
+	const visit = (child: ts.Node): boolean => {
+		if (coreExportName(child) === "requireAuth") {
+			return true;
+		}
+
+		if (ts.isIdentifier(child)) {
+			if (namesOnly(child)) {
+				return false;
+			}
+
+			const binding = localBinding(cwd, file, child.getSourceFile(), child.text, parser);
+
+			if (binding === "none" || seen.has(`${binding.file}\0${binding.name}`)) {
+				return false;
+			}
+
+			seen.add(`${binding.file}\0${binding.name}`);
+			const target = binding.value ?? binding.from;
+			return target !== undefined && buildsRequireAuth(cwd, binding.file, target, parser, seen);
+		}
+
+		return ts.forEachChild(child, visit) === true;
+	};
+
+	return visit(node);
+}
+
+/**
+ * Whether an identifier only names something, such as a property key or a `.member`, rather than
+ * referring to a binding, so `{ signedIn: true }` beside a `signedIn` guard is not a reference.
+ */
+function namesOnly(identifier: ts.Identifier): boolean {
+	const { parent } = identifier;
+	return (
+		((ts.isPropertyAssignment(parent)
+			|| ts.isPropertyDeclaration(parent)
+			|| ts.isPropertySignatureDeclaration(parent)
+			|| ts.isMethodDeclaration(parent)
+			|| ts.isGetAccessorDeclaration(parent)
+			|| ts.isSetAccessorDeclaration(parent)
+			|| ts.isPropertyAccessExpression(parent))
+			&& parent.name === identifier)
+		|| (ts.isBindingElement(parent) && parent.propertyName === identifier)
+	);
 }
 
 /**
@@ -801,11 +988,13 @@ export function rejectsAmbiguousCredentials(
 }
 
 /**
- * Reports operations whose `requireAuth` guards each allow schemes, but none in common, so no
- * request could pass them. A guard that allows no configured scheme is reported where it is
- * written.
+ * Checks how the `requireAuth` guards on each operation compose, in execution order from the
+ * root folder to the method. Guards that each allow schemes, but none in common, are an error,
+ * since no request could pass them; a guard that allows no configured scheme is reported where it
+ * is written. A guard that lists a scheme an earlier guard excludes gets a warning: requirements
+ * only narrow, so that scheme never authenticates there.
  */
-export function requirementIntersectionDiagnostics(
+export function requirementCompositionDiagnostics(
 	routes: ReadonlyArray<{
 		file: string;
 		path: string;
@@ -819,26 +1008,86 @@ export function requirementIntersectionDiagnostics(
 		return [];
 	}
 
-	return routes.flatMap((route) =>
-		route.methods.flatMap((method) => {
-			const chain = route.methodMiddleware[method.toLowerCase()] ?? route.middleware;
-			const guards = chain.flatMap((item) => (item.authentication ? [item.authentication] : []));
+	const diagnostics = new Map<string, Diagnostic>();
 
-			return guards.length > 1
-				&& guards.every((guard) => guard.schemes.length > 0)
+	for (const route of routes) {
+		for (const method of route.methods) {
+			const chain = route.methodMiddleware[method.toLowerCase()] ?? route.middleware;
+			const guards = chain.filter((item) => item.authentication);
+
+			if (
+				guards.length > 1
+				&& guards.every((guard) => guard.authentication!.schemes.length > 0)
 				&& allowedSchemes(chain, authentication).length === 0
-				? [
-						{
-							code: "ROUTA_AUTH_REQUIREMENT_EMPTY",
-							severity: "error" as const,
-							message: `requireAuth() guards on ${method} ${route.path} allow no scheme in common, so no request could pass them.`,
-							file: route.file,
-							routePath: route.path,
-							suggestion:
-								"Allow at least one scheme in every requireAuth() guard on the operation, or remove a guard.",
-						},
-					]
-				: [];
-		}),
-	);
+			) {
+				const message = `requireAuth() guards on ${method} ${route.path} allow no scheme in common, so no request could pass them: ${guards
+					.filter((guard) => listedSchemes.has(guard))
+					.map((guard) => `${guard.file} allows ${quotedList(guard.authentication!.schemes)}`)
+					.join("; ")}.`;
+				diagnostics.set(message, {
+					code: "ROUTA_AUTH_REQUIREMENT_EMPTY",
+					severity: "error",
+					message,
+					file: route.file,
+					routePath: route.path,
+					suggestion:
+						"Allow at least one scheme in every requireAuth() guard on the operation, or remove a guard. A descendant cannot widen a requirement it inherits.",
+				});
+				continue;
+			}
+
+			for (const warning of wideningWarnings(guards, authentication)) {
+				diagnostics.set(`${warning.file}\0${warning.message}`, warning);
+			}
+		}
+	}
+
+	return [...diagnostics.values()];
+}
+
+/** Warnings for guards in one chain that list schemes an earlier guard excludes. */
+function wideningWarnings(
+	guards: readonly MiddlewareMetadata[],
+	authentication: AuthenticationMetadata,
+): Diagnostic[] {
+	const warnings: Diagnostic[] = [];
+
+	for (const [index, guard] of guards.entries()) {
+		const earlier = guards.slice(0, index);
+		const inherited = allowedSchemes(earlier, authentication);
+		const dropped = (listedSchemes.get(guard) ?? []).filter(
+			(name) => guard.authentication!.schemes.includes(name) && !inherited.includes(name),
+		);
+		const accepted = allowedSchemes(guards.slice(0, index + 1), authentication);
+
+		if (index === 0 || dropped.length === 0 || accepted.length === 0) {
+			continue;
+		}
+
+		const excluding = [
+			...new Set(
+				earlier
+					.filter((item) => dropped.some((name) => !item.authentication!.schemes.includes(name)))
+					.map((item) => item.file),
+			),
+		];
+		const follows =
+			excluding.length === 1
+				? `the requireAuth() in ${excluding[0]} it follows does not`
+				: `the requireAuth() guards in ${excluding.join(" and ")} it follows do not`;
+		warnings.push({
+			code: "ROUTA_AUTH_REQUIREMENT_WIDENED",
+			severity: "warning",
+			message: `requireAuth() in ${guard.file} allows ${quotedList(dropped)}, which ${follows}. Requirements only narrow, so it accepts ${quotedList(accepted)}.`,
+			file: guard.file,
+			suggestion: `Remove ${quotedList(dropped)} from the list. A descendant cannot widen or remove a requirement it inherits; to accept another scheme, allow it in the guard it follows.`,
+		});
+	}
+
+	return warnings;
+}
+
+/** Scheme names as a quoted, comma-separated list. */
+function quotedList(names: readonly string[]): string {
+	return names.map((name) => JSON.stringify(name)).join(", ");
 }
