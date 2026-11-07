@@ -186,7 +186,7 @@ curl -s -i -H 'Cookie: session=expired' \
   http://127.0.0.1:3000/tenants/acme/projects                     # 401 authenticationFailed
 ```
 
-Routa's `401` responses set no cookies, so a stale `session` cookie is no longer cleared on `401`. Sign-in and sign-out run under automatic authentication too: a request that still carries an invalid session cookie gets `401` before the handler runs.
+Routa's `401` responses set no cookies, so a stale `session` cookie is no longer cleared on `401`. Sign-in and sign-out run under automatic authentication too: a request that still carries an invalid session cookie gets `401` before the handler runs. Browser scripts cannot clear the `HttpOnly` session cookie, so a browser stays rejected until the cookie's one-hour `Max-Age` passes or the user clears the site's cookies; a non-browser client drops it from its cookie jar.
 
 Authentication with every credential scheme. All of these credentials are demonstration values, unfit for production:
 
