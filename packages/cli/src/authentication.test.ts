@@ -2021,6 +2021,41 @@ export function guardFor() {
 		}
 	});
 
+	it("reads re-exports whose module declares a type of the same name first", () => {
+		const validation = validateProject(
+			project(
+				guarded("", {
+					[folder]: `export { signedIn } from "../../guards.js";
+export { audit } from "../../audit.js";
+`,
+					"src/guards.ts": `import { requireAuth } from "@routa-ts/core";
+
+export type signedIn = typeof signedIn;
+export const signedIn = requireAuth({ schemes: ["a"] });
+`,
+					"src/audit.ts": `import { createMiddleware } from "@routa-ts/core";
+
+export interface audit {
+\treadonly name: "audit";
+}
+export const audit = createMiddleware({ run: ({ next }) => next() });
+`,
+				}),
+			),
+			{ write: false },
+		);
+
+		expect(validation.diagnostics).toEqual([]);
+		expect(validation.routes[0]!.middleware).toEqual([
+			expect.objectContaining({
+				file: folder,
+				name: "signedIn",
+				authentication: { schemes: ["a"] },
+			}),
+			expect.objectContaining({ file: folder, name: "audit" }),
+		]);
+	});
+
 	it("leaves folder exports that cannot be guards alone", () => {
 		expect(
 			diagnostics(
