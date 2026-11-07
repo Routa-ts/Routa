@@ -20,7 +20,14 @@ const Principal = z.discriminatedUnion("type", [
 
 /** Decodes `Authorization: Basic` credentials, or reports them malformed. */
 function decodeBasic(value: string) {
-	const decoded = atob(value);
+	let decoded: string;
+
+	try {
+		decoded = atob(value);
+	} catch {
+		return { type: "malformed" } as const;
+	}
+
 	const index = decoded.indexOf(":");
 	return index === -1
 		? ({ type: "malformed" } as const)
@@ -158,9 +165,38 @@ describe("a custom credential scheme", () => {
 	});
 
 	it("fails a malformed extraction without calling the authenticator", async () => {
-		const result = await send(whoami(), configured(), {
-			authorization: `Basic ${btoa("no-colon")}`,
-		});
+		for (const value of [btoa("no-colon"), "not base64!"]) {
+			const result = await send(whoami(), configured(), { authorization: `Basic ${value}` });
+
+			expect(result, value).toEqual({
+				status: 401,
+				challenge: 'Basic realm="api"',
+				body: failedBody,
+				calls: [["extract", value]],
+			});
+		}
+	});
+
+	it("fails a malformed extraction without falling back to a lower-priority credential", async () => {
+		const setup = configured({ priority: ["basicUser", "serviceKey", "userToken"] });
+		const authentication = {
+			...setup.authentication,
+			schemes: {
+				...setup.authentication.schemes,
+				serviceKey: apiKey({
+					header: "x-api-key",
+					authenticate: (key) => {
+						setup.calls.push(["serviceKey", key]);
+						return { type: "authenticated", principal: { type: "service", id: "svc_1" } };
+					},
+				}),
+			},
+		};
+		const result = await send(
+			whoami(),
+			{ authentication, calls: setup.calls },
+			{ authorization: `Basic ${btoa("no-colon")}`, "x-api-key": "valid-key" },
+		);
 
 		expect(result).toEqual({
 			status: 401,
