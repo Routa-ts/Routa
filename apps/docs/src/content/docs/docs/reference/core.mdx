@@ -815,7 +815,11 @@ export default createRouteRoot("/me")({
 ```ts
 type Principal = { readonly id: string; readonly type: string }
 type PrincipalSchema = z.ZodType<{ id: string; type: string }, any>
-type PrincipalOf<TConfig> = /* the principal schema's output for a createRouta config */
+type PrincipalOf<TConfig> = TConfig extends {
+	readonly authentication: { readonly principal: infer TSchema extends z.ZodTypeAny }
+}
+	? z.output<TSchema>
+	: never
 
 type AuthenticatorContext = { readonly logger: RoutaLogger; readonly services: Readonly<AppServices> }
 type Authenticator<TResult extends AuthenticationResult = AuthenticationResult, TCredential = string> =
@@ -824,11 +828,32 @@ type Authenticator<TResult extends AuthenticationResult = AuthenticationResult, 
 type CredentialChallenge = { readonly realm?: string }
 type CustomChallenge = { readonly scheme?: string; readonly realm?: string }
 type CustomTransport = { readonly header: string; readonly scheme?: string } | { readonly cookie: string }
-type ExtractedCredential<TExtraction> = /* the `credential` type of a CustomExtraction */
+type ExtractedCredential<TExtraction> = TExtraction extends {
+	readonly type: "credential"
+	readonly credential: infer TCredential
+}
+	? TCredential
+	: never
 
 type CredentialScheme = BearerScheme | ApiKeyScheme | SessionCookieScheme | CustomScheme
 type RequireAuthOptions<TSchemes extends readonly string[]> = { readonly schemes: TSchemes }
-type RequireAuthMiddleware = MiddlewareContract</* provides nothing; rejects authenticationRequired */>
+type RequireAuthMiddleware = MiddlewareContract<
+	readonly [],
+	Record<never, never>,
+	{
+		readonly authenticationRequired: {
+			readonly status: 401
+			readonly description: "Authentication is required: the request presented no credential."
+			readonly schema: z.ZodObject<{
+				type: z.ZodLiteral<"https://routa-ts.dev/problems/authentication-required">
+				title: z.ZodLiteral<"Authentication required">
+				status: z.ZodLiteral<401>
+			}>
+			readonly headers: z.ZodObject<{ "www-authenticate": z.ZodString }>
+		}
+	},
+	undefined
+>
 ```
 
 The types behind [`authentication`](/docs/reference/configuration/#authentication) and the
