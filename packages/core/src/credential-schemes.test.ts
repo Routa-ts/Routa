@@ -109,6 +109,17 @@ describe("API-key and session-cookie schemes", () => {
 		}
 	});
 
+	it("passes the session authenticator the percent-decoded cookie value", async () => {
+		const result = await send(whoami(), configured(), { cookie: "session=session%2Did" });
+
+		expect(result).toEqual({
+			status: 200,
+			challenge: null,
+			body: { auth: { status: "authenticated", scheme: "session", principal: { type: "user", id: "user_2" } } },
+			calls: ["session"],
+		});
+	});
+
 	it("stays anonymous without a credential, ignoring unrelated cookies and headers", async () => {
 		const result = await send(whoami(), configured(), { cookie: "theme=dark", "x-other": "1" });
 
