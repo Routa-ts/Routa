@@ -479,7 +479,9 @@ async function authenticate(
 
 	try {
 		type =
-			typeof result === "object" && result !== null ? (result as { type?: unknown }).type : undefined;
+			typeof result === "object" && result !== null
+				? (result as { type?: unknown }).type
+				: undefined;
 	} catch {
 		// A getter threw. Its error may carry the credential, or a ZodError the generic error mapping
 		// would answer with 400 and its messages.
