@@ -101,13 +101,13 @@ When `src/routa.ts` configures [`authentication`](/docs/reference/configuration/
 Routa resolves every matched request's credential before anything else reads the request. A
 Bearer scheme reads the `Authorization` header:
 
-| `Authorization` header                                                      | Result                                                         |
-| --------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Absent                                                                      | `ctx.auth` is `{ status: "anonymous" }`                        |
-| `Bearer <token>`, accepted by the authenticator                             | `ctx.auth` is `{ status: "authenticated", scheme, principal }` |
-| `Bearer <token>`, rejected by the authenticator                             | `authenticationFailed`                                         |
-| `Bearer` with an empty token, or a token that is not an RFC 6750 `b64token` | `authenticationFailed`; the authenticator does not run         |
-| Another scheme, such as `Basic …`                                           | `authenticationFailed`; the authenticator does not run         |
+| `Authorization` header                                                             | Result                                                         |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Absent                                                                             | `ctx.auth` is `{ status: "anonymous" }`                        |
+| `Bearer <token>`, accepted by the authenticator                                    | `ctx.auth` is `{ status: "authenticated", scheme, principal }` |
+| `Bearer <token>`, rejected by the authenticator                                    | `authenticationFailed`                                         |
+| `Bearer` with an empty token, or a token that is not an RFC 6750 `b64token`        | `authenticationFailed`; the authenticator does not run         |
+| Another scheme, such as `Basic …`, or `Bearer` followed by a tab instead of spaces | `authenticationFailed`; the authenticator does not run         |
 
 A presented credential that fails never downgrades to anonymous, on public operations and
 protected ones alike. Because resolution runs first, a request with an invalid credential

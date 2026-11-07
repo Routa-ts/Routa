@@ -375,7 +375,8 @@ type Presented =
 	| { readonly kind: "malformed" }
 	| { readonly kind: "token"; readonly token: string };
 
-const authSchemePattern = /^([!#$%&'*+.^_`|~0-9A-Za-z-]+)(?:\s+(.*))?$/s;
+// RFC 9110 separates an auth-scheme from its credential with spaces only.
+const authSchemePattern = /^([!#$%&'*+.^_`|~0-9A-Za-z-]+)(?: +(.*))?$/s;
 /** RFC 6750 `b64token`. */
 const tokenPattern = /^[A-Za-z0-9\-._~+/]+=*$/;
 

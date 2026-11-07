@@ -178,6 +178,7 @@ describe("presented credentials fail closed", () => {
 		["a malformed token", "Bearer not a token", 'Bearer error="invalid_token"', 0],
 		["an empty Bearer credential", "Bearer", 'Bearer error="invalid_token"', 0],
 		["another authentication scheme", "Basic dXNlcjpwYXNz", "Bearer", 0],
+		["a tab after Bearer, which RFC 9110 does not allow", "Bearer\tvalid-user", "Bearer", 0],
 	] as const;
 
 	for (const [label, header, challenge, expectedCalls] of cases) {
