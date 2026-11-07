@@ -86,7 +86,7 @@ accepts one scheme cannot return it, so it does not list it. A `HEAD` operation 
 status as one bodyless response. Middleware `openapi.security` still applies: Routa enforces
 authentication in addition to your middleware, so each middleware requirement combines with
 each authentication alternative. `[{ tenantKey: [] }]` on a public operation becomes
-`[{ tenantKey: [] }, { tenantKey: [], userToken: [] }]`.
+`[{ tenantKey: [] }, { tenantKey: [], userToken: [] }, { tenantKey: [], session: [] }, { tenantKey: [], serviceKey: [] }]`.
 
 ### Outcomes That Share a Status
 
