@@ -590,17 +590,21 @@ the route contract.
 
 ### `ROUTA_SCHEMA_COMPONENT_COLLISION`
 
-One `components.schemas` key would hold two different schemas. This happens in two cases:
+One `components.schemas` key would hold two different schemas. This happens in three cases:
 
 - Two different declarations share a key: two `.meta({ id })` calls with the same id, or two
   exports with the same name and different content.
 - One declaration projects differently in different places, for example input and output, or
   a query parameter and a JSON body. A schema such as `z.stringbool()` has a different shape
   in each, so it cannot be one component.
+- With `authentication` configured, one of your schemas claims a key that holds a Routa
+  problem body: `RoutaAuthenticationFailed`, or `RoutaAuthenticationRequired` when an
+  operation is behind `requireAuth`. See [Authentication](/docs/concepts/openapi/#authentication).
 
 **Fix:** for two declarations, reuse one declaration, or give each a distinct
 `.meta({ id })`. For one declaration with different projections, write separate declarations
 with distinct component identities, or change the schema so every use projects the same way.
+For a Routa problem body, rename your export or give it a different `.meta({ id })`.
 Routa never renames components or picks one projection.
 
 ### `ROUTA_SCHEMA_COMPONENT_ID_INVALID`

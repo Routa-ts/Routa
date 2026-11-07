@@ -163,7 +163,9 @@ export function projectContractSchemas(
 				site,
 				contract?.lifecycle ?? { owned: new Set() },
 			);
-			const authentication = options.authentication ? authenticationOutcomes(chain, method) : [];
+			const authentication = options.authentication
+				? projector.routaOutcomes(authenticationOutcomes(chain, method))
+				: [];
 			methods[method] = {
 				input: contract?.input ?? {},
 				responses: projector.compose(
@@ -284,6 +286,8 @@ type ComponentIdentity = {
 	file: string;
 	/** Where the declaration was read: a parameter, a request body, or a response. */
 	placement: string;
+	/** The Routa outcome whose problem body this component holds, when Routa owns it. */
+	routaOutcome?: string;
 };
 
 /**
@@ -677,6 +681,33 @@ class SchemaProjector {
 	}
 
 	/**
+	 * Places the body of each outcome Routa owns in `components.schemas` under `Routa` and the
+	 * outcome name, such as `RoutaAuthenticationFailed`, and refers to it there. A discriminator
+	 * maps values only to components, so a Routa body that shares a status stays selectable.
+	 */
+	routaOutcomes(outcomes: readonly ProjectedOutcome[]): ProjectedOutcome[] {
+		return outcomes.map((outcome) => {
+			if (!outcome.schema) {
+				return outcome;
+			}
+
+			const key = `Routa${outcome.name[0]!.toUpperCase()}${outcome.name.slice(1)}`;
+			this.registerComponent(
+				{
+					key,
+					explicit: true,
+					identity: `routa#${outcome.name}`,
+					file: "src/routa.ts",
+					placement: "a response",
+					routaOutcome: outcome.name,
+				},
+				outcome.schema,
+			);
+			return { ...outcome, schema: { $ref: `${componentPrefix}${key}` } };
+		});
+	}
+
+	/**
 	 * Composes an operation's effective outcomes into one Response Object per status.
 	 *
 	 * A status with one outcome keeps it. Outcomes that share a status compose only when every one
@@ -795,8 +826,9 @@ class SchemaProjector {
 	/**
 	 * The discriminator for same-status body alternatives: a property every alternative requires
 	 * with a single literal value (string, number, or boolean), each value different as text,
-	 * because discriminator values compare as strings. When several qualify, the
-	 * lexicographically first name wins.
+	 * because discriminator values compare as strings. When several qualify, `type` wins if a
+	 * Routa problem body is among the alternatives, because it is the problem identifier;
+	 * otherwise the lexicographically first name wins.
 	 *
 	 * A referenced alternative is matched implicitly by its component name. When any referenced
 	 * alternative's value differs from its component name, `mapping` names every referenced
@@ -807,14 +839,21 @@ class SchemaProjector {
 	): { propertyName: string; mapping?: Record<string, string> } | undefined {
 		const literals = schemas.map((schema) => this.requiredLiterals(schema));
 		const [first, ...rest] = literals;
-		const propertyName = Array.from(first?.keys() ?? [])
+		const qualifying = Array.from(first?.keys() ?? [])
 			.filter((name) => {
 				const values = literals.map((properties) => properties.get(name));
 				return (
 					values.every((value) => value !== undefined) && new Set(values).size === values.length
 				);
 			})
-			.sort(compareText)[0];
+			.sort(compareText);
+		const routaProblem = schemas.some(
+			(schema) =>
+				typeof schema.$ref === "string"
+				&& this.components.get(schema.$ref.replace(componentPrefix, ""))?.routaOutcome
+					!== undefined,
+		);
+		const propertyName = routaProblem && qualifying.includes("type") ? "type" : qualifying[0];
 
 		if (rest.length === 0 || propertyName === undefined) {
 			return undefined;
@@ -2830,6 +2869,21 @@ class SchemaProjector {
 				});
 			}
 
+			return;
+		}
+
+		const routaOutcome = existing.routaOutcome ?? component.routaOutcome;
+
+		if (routaOutcome !== undefined) {
+			const { file } = existing.routaOutcome === undefined ? existing : component;
+			pushUnique(this.diagnostics, {
+				code: "ROUTA_SCHEMA_COMPONENT_COLLISION",
+				severity: "error",
+				message: `A schema in ${file} claims component ${component.key}, which holds Routa's ${routaOutcome} problem body.`,
+				file,
+				suggestion:
+					"Rename the export, or give the schema a different .meta({ id }). Routa never renames components.",
+			});
 			return;
 		}
 

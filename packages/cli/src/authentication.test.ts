@@ -644,6 +644,27 @@ describe("OpenAPI for Bearer authentication", () => {
 			status: { type: "number", const: 401 },
 		},
 	});
+	const ref = (name: string) => ({ $ref: `#/components/schemas/${name}` });
+	const signInRejected = (name: string) => `import { z } from "zod";
+
+export const ${name} = z.object({
+\ttype: z.literal("https://api.example.invalid/problems/sign-in-rejected"),
+\ttitle: z.literal("Sign-in rejected"),
+\tstatus: z.literal(401),
+});
+`;
+	const sessionsRoute = (
+		name: string,
+	) => `import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { ${name} } from "./schemas.js";
+
+export default createRouteRoot("/sessions")({
+\tpost: createRoute({
+\t\tresponses: { created: { status: 201 }, rejected: { status: 401, schema: ${name} } },
+\t\trun: () => ({ type: "created" }),
+\t}),
+});
+`;
 
 	it("declares the scheme, optional security on public operations, and required security behind requireAuth", () => {
 		const document = generateOpenApi(
@@ -664,7 +685,7 @@ describe("OpenAPI for Bearer authentication", () => {
 				"Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.",
 			headers: challenge,
 			content: {
-				"application/json": { schema: problem("authentication-failed", "Authentication failed") },
+				"application/json": { schema: ref("RoutaAuthenticationFailed") },
 			},
 		});
 		expect(operations.post.responses["401"]).toEqual({
@@ -676,15 +697,112 @@ describe("OpenAPI for Bearer authentication", () => {
 			content: {
 				"application/json": {
 					schema: {
-						oneOf: [
-							problem("authentication-failed", "Authentication failed"),
-							problem("authentication-required", "Authentication required"),
-						],
-						discriminator: { propertyName: "title" },
+						oneOf: [ref("RoutaAuthenticationFailed"), ref("RoutaAuthenticationRequired")],
+						discriminator: {
+							propertyName: "type",
+							mapping: {
+								"https://routa-ts.dev/problems/authentication-failed":
+									"#/components/schemas/RoutaAuthenticationFailed",
+								"https://routa-ts.dev/problems/authentication-required":
+									"#/components/schemas/RoutaAuthenticationRequired",
+							},
+						},
 					},
 				},
 			},
 		});
+		expect(document.components.schemas).toEqual({
+			RoutaAuthenticationFailed: problem("authentication-failed", "Authentication failed"),
+			RoutaAuthenticationRequired: problem("authentication-required", "Authentication required"),
+		});
+	});
+
+	it("lets a discriminator select every 401 body, Routa's and the application's", () => {
+		const document = generateOpenApi(
+			project({
+				"src/routa.ts": routaConfig,
+				"src/routes/projects/route.ts": projectsRoute,
+				"src/routes/sessions/schemas.ts": signInRejected("SignInRejected"),
+				"src/routes/sessions/route.ts": sessionsRoute("SignInRejected"),
+			}),
+		) as Record<string, any>;
+		const body = (path: string, method: string) =>
+			document.paths[path][method].responses["401"].content["application/json"].schema;
+
+		expect(document["x-routa-diagnostics"]).toBeUndefined();
+		expect(body("/projects", "get")).toEqual(ref("RoutaAuthenticationFailed"));
+		expect(document.components.schemas.RoutaAuthenticationFailed).toEqual(
+			problem("authentication-failed", "Authentication failed"),
+		);
+
+		for (const [path, method, names] of [
+			["/projects", "post", ["RoutaAuthenticationFailed", "RoutaAuthenticationRequired"]],
+			["/sessions", "post", ["RoutaAuthenticationFailed", "SignInRejected"]],
+		] as const) {
+			const schema = body(path, method);
+			const { propertyName, mapping } = schema.discriminator;
+
+			expect(schema.oneOf).toEqual(names.map(ref));
+			expect(propertyName).toBe("type");
+			expect(mapping).toEqual(
+				Object.fromEntries(
+					names.map((name) => [
+						document.components.schemas[name].properties.type.const,
+						`#/components/schemas/${name}`,
+					]),
+				),
+			);
+		}
+	});
+
+	it("refuses an application schema that claims the component of a Routa problem body", () => {
+		const statusRoute = (name: string, schema: string) => ({
+			"src/routes/status/schemas.ts": `import { z } from "zod";\n\nexport const ${name} = ${schema};\n`,
+			"src/routes/status/route.ts": `import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { ${name} } from "./schemas.js";
+
+export default createRouteRoot("/status")({
+\tget: createRoute({
+\t\tresponses: { ok: { status: 200, schema: ${name} } },
+\t\trun: () => ({ type: "ok", data: { healthy: true } }),
+\t}),
+});
+`,
+		});
+		const claimed = statusRoute("RoutaAuthenticationFailed", "z.object({ healthy: z.boolean() })");
+		const collision = {
+			code: "ROUTA_SCHEMA_COMPONENT_COLLISION",
+			message:
+				"A schema in src/routes/status/schemas.ts claims component RoutaAuthenticationFailed, which holds Routa's authenticationFailed problem body.",
+		};
+
+		// Routa places its component after the route's own outcome, and before a later route's.
+		expect(diagnostics({ "src/routa.ts": routaConfig, ...claimed })).toEqual([collision]);
+		expect(
+			diagnostics({
+				"src/routa.ts": routaConfig,
+				"src/routes/projects/route.ts": projectsRoute,
+				...claimed,
+			}),
+		).toEqual([collision]);
+		expect(
+			diagnostics({
+				"src/routa.ts": routaConfig,
+				"src/routes/projects/route.ts": projectsRoute,
+				...statusRoute(
+					"Health",
+					'z.object({ healthy: z.boolean() }).meta({ id: "RoutaAuthenticationRequired" })',
+				),
+			}),
+		).toEqual([
+			{
+				code: "ROUTA_SCHEMA_COMPONENT_COLLISION",
+				message:
+					"A schema in src/routes/status/schemas.ts claims component RoutaAuthenticationRequired, which holds Routa's authenticationRequired problem body.",
+			},
+		]);
+		// Without authentication, Routa places no problem bodies, so the names stay free.
+		expect(diagnostics({ "src/routa.ts": plainConfig, ...claimed })).toEqual([]);
 	});
 
 	it("documents the 401 bodies and challenges the running application sends", async () => {
@@ -696,10 +814,8 @@ describe("OpenAPI for Bearer authentication", () => {
 		const document = generateOpenApi(cwd) as Record<string, any>;
 		const { application } = await createProjectApplication(cwd, cwd, "dev");
 		const documented = document.paths["/projects"].post.responses["401"];
-		const alternatives = documented.content["application/json"].schema.oneOf as Array<{
-			required: string[];
-			properties: Record<string, { const: unknown }>;
-		}>;
+		const { propertyName, mapping } = documented.content["application/json"].schema
+			.discriminator as { propertyName: string; mapping: Record<string, string> };
 
 		for (const headers of [{}, { authorization: "Bearer expired" }] as Array<
 			Record<string, string>
@@ -712,7 +828,12 @@ describe("OpenAPI for Bearer authentication", () => {
 				}),
 			);
 			const body = (await response.json()) as Record<string, unknown>;
-			const schema = alternatives.find((item) => item.properties.type!.const === body.type);
+			// Select the body's schema the way a discriminator-driven client does.
+			const component = mapping[String(body[propertyName])]!.replace("#/components/schemas/", "");
+			const schema = document.components.schemas[component] as {
+				required: string[];
+				properties: Record<string, { const: unknown }>;
+			};
 
 			expect(response.status).toBe(401);
 			expect(Object.keys(documented.headers)).toEqual(["www-authenticate"]);
@@ -753,6 +874,7 @@ export default createRouteRoot("/files")({
 			].join("\n"),
 			headers: challenge,
 		});
+		expect(document.components.schemas).toBeUndefined();
 	});
 
 	it("reports only requireAuth operations as newly requiring authentication", async () => {
