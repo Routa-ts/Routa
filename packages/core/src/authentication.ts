@@ -905,13 +905,16 @@ function runtimeScheme(
 					: (scheme.transport as CustomTransport);
 	const header = "header" in transport ? transport.header.toLowerCase() : undefined;
 
-	return {
+	// Frozen, and application callbacks run without a receiver, so no extractor or authenticator can
+	// change the transport or challenge Routa validated.
+	return Object.freeze({
 		name,
 		kind,
-		transport:
+		transport: Object.freeze(
 			"cookie" in transport
 				? { cookie: transport.cookie }
 				: { header: header!, authScheme: transport.scheme?.toLowerCase() },
+		),
 		reads:
 			"cookie" in transport
 				? `the "${transport.cookie}" cookie`
@@ -922,7 +925,7 @@ function runtimeScheme(
 		realm: challenge?.realm,
 		extract: scheme.extract as RuntimeScheme["extract"],
 		authenticate: scheme.authenticate as Authenticator<any, any>,
-	};
+	});
 }
 
 /**
@@ -1334,7 +1337,7 @@ function extractCredential(
 	let hasCredential = false;
 
 	try {
-		const result = scheme.extract(value);
+		const result = Reflect.apply(scheme.extract, undefined, [value]);
 
 		if (isRecord(result)) {
 			type = result.type;
@@ -1367,13 +1370,13 @@ async function authenticate(
 	let result: unknown;
 
 	try {
-		result = await scheme.authenticate(
+		result = await Reflect.apply(scheme.authenticate, undefined, [
 			credential,
 			Object.freeze({
 				logger: context.logger,
 				...(context.services === undefined ? {} : { services: context.services }),
 			}) as AuthenticatorContext,
-		);
+		]);
 	} catch {
 		throw new AuthenticatorError(scheme.name);
 	}

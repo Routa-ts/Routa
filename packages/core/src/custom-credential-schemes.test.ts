@@ -450,6 +450,35 @@ describe("custom scheme failures", () => {
 		expect(received).toEqual([["value"]]);
 	});
 
+	it("calls the extractor and authenticator without a receiver they could change", async () => {
+		const receivers: unknown[] = [];
+		const signed = custom({
+			transport: { header: "x-signed" },
+			openapi: { type: "apiKey", in: "header", name: "x-signed" },
+			extract(this: unknown, value) {
+				receivers.push(this);
+				const scheme = this as { transport?: { header: string }; challenge?: string } | undefined;
+				if (scheme?.transport) {
+					scheme.transport.header = "x-attacker";
+					scheme.challenge = value;
+				}
+				return { type: "credential", credential: value };
+			},
+			authenticate(this: unknown) {
+				receivers.push(this);
+				return { type: "rejected" };
+			},
+		});
+		const setup = { calls: [], authentication: { principal: Principal, schemes: { signed } } };
+
+		const first = await send(whoami(), setup, { "x-signed": "secret-value" });
+		const second = await send(whoami(), setup, { "x-signed": "secret-value" });
+
+		expect(receivers).toEqual([undefined, undefined, undefined, undefined]);
+		expect([first.status, first.challenge]).toEqual([401, "signed"]);
+		expect([second.status, second.challenge]).toEqual([401, "signed"]);
+	});
+
 	it("gives the authenticator the extracted credential, not the extractor's result object", async () => {
 		const received: unknown[] = [];
 		const result = { type: "credential", credential: { id: "c1" } };
