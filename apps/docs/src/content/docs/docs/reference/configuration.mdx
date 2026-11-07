@@ -185,8 +185,9 @@ authentication?: {
 
 Turns on credential orchestration for every route. Routa reads each request's credential,
 calls your authenticator once, validates the principal it returns, and gives every handler
-`ctx.auth`. Omit it and no route has `ctx.auth`: an application without `authentication`
-behaves exactly as before, and `requireAuth` fails `routa check`.
+`ctx.auth`. Omit it and Routa provides no `ctx.auth`: an application without
+`authentication` behaves exactly as before, its own middleware may still provide `auth`, and
+`requireAuth` fails `routa check`.
 
 | Field       | Purpose                                                                                     |
 | ----------- | ------------------------------------------------------------------------------------------- |

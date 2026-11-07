@@ -538,8 +538,9 @@ type AuthenticatedAuthContext<TScheme extends string = string, TPrincipal = Prin
 }
 ```
 
-The type of `ctx.auth`. It exists only when `src/routa.ts` configures authentication;
-otherwise reading `ctx.auth` is a type error. `.routa/routes.gen.ts` types it for each
+The type of `ctx.auth`. Routa provides it only when `src/routa.ts` configures authentication;
+otherwise `ctx.auth` exists only when application middleware provides it, with that
+middleware's type. `.routa/routes.gen.ts` types it for each
 operation: an operation without `requireAuth` gets `AuthContext`, and an operation behind
 `requireAuth` gets `AuthenticatedAuthContext`. `TPrincipal` is the principal schema's output.
 Middleware reads `ctx.auth` by declaring `requires: ["auth"]` and sees `AuthContext`.
