@@ -824,7 +824,13 @@ function requestCookies(request: Request): Map<string, string[]> {
 				// Malformed percent-encoding stays raw, as in input.cookies.
 			}
 
-			cookies.set(name, [...(cookies.get(name) ?? []), value]);
+			const values = cookies.get(name);
+
+			if (values) {
+				values.push(value);
+			} else {
+				cookies.set(name, [value]);
+			}
 		}
 	}
 
