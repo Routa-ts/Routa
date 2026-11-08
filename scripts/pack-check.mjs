@@ -93,6 +93,7 @@ if (response.status !== 200 || body.ok !== true) {
  */
 const authenticatedRouta = `import { apiKey, bearer, createRouta } from "@routa-ts/core";
 import { z } from "zod";
+import { calls } from "./calls.js";
 
 const Principal = z.object({ type: z.enum(["user", "service"]), id: z.string() });
 
@@ -103,17 +104,21 @@ export default createRouta({
 		schemes: {
 			serviceKey: apiKey({
 				header: "x-api-key",
-				authenticate: (key) =>
-					key === "smoke-key"
+				authenticate: (key) => {
+					calls.push("serviceKey");
+					return key === "smoke-key"
 						? { type: "authenticated", principal: { type: "service", id: "svc_1" } }
-						: { type: "rejected" },
+						: { type: "rejected" };
+				},
 			}),
 			userToken: bearer({
 				challenge: { realm: "smoke" },
-				authenticate: (token) =>
-					token === "smoke-token"
+				authenticate: (token) => {
+					calls.push("userToken");
+					return token === "smoke-token"
 						? { type: "authenticated", principal: { type: "user", id: "usr_1" } }
-						: { type: "rejected" },
+						: { type: "rejected" };
+				},
 			}),
 		},
 		priority: ["userToken", "serviceKey"],
@@ -121,8 +126,25 @@ export default createRouta({
 });
 `;
 
-/** Authenticated routes: a public route reading ctx.auth, a protected route, and a key-only route. */
+/**
+ * Authenticated routes: a public route reading ctx.auth, a protected route, a key-only route,
+ * and a smoke-only route that reports, then clears, which authenticators ran.
+ */
 const authenticatedRoutes = {
+	"src/calls.ts": `/** The schemes whose authenticator ran since the last read of /calls. Smoke test only. */
+export const calls: string[] = [];
+`,
+	"src/routes/calls/route.ts": `import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+import { calls } from "../../calls.js";
+
+export default createRouteRoot("/calls")({
+	get: createRoute({
+		responses: { success: { status: 200, schema: z.object({ calls: z.array(z.string()) }) } },
+		run: () => ({ type: "success", data: { calls: calls.splice(0) } }),
+	}),
+});
+`,
 	"src/routes/whoami/route.ts": `import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { z } from "zod";
 
@@ -525,34 +547,62 @@ async function checkAuthentication(port, signal, output) {
 		unauthorized(challenge, "authentication-failed", "Authentication failed");
 	const invalidToken = failed('Bearer realm="smoke", error="invalid_token"');
 	const user = ok('{"scheme":"userToken","id":"usr_1"}');
+	// Each case: path, request headers, expected response, and the authenticators expected to run.
 	const cases = {
-		"anonymous public": ["/whoami", {}, ok('{"status":"anonymous"}')],
+		"anonymous public": ["/whoami", {}, ok('{"status":"anonymous"}'), []],
 		"valid Bearer public": [
 			"/whoami",
 			bearer("smoke-token"),
 			ok('{"status":"authenticated","id":"usr_1"}'),
+			["userToken"],
 		],
-		"invalid Bearer public": ["/whoami", bearer("wrong"), invalidToken],
-		"anonymous protected": ["/me", {}, required('Bearer realm="smoke", ApiKey')],
-		"valid Bearer protected": ["/me", bearer("smoke-token"), user],
-		"invalid Bearer protected": ["/me", bearer("wrong"), invalidToken],
-		"valid API key protected": ["/me", key, ok('{"scheme":"serviceKey","id":"svc_1"}')],
-		"both credentials select by priority": ["/me", { ...bearer("smoke-token"), ...key }, user],
+		"invalid Bearer public": ["/whoami", bearer("wrong"), invalidToken, ["userToken"]],
+		"anonymous protected": ["/me", {}, required('Bearer realm="smoke", ApiKey'), []],
+		"valid Bearer protected": ["/me", bearer("smoke-token"), user, ["userToken"]],
+		"invalid Bearer protected": ["/me", bearer("wrong"), invalidToken, ["userToken"]],
+		"valid API key protected": [
+			"/me",
+			key,
+			ok('{"scheme":"serviceKey","id":"svc_1"}'),
+			["serviceKey"],
+		],
+		"both credentials select by priority": [
+			"/me",
+			{ ...bearer("smoke-token"), ...key },
+			user,
+			["userToken"],
+		],
 		"a rejected Bearer never falls back to a valid key": [
 			"/me",
 			{ ...bearer("wrong"), ...key },
 			invalidToken,
+			["userToken"],
 		],
-		"disallowed Bearer on a key-only route": ["/keys", bearer("smoke-token"), failed("ApiKey")],
-		"valid API key on a key-only route": ["/keys", key, ok('{"scheme":"serviceKey"}')],
+		"disallowed Bearer on a key-only route": ["/keys", bearer("smoke-token"), failed("ApiKey"), []],
+		"valid API key on a key-only route": [
+			"/keys",
+			key,
+			ok('{"scheme":"serviceKey"}'),
+			["serviceKey"],
+		],
 	};
 
-	for (const [name, [path, headers, expected]] of Object.entries(cases)) {
+	// Clear anything a readiness or earlier request recorded.
+	await observe("/calls");
+
+	for (const [name, [path, headers, expected, expectedCalls]] of Object.entries(cases)) {
 		const actual = await observe(path, headers);
+		const ran = JSON.parse((await observe("/calls")).body).calls;
 
 		if (JSON.stringify(actual) !== JSON.stringify(expected)) {
 			throw new Error(
 				`Authentication smoke test "${name}" expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}.\n${output}`,
+			);
+		}
+
+		if (JSON.stringify(ran) !== JSON.stringify(expectedCalls)) {
+			throw new Error(
+				`Authentication smoke test "${name}" expected authenticators ${JSON.stringify(expectedCalls)} to run, got ${JSON.stringify(ran)}.\n${output}`,
 			);
 		}
 	}
