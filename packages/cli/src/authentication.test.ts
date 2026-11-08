@@ -445,15 +445,26 @@ describe("application-owned authentication middleware", () => {
 	}, 30_000);
 
 	it("must tell its 401 apart from authenticationFailed once authentication is configured", () => {
-		const codes = (config: string) =>
+		const codes = (config: string, body = "z.object({ type: z.string() })") =>
 			diagnostics({
 				"src/routa.ts": config,
-				"src/middleware/auth.ts": applicationGuard("z.object({ type: z.string() })"),
+				"src/middleware/auth.ts": applicationGuard(body),
 				"src/routes/projects/route.ts": applicationGuardedRoute(false),
 			}).map(({ code }) => code);
 
 		expect(codes(plainConfig)).toEqual([]);
 		expect(codes(routaConfig)).toEqual(["ROUTA_RESPONSE_STATUS_AMBIGUOUS"]);
+		// A literal on a property Routa's bodies lack tells nothing apart.
+		expect(codes(routaConfig, 'z.object({ kind: z.literal("unauthorized") })')).toEqual([
+			"ROUTA_RESPONSE_STATUS_AMBIGUOUS",
+		]);
+		// A distinct literal on a property every 401 body requires, such as type, does.
+		expect(
+			codes(
+				routaConfig,
+				'z.object({ type: z.literal("https://example.com/problems/unauthorized") })',
+			),
+		).toEqual([]);
 	});
 });
 

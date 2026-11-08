@@ -538,6 +538,11 @@ async function checkAuthentication(port, signal, output) {
 		"invalid Bearer protected": ["/me", bearer("wrong"), invalidToken],
 		"valid API key protected": ["/me", key, ok('{"scheme":"serviceKey","id":"svc_1"}')],
 		"both credentials select by priority": ["/me", { ...bearer("smoke-token"), ...key }, user],
+		"a rejected Bearer never falls back to a valid key": [
+			"/me",
+			{ ...bearer("wrong"), ...key },
+			invalidToken,
+		],
 		"disallowed Bearer on a key-only route": ["/keys", bearer("smoke-token"), failed("ApiKey")],
 		"valid API key on a key-only route": ["/keys", key, ok('{"scheme":"serviceKey"}')],
 	};
