@@ -46,7 +46,7 @@
 		"test": "vp test run --coverage"
 	},
 	"dependencies": {
-		"@hono/node-server": "2.1.5",
+		"@hono/node-server": "2.1.6",
 		"@routa-ts/core": "workspace:*",
 		"tsx": "4.23.15",
 		"typescript": "7.0.2",
