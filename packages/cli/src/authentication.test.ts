@@ -458,13 +458,14 @@ describe("application-owned authentication middleware", () => {
 		expect(codes(routaConfig, 'z.object({ kind: z.literal("unauthorized") })')).toEqual([
 			"ROUTA_RESPONSE_STATUS_AMBIGUOUS",
 		]);
-		// A distinct literal on a property every 401 body requires, such as type, does.
+		// A distinct literal on a property every 401 body requires, type or title, does.
 		expect(
 			codes(
 				routaConfig,
 				'z.object({ type: z.literal("https://example.com/problems/unauthorized") })',
 			),
 		).toEqual([]);
+		expect(codes(routaConfig, 'z.object({ title: z.literal("Unauthorized") })')).toEqual([]);
 	});
 });
 
