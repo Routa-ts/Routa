@@ -15,10 +15,10 @@
 		"sync": "vp exec node ./scripts/astro.mjs sync"
 	},
 	"dependencies": {
-		"@astrojs/starlight": "^0.42.7",
+		"@astrojs/starlight": "^0.42.9",
 		"@astrojs/starlight-tailwind": "^5.0.0",
-		"@tailwindcss/vite": "^4.3.3",
-		"astro": "^7.4.4",
+		"@tailwindcss/vite": "^4.3.4",
+		"astro": "^7.4.5",
 		"sharp": "^0.35.5",
 		"tailwindcss": "^4.3.3"
 	},

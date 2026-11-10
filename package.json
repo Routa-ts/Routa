@@ -39,7 +39,7 @@
 		"eslint-plugin-no-secrets": "2.3.3",
 		"@arethetypeswrong/cli": "0.18.5",
 		"@vitest/coverage-v8": "5.0.5",
-		"fallow": "3.37.0",
+		"fallow": "3.39.0",
 		"publint": "0.3.25"
 	}
 }
