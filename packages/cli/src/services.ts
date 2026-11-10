@@ -59,7 +59,7 @@ export function applicationServices(
 		return { diagnostics: [], warnings: [] };
 	}
 
-	const { declaration, hidden } = servicesDeclaration(cwd, parser);
+	const { declaration, hidden } = routaConfigMember(cwd, parser, "services");
 	// Tuning values may be runtime expressions, so a config Routa cannot read is not an error.
 	const warnings: Diagnostic[] = hidden
 		? [
@@ -181,19 +181,23 @@ function declaredContract(
 	});
 }
 
-type ServicesMember = {
-	/** The `services` member's value, and the module it is written in. */
+type ConfigMember = {
+	/** The member's value, and the module it is written in. */
 	declaration?: { file: string; node: ts.Node } | undefined;
-	/** Whether a spread, computed key, or argument Routa cannot read may hold `services`, after any visible member. */
+	/** Whether a spread, computed key, or argument Routa cannot read may hold the member, after any visible member. */
 	hidden: boolean;
 };
 
 /**
- * Finds the `services` member of the default-exported `createRouta({ ... })` call in
+ * Finds a member, such as `services`, of the default-exported `createRouta({ ... })` call in
  * `src/routa.ts`, the config Routa loads at startup. The export may be the call itself or a
- * `const` bound to it; any other default export may hide `services`.
+ * `const` bound to it; any other default export may hide the member.
  */
-function servicesDeclaration(cwd: string, parser: ts.SourceFileParser): ServicesMember {
+export function routaConfigMember(
+	cwd: string,
+	parser: ts.SourceFileParser,
+	member: string,
+): ConfigMember {
 	const sourceFile = parseTypeScriptFile(join(cwd, configFile), parser);
 	const exported = sourceFile.statements.find(ts.isExportAssignment)?.expression;
 	const call = exported && createRoutaCall(sourceFile, exported);
@@ -207,7 +211,7 @@ function servicesDeclaration(cwd: string, parser: ts.SourceFileParser): Services
 	const config = argument && spreadObject(cwd, configFile, argument, parser, 0);
 
 	return config
-		? objectServices(cwd, config.file, config.object, parser, 1)
+		? objectMember(cwd, config.file, config.object, parser, 1, member)
 		: { hidden: argument !== undefined };
 }
 
@@ -241,33 +245,34 @@ function createRoutaCall(
 }
 
 /**
- * Reads `services` from a config object in source order, so a later member replaces an earlier
+ * Reads a member from a config object in source order, so a later member replaces an earlier
  * one as it does at runtime. A spread of an object literal, or of a `const` object literal
  * declared locally or imported, is read like members written in place.
  *
  * @param file - The module containing `object`, relative to `cwd`
  */
-function objectServices(
+function objectMember(
 	cwd: string,
 	file: string,
 	object: ts.ObjectLiteralExpression,
 	parser: ts.SourceFileParser,
 	depth: number,
-): ServicesMember {
-	let found: ServicesMember = { hidden: false };
+	name: string,
+): ConfigMember {
+	let found: ConfigMember = { hidden: false };
 
 	for (const property of object.properties) {
 		if (ts.isSpreadAssignment(property)) {
 			const spread = spreadObject(cwd, file, property.expression, parser, depth);
 			const member = spread
-				? objectServices(cwd, spread.file, spread.object, parser, depth + 1)
+				? objectMember(cwd, spread.file, spread.object, parser, depth + 1, name)
 				: { hidden: true };
 			found = member.declaration
 				? member
 				: { declaration: found.declaration, hidden: found.hidden || member.hidden };
 		} else if (ts.isComputedPropertyName(property.name)) {
 			found = { ...found, hidden: true };
-		} else if (propertyName(property.name) === "services") {
+		} else if (propertyName(property.name) === name) {
 			// A visible member replaces whatever an earlier unreadable part held.
 			found = { declaration: { file, node: memberValue(property) }, hidden: false };
 		}
@@ -316,7 +321,7 @@ function memberValue(property: ts.ObjectLiteralElementLike): ts.Node {
 }
 
 /** Follows a spread expression to the object literal it spreads, when it is a `const` binding. */
-function spreadObject(
+export function spreadObject(
 	cwd: string,
 	file: string,
 	expression: ts.Expression,

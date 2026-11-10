@@ -32,6 +32,48 @@ Middleware `rejects` are documented exactly like route outcomes: description, bo
 and cookies. Middleware `openapi` metadata contributes `security` and `x-routa-authz`, and
 route `deprecation` metadata marks the operation deprecated.
 
+### Authentication
+
+When `src/routa.ts` configures [`authentication`](/docs/reference/configuration/#authentication),
+`components.securitySchemes` declares each scheme under its name, such as
+`userToken: { type: "http", scheme: "bearer" }`, and every operation documents its security:
+
+| Operation             | `security`                | `401` outcomes                                      |
+| --------------------- | ------------------------- | --------------------------------------------------- |
+| Without `requireAuth` | `[{}, { userToken: [] }]` | `authenticationFailed`                              |
+| Behind `requireAuth`  | `[{ userToken: [] }]`     | `authenticationFailed` and `authenticationRequired` |
+
+The empty requirement `{}` says the operation also accepts requests without a credential.
+Each `401` outcome documents its problem body and a required `WWW-Authenticate` header, and
+the two compose under one status like any other outcomes. Routa places each problem body in
+`components.schemas` as `RoutaAuthenticationFailed` or `RoutaAuthenticationRequired` and
+refers to it, so a discriminator `mapping` can select it beside any other component under the
+same status. When a Routa body is one of the alternatives, the problem `type` is the
+discriminator if it qualifies:
+
+```json title="openapi.json"
+{
+	"oneOf": [
+		{ "$ref": "#/components/schemas/RoutaAuthenticationFailed" },
+		{ "$ref": "#/components/schemas/RoutaAuthenticationRequired" }
+	],
+	"discriminator": {
+		"propertyName": "type",
+		"mapping": {
+			"https://routa-ts.dev/problems/authentication-failed": "#/components/schemas/RoutaAuthenticationFailed",
+			"https://routa-ts.dev/problems/authentication-required": "#/components/schemas/RoutaAuthenticationRequired"
+		}
+	}
+}
+```
+
+A schema of yours that claims one of these component names fails with
+`ROUTA_SCHEMA_COMPONENT_COLLISION`. A `HEAD` operation documents the outcomes as one bodyless
+response. Middleware `openapi.security` still applies: Routa enforces
+authentication in addition to your middleware, so each middleware requirement combines with
+each authentication alternative. `[{ tenantKey: [] }]` on a public operation becomes
+`[{ tenantKey: [] }, { tenantKey: [], userToken: [] }]`.
+
 ### Outcomes That Share a Status
 
 OpenAPI has one response per status, so outcomes that share a status are composed into one.
@@ -45,7 +87,8 @@ in its chain. Composition never depends on the order they are written in:
   references and intersections (`z.intersection()` or `.and()`). The response schema becomes a
   `oneOf` of the outcome schemas, ordered by outcome name, with that property as
   `discriminator.propertyName`. When several properties qualify, the alphabetically first
-  name is the discriminator.
+  name is the discriminator, except that `type` wins when one of the outcomes is a
+  [Routa authentication outcome](#authentication).
 - When an outcome schema is a referenced component whose name differs from its discriminator
   value, such as `Created` for `kind: "created"`, the discriminator gets a `mapping` from each
   value, as text, to its component. Components are never renamed to match values.
@@ -109,8 +152,12 @@ the baseline. Descriptions, `operationId`, `info`, and `servers` are not compare
 the generated `Set-Cookie` header description, which lists cookie names and attributes.
 Removing a response status or an operation's authentication from source is drift, because the
 current document no longer carries them over from the baseline. `openapi breaking` is
-narrower: it fails only for removed operations and for inputs that became required or
-newly require authentication, so it is the check to run in CI on every pull request.
+narrower: it fails only for removed operations, for inputs that became required, and for
+operations whose `security` refuses credentials the baseline accepted, so it is the check to
+run in CI on every pull request. Each requirement in `security` is one accepted set of
+credentials, and the empty requirement `{}` accepts a request without any. Adding
+`authentication` to an application flags only the operations behind `requireAuth`, including
+ones that already required an application credential such as a tenant key.
 
 ## OpenAPI to Source
 

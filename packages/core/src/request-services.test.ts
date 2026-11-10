@@ -120,6 +120,23 @@ describe("request-scoped services", () => {
 		await app.dispose();
 	});
 
+	it("keeps an application-owned ctx.auth when authentication is not configured", async () => {
+		const app = await createApplication([
+			route(
+				{
+					middleware: [observe("auth", [])],
+					services: {
+						routeFile: scope(["owner"], 1, ({ ctx }) => ({ owner: (ctx as Ctx).auth })),
+					},
+				},
+				(ctx) => ({ factory: ctx.services.owner, handler: ctx.auth }),
+			),
+		]);
+
+		expect(await (await request(app)).json()).toEqual({ factory: "auth", handler: "auth" });
+		await app.dispose();
+	});
+
 	it("runs the method factory after route-file middleware, only for its own method", async () => {
 		const ran: string[] = [];
 		const routeFile = scope(["orders"], 0, () => {

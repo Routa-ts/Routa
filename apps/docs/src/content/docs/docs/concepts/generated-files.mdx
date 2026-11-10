@@ -54,6 +54,15 @@ requirement interface to its `routaRoutes` entry as `requiresServices`, and the 
 services there do not satisfy the requirement. Projects without services or requirements get
 none of these.
 
+When `src/routa.ts` configures [authentication](/docs/reference/configuration/#authentication),
+the file exports `routaAuthenticationSchemes`, the scheme names in declaration order, which
+startup compares with the configuration. It also exports `RoutaPrincipal`, the principal
+schema's output read from `src/routa.ts`, `RoutaAuthenticationScheme`, and `RoutaAuth`, and it
+adds `auth` to every operation's context: `RoutaAuth`, or the authenticated branch behind
+`requireAuth`. A `requireAuth` guard appears in its `routaRoutes` chain with the schemes it
+allows, and every operation lists `401` among its statuses. Projects without authentication
+get none of these.
+
 Refresh it after adding, moving, or removing a route file, changing which methods a route
 declares, or changing middleware layout:
 
