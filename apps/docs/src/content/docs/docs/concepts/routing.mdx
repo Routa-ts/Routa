@@ -97,7 +97,8 @@ A folder wrapped in parentheses organizes files without contributing a URL segme
 </FileTree>
 
 Groups are the tool for applying one middleware chain to a set of routes that do not share
-a URL prefix. The group name is recorded in generated metadata and in `routa routes`
+a URL prefix, including a [`requireAuth`](/docs/reference/core/#requireauth) guard that
+protects all of them. The group name is recorded in generated metadata and in `routa routes`
 output, so it stays visible even though it is invisible in the URL.
 
 ### Reserved File Names
