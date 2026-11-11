@@ -87,6 +87,117 @@ if (response.status !== 200 || body.ok !== true) {
 }
 `;
 
+/**
+ * The authenticated consumer's src/routa.ts: one principal schema, a Bearer and an API-key
+ * scheme, and a priority that differs from declaration order.
+ */
+const authenticatedRouta = `import { apiKey, bearer, createRouta } from "@routa-ts/core";
+import { z } from "zod";
+import { calls } from "./calls.js";
+
+const Principal = z.object({ type: z.enum(["user", "service"]), id: z.string() });
+
+export default createRouta({
+	port: 3000,
+	authentication: {
+		principal: Principal,
+		schemes: {
+			serviceKey: apiKey({
+				header: "x-api-key",
+				authenticate: (key) => {
+					calls.push("serviceKey");
+					return key === "smoke-key"
+						? { type: "authenticated", principal: { type: "service", id: "svc_1" } }
+						: { type: "rejected" };
+				},
+			}),
+			userToken: bearer({
+				challenge: { realm: "smoke" },
+				authenticate: (token) => {
+					calls.push("userToken");
+					return token === "smoke-token"
+						? { type: "authenticated", principal: { type: "user", id: "usr_1" } }
+						: { type: "rejected" };
+				},
+			}),
+		},
+		priority: ["userToken", "serviceKey"],
+	},
+});
+`;
+
+/**
+ * Authenticated routes: a public route reading ctx.auth, a protected route, a key-only route,
+ * and a smoke-only route that reports, then clears, which authenticators ran.
+ */
+const authenticatedRoutes = {
+	"src/calls.ts": `/** The schemes whose authenticator ran since the last read of /calls. Smoke test only. */
+export const calls: string[] = [];
+`,
+	"src/routes/calls/route.ts": `import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+import { calls } from "../../calls.js";
+
+export default createRouteRoot("/calls")({
+	get: createRoute({
+		responses: { success: { status: 200, schema: z.object({ calls: z.array(z.string()) }) } },
+		run: () => ({ type: "success", data: { calls: calls.splice(0) } }),
+	}),
+});
+`,
+	"src/routes/whoami/route.ts": `import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/whoami")({
+	get: createRoute({
+		responses: {
+			success: { status: 200, schema: z.object({ status: z.string(), id: z.string().optional() }) },
+		},
+		run: ({ ctx }) => ({
+			type: "success",
+			data:
+				ctx.auth.status === "anonymous"
+					? { status: "anonymous" }
+					: { status: "authenticated", id: ctx.auth.principal.id },
+		}),
+	}),
+});
+`,
+	"src/routes/me/route.ts": `import { createRoute, createRouteRoot, requireAuth } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/me")({
+	get: createRoute({
+		middleware: [requireAuth()],
+		responses: {
+			success: {
+				status: 200,
+				schema: z.object({ scheme: z.enum(["userToken", "serviceKey"]), id: z.string() }),
+			},
+		},
+		// ctx.auth is narrowed to the authenticated branch; tsc in routa check proves it.
+		run: ({ ctx }) => ({
+			type: "success",
+			data: { scheme: ctx.auth.scheme, id: ctx.auth.principal.id },
+		}),
+	}),
+});
+`,
+	"src/routes/keys/route.ts": `import { createRoute, createRouteRoot, requireAuth } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouteRoot("/keys")({
+	get: createRoute({
+		middleware: [requireAuth({ schemes: ["serviceKey"] })],
+		responses: {
+			success: { status: 200, schema: z.object({ scheme: z.literal("serviceKey") }) },
+		},
+		run: ({ ctx }) => ({ type: "success", data: { scheme: ctx.auth.scheme } }),
+	}),
+});
+`,
+};
+
 run("vp", ["run", "build:packages"], root);
 mkdirSync(packDir, { recursive: true });
 writeFileSync(
@@ -217,48 +328,71 @@ for (const [zodVersion, label] of zodVersions) {
 	writeFileSync(join(appDir, "src/routes/session/route.ts"), responseContractRoute);
 	run("vp", ["exec", "routa", "build"], appDir);
 	run("vp", ["exec", "routa", "check"], appDir);
-	await smokeTestStart(appDir);
+	await smokeTestStart(appDir, checkResponseContract);
 	process.stdout.write(`Packed consumer passed with zod ${zodVersion} (${label}).\n`);
 }
 
-const noOpenApiDir = join(tmp, "app-no-openapi");
-run(
-	"vp",
-	[
-		"dlx",
-		`file:${tarballs.get("create-routa-ts")}`,
-		"app-no-openapi",
-		"--no-openapi",
-		"--no-git",
-		"--no-install",
-		"--yes",
-	],
-	tmp,
-);
-const noOpenApiManifestPath = join(noOpenApiDir, "package.json");
-const noOpenApiManifest = readJson(noOpenApiManifestPath);
-noOpenApiManifest.dependencies["@routa-ts/core"] = `file:${tarballs.get("@routa-ts/core")}`;
-noOpenApiManifest.dependencies["@routa-ts/cli"] = `file:${tarballs.get("@routa-ts/cli")}`;
-writeFileSync(noOpenApiManifestPath, `${JSON.stringify(noOpenApiManifest, null, "\t")}\n`);
-writeFileSync(
-	join(noOpenApiDir, "pnpm-workspace.yaml"),
-	`overrides:\n  "@routa-ts/cli": "file:${tarballs.get("@routa-ts/cli")}"\n  "@routa-ts/core": "file:${tarballs.get("@routa-ts/core")}"\n  "create-routa-ts": "file:${tarballs.get("create-routa-ts")}"\nallowBuilds:\n  esbuild: true\n`,
-);
-run("vp", ["install"], noOpenApiDir);
+const noOpenApiDir = scaffoldConsumer("app-no-openapi", ["--no-openapi"]);
 run("vp", ["exec", "routa", "check"], noOpenApiDir);
 run("vp", ["exec", "routa", "build"], noOpenApiDir);
 run("vp", ["run", "test"], noOpenApiDir);
 
+// The starter stays authentication-free. A consumer adopts authentication by editing files
+// after scaffolding, then routa check (including tsc on the narrowed ctx.auth) and routa start
+// prove the packed packages serve the contract.
+const authenticatedDir = scaffoldConsumer("app-authenticated", []);
+writeFileSync(join(authenticatedDir, "src/routa.ts"), authenticatedRouta);
+
+for (const [file, source] of Object.entries(authenticatedRoutes)) {
+	mkdirSync(join(authenticatedDir, file, ".."), { recursive: true });
+	writeFileSync(join(authenticatedDir, file), source);
+}
+
+run("vp", ["exec", "routa", "check"], authenticatedDir);
+run("vp", ["exec", "routa", "build"], authenticatedDir);
+checkAuthenticatedOpenApi(authenticatedDir);
+await smokeTestStart(authenticatedDir, checkAuthentication);
+process.stdout.write("Packed authenticated consumer passed.\n");
+
 process.stdout.write(`Pack check passed in ${basename(tmp)}.\n`);
 
+/** Scaffolds a project from the packed creator and installs the packed packages into it. */
+function scaffoldConsumer(name, flags) {
+	const appDir = join(tmp, name);
+	run(
+		"vp",
+		[
+			"dlx",
+			`file:${tarballs.get("create-routa-ts")}`,
+			name,
+			...flags,
+			"--no-git",
+			"--no-install",
+			"--yes",
+		],
+		tmp,
+	);
+	const manifestPath = join(appDir, "package.json");
+	const manifest = readJson(manifestPath);
+	manifest.dependencies["@routa-ts/core"] = `file:${tarballs.get("@routa-ts/core")}`;
+	manifest.dependencies["@routa-ts/cli"] = `file:${tarballs.get("@routa-ts/cli")}`;
+	writeFileSync(manifestPath, `${JSON.stringify(manifest, null, "\t")}\n`);
+	writeFileSync(
+		join(appDir, "pnpm-workspace.yaml"),
+		`overrides:\n  "@routa-ts/cli": "file:${tarballs.get("@routa-ts/cli")}"\n  "@routa-ts/core": "file:${tarballs.get("@routa-ts/core")}"\n  "create-routa-ts": "file:${tarballs.get("create-routa-ts")}"\nallowBuilds:\n  esbuild: true\n`,
+	);
+	run("vp", ["install"], appDir);
+	return appDir;
+}
+
 /**
- * Starts the packaged `routa start` server and verifies it serves the starter route and the
- * response contract route.
+ * Starts the packaged `routa start` server, waits until it serves the starter route, then runs
+ * `check(port, signal, output)` against it.
  *
  * This guards the packaged runtime entry (dist/runtime.js), which `routa check`
  * and `routa build` never exercise.
  */
-async function smokeTestStart(cwd) {
+async function smokeTestStart(cwd, check) {
 	const port = await freePort();
 	// detached puts the vp -> routa -> node chain in its own process group so
 	// the whole tree can be killed once the smoke test finishes.
@@ -308,8 +442,7 @@ async function smokeTestStart(cwd) {
 						);
 					}
 
-					await checkResponseContract(port, controller.signal, output);
-					return;
+					break;
 				} finally {
 					clearTimeout(timeoutId);
 				}
@@ -332,6 +465,9 @@ async function smokeTestStart(cwd) {
 				throw error;
 			}
 		}
+
+		// Outside the readiness retries: a failing check reports its own error, never a timeout.
+		await check(port, AbortSignal.timeout(Math.max(1, deadline - Date.now())), output);
 	} finally {
 		if (process.platform !== "win32" && child.pid) {
 			try {
@@ -382,6 +518,135 @@ async function checkResponseContract(port, signal, output) {
 			`Response contract smoke test expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}.\n${output}`,
 		);
 	}
+}
+
+/**
+ * Checks the authenticated consumer over HTTP: anonymous, valid, invalid, prioritized, and
+ * disallowed credentials, with exact challenges.
+ */
+async function checkAuthentication(port, signal, output) {
+	const observe = async (path, headers = {}) => {
+		const response = await fetch(`http://127.0.0.1:${port}${path}`, { headers, signal });
+		return {
+			status: response.status,
+			challenge: response.headers.get("www-authenticate"),
+			body: await response.text(),
+		};
+	};
+	const bearer = (token) => ({ authorization: `Bearer ${token}` });
+	const key = { "x-api-key": "smoke-key" };
+	const ok = (body) => ({ status: 200, challenge: null, body });
+	const unauthorized = (challenge, kind, title) => ({
+		status: 401,
+		challenge,
+		body: `{"type":"https://routa-ts.dev/problems/${kind}","title":"${title}","status":401}`,
+	});
+	const required = (challenge) =>
+		unauthorized(challenge, "authentication-required", "Authentication required");
+	const failed = (challenge) =>
+		unauthorized(challenge, "authentication-failed", "Authentication failed");
+	const invalidToken = failed('Bearer realm="smoke", error="invalid_token"');
+	const user = ok('{"scheme":"userToken","id":"usr_1"}');
+	// Each case: path, request headers, expected response, and the authenticators expected to run.
+	const cases = {
+		"anonymous public": ["/whoami", {}, ok('{"status":"anonymous"}'), []],
+		"valid Bearer public": [
+			"/whoami",
+			bearer("smoke-token"),
+			ok('{"status":"authenticated","id":"usr_1"}'),
+			["userToken"],
+		],
+		"invalid Bearer public": ["/whoami", bearer("wrong"), invalidToken, ["userToken"]],
+		"anonymous protected": ["/me", {}, required('Bearer realm="smoke", ApiKey'), []],
+		"valid Bearer protected": ["/me", bearer("smoke-token"), user, ["userToken"]],
+		"invalid Bearer protected": ["/me", bearer("wrong"), invalidToken, ["userToken"]],
+		"valid API key protected": [
+			"/me",
+			key,
+			ok('{"scheme":"serviceKey","id":"svc_1"}'),
+			["serviceKey"],
+		],
+		"both credentials select by priority": [
+			"/me",
+			{ ...bearer("smoke-token"), ...key },
+			user,
+			["userToken"],
+		],
+		"a rejected Bearer never falls back to a valid key": [
+			"/me",
+			{ ...bearer("wrong"), ...key },
+			invalidToken,
+			["userToken"],
+		],
+		"disallowed Bearer on a key-only route": ["/keys", bearer("smoke-token"), failed("ApiKey"), []],
+		"valid API key on a key-only route": [
+			"/keys",
+			key,
+			ok('{"scheme":"serviceKey"}'),
+			["serviceKey"],
+		],
+	};
+
+	// Clear anything a readiness or earlier request recorded.
+	await observe("/calls");
+
+	for (const [name, [path, headers, expected, expectedCalls]] of Object.entries(cases)) {
+		const actual = await observe(path, headers);
+		const ran = JSON.parse((await observe("/calls")).body).calls;
+
+		if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+			throw new Error(
+				`Authentication smoke test "${name}" expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}.\n${output}`,
+			);
+		}
+
+		if (JSON.stringify(ran) !== JSON.stringify(expectedCalls)) {
+			throw new Error(
+				`Authentication smoke test "${name}" expected authenticators ${JSON.stringify(expectedCalls)} to run, got ${JSON.stringify(ran)}.\n${output}`,
+			);
+		}
+	}
+}
+
+/**
+ * Generates the authenticated consumer's OpenAPI through the packed CLI and checks its security
+ * schemes and each operation's security alternatives, then that `routa openapi check` agrees.
+ */
+function checkAuthenticatedOpenApi(cwd) {
+	run("vp", ["exec", "routa", "openapi", "breaking", "--update-baseline"], cwd);
+	const document = readJson(join(cwd, ".routa/openapi-baseline.json"));
+	const expected = {
+		securitySchemes: {
+			serviceKey: { type: "apiKey", in: "header", name: "x-api-key" },
+			userToken: { type: "http", scheme: "bearer" },
+		},
+		"/whoami": [{}, { userToken: [] }, { serviceKey: [] }],
+		"/me": [{ userToken: [] }, { serviceKey: [] }],
+		"/keys": [{ serviceKey: [] }],
+	};
+	const actual = {
+		securitySchemes: document.components?.securitySchemes,
+		...Object.fromEntries(
+			["/whoami", "/me", "/keys"].map((path) => [path, document.paths?.[path]?.get?.security]),
+		),
+	};
+
+	if (canonicalJson(actual) !== canonicalJson(expected)) {
+		throw new Error(
+			`Authenticated OpenAPI expected ${canonicalJson(expected)}, got ${canonicalJson(actual)}.`,
+		);
+	}
+
+	run("vp", ["exec", "routa", "openapi", "check"], cwd);
+}
+
+/** JSON with object keys sorted, so key order does not matter but array order does. */
+function canonicalJson(value) {
+	return JSON.stringify(value, (_key, item) =>
+		item && typeof item === "object" && !Array.isArray(item)
+			? Object.fromEntries(Object.entries(item).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+			: item,
+	);
 }
 
 function freePort() {
