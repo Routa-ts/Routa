@@ -9,14 +9,22 @@ import * as ts from "./typescript.js";
 /** One credential scheme `src/routa.ts` declares, read from source. */
 export type AuthenticationSchemeMetadata = {
 	name: string;
-	kind: "bearer";
 	/** The static challenge realm, when the scheme overrides it. */
 	realm?: string;
-};
+} & (
+	| { kind: "bearer" }
+	| {
+			kind: "apiKey";
+			/** As written; HTTP compares header names case-insensitively. */ header: string;
+	  }
+	| { kind: "sessionCookie"; cookie: string }
+);
 
-/** The application's authentication contract facts, in declaration order. */
+/** The application's authentication contract facts. */
 export type AuthenticationMetadata = {
+	/** In priority order, which is declaration order unless `priority` sets it. */
 	schemes: AuthenticationSchemeMetadata[];
+	multipleCredentials: "priority" | "reject";
 };
 
 /** What a `requireAuth` guard contributes to a middleware chain's metadata. */
@@ -38,6 +46,20 @@ export const authenticationRequiredDescription =
 	"Authentication is required: the request presented no credential.";
 export const authenticationFailedDescription =
 	"Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.";
+export const ambiguousCredentialsDescription =
+	"Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.";
+
+/** RFC 9110 `token`, the grammar of header names and, in RFC 6265, of cookie names. */
+const tokenNamePattern = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+
+type SchemeKind = AuthenticationSchemeMetadata["kind"];
+
+/** Each kind's constructor, and the auth-scheme its challenges name. */
+const kinds: Record<SchemeKind, { call: string; challenge: string; article: string }> = {
+	bearer: { call: "bearer", challenge: "Bearer", article: "A" },
+	apiKey: { call: "apiKey", challenge: "ApiKey", article: "An" },
+	sessionCookie: { call: "sessionCookie", challenge: "Session", article: "A" },
+};
 
 /**
  * Reads the `authentication` field of the `createRouta` config in `src/routa.ts` without
@@ -116,11 +138,13 @@ export function applicationAuthentication(
 	}
 
 	const metadata: AuthenticationSchemeMetadata[] = [];
+	const names: string[] = [];
 
 	for (const property of schemes.object.properties) {
 		// hasUnreadableMember already rejected every other member kind.
 		const member = property as ts.PropertyAssignment | ts.ShorthandPropertyAssignment;
 		const name = propertyName(member.name) as string;
+		names.push(name);
 
 		if (!schemeNamePattern.test(name)) {
 			report(
@@ -133,17 +157,29 @@ export function applicationAuthentication(
 		}
 
 		const value = memberNode(schemes.object, name) as ts.Expression;
-		const descriptor = bearerDescriptor(cwd, schemes.file, value, parser);
+		const descriptor = schemeDescriptor(cwd, schemes.file, value, parser);
 
 		if (!descriptor) {
 			unresolved(
-				`Authentication scheme "${name}" in ${configFile} is not a statically readable bearer() call.`,
+				`Authentication scheme "${name}" in ${configFile} is not a statically readable bearer(), apiKey(), or sessionCookie() call.`,
 				schemes.file,
 			);
 			continue;
 		}
 
-		const challenge = bearerChallenge(descriptor.options);
+		const transport = schemeTransport(descriptor.kind, descriptor.options);
+
+		if ("problem" in transport) {
+			report(
+				transport.code,
+				`Authentication scheme "${name}" ${transport.problem}`,
+				transport.suggestion,
+				descriptor.file,
+			);
+			continue;
+		}
+
+		const challenge = schemeChallenge(descriptor.kind, descriptor.options);
 
 		if ("problem" in challenge) {
 			report(
@@ -155,23 +191,19 @@ export function applicationAuthentication(
 			continue;
 		}
 
-		const earlier = metadata.find((item) => item.kind === "bearer");
+		const scheme = {
+			name,
+			...transport,
+			...(challenge.realm === undefined ? {} : { realm: challenge.realm }),
+		} as AuthenticationSchemeMetadata;
+		const overlap = transportOverlap(scheme, metadata);
 
-		if (earlier) {
-			report(
-				"ROUTA_AUTH_TRANSPORT_OVERLAP",
-				`Authentication schemes "${earlier.name}" and "${name}" both read the Authorization Bearer credential.`,
-				"Declare one Bearer scheme, and verify every token format it accepts in its authenticator.",
-				schemes.file,
-			);
+		if (overlap) {
+			report("ROUTA_AUTH_TRANSPORT_OVERLAP", overlap.message, overlap.suggestion, schemes.file);
 			continue;
 		}
 
-		metadata.push({
-			name,
-			kind: "bearer",
-			...(challenge.realm === undefined ? {} : { realm: challenge.realm }),
-		});
+		metadata.push(scheme);
 	}
 
 	if (schemes.object.properties.length === 0) {
@@ -183,9 +215,251 @@ export function applicationAuthentication(
 		);
 	}
 
+	const priority = schemePriority(config.object, names);
+	const multipleCredentials = multipleCredentialsMode(config.object);
+
+	for (const problem of [...priority.problems, ...multipleCredentials.problems]) {
+		report(problem.code, problem.message, problem.suggestion, config.file);
+	}
+
 	return diagnostics.length > 0
 		? { diagnostics, warnings }
-		: { authentication: { schemes: metadata }, diagnostics, warnings };
+		: {
+				authentication: {
+					schemes: priority.order.map((name) => metadata.find((item) => item.name === name)!),
+					multipleCredentials: multipleCredentials.mode,
+				},
+				diagnostics,
+				warnings,
+			};
+}
+
+type ConfigProblem = { code: string; message: string; suggestion: string };
+
+/**
+ * Reads `priority`: absent for declaration order, or a literal list naming every scheme exactly
+ * once.
+ *
+ * @param names - The declared scheme names, in declaration order
+ */
+function schemePriority(
+	config: ts.ObjectLiteralExpression,
+	names: readonly string[],
+): { order: string[]; problems: ConfigProblem[] } {
+	const node = memberNode(config, "priority");
+
+	if (!node) {
+		return { order: [...names], problems: [] };
+	}
+
+	const listed = ts.isExpression(node) ? stringList(node) : undefined;
+	const at = `The authentication priority in ${configFile}`;
+	const suggestion = `List every scheme exactly once, in the order Routa selects among presented credentials: priority: [${names.map((name) => JSON.stringify(name)).join(", ")}].`;
+
+	if (!listed) {
+		return {
+			order: [],
+			problems: [
+				{
+					code: "ROUTA_AUTH_CONFIG_UNRESOLVED",
+					message: `${at} is not a literal list of scheme names.`,
+					suggestion,
+				},
+			],
+		};
+	}
+
+	const problems: ConfigProblem[] = [];
+
+	for (const [index, name] of listed.entries()) {
+		if (!names.includes(name)) {
+			problems.push({
+				code: "ROUTA_AUTH_SCHEME_UNKNOWN",
+				message: `${at} lists "${name}", which schemes does not declare.`,
+				suggestion,
+			});
+		} else if (listed.indexOf(name) !== index) {
+			problems.push({
+				code: "ROUTA_AUTH_PRIORITY_INVALID",
+				message: `${at} lists "${name}" more than once.`,
+				suggestion,
+			});
+		}
+	}
+
+	for (const name of names.filter((item) => !listed.includes(item))) {
+		problems.push({
+			code: "ROUTA_AUTH_PRIORITY_INVALID",
+			message: `${at} omits "${name}".`,
+			suggestion,
+		});
+	}
+
+	return { order: listed, problems };
+}
+
+/** Reads `multipleCredentials`: absent for `"priority"`, or the literal `"priority"` or `"reject"`. */
+function multipleCredentialsMode(config: ts.ObjectLiteralExpression): {
+	mode: "priority" | "reject";
+	problems: ConfigProblem[];
+} {
+	const node = memberNode(config, "multipleCredentials");
+	const value = node && ts.isExpression(node) ? unwrapExpression(node) : undefined;
+	const at = `The authentication multipleCredentials in ${configFile}`;
+	const suggestion =
+		'Write multipleCredentials: "priority" to authenticate the first presented credential by priority, or "reject" to answer ambiguousCredentials (400).';
+
+	if (!node) {
+		return { mode: "priority", problems: [] };
+	}
+
+	if (!value || !ts.isStringLiteralLike(value)) {
+		return {
+			mode: "priority",
+			problems: [
+				{
+					code: "ROUTA_AUTH_CONFIG_UNRESOLVED",
+					message: `${at} is not the literal "priority" or "reject".`,
+					suggestion,
+				},
+			],
+		};
+	}
+
+	if (value.text !== "priority" && value.text !== "reject") {
+		return {
+			mode: "priority",
+			problems: [
+				{
+					code: "ROUTA_AUTH_CONFIG_INVALID",
+					message: `${at} is ${JSON.stringify(value.text)}. Use "priority" or "reject".`,
+					suggestion,
+				},
+			],
+		};
+	}
+
+	return { mode: value.text, problems: [] };
+}
+
+/** The string literals an array literal lists, or `undefined` when it is anything else. */
+function stringList(expression: ts.Expression): string[] | undefined {
+	const array = unwrapExpression(expression);
+
+	if (!ts.isArrayLiteralExpression(array)) {
+		return undefined;
+	}
+
+	const values: string[] = [];
+
+	for (const element of array.elements) {
+		const value = unwrapExpression(element as ts.Expression);
+
+		if (!ts.isStringLiteralLike(value)) {
+			return undefined;
+		}
+
+		values.push(value.text);
+	}
+
+	return values;
+}
+
+/**
+ * Reads where a scheme's credential travels: nothing more for Bearer, a literal header name for
+ * an API key, or a literal cookie name for a session.
+ */
+function schemeTransport(
+	kind: SchemeKind,
+	options: ts.ObjectLiteralExpression,
+):
+	| { kind: "bearer" }
+	| { kind: "apiKey"; header: string }
+	| { kind: "sessionCookie"; cookie: string }
+	| { code: string; problem: string; suggestion: string } {
+	if (kind === "bearer") {
+		return { kind };
+	}
+
+	const [key, noun, example, grammar] =
+		kind === "apiKey"
+			? (["header", "header", "x-api-key", "an HTTP header name"] as const)
+			: (["cookie", "cookie", "session", "a cookie name"] as const);
+	const node = memberNode(options, key);
+	const value = node && ts.isExpression(node) ? unwrapExpression(node) : undefined;
+	const suggestion = `Write the ${noun} name as a string literal of letters, digits, and !#$%&'*+-.^_\`|~, such as ${key}: "${example}".`;
+
+	if (!value || !ts.isStringLiteralLike(value)) {
+		return {
+			code: "ROUTA_AUTH_CONFIG_UNRESOLVED",
+			problem: `declares a ${noun} that is not a string literal.`,
+			suggestion,
+		};
+	}
+
+	if (!tokenNamePattern.test(value.text)) {
+		return {
+			code: "ROUTA_AUTH_CONFIG_INVALID",
+			problem: `declares ${noun} ${JSON.stringify(value.text)}, which is not ${grammar}.`,
+			suggestion,
+		};
+	}
+
+	return kind === "apiKey" ? { kind, header: value.text } : { kind, cookie: value.text };
+}
+
+/** Why a scheme reads bytes another built-in scheme already reads, or `undefined`. */
+function transportOverlap(
+	scheme: AuthenticationSchemeMetadata,
+	earlier: readonly AuthenticationSchemeMetadata[],
+): { message: string; suggestion: string } | undefined {
+	const header = scheme.kind === "apiKey" ? scheme.header.toLowerCase() : undefined;
+
+	if (header === "authorization") {
+		return {
+			message: `Authentication scheme "${scheme.name}" reads the Authorization header, which carries Authorization-scheme credentials such as Bearer.`,
+			suggestion:
+				"Use bearer() for Bearer tokens, or read the API key from its own header, such as x-api-key.",
+		};
+	}
+
+	if (header === "cookie") {
+		return {
+			message: `Authentication scheme "${scheme.name}" reads the Cookie header, which carries cookies.`,
+			suggestion:
+				"Use sessionCookie() for a session cookie, or read the API key from its own header, such as x-api-key.",
+		};
+	}
+
+	const other = earlier.find(
+		(item) =>
+			item.kind === scheme.kind
+			&& (item.kind !== "apiKey" || item.header.toLowerCase() === header)
+			&& (item.kind !== "sessionCookie" || item.cookie === (scheme as { cookie?: string }).cookie),
+	);
+
+	if (!other) {
+		return undefined;
+	}
+
+	const both = `Authentication schemes "${other.name}" and "${scheme.name}" both read`;
+	return scheme.kind === "bearer"
+		? {
+				message: `${both} the Authorization Bearer credential.`,
+				suggestion:
+					"Declare one Bearer scheme, and verify every token format it accepts in its authenticator.",
+			}
+		: scheme.kind === "apiKey"
+			? {
+					message: `${both} the ${header} header.`,
+					suggestion:
+						"Declare one API-key scheme per header, and verify every key format it accepts in its authenticator.",
+				}
+			: {
+					message: `${both} the "${scheme.cookie}" cookie.`,
+					suggestion:
+						"Declare one session scheme per cookie, and verify every session format it accepts in its authenticator.",
+				};
 }
 
 /** A node read as an object literal: written in place, or a `const` bound to one. */
@@ -231,33 +505,44 @@ function memberNode(object: ts.ObjectLiteralExpression, name: string): ts.Node |
 	}
 }
 
-/** Follows a scheme value to its `bearer({ ... })` call, through `const` bindings and imports. */
-function bearerDescriptor(
+/**
+ * Follows a scheme value to its `bearer({ ... })`, `apiKey({ ... })`, or `sessionCookie({ ... })`
+ * call, through `const` bindings and imports.
+ */
+function schemeDescriptor(
 	cwd: string,
 	file: string,
 	expression: ts.Expression,
 	parser: ts.SourceFileParser,
-): { file: string; options: ts.ObjectLiteralExpression } | undefined {
+): { file: string; kind: SchemeKind; options: ts.ObjectLiteralExpression } | undefined {
 	const read = (node: ts.Expression) => {
-		const call = coreCall(node, "bearer");
-		const options = call && objectLiteral(call.arguments[0]);
-		// A spread or computed key could hide or replace the challenge override. A method, such as
-		// authenticate(token) { ... }, declares a function, which is never a contract fact.
-		return options && !hasUnreadableMember(options, true) ? options : undefined;
+		for (const kind of Object.keys(kinds) as SchemeKind[]) {
+			const call = coreCall(node, kinds[kind].call);
+			const options = call && objectLiteral(call.arguments[0]);
+
+			// A spread or computed key could hide or replace a contract fact. A method, such as
+			// authenticate(token) { ... }, declares a function, which is never a contract fact.
+			if (call) {
+				return options && !hasUnreadableMember(options, true) ? { kind, options } : undefined;
+			}
+		}
+
+		return undefined;
 	};
 	const node = unwrapExpression(expression);
 
 	if (ts.isIdentifier(node)) {
 		const bound = boundDeclaration(cwd, file, node.text, parser, read);
-		return bound && { file: bound.file, options: bound.contract };
+		return bound && { file: bound.file, ...bound.contract };
 	}
 
-	const options = read(node);
-	return options && { file, options };
+	const descriptor = read(node);
+	return descriptor && { file, ...descriptor };
 }
 
-/** Reads a Bearer challenge override: absent, or a literal object with only a literal realm. */
-function bearerChallenge(
+/** Reads a challenge override: absent, or a literal object with only a literal realm. */
+function schemeChallenge(
+	kind: SchemeKind,
 	options: ts.ObjectLiteralExpression,
 ): { realm?: string } | { problem: string } {
 	const node = memberNode(options, "challenge");
@@ -279,7 +564,7 @@ function bearerChallenge(
 
 		if (key !== "realm") {
 			return {
-				problem: `declares challenge "${key}". A Bearer challenge override accepts only realm.`,
+				problem: `declares challenge "${key}". ${kinds[kind].article} ${kinds[kind].challenge} challenge override accepts only realm.`,
 			};
 		}
 
@@ -515,4 +800,79 @@ export function filesystemRequirementDiagnostics(
 		file,
 		suggestion: "Write requireAuth() inline in the middleware of each route or method it protects.",
 	}));
+}
+
+/**
+ * The schemes an operation accepts, in priority order: those every `requireAuth` guard in its
+ * middleware chain allows, or every configured scheme without a guard. Generated types, route
+ * metadata, and OpenAPI all read an operation's accepted schemes from here.
+ */
+export function allowedSchemes(
+	chain: readonly MiddlewareMetadata[],
+	authentication: AuthenticationMetadata,
+): string[] {
+	return chain.reduce(
+		(allowed, item) =>
+			item.authentication
+				? allowed.filter((name) => item.authentication!.schemes.includes(name))
+				: allowed,
+		authentication.schemes.map((scheme) => scheme.name),
+	);
+}
+
+/**
+ * Whether an operation can answer `ambiguousCredentials`: strict multiple-credential mode, and
+ * more than one scheme the operation accepts.
+ */
+export function rejectsAmbiguousCredentials(
+	chain: readonly MiddlewareMetadata[],
+	authentication: AuthenticationMetadata | undefined,
+): boolean {
+	return (
+		authentication?.multipleCredentials === "reject"
+		&& allowedSchemes(chain, authentication).length > 1
+	);
+}
+
+/**
+ * Reports operations whose `requireAuth` guards each allow schemes, but none in common, so no
+ * request could pass them. A guard that allows no configured scheme is reported where it is
+ * written.
+ */
+export function requirementIntersectionDiagnostics(
+	routes: ReadonlyArray<{
+		file: string;
+		path: string;
+		methods: readonly string[];
+		middleware: readonly MiddlewareMetadata[];
+		methodMiddleware: Readonly<Record<string, readonly MiddlewareMetadata[]>>;
+	}>,
+	authentication: AuthenticationMetadata | undefined,
+): Diagnostic[] {
+	if (!authentication) {
+		return [];
+	}
+
+	return routes.flatMap((route) =>
+		route.methods.flatMap((method) => {
+			const chain = route.methodMiddleware[method.toLowerCase()] ?? route.middleware;
+			const guards = chain.flatMap((item) => (item.authentication ? [item.authentication] : []));
+
+			return guards.length > 1
+				&& guards.every((guard) => guard.schemes.length > 0)
+				&& allowedSchemes(chain, authentication).length === 0
+				? [
+						{
+							code: "ROUTA_AUTH_REQUIREMENT_EMPTY",
+							severity: "error" as const,
+							message: `requireAuth() guards on ${method} ${route.path} allow no scheme in common, so no request could pass them.`,
+							file: route.file,
+							routePath: route.path,
+							suggestion:
+								"Allow at least one scheme in every requireAuth() guard on the operation, or remove a guard.",
+						},
+					]
+				: [];
+		}),
+	);
 }

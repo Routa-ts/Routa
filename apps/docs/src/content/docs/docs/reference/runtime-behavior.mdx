@@ -16,8 +16,8 @@ For each matched route, in order:
 
 1. **Credential resolution.** Only when `src/routa.ts` configures
    [`authentication`](/docs/reference/configuration/#authentication). Routa reads the request's
-   credential and sets `ctx.auth`, or ends the request with `authenticationFailed`. See
-   [Authentication](#authentication).
+   credentials and sets `ctx.auth`, or ends the request with `authenticationFailed` or, in
+   strict mode, `ambiguousCredentials`. See [Authentication](#authentication).
 2. **Accept negotiation.** A request whose `Accept` header cannot be satisfied by JSON
    receives `406 Not Acceptable`. A missing `Accept` header is treated as acceptable.
 3. **Input parsing.** Declared `params`, `query`, `headers`, `cookies`, and `body` are
@@ -46,20 +46,21 @@ For each matched route, in order:
 
 ## Status Codes Routa Produces
 
-| Status | Cause                                                                              |
-| ------ | ---------------------------------------------------------------------------------- |
-| `204`  | Automatic `OPTIONS` response                                                       |
-| `400`  | Input failed schema validation, or the JSON body could not be parsed               |
-| `401`  | A presented credential failed authentication (`authenticationFailed`)              |
-| `401`  | A `requireAuth` guard received an anonymous request (`authenticationRequired`)     |
-| `404`  | No route matches the request path                                                  |
-| `405`  | The path exists but does not declare the requested method                          |
-| `406`  | The `Accept` header cannot be satisfied by JSON                                    |
-| `415`  | The request body's content type is not a JSON media type                           |
-| `500`  | A handler or middleware returned output that does not match its contract           |
-| `500`  | A route-file or method service factory failed during the request                   |
-| `500`  | A handler or middleware threw an error it did not handle                           |
-| `500`  | An authenticator threw, or returned a result or principal that breaks its contract |
+| Status | Cause                                                                                 |
+| ------ | ------------------------------------------------------------------------------------- |
+| `204`  | Automatic `OPTIONS` response                                                          |
+| `400`  | Input failed schema validation, or the JSON body could not be parsed                  |
+| `400`  | Strict mode received credentials of several accepted schemes (`ambiguousCredentials`) |
+| `401`  | A presented credential failed authentication (`authenticationFailed`)                 |
+| `401`  | A `requireAuth` guard received an anonymous request (`authenticationRequired`)        |
+| `404`  | No route matches the request path                                                     |
+| `405`  | The path exists but does not declare the requested method                             |
+| `406`  | The `Accept` header cannot be satisfied by JSON                                       |
+| `415`  | The request body's content type is not a JSON media type                              |
+| `500`  | A handler or middleware returned output that does not match its contract              |
+| `500`  | A route-file or method service factory failed during the request                      |
+| `500`  | A handler or middleware threw an error it did not handle                              |
+| `500`  | An authenticator threw, or returned a result or principal that breaks its contract    |
 
 Every other status comes from your contract: a handler outcome or a middleware reject.
 
@@ -82,6 +83,7 @@ the table below:
 | ------------------------------------ | ----------------------- | ------ |
 | `…/problems/validation`              | Validation failed       | 400    |
 | `…/problems/invalid-json`            | Invalid JSON body       | 400    |
+| `…/problems/ambiguous-credentials`   | Ambiguous credentials   | 400    |
 | `…/problems/authentication-failed`   | Authentication failed   | 401    |
 | `…/problems/authentication-required` | Authentication required | 401    |
 | Plain text (no problem type)         | 404 Not Found           | 404    |
@@ -98,23 +100,23 @@ data.
 ## Authentication
 
 When `src/routa.ts` configures [`authentication`](/docs/reference/configuration/#authentication),
-Routa resolves every matched request's credential before anything else reads the request. A
-Bearer scheme reads the `Authorization` header:
+Routa resolves every matched request's credentials before anything else reads the request.
+Each scheme reads its own transport:
 
-| `Authorization` header                                                             | Result                                                         |
-| ---------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Absent                                                                             | `ctx.auth` is `{ status: "anonymous" }`                        |
-| `Bearer <token>`, accepted by the authenticator                                    | `ctx.auth` is `{ status: "authenticated", scheme, principal }` |
-| `Bearer <token>`, rejected by the authenticator                                    | `authenticationFailed`                                         |
-| `Bearer` with an empty token, or a token that is not an RFC 6750 `b64token`        | `authenticationFailed`; the authenticator does not run         |
-| Another scheme, such as `Basic …`, or `Bearer` followed by a tab instead of spaces | `authenticationFailed`; the authenticator does not run         |
+| Scheme          | Presented when                                  | Malformed, so its authenticator does not run                    |
+| --------------- | ----------------------------------------------- | --------------------------------------------------------------- |
+| `bearer`        | `Authorization` names the `Bearer` scheme       | The token is empty or not an RFC 6750 `b64token`                |
+| `apiKey`        | The configured header is present                | The value is empty, or holds a comma, as a repeated header does |
+| `sessionCookie` | The `Cookie` header carries the configured name | The value is empty, or the cookie appears more than once        |
 
-A presented credential that fails never downgrades to anonymous, on public operations and
-protected ones alike. Because resolution runs first, a request with an invalid credential
-receives `401` whatever its `Accept` header or body.
+`Headers` joins a repeated header into one value separated by `, `, so Routa cannot tell a
+repeated API-key header from a key that holds a comma. Both fail. A session cookie value is
+percent-decoded the same way as declared `cookies` input. An `Authorization` header that no
+configured scheme reads, such as `Basic …`, `Bearer …` without a Bearer scheme, or `Bearer`
+followed by a tab instead of spaces, is an unsupported credential.
 
-The authenticator runs once per request. Routa parses an accepted principal once with the
-principal schema, and `ctx.auth.principal` is the schema's output. `ctx.auth` is readonly:
+The authenticator runs at most once per request. Routa parses an accepted principal once with
+the principal schema, and `ctx.auth.principal` is the schema's output. `ctx.auth` is readonly:
 middleware cannot replace it, and writing it fails the request with the generic `500`.
 
 A [`requireAuth`](/docs/reference/core/#requireauth) guard runs at its position in the
@@ -122,9 +124,36 @@ middleware chain, after input parsing. It returns `authenticationRequired` for a
 request and passes an authenticated one on. The handler sees the authenticated branch of
 `ctx.auth`.
 
+### Credential Selection
+
+Each operation accepts a set of schemes, which Routa computes once at startup: the schemes
+every `requireAuth` guard in its middleware chain allows, or every configured scheme when no
+guard applies. Only credentials of accepted schemes are eligible. For each request:
+
+| Presented credentials                                   | Result                                                |
+| ------------------------------------------------------- | ----------------------------------------------------- |
+| None                                                    | `ctx.auth` is `{ status: "anonymous" }`               |
+| Only unsupported, or only of schemes not accepted       | `authenticationFailed`; no authenticator runs         |
+| Exactly one eligible, in either mode                    | It is selected                                        |
+| Two or more eligible, `multipleCredentials: "priority"` | The first eligible by `priority` is selected          |
+| Two or more eligible, `multipleCredentials: "reject"`   | `ambiguousCredentials` (`400`); no authenticator runs |
+
+Routa then checks the selected credential. A malformed one fails without calling the
+authenticator. Otherwise the scheme's authenticator alone runs: an accepted principal makes
+`ctx.auth` `{ status: "authenticated", scheme, principal }`, and a rejection returns
+`authenticationFailed`. Routa never falls back to another credential, and a presented
+credential that fails never downgrades to anonymous, on public operations and protected ones
+alike. Because resolution runs first, a request it fails receives `authenticationFailed` or
+`ambiguousCredentials` whatever its `Accept` header or body.
+
+A credential of a scheme the operation does not accept never authenticates it. A route behind
+`requireAuth({ schemes: ["session"] })` that receives only a valid Bearer token returns
+`authenticationFailed`, challenging `Session`. When the same request also carries a session
+cookie, Routa ignores the Bearer token and authenticates the session.
+
 ### Outcomes and Challenges
 
-Both outcomes are `401` problem documents with a `WWW-Authenticate` challenge:
+Both `401` outcomes are problem documents with a `WWW-Authenticate` challenge:
 
 ```json
 {
@@ -134,15 +163,34 @@ Both outcomes are `401` problem documents with a `WWW-Authenticate` challenge:
 }
 ```
 
-| Situation                          | Outcome                  | `WWW-Authenticate`                                                   |
-| ---------------------------------- | ------------------------ | -------------------------------------------------------------------- |
-| No credential behind `requireAuth` | `authenticationRequired` | `Bearer` or `Bearer realm="api"`                                     |
-| Another scheme than Bearer         | `authenticationFailed`   | `Bearer` or `Bearer realm="api"`                                     |
-| Malformed or rejected Bearer token | `authenticationFailed`   | `Bearer error="invalid_token"`, with the realm first when configured |
+Each scheme's challenge names its auth-scheme, `Bearer`, `ApiKey`, or `Session`, with
+`realm="…"` when the scheme declares a static
+[challenge override](/docs/reference/core/#bearer):
 
-`realm` appears only when the scheme declares a static
-[challenge override](/docs/reference/core/#bearer). Routa never adds `error_description`,
+| Situation                                    | Outcome                  | `WWW-Authenticate`                                       |
+| -------------------------------------------- | ------------------------ | -------------------------------------------------------- |
+| No credential behind `requireAuth`           | `authenticationRequired` | Every accepted scheme, in priority order                 |
+| Only unsupported or not-accepted credentials | `authenticationFailed`   | Every accepted scheme, in priority order                 |
+| Malformed or rejected Bearer token           | `authenticationFailed`   | `Bearer error="invalid_token"`, with the realm first     |
+| Malformed or rejected API key or session     | `authenticationFailed`   | That scheme alone: `ApiKey` or `Session`, with its realm |
+
+Several challenges share one header, such as `Bearer realm="api", Session`. Routa adds
+`error="invalid_token"` to Bearer challenges only, and never adds `error_description`,
 `error_uri`, or any value from the request, the application, or its provider.
+
+In strict mode, `ambiguousCredentials` is a `400` problem document without a challenge, since
+the client already holds credentials and must send one:
+
+```json
+{
+	"type": "https://routa-ts.dev/problems/ambiguous-credentials",
+	"title": "Ambiguous credentials",
+	"status": 400
+}
+```
+
+It applies only to operations that accept two or more schemes. On an explicit `HEAD`
+operation every authentication outcome keeps its status and challenge without a body.
 
 ### Authenticator Failures
 
@@ -227,7 +275,9 @@ For an authenticator that throws, `http.error` carries the message
 `Authenticator for scheme "<name>" threw.` and the `scheme`, never anything the thrown value
 carries, such as its message, stack, or name, because a provider error may include the
 credential. An
-invalid principal logs the scheme in the message and the principal schema's `issues`.
+invalid principal logs the scheme in the message and the principal schema's `issues`. Request
+events record no headers or cookies, so Bearer tokens, API keys, and session values never reach
+the logs.
 
 Handlers always receive `ctx.logger`. With logging disabled it is a complete no-op
 implementation of the same type.

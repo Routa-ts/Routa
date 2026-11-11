@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import {
-	authenticationGuard,
 	isAuthenticationGuard,
-	type RuntimeAuthentication,
+	rejectsAmbiguousCredentials,
+	type RouteAuthentication,
+	routeAuthentication,
 	runtimeAuthentication,
 } from "./authentication.js";
 import type {
@@ -245,12 +246,17 @@ function honoApp(
 	for (const route of registrationRoutes) {
 		const method = route.method.toUpperCase();
 		const routeKey = `${method} ${route.path}`;
-		const contract = withAuthenticationGuards(
-			route.contract as RuntimeRouteContract,
-			authentication,
-			routeKey,
-			method === "HEAD",
-		);
+		const declared = route.contract as RuntimeRouteContract;
+		// The one place a route's accepted schemes are decided, from every requireAuth in its chain.
+		const middleware = declared.middleware ?? [];
+		const prepared = routeAuthentication(middleware, authentication, routeKey, method === "HEAD");
+		const contract: RuntimeRouteContract =
+			prepared.middleware === middleware
+				? declared
+				: {
+						...declared,
+						middleware: prepared.middleware as NonNullable<RuntimeRouteContract["middleware"]>,
+					};
 
 		if (registeredRoutes.has(routeKey)) {
 			throw new Error(`Duplicate route registration: ${routeKey}`);
@@ -269,7 +275,7 @@ function honoApp(
 			options.lifecycleHeaders,
 			routeLogger,
 		);
-		assertUniqueOutcomeNames(contract, route.path, method, authentication !== undefined);
+		assertUniqueOutcomeNames(contract, route.path, method, prepared.authentication);
 		assertReservedContext(contract, routeKey, authentication !== undefined);
 		assertRouteServices(route, routeKey, services);
 
@@ -285,7 +291,7 @@ function honoApp(
 			requestLogger: options.logger,
 			createContext: route.createContext,
 			services,
-			authentication,
+			authentication: prepared.authentication,
 			head: method === "HEAD",
 			requestServices: requestScopes(route.services, routeKey),
 			route: routeKey,
@@ -472,33 +478,6 @@ function assertReservedContext(
 	}
 }
 
-/**
- * Replaces each `requireAuth` contract in a route's chain with the guard that enforces it there.
- *
- * @throws {Error} When a guard appears without authentication or names an unknown scheme
- */
-function withAuthenticationGuards(
-	contract: RuntimeRouteContract,
-	authentication: RuntimeAuthentication | undefined,
-	label: string,
-	bodyless: boolean,
-): RuntimeRouteContract {
-	const { middleware } = contract;
-
-	if (!middleware?.some(isAuthenticationGuard)) {
-		return contract;
-	}
-
-	return {
-		...contract,
-		middleware: middleware.map(
-			(item) =>
-				(authenticationGuard(item, authentication, label, bodyless) as typeof item | undefined)
-				?? item,
-		) as typeof middleware,
-	};
-}
-
 /** Orders a route's request-scoped factories as they run: route file, then method. */
 function requestScopes(services: RouteServices | undefined, label: string): RequestScope[] {
 	const { routeFile, method } = services ?? {};
@@ -579,14 +558,17 @@ function assertUniqueOutcomeNames(
 	contract: RuntimeRouteContract,
 	path: string,
 	method: string,
-	authenticated: boolean,
+	authentication: RouteAuthentication | undefined,
 ): void {
 	const seen = new Map<string, string>(
 		Object.keys(contract.responses).map((type) => [type, "the route"]),
 	);
 	// Routa owns the authentication outcomes. Every requireAuth guard shares one.
 	const framework = [
-		...(authenticated ? ["authenticationFailed"] : []),
+		...(authentication ? ["authenticationFailed"] : []),
+		...(authentication && rejectsAmbiguousCredentials(authentication)
+			? ["ambiguousCredentials"]
+			: []),
 		...((contract.middleware ?? []).some(isAuthenticationGuard) ? ["authenticationRequired"] : []),
 	];
 
