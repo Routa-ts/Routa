@@ -61,10 +61,15 @@ configuration. It also exports `RoutaPrincipal`, the principal
 schema's output read from `src/routa.ts`, `RoutaAuthenticationScheme`, and `RoutaAuth`, and it
 adds `auth` to every operation's context: `RoutaAuth`, or the authenticated branch behind
 `requireAuth`. A `requireAuth` guard appears in its `routaRoutes` chain with the schemes it
-allows, every operation lists `401` among its statuses, and with
+allows, named `requireAuth` when written inline or by its export name when a folder
+`middleware.ts` exports it, every operation lists `401` among its statuses, and with
 `multipleCredentials: "reject"`, every operation that accepts two or more schemes also lists
-`400`. Projects without authentication
-get none of these.
+`400`. Each `routaRoutes` entry also lists `middlewareFiles`: every folder `middleware.ts` on
+the route's path, root first, including one with no export Routa reads. Startup loads each of
+them and refuses a `requireAuth` guard export the route's chain does not list, and it asks you
+to run `routa generate` when an entry has no `middlewareFiles`. Projects without
+authentication get none of these, and their startup does not check folder files, because no
+guard can run there.
 
 Refresh it after adding, moving, or removing a route file, changing which methods a route
 declares, or changing middleware layout:

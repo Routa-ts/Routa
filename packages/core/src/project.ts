@@ -1,4 +1,4 @@
-import { runtimeAuthentication } from "./authentication.js";
+import { isAuthenticationGuard, runtimeAuthentication } from "./authentication.js";
 import type { CreateApplicationOptions, HonoRoute, RoutaApplication } from "./hono.js";
 import type { RoutaConfig } from "./index.js";
 import { createLogger, type RoutaLogger } from "./logger.js";
@@ -54,6 +54,11 @@ type RouteMetadata = {
 	readonly methods: readonly string[];
 	readonly middleware?: readonly MiddlewareReference[];
 	readonly methodMiddleware?: Readonly<Record<string, readonly MiddlewareReference[]>>;
+	/**
+	 * Every folder `middleware.ts` on the route's path, including those with no listed export.
+	 * Generated only when the project configures authentication.
+	 */
+	readonly middlewareFiles?: readonly string[];
 	readonly services?: {
 		readonly routeFile?: ServiceNamesMetadata;
 		readonly methods?: Readonly<Record<string, ServiceNamesMetadata>>;
@@ -91,7 +96,11 @@ export async function buildProjectApplication(
 	const metadata = (await load(".routa/routes.gen.ts")) as MetadataModule;
 	const replacements = options.replacements ?? {};
 	assertReplacements(replacements, metadata);
-	const routes = await loadRoutes(load, metadata.routaRoutes, replacements);
+	// The metadata declares schemes exactly when src/routa.ts configures authentication, which
+	// assertAuthenticationMetadata confirms. Without it, no guard can run, so none is checked.
+	const routes = await loadRoutes(load, metadata.routaRoutes, replacements, {
+		checkFolderGuards: metadata.routaAuthenticationSchemes !== undefined,
+	});
 	const config = ((await load("src/routa.ts")) as { default?: RoutaConfig }).default ?? {};
 	const logger = config.logger === false ? undefined : (config.logger ?? createLogger());
 	const services = pairServices(config.services, metadata.routaApplicationServices, {
@@ -287,12 +296,15 @@ function pairServices(
  * Assembles the Hono route list: each route module's method contracts, with the filesystem,
  * route-file, and method middleware chained in order and each scope's services paired.
  *
+ * @param options - Whether to refuse folder `requireAuth` guards the metadata does not list,
+ *   which matters only when the project configures authentication
  * @throws If a route file does not export a default route config or is missing a method contract
  */
 async function loadRoutes(
 	load: ProjectModuleLoader,
 	metadata: readonly RouteMetadata[],
 	replacements: ServiceReplacements,
+	options: { readonly checkFolderGuards: boolean },
 ): Promise<HonoRoute[]> {
 	const routes: HonoRoute[] = [];
 
@@ -323,6 +335,9 @@ async function loadRoutes(
 			// by older generators that omitted middleware fields.
 			const chainMetadata = route.methodMiddleware?.[key] ?? route.middleware ?? [];
 			const fileMiddleware = await loadFileMiddleware(load, route.file, chainMetadata);
+			if (options.checkFolderGuards) {
+				await assertFolderGuardsListed(load, route, chainMetadata);
+			}
 			const routeMiddleware = routeConfig.middleware ?? [];
 			const middleware = [...fileMiddleware, ...routeMiddleware, ...(contract.middleware ?? [])];
 			const methodServices = pairServices(
@@ -361,6 +376,43 @@ async function loadRoutes(
 	}
 
 	return routes;
+}
+
+/**
+ * Refuses a folder `middleware.ts` export that is a `requireAuth` guard the route's chain does not
+ * list. Routa runs only listed exports, so such a guard would never run and leave the routes below
+ * public: `routa generate` could not read it, or the metadata is older than the source.
+ *
+ * @throws When the metadata lists no folder middleware files, or a guard is missing from the chain
+ */
+async function assertFolderGuardsListed(
+	load: ProjectModuleLoader,
+	route: RouteMetadata,
+	chain: readonly MiddlewareReference[],
+): Promise<void> {
+	if (!route.middlewareFiles) {
+		throw new Error(
+			`.routa/routes.gen.ts lists no folder middleware files for ${route.file}, so Routa cannot check them for requireAuth() guards. Run routa generate.`,
+		);
+	}
+
+	for (const file of route.middlewareFiles) {
+		const module = (await load(file)) as Record<string, unknown>;
+
+		for (const [name, value] of Object.entries(module)) {
+			if (
+				typeof value === "object"
+				&& value !== null
+				&& isAuthenticationGuard(value)
+				&& !chain.some((item) => item.file === file && item.name === name)
+			) {
+				const declared = name === "default" ? "signedIn" : name;
+				throw new Error(
+					`${file} exports ${name}, a requireAuth() guard .routa/routes.gen.ts does not list, so it would not run and the routes below would be public. Write it as export const ${declared} = requireAuth({ ... }), or re-export a const declared that way, then run routa generate.`,
+				);
+			}
+		}
+	}
 }
 
 /**

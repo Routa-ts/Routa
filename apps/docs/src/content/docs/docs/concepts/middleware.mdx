@@ -166,6 +166,68 @@ export default route({
 The full chain for a method is folder middleware, then route-level middleware, then
 method-level middleware.
 
+### Authentication Requirements
+
+With [`authentication`](/docs/reference/configuration/#authentication) configured, a folder can
+require it for every route below. Export a [`requireAuth`](/docs/reference/core/#requireauth)
+guard the way you export other middleware:
+
+```ts title="src/routes/(staff)/middleware.ts"
+import { requireAuth } from "@routa-ts/core";
+
+export const signedIn = requireAuth({ schemes: ["session", "userToken"] });
+```
+
+The guard runs at its export position, before route and method middleware, and returns
+`authenticationRequired` (`401`) to an anonymous request. Handlers below it see `ctx.auth`
+narrowed to the authenticated branch, with `ctx.auth.scheme` typed `"session" | "userToken"`.
+A middleware with `requires: ["auth"]` still sees the anonymous-or-authenticated union.
+
+Guards compose down the chain by intersection. An operation accepts only the schemes every
+`requireAuth` from the root folder to the method allows, and Routa authenticates only
+credentials of those schemes:
+
+<FileTree>
+- src/routes/
+  - (staff)/
+    - middleware.ts `signedIn`: session or userToken
+    - reports/
+      - route.ts GET accepts session or userToken; POST adds `requireAuth({ schemes: ["session"] })` and accepts session
+    - tenants/
+      - $tenantId/
+        - middleware.ts re-exports a session-only guard
+        - projects/
+          - route.ts accepts session
+</FileTree>
+
+A descendant cannot remove an inherited requirement or widen its schemes. A route guard that
+lists `"serviceKey"` under this folder still accepts only `"session"` and `"userToken"`, and
+`routa check` warns with `ROUTA_AUTH_REQUIREMENT_WIDENED`. Guards that share no scheme fail
+with `ROUTA_AUTH_REQUIREMENT_EMPTY`.
+
+Routa runs only the folder exports `routa check` reads. It reads a guard written as a literal
+`requireAuth(...)` call bound to a `const`:
+
+- `export const signedIn = requireAuth({ ... })`, with `requireAuth` imported by name, under an
+  alias, or called on a namespace import as `core.requireAuth({ ... })`
+- a `const` bound to such a guard, declared in the folder or imported:
+  `const guard = requireAuth(); export const signedIn = guard;`
+- a re-export of either form: `export { member as signedIn } from "../../guards.js"`
+
+A guard built any other way, through a factory call at any depth, a conditional, a
+destructuring, or a `let` or `var` binding, fails with `ROUTA_AUTH_REQUIREMENT_UNRESOLVED`.
+`routa check` follows your project's functions, named imports, and re-exports to find it, but
+not package code. Exporting a factory function itself is fine, since a function is not a guard.
+
+Startup is the backstop. For every route, Routa loads each folder `middleware.ts` above it and
+refuses to start when one exports a `requireAuth` guard the generated metadata does not list,
+such as one a package builds, even with its own copy of `@routa-ts/core`, or one added after the
+last `routa generate`. `routa dev`, `routa start`, and `createTestApp` all fail the same way:
+
+```text
+src/routes/(staff)/middleware.ts exports signedIn, a requireAuth() guard .routa/routes.gen.ts does not list, so it would not run and the routes below would be public. Write it as export const signedIn = requireAuth({ ... }), or re-export a const declared that way, then run routa generate.
+```
+
 ## Security Visibility
 
 Middleware can describe what an operation requires without Routa implementing any of it:
@@ -182,6 +244,46 @@ createMiddleware({
 
 Routa emits `security` and `x-routa-authz` on every operation the middleware covers, and
 `routa openapi breaking` reports when a previously public operation becomes authenticated.
+
+## Migrating an Application-Owned Guard
+
+An application can keep its own authentication middleware, such as the `withAuth` example
+above. To move a folder to Routa's guard, configure a credential scheme that reads the same
+credential, move the verification into its authenticator, and export `requireAuth` from the
+folder instead:
+
+```ts title="src/routes/(private)/middleware.ts (before)"
+export { requireAuth } from "../../middleware/auth.js";
+```
+
+```ts title="src/routes/(private)/middleware.ts (after)"
+import { requireAuth } from "@routa-ts/core";
+
+export const signedIn = requireAuth({ schemes: ["session"] });
+```
+
+Routa treats only the `requireAuth` imported from `@routa-ts/core` as the built-in guard, so an
+application middleware that is also named `requireAuth` stays ordinary middleware. The names
+collide once one module imports both. Rename the application guard, such as `requireSession`,
+or import the core one under an alias:
+`import { requireAuth as requireRoutaAuth } from "@routa-ts/core"`. Give the folder export its
+own name, such as `signedIn`, because it cannot share the imported name.
+
+What changes with the move:
+
+- Configuring `authentication` reserves `ctx.auth`, so a middleware that provides `auth` fails
+  `routa check` with `ROUTA_CONTEXT_RESERVED`. Remove the old guard in the same change, and read
+  `ctx.auth.principal` where handlers read the old context.
+- OpenAPI declares the scheme in `components.securitySchemes` under its scheme name. Operations
+  below the guard list that name in `security` instead of the old middleware's
+  `openapi.security` entry, and every other operation gains `{}` and the scheme as optional
+  alternatives.
+- The `401` responses become the `authenticationRequired` and `authenticationFailed` problem
+  documents with a `WWW-Authenticate` challenge, in place of the old middleware's reject. Every
+  operation also documents `authenticationFailed`, since a presented invalid credential fails
+  on public routes too.
+- Routa's authentication outcomes set no cookies, so a guard that cleared a stale session
+  cookie on `401` no longer does.
 
 ## Rules
 
@@ -220,7 +322,8 @@ Routa emits `security` and `x-routa-authz` on every operation the middleware cov
 Routa makes security context and early responses visible at the HTTP boundary. Without
 `authentication` in `createRouta`, Routa never authenticates a request: middleware such as
 the example above owns it. With it, Routa reads Bearer, API-key, and session-cookie
-credentials, calls one authenticator, and enforces [`requireAuth`](/docs/reference/core/#requireauth). Your application still owns
+credentials, calls one authenticator, and enforces [`requireAuth`](/docs/reference/core/#requireauth)
+inline and in folders. Your application still owns
 credential verification, authorization rules, policy correctness, and secrets.
 
 <Aside type="caution" title="v0 status">

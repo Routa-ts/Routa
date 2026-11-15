@@ -22,11 +22,224 @@ export type ModuleDeclaration<T = ts.ObjectLiteralExpression> = {
 };
 
 /**
- * Resolves exported declarations from a module and its re-exports: `export const`, names exported
- * later with `export { name }`, named re-exports (aliases included), and `export *`.
+ * A name a module exports, and the node that gives its value where Routa can follow it: a
+ * variable's initializer, or the function, class, or enum declaration itself.
+ */
+export type ModuleExport = {
+	/** The file that declares the value, or the module whose export Routa could not follow. */
+	file: string;
+	/** The declared name in `file`. */
+	name: string;
+	/** The name the inspected module exports it under. */
+	exportedName: string;
+	/**
+	 * Missing when Routa cannot follow the export: a destructured or uninitialized binding, a
+	 * re-export from a package, or a name the target module does not export in a form it reads.
+	 */
+	value?: ts.Node;
+	/** For a destructured or uninitialized binding, the declaration it comes from. */
+	from?: ts.VariableDeclaration;
+};
+
+/**
+ * Lists every named runtime export of a module, following its re-exports: `export const`,
+ * exported function, class, and enum declarations, names exported later with `export { name }`,
+ * named re-exports (aliases included), and `export *`. Interfaces, type aliases, type-only
+ * exports, and `export default` statements are left out, so a type never shadows the value a
+ * module exports under the same name.
  *
  * Each branch of the walk carries its own copy of the visited files, so a cycle ends the branch
  * that closes it while sibling re-exports of the same module still resolve.
+ *
+ * @param cwd - The project root directory
+ * @param file - The module being inspected
+ * @param sourceFile - The parsed TypeScript source file for `file`
+ * @returns The exports in declaration order, explicit exports before wildcard ones
+ */
+export function moduleExports(
+	cwd: string,
+	file: string,
+	sourceFile: ts.SourceFile,
+	parser: ts.SourceFileParser,
+	seen = new Set<string>(),
+): ModuleExport[] {
+	if (seen.has(file)) {
+		return [];
+	}
+
+	seen.add(file);
+
+	const explicit: ModuleExport[] = [];
+	const wildcard: ModuleExport[] = [];
+	const walk = (target: string) =>
+		moduleExports(
+			cwd,
+			target,
+			parseTypeScriptFile(join(cwd, target), parser),
+			parser,
+			new Set(seen),
+		);
+	const reexport = (target: string | undefined, name: string, exportedName: string) => {
+		const found = target && walk(target).find((item) => item.exportedName === name);
+		return found ? { ...found, exportedName } : { file, name, exportedName };
+	};
+
+	for (const statement of sourceFile.statements) {
+		if (ts.isVariableStatement(statement)) {
+			if (hasModifier(statement, ts.SyntaxKind.ExportKeyword)) {
+				for (const declaration of statement.declarationList.declarations) {
+					for (const binding of variableBindings(file, declaration)) {
+						explicit.push({ ...binding, exportedName: binding.name });
+					}
+				}
+			}
+			continue;
+		}
+
+		if (
+			isValueDeclaration(statement)
+			&& hasModifier(statement, ts.SyntaxKind.ExportKeyword)
+			&& !hasModifier(statement, ts.SyntaxKind.DefaultKeyword)
+		) {
+			const name = statement.name!.text;
+			explicit.push({ file, name, exportedName: name, value: statement });
+			continue;
+		}
+
+		if (!ts.isExportDeclaration(statement) || statement.isTypeOnly) {
+			continue;
+		}
+
+		const specifier =
+			statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)
+				? statement.moduleSpecifier.text
+				: undefined;
+		const target = specifier === undefined ? undefined : resolveImportFile(cwd, file, specifier);
+
+		if (!statement.exportClause) {
+			if (target) {
+				wildcard.push(...walk(target).filter((item) => item.exportedName !== "default"));
+			}
+			continue;
+		}
+
+		if (!ts.isNamedExports(statement.exportClause)) {
+			continue;
+		}
+
+		for (const element of statement.exportClause.elements) {
+			if (element.isTypeOnly) {
+				continue;
+			}
+
+			const exportedName = element.name.text;
+			const name = element.propertyName?.text ?? exportedName;
+
+			if (specifier !== undefined) {
+				explicit.push(reexport(target, name, exportedName));
+				continue;
+			}
+
+			const local = localBinding(cwd, file, sourceFile, name, parser, seen);
+
+			if (local !== "none") {
+				explicit.push({ ...local, exportedName });
+			}
+		}
+	}
+
+	const exportedNames = new Set(explicit.map((item) => item.exportedName));
+	return [
+		...explicit,
+		...wildcard.filter((item) => {
+			if (exportedNames.has(item.exportedName)) {
+				return false;
+			}
+			exportedNames.add(item.exportedName);
+			return true;
+		}),
+	];
+}
+
+/**
+ * What a module binds to a top-level name: its own declaration, or the export an import names.
+ * Returns `none` for a name that holds no value Routa follows, a namespace or type-only import,
+ * and an entry without `value` when Routa cannot follow the binding.
+ *
+ * @param file - The module that uses the name, relative to `cwd`
+ * @param name - The local name in `file`
+ */
+export function localBinding(
+	cwd: string,
+	file: string,
+	sourceFile: ts.SourceFile,
+	name: string,
+	parser: ts.SourceFileParser,
+	seen = new Set<string>(),
+): Omit<ModuleExport, "exportedName"> | "none" {
+	for (const statement of sourceFile.statements) {
+		if (ts.isVariableStatement(statement)) {
+			for (const declaration of statement.declarationList.declarations) {
+				const binding = variableBindings(file, declaration).find((item) => item.name === name);
+
+				if (binding) {
+					return binding;
+				}
+			}
+			continue;
+		}
+
+		if (isValueDeclaration(statement) && statement.name?.text === name) {
+			return { file, name, value: statement };
+		}
+
+		if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
+			continue;
+		}
+
+		const clause = statement.importClause;
+		const target = resolveImportFile(cwd, file, statement.moduleSpecifier.text);
+		const bindings = clause?.namedBindings;
+
+		if (bindings && ts.isNamespaceImport(bindings) && bindings.name.text === name) {
+			return "none";
+		}
+
+		const imported =
+			bindings && ts.isNamedImports(bindings)
+				? bindings.elements.find((element) => element.name.text === name)
+				: undefined;
+		const importedName =
+			clause?.name?.text === name
+				? "default"
+				: (imported?.propertyName?.text ?? imported?.name.text);
+
+		if (importedName === undefined) {
+			continue;
+		}
+
+		if (clause?.phaseModifier === ts.SyntaxKind.TypeKeyword || imported?.isTypeOnly) {
+			return "none";
+		}
+
+		const found =
+			target
+			&& moduleExports(
+				cwd,
+				target,
+				parseTypeScriptFile(join(cwd, target), parser),
+				parser,
+				new Set(seen),
+			).find((item) => item.exportedName === importedName);
+		return found || { file, name };
+	}
+
+	return { file, name };
+}
+
+/**
+ * Resolves exported declarations from a module and its re-exports, as {@link moduleExports}
+ * lists them, keeping the variables whose initializer `read` reads.
  *
  * @param cwd - The project root directory
  * @param file - The module being inspected
@@ -39,106 +252,51 @@ export function exportedDeclarations<T>(
 	sourceFile: ts.SourceFile,
 	parser: ts.SourceFileParser,
 	read: DeclarationReader<T>,
-	seen = new Set<string>(),
 ): ModuleDeclaration<T>[] {
-	if (seen.has(file)) {
-		return [];
+	return moduleExports(cwd, file, sourceFile, parser).flatMap((item) => {
+		const contract =
+			item.value && ts.isExpression(item.value) ? read(item.value, item.file) : undefined;
+		return contract
+			? [{ file: item.file, name: item.name, exportedName: item.exportedName, contract }]
+			: [];
+	});
+}
+
+/** The names a variable declaration binds, each with its initializer when it binds a plain name. */
+function variableBindings(
+	file: string,
+	declaration: ts.VariableDeclaration,
+): Array<Omit<ModuleExport, "exportedName">> {
+	if (ts.isIdentifier(declaration.name)) {
+		const name = declaration.name.text;
+		return [
+			declaration.initializer
+				? { file, name, value: declaration.initializer }
+				: { file, name, from: declaration },
+		];
 	}
 
-	seen.add(file);
-
-	const declarations: ModuleDeclaration<T>[] = [];
-	const wildcard: ModuleDeclaration<T>[] = [];
-	const imports = namedImportMap(cwd, file, sourceFile);
-	const walk = (target: string) =>
-		exportedDeclarations(
-			cwd,
-			target,
-			parseTypeScriptFile(join(cwd, target), parser),
-			parser,
-			read,
-			new Set(seen),
-		);
-
-	for (const statement of sourceFile.statements) {
-		if (ts.isVariableStatement(statement) && hasExportModifier(statement)) {
-			for (const declaration of statement.declarationList.declarations) {
-				if (!ts.isIdentifier(declaration.name) || !declaration.initializer) {
-					continue;
-				}
-
-				const contract = read(declaration.initializer, file);
-
-				if (contract) {
-					const name = declaration.name.text;
-					declarations.push({ file, name, exportedName: name, contract });
-				}
-			}
-			continue;
+	const names: string[] = [];
+	const visit = (node: ts.Node): void => {
+		if (ts.isBindingElement(node) && node.name && ts.isIdentifier(node.name)) {
+			names.push(node.name.text);
 		}
+		ts.forEachChild(node, visit);
+	};
+	visit(declaration.name);
+	return names.map((name) => ({ file, name, from: declaration }));
+}
 
-		if (!ts.isExportDeclaration(statement)) {
-			continue;
-		}
-
-		const targetFile =
-			statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)
-				? resolveImportFile(cwd, file, statement.moduleSpecifier.text)
-				: undefined;
-
-		if (!statement.exportClause) {
-			if (targetFile) {
-				wildcard.push(...walk(targetFile));
-			}
-			continue;
-		}
-
-		if (!ts.isNamedExports(statement.exportClause)) {
-			continue;
-		}
-
-		for (const specifier of statement.exportClause.elements) {
-			const exportedName = specifier.name.text;
-			const importedName = specifier.propertyName?.text ?? specifier.name.text;
-
-			if (!statement.moduleSpecifier) {
-				const local = variableDeclarations(file, sourceFile, false, read).find(
-					(item) => item.name === importedName,
-				);
-
-				if (local) {
-					declarations.push({ file, name: importedName, exportedName, contract: local.contract });
-					continue;
-				}
-			}
-
-			const source = targetFile
-				? { file: targetFile, name: importedName }
-				: imports.get(importedName);
-
-			if (!source) {
-				continue;
-			}
-
-			const declaration = walk(source.file).find((item) => item.exportedName === source.name);
-
-			if (declaration) {
-				declarations.push({ ...declaration, exportedName });
-			}
-		}
-	}
-
-	const exportedNames = new Set(declarations.map((item) => item.exportedName));
-	return [
-		...declarations,
-		...wildcard.filter((item) => {
-			if (exportedNames.has(item.exportedName)) {
-				return false;
-			}
-			exportedNames.add(item.exportedName);
-			return true;
-		}),
-	];
+/** A top-level declaration other than a variable's that binds a runtime value to its name. */
+function isValueDeclaration(
+	statement: ts.Statement,
+): statement is ts.FunctionDeclaration | ts.ClassDeclaration | ts.EnumDeclaration {
+	return (
+		(ts.isFunctionDeclaration(statement)
+			|| ts.isClassDeclaration(statement)
+			|| ts.isEnumDeclaration(statement))
+		&& statement.name !== undefined
+	);
 }
 
 /**
@@ -262,7 +420,7 @@ export function variableDeclarations<T>(
 			continue;
 		}
 
-		if (exportedOnly && !hasExportModifier(statement)) {
+		if (exportedOnly && !hasModifier(statement, ts.SyntaxKind.ExportKeyword)) {
 			continue;
 		}
 
@@ -284,13 +442,10 @@ export function variableDeclarations<T>(
 	return declarations;
 }
 
-/**
- * Determines whether a variable statement is exported.
- *
- * @returns `true` if the statement has an `export` modifier, `false` otherwise.
- */
-function hasExportModifier(statement: ts.VariableStatement): boolean {
-	return (
-		statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false
-	);
+/** Whether a statement carries a modifier, such as `export`. */
+function hasModifier(
+	statement: ts.Statement & { readonly modifiers?: ts.NodeArray<ts.ModifierLike> },
+	kind: ts.SyntaxKind,
+): boolean {
+	return statement.modifiers?.some((modifier) => modifier.kind === kind) ?? false;
 }

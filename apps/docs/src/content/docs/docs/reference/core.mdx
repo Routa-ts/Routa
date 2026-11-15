@@ -600,9 +600,9 @@ is typed with the anonymous-or-authenticated union, so check `ctx.auth.status` b
 configured scheme, or list the accepted schemes inline; `SchemeName` is the union of names
 `routa generate` read from `src/routa.ts`.
 
-Write the call inline in a route root's or a `createRoute`'s `middleware`, so `routa check`
-can read it. It requires [`authentication`](/docs/reference/configuration/#authentication) in
-`createRouta`.
+Write the call inline in a route root's or a `createRoute`'s `middleware`, or export it from a
+folder `middleware.ts`, so `routa check` can read it. It requires
+[`authentication`](/docs/reference/configuration/#authentication) in `createRouta`.
 
 ```ts title="src/routes/projects/route.ts"
 import { createRoute, createRouteRoot, requireAuth } from "@routa-ts/core";
@@ -618,12 +618,35 @@ export default createRouteRoot("/projects")({
 });
 ```
 
+A folder export protects every route in that folder and below. Like other
+[folder middleware](/docs/concepts/middleware/#folder-inheritance), it runs at its export
+position, before route and method middleware:
+
+```ts title="src/routes/(staff)/middleware.ts"
+import { requireAuth } from "@routa-ts/core";
+
+export const signedIn = requireAuth({ schemes: ["session", "userToken"] });
+```
+
+The folder may also export a `const` bound to such a guard, call it on a namespace import as
+`core.requireAuth()`, or re-export a guard another module declares that way, such as
+`export { signedIn } from "../../guards.js"`. A guard built any other way, such as through a
+factory call, a conditional, a destructuring, or a `let` binding, fails `routa check`, and
+startup refuses a guard export the generated metadata does not list, because Routa would not
+run it. See
+[Authentication Requirements](/docs/concepts/middleware/#authentication-requirements).
+
+Every guard on an operation applies, from the root folder to the method, and the operation
+accepts only the schemes all of them allow. A descendant can narrow an inherited requirement
+but cannot remove or widen it: under the folder above, a method's
+`requireAuth({ schemes: ["session"] })` accepts sessions alone, and a route's
+`requireAuth({ schemes: ["session", "serviceKey"] })` still accepts sessions alone. The handler's
+`ctx.auth.scheme` has the same narrowed type.
+
 Listing `schemes` restricts which credentials can authenticate the operation, not only who
-passes the guard. Routa selects only among credentials of the schemes every `requireAuth` on
-the operation allows, so `requireAuth({ schemes: ["session"] })` with a route-level
-`requireAuth({ schemes: ["session", "userToken"] })` accepts sessions alone, and a valid
-Bearer token there fails with `authenticationFailed`. See
-[Credential selection](/docs/reference/runtime-behavior/#credential-selection).
+passes the guard. Routa selects only among credentials of the schemes the operation accepts,
+so a valid Bearer token on that method fails with `authenticationFailed` without reaching its
+authenticator. See [Credential selection](/docs/reference/runtime-behavior/#credential-selection).
 
 The guard owns the `authenticationRequired` outcome, so a route outcome with that name is a
 type error. Its `401` carries a `WWW-Authenticate` challenge for every accepted scheme, in
@@ -632,15 +655,11 @@ priority order; see
 
 **Errors:** throws a `TypeError` for an empty `schemes` list. `routa check` reports
 `ROUTA_AUTH_NOT_CONFIGURED`, `ROUTA_AUTH_SCHEME_UNKNOWN`, `ROUTA_AUTH_REQUIREMENT_EMPTY` for an
-empty list or guards on one operation that allow no scheme in common,
-`ROUTA_AUTH_REQUIREMENT_UNRESOLVED`, and, for a guard a folder `middleware.ts` exports,
-`ROUTA_AUTH_REQUIREMENT_UNSUPPORTED`. Registration throws when authentication is not
-configured, a guard names an undeclared scheme, or the guards allow no scheme in common.
-
-<Aside type="caution" title="Inline guards only">
-	`requireAuth` works inline at route and method level. A folder `middleware.ts` cannot
-	export it yet.
-</Aside>
+empty list or guards on one operation that allow no scheme in common, and
+`ROUTA_AUTH_REQUIREMENT_UNRESOLVED` for options or a folder export it cannot read. It warns
+with `ROUTA_AUTH_REQUIREMENT_WIDENED` when a guard lists a scheme an earlier guard excludes.
+Registration throws when authentication is not configured, a guard names an undeclared scheme,
+or the guards allow no scheme in common.
 
 ## `AuthContext`
 
@@ -662,7 +681,8 @@ The type of `ctx.auth`. Routa provides it only when `src/routa.ts` configures au
 otherwise `ctx.auth` exists only when application middleware provides it, with that
 middleware's type. `.routa/routes.gen.ts` types it for each
 operation: an operation without `requireAuth` gets `AuthContext`, and an operation behind
-`requireAuth` gets `AuthenticatedAuthContext`. `TPrincipal` is the principal schema's output.
+`requireAuth`, inline or inherited from a folder, gets `AuthenticatedAuthContext` with the
+schemes it accepts. `TPrincipal` is the principal schema's output.
 Middleware reads `ctx.auth` by declaring `requires: ["auth"]` and sees `AuthContext`.
 
 ```ts title="src/routes/me/route.ts"

@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
-import { createApplication, createHonoApp, type HonoRoute } from "./hono.js";
+import type * as AuthenticationModule from "./authentication.js";
 import {
+	createApplication,
+	createHonoApp,
+	createProjectApplication,
+	type HonoRoute,
+} from "./hono.js";
+import {
+	apiKey,
 	bearer,
 	createMiddleware,
 	createRoute,
@@ -25,6 +32,28 @@ const userToken = bearer({
 });
 
 const authentication = { principal: Principal, schemes: { userToken } };
+
+const serviceKey = apiKey({
+	header: "x-api-key",
+	authenticate: (key) =>
+		key === "service-key"
+			? { type: "authenticated", principal: { type: "service", id: "svc_1" } }
+			: { type: "rejected" },
+});
+
+/**
+ * A second, independently loaded copy of the authentication module: the copy a package that
+ * bundles or resolves its own `@routa-ts/core` builds its guards with.
+ */
+async function foreignCore(): Promise<typeof AuthenticationModule> {
+	const specifier = "./authentication.js?foreign-copy";
+	const foreign = (await import(/* @vite-ignore */ specifier)) as typeof AuthenticationModule;
+	expect(foreign.requireAuth).not.toBe(requireAuth);
+	return foreign;
+}
+
+/** The registry symbol every copy of `@routa-ts/core` marks a `requireAuth` contract with. */
+const requirementKey = Symbol.for("@routa-ts/core/requireAuth");
 
 const whoami: HonoRoute = {
 	method: "get",
@@ -598,6 +627,91 @@ describe("authentication registration", () => {
 		expect(response.status).toBe(401);
 	});
 
+	it("enforces a guard built by another copy of core like its own", async () => {
+		const foreign = await foreignCore();
+		const config = { principal: Principal, schemes: { userToken, serviceKey } };
+		const guarded = (guard: object) =>
+			createHonoApp(
+				[{ ...whoami, contract: { ...whoami.contract, middleware: [guard as never] } }],
+				{ authentication: config },
+			);
+		const local = guarded(requireAuth({ schemes: ["serviceKey"] as never }));
+		const copied = guarded(foreign.requireAuth({ schemes: ["serviceKey"] as never }));
+		const answer = async (app: ReturnType<typeof guarded>, headers: Record<string, string>) => {
+			const response = await app.request("/whoami", { headers });
+			return [response.status, response.headers.get("www-authenticate"), await response.json()];
+		};
+
+		for (const [headers, status] of [
+			[{}, 401],
+			[{ authorization: "Bearer valid-user" }, 401],
+			[{ "x-api-key": "service-key" }, 200],
+		] as const) {
+			const copiedAnswer = await answer(copied, headers);
+			expect(copiedAnswer[0]).toBe(status);
+			expect(copiedAnswer).toEqual(await answer(local, headers));
+		}
+		expect(() =>
+			createHonoApp([
+				{ ...whoami, contract: { ...whoami.contract, middleware: [foreign.requireAuth()] } },
+			]),
+		).toThrow(
+			"requireAuth() on GET /whoami needs authentication. Configure authentication in createRouta.",
+		);
+	});
+
+	it("refuses middleware marked as a guard with a requirement Routa cannot read", () => {
+		const marked = (descriptor: PropertyDescriptor) =>
+			Object.defineProperty(
+				{ run: ({ next }: { next: () => unknown }) => next() },
+				requirementKey,
+				descriptor,
+			);
+
+		for (const descriptor of [
+			{ value: undefined },
+			{ value: "all" },
+			{ value: [] },
+			{ value: Object.freeze(["userToken", 1]) },
+			{ value: ["userToken"] },
+			{ get: () => Object.freeze(["userToken"]) },
+		]) {
+			expect(() =>
+				createHonoApp(
+					[
+						{
+							...whoami,
+							contract: { ...whoami.contract, middleware: [marked(descriptor) as never] },
+						},
+					],
+					{ authentication },
+				),
+			).toThrow(
+				"middleware[0] on GET /whoami is marked as a requireAuth() guard, but Routa cannot read the schemes it allows. Build the guard with requireAuth() from @routa-ts/core.",
+			);
+		}
+	});
+
+	it("reads a guard's schemes without trusting methods the marked list overrides", async () => {
+		const schemes = ["userToken"];
+		Object.defineProperty(schemes, "includes", { value: () => true });
+		Object.defineProperty(schemes, "filter", { value: () => ["userToken", "serviceKey"] });
+		Object.freeze(schemes);
+		const marked = Object.defineProperty(
+			{ run: ({ next }: { next: () => unknown }) => next() },
+			requirementKey,
+			{ value: schemes },
+		);
+		const app = createHonoApp(
+			[{ ...whoami, contract: { ...whoami.contract, middleware: [marked as never] } }],
+			{ authentication: { principal: Principal, schemes: { userToken, serviceKey } } },
+		);
+
+		const response = await app.request("/whoami", { headers: { "x-api-key": "service-key" } });
+
+		expect([response.status, response.headers.get("www-authenticate")]).toEqual([401, "Bearer"]);
+	});
+
 	it("validates the authentication configuration", () => {
 		const reject = () => ({ type: "rejected" }) as const;
 		const cases: Array<[unknown, string]> = [
@@ -660,7 +774,12 @@ describe("project applications", () => {
 					routaAuthenticationSchemes: ["userToken"],
 					routaMultipleCredentials: "priority",
 					routaRoutes: [
-						{ file: "src/routes/projects/route.ts", path: "/projects", methods: ["POST"] },
+						{
+							file: "src/routes/projects/route.ts",
+							path: "/projects",
+							methods: ["POST"],
+							middlewareFiles: [],
+						},
 					],
 					...overrides.metadata,
 				}),
@@ -710,6 +829,140 @@ describe("project applications", () => {
 		for (const [overrides, message] of cases) {
 			await expect(createTestApplication(project(overrides))).rejects.toThrow(message);
 		}
+	});
+
+	/** A public route below a folder `middleware.ts` that exports `exports`, of which the metadata lists `listed`. */
+	function folderProject(
+		exports: Record<string, unknown>,
+		listed: readonly string[] = [],
+		overrides: Parameters<typeof project>[0] = {},
+	) {
+		const folder = "src/routes/middleware.ts";
+		const modules: Record<string, () => Promise<unknown>> = {
+			...project({
+				...overrides,
+				metadata: {
+					...overrides.metadata,
+					routaRoutes: [
+						{
+							file: "src/routes/projects/route.ts",
+							path: "/projects",
+							methods: ["GET"],
+							middleware: listed.map((name) => ({ file: folder, name })),
+							middlewareFiles: [folder],
+						},
+					],
+				},
+			}),
+			[folder]: () => Promise.resolve(exports),
+			"src/routes/projects/route.ts": () => Promise.resolve({ default: { get: whoami.contract } }),
+		};
+		return { modules, load: (file: string) => modules[file]!() };
+	}
+
+	it("refuses to start when a folder guard is missing from the generated metadata", async () => {
+		// A guard routa generate could not read, such as one a factory builds, is never listed.
+		const guardFor = () => requireAuth();
+		const { modules, load } = folderProject({
+			signedIn: guardFor(),
+			withNothing: createMiddleware({ run: ({ next }) => next() }),
+		});
+		const message =
+			"src/routes/middleware.ts exports signedIn, a requireAuth() guard .routa/routes.gen.ts does not list, so it would not run and the routes below would be public. Write it as export const signedIn = requireAuth({ ... }), or re-export a const declared that way, then run routa generate.";
+
+		await expect(createTestApplication(modules)).rejects.toThrow(message);
+		await expect(createProjectApplication(load, { runtimeMode: "start" })).rejects.toThrow(message);
+	});
+
+	it("runs a folder guard the generated metadata lists", async () => {
+		const { modules, load } = folderProject({ signedIn: requireAuth() }, ["signedIn"]);
+		const app = await createTestApplication(modules);
+		const { application } = await createProjectApplication(load, { runtimeMode: "start" });
+		const signedIn = {
+			auth: {
+				status: "authenticated",
+				scheme: "userToken",
+				principal: { type: "user", id: "user_1", email: "a@example.com" },
+			},
+		};
+
+		try {
+			expect((await app.request("/projects")).status).toBe(401);
+			expect(
+				await (
+					await app.request("/projects", { headers: { authorization: "Bearer valid-user" } })
+				).json(),
+			).toEqual(signedIn);
+			expect((await application.fetch(new Request("http://localhost/projects"))).status).toBe(401);
+		} finally {
+			await app.dispose();
+			await application.dispose();
+		}
+	});
+
+	it("refuses to start when an unlisted folder guard comes from another copy of core", async () => {
+		const foreign = await foreignCore();
+		const { modules, load } = folderProject({ signedIn: foreign.requireAuth() });
+		const message =
+			"src/routes/middleware.ts exports signedIn, a requireAuth() guard .routa/routes.gen.ts does not list, so it would not run and the routes below would be public.";
+
+		await expect(createTestApplication(modules)).rejects.toThrow(message);
+		await expect(createProjectApplication(load, { runtimeMode: "start" })).rejects.toThrow(message);
+	});
+
+	it("enforces a listed folder guard from another copy of core, with its schemes", async () => {
+		const foreign = await foreignCore();
+		const { modules, load } = folderProject(
+			{ serviceOnly: foreign.requireAuth({ schemes: ["serviceKey"] as never }) },
+			["serviceOnly"],
+			{
+				config: { authentication: { principal: Principal, schemes: { userToken, serviceKey } } },
+				metadata: { routaAuthenticationSchemes: ["userToken", "serviceKey"] },
+			},
+		);
+		const app = await createTestApplication(modules);
+		const { application } = await createProjectApplication(load, { runtimeMode: "start" });
+
+		try {
+			for (const [headers, status] of [
+				[{}, 401],
+				[{ authorization: "Bearer valid-user" }, 401],
+				[{ "x-api-key": "service-key" }, 200],
+			] as const) {
+				expect((await app.request("/projects", { headers })).status).toBe(status);
+				expect(
+					(await application.fetch(new Request("http://localhost/projects", { headers }))).status,
+				).toBe(status);
+			}
+			expect(
+				await (await app.request("/projects", { headers: { "x-api-key": "service-key" } })).json(),
+			).toEqual({
+				auth: {
+					status: "authenticated",
+					scheme: "serviceKey",
+					principal: { type: "service", id: "svc_1" },
+				},
+			});
+		} finally {
+			await app.dispose();
+			await application.dispose();
+		}
+	});
+
+	it("asks to regenerate metadata that lists no folder middleware files", async () => {
+		await expect(
+			createTestApplication(
+				project({
+					metadata: {
+						routaRoutes: [
+							{ file: "src/routes/projects/route.ts", path: "/projects", methods: ["POST"] },
+						],
+					},
+				}),
+			),
+		).rejects.toThrow(
+			".routa/routes.gen.ts lists no folder middleware files for src/routes/projects/route.ts, so Routa cannot check them for requireAuth() guards. Run routa generate.",
+		);
 	});
 });
 

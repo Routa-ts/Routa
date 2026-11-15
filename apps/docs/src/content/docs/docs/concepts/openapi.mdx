@@ -53,6 +53,12 @@ priority order. OpenAPI reads them with OR semantics: any one of them suffices. 
 | Behind `requireAuth()`                         | `[{ userToken: [] }, { session: [] }, { serviceKey: [] }]`     | `authenticationFailed` and `authenticationRequired` |
 | Behind `requireAuth({ schemes: ["session"] })` | `[{ session: [] }]`                                            | `authenticationFailed` and `authenticationRequired` |
 
+An operation's requirement comes from every `requireAuth` on its chain, including guards a
+folder `middleware.ts` exports, so a folder guard sets the security of every operation below
+it. Inherited, route, and method guards intersect: a method's
+`requireAuth({ schemes: ["session"] })` under a folder's `requireAuth()` documents
+`[{ session: [] }]`, and no descendant can add an alternative its folder excludes.
+
 The empty requirement `{}` says the operation also accepts requests without a credential.
 Each `401` outcome documents its problem body and a required `WWW-Authenticate` header, and
 the two compose under one status like any other outcomes. Routa places each problem body in

@@ -29,10 +29,11 @@ import {
 	type AuthenticationMetadata,
 	type AuthenticationRequirementMetadata,
 	authenticationFailedDescription,
-	filesystemRequirementDiagnostics,
+	coreCall,
+	folderGuard,
 	rejectsAmbiguousCredentials,
 	requireAuthMiddleware,
-	requirementIntersectionDiagnostics,
+	requirementCompositionDiagnostics,
 } from "./authentication.js";
 import { compareText } from "./compare-text.js";
 import { type ContractSchemaProjection, projectContractSchemas } from "./contract-schemas.js";
@@ -40,8 +41,8 @@ import {
 	boundDeclaration,
 	type DeclarationReader,
 	exportedDeclaration,
-	exportedDeclarations,
 	type ModuleDeclaration,
+	moduleExports,
 	namedImportMap,
 	parseTypeScriptFile,
 	variableDeclarations,
@@ -77,6 +78,12 @@ export type RouteMetadata = {
 	inputs: Record<string, RouteMethodInputMetadata>;
 	middleware: MiddlewareMetadata[];
 	methodMiddleware: Record<string, MiddlewareMetadata[]>;
+	/**
+	 * Every folder `middleware.ts` on the route's path, root first, including files with no export
+	 * Routa reads. Startup loads each one and refuses a `requireAuth` guard export the chain omits.
+	 * Written only when the project configures authentication, the one case a guard can run.
+	 */
+	middlewareFiles?: string[];
 	/** The service contracts the route file declares, when it declares any. */
 	services?: RouteServicesMetadata;
 	deprecations?: Record<string, RouteDeprecationMetadata | undefined>;
@@ -194,12 +201,15 @@ function validateProjectInSession(
 		...(authentication && { authentication }),
 	});
 	const services = applicationServices(cwd, parser);
-	const discoveryWarnings = discovery.diagnostics.filter((item) => item.severity === "warning");
+	const discovered = [
+		...discovery.diagnostics,
+		...requirementCompositionDiagnostics(routes, authentication),
+	];
+	const discoveryWarnings = discovered.filter((item) => item.severity === "warning");
 	const diagnostics = [
 		...projectStructureDiagnostics(cwd),
 		...auth.diagnostics,
-		...discovery.diagnostics.filter((item) => item.severity !== "warning"),
-		...requirementIntersectionDiagnostics(routes, authentication),
+		...discovered.filter((item) => item.severity !== "warning"),
 		...services.diagnostics,
 		...runResultShapeDiagnostics(cwd, parser),
 		...duplicateRouteDiagnostics(routes),
@@ -543,6 +553,9 @@ function validateRuntimeOutput(
 			for (const middleware of middlewareList) {
 				runtimeFiles.add(middleware.file);
 			}
+		}
+		for (const file of route.middlewareFiles ?? []) {
+			runtimeFiles.add(file);
 		}
 	}
 
@@ -1014,9 +1027,17 @@ function discoverRoutes(
 
 	const sources = walk(routesDir);
 	const files = sources.filter(isRouteFile);
-	const diagnostics: Diagnostic[] = sources
-		.filter((file) => basename(file) === "middleware.ts")
-		.flatMap((file) => filesystemRequirementDiagnostics(cwd, relative(cwd, file), parser));
+	const folders = new Map<string, FolderMiddleware>();
+	const folderMiddleware = (file: string) => {
+		const parsed = folders.get(file) ?? parseMiddlewareFile(cwd, file, parser, authentication);
+		folders.set(file, parsed);
+		return parsed.middleware;
+	};
+	const diagnostics: Diagnostic[] = [];
+
+	for (const file of sources.filter((item) => basename(item) === "middleware.ts")) {
+		folderMiddleware(relative(cwd, file));
+	}
 
 	const routes = files.flatMap((file) => {
 		const relativeFile = relative(cwd, file);
@@ -1027,7 +1048,8 @@ function discoverRoutes(
 		const segments = rawSegments.filter(
 			(segment) => !(segment.startsWith("(") && segment.endsWith(")")),
 		);
-		const inheritedMiddleware = middlewareChain(cwd, rawSegments, parser);
+		const middlewareFiles = folderMiddlewareFiles(cwd, rawSegments);
+		const inheritedMiddleware = middlewareFiles.flatMap(folderMiddleware);
 		const routeFileMiddleware = parseRouteFileMiddleware(cwd, relativeFile, parser, authentication);
 		const middleware = [...inheritedMiddleware, ...routeFileMiddleware.route];
 		const methodMiddleware = Object.fromEntries(
@@ -1135,6 +1157,7 @@ function discoverRoutes(
 					: {}),
 				middleware,
 				methodMiddleware,
+				...(authentication && { middlewareFiles }),
 				...(services.services && { services: services.services }),
 				ctx,
 				groups,
@@ -1143,7 +1166,14 @@ function discoverRoutes(
 		];
 	});
 
-	return { routes, diagnostics };
+	// A guard two folders re-export from one module is reported once, where its call is written.
+	const folderDiagnostics = new Map(
+		[...folders.values()]
+			.flatMap((folder) => folder.diagnostics)
+			.map((item) => [`${item.code}\0${item.file}\0${item.message}`, item]),
+	);
+
+	return { routes, diagnostics: [...folderDiagnostics.values(), ...diagnostics] };
 }
 
 function isRouteFile(file: string): boolean {
@@ -1731,17 +1761,13 @@ function contractObjectKeys(
 }
 
 /**
- * Collects middleware declarations inherited from the route directory hierarchy.
+ * Lists the folder `middleware.ts` files a route inherits middleware from, root first.
  *
  * @param cwd - Project root directory
  * @param rawSegments - Route path segments used to locate nested `middleware.ts` files
- * @returns Middleware declarations from the global route middleware file and any matching nested middleware files
+ * @returns The root routes `middleware.ts` and each nested one that exists, relative to `cwd`
  */
-function middlewareChain(
-	cwd: string,
-	rawSegments: string[],
-	parser: ts.SourceFileParser,
-): MiddlewareMetadata[] {
+function folderMiddlewareFiles(cwd: string, rawSegments: string[]): string[] {
 	const candidates = [`${routesRoot}/middleware.ts`];
 	let current = routesRoot;
 
@@ -1750,9 +1776,7 @@ function middlewareChain(
 		candidates.push(join(current, "middleware.ts"));
 	}
 
-	return candidates
-		.filter((file) => existsSync(join(cwd, file)))
-		.flatMap((file) => parseMiddlewareFile(cwd, file, parser));
+	return candidates.filter((file) => existsSync(join(cwd, file)));
 }
 
 /**
@@ -1780,27 +1804,55 @@ function projectStructureDiagnostics(cwd: string): Diagnostic[] {
 		}));
 }
 
+/** A folder `middleware.ts` file's middleware, in export order, and what Routa reports about it. */
+type FolderMiddleware = { middleware: MiddlewareMetadata[]; diagnostics: Diagnostic[] };
+
 /**
- * Parses exported middleware declarations from a middleware file.
+ * Parses exported middleware declarations from a middleware file: `createMiddleware` contracts
+ * and `requireAuth` guards, in export order.
  *
  * Each entry names the middleware file and the name it exports, which the runtime can import
  * even when the declaration is private to another module or exported under an alias.
  *
  * @param cwd - Project root used to resolve `file`.
  * @param file - Path to the middleware file relative to `cwd`.
- * @returns Metadata for each exported middleware declaration found in the file.
+ * @returns Metadata for each exported middleware declaration found in the file, and diagnostics
+ *   for guards it cannot use.
  */
 function parseMiddlewareFile(
 	cwd: string,
 	file: string,
 	parser: ts.SourceFileParser,
-): MiddlewareMetadata[] {
+	authentication: AuthenticationMetadata | undefined,
+): FolderMiddleware {
 	const sourceFile = parseTypeScriptFile(join(cwd, file), parser);
+	const read = middlewareReader(cwd, parser);
+	const middleware: MiddlewareMetadata[] = [];
+	const diagnostics: Diagnostic[] = [];
 
-	return exportedDeclarations(cwd, file, sourceFile, parser, middlewareReader(cwd, parser)).map(
-		(block) =>
-			middlewareMetadata(cwd, parser, file, block.exportedName, block.contract, block.file),
-	);
+	const readsMiddleware = (expression: ts.Expression, from: string) =>
+		read(expression, from) !== undefined;
+
+	for (const exported of moduleExports(cwd, file, sourceFile, parser)) {
+		// The core requireAuth is a guard even when imported under the name createMiddleware.
+		const declaration =
+			exported.value && ts.isExpression(exported.value) && !coreCall(exported.value, "requireAuth")
+				? read(exported.value, exported.file)
+				: undefined;
+
+		if (declaration) {
+			middleware.push(
+				middlewareMetadata(cwd, parser, file, exported.exportedName, declaration, exported.file),
+			);
+			continue;
+		}
+
+		const guard = folderGuard(cwd, file, exported, parser, authentication, readsMiddleware);
+		middleware.push(...(guard.metadata ? [guard.metadata] : []));
+		diagnostics.push(...guard.diagnostics);
+	}
+
+	return { middleware, diagnostics };
 }
 
 /**
