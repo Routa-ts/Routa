@@ -2,7 +2,6 @@ import { createMiddleware } from "@routa-ts/core";
 import { z } from "zod";
 
 export const withTenant = createMiddleware({
-	requires: ["auth", "session"],
 	input: {
 		params: z.object({
 			tenantId: z.string(),

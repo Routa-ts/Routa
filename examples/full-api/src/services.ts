@@ -1,4 +1,5 @@
 import { defineServices, type RoutaLogger } from "@routa-ts/core";
+import { DemoIdentityDirectory, type IdentityDirectory } from "./identities.js";
 
 export type ProjectStatus = "active" | "archived";
 
@@ -18,6 +19,7 @@ export interface ProjectCatalog {
 /** The services every request receives as `ctx.services`. */
 export interface AppServices {
 	projects: ProjectCatalog;
+	identities: IdentityDirectory;
 }
 
 const defineAppServices = defineServices<AppServices>();
@@ -38,7 +40,10 @@ class DemoProjectCatalog implements ProjectCatalog {
 	}
 }
 
-export const appServices = defineAppServices(() => ({ projects: new DemoProjectCatalog() }));
+export const appServices = defineAppServices(() => ({
+	projects: new DemoProjectCatalog(),
+	identities: new DemoIdentityDirectory(),
+}));
 
 /** One tenant's projects. The projects route file builds one per request, for the tenant in ctx. */
 export interface TenantProjects {
