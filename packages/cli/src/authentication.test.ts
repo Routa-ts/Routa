@@ -388,12 +388,12 @@ describe("authentication diagnostics", () => {
 			[
 				"{ principal: Principal, schemes: { userToken: makeScheme() } }",
 				"ROUTA_AUTH_CONFIG_UNRESOLVED",
-				'Authentication scheme "userToken" in src/routa.ts is not a statically readable bearer(), apiKey(), or sessionCookie() call.',
+				'Authentication scheme "userToken" in src/routa.ts is not a statically readable bearer(), apiKey(), sessionCookie(), or custom() call.',
 			],
 			[
 				"{ principal: Principal, schemes: { userToken: bearer({ authenticate: reject, ...dynamicChallenge() }) } }",
 				"ROUTA_AUTH_CONFIG_UNRESOLVED",
-				'Authentication scheme "userToken" in src/routa.ts is not a statically readable bearer(), apiKey(), or sessionCookie() call.',
+				'Authentication scheme "userToken" in src/routa.ts is not a statically readable bearer(), apiKey(), sessionCookie(), or custom() call.',
 				"const dynamicChallenge = () => ({ challenge: { realm: process.env.REALM ?? 'api' } });",
 			],
 			[
@@ -547,7 +547,7 @@ export default createRouta({ ...base, port: 3000 });
 			{
 				code: "ROUTA_AUTH_CONFIG_UNRESOLVED",
 				message:
-					'Authentication scheme "userToken" in src/routa.ts is not a statically readable bearer(), apiKey(), or sessionCookie() call.',
+					'Authentication scheme "userToken" in src/routa.ts is not a statically readable bearer(), apiKey(), sessionCookie(), or custom() call.',
 			},
 		]);
 	});
@@ -2225,6 +2225,480 @@ export const requireAuth = createMiddleware({ run: ({ next }) => next() });
 				},
 			],
 		);
+	});
+});
+
+const customConfig = (
+	schemes = "",
+	options = "",
+) => `import { bearer, createRouta, custom } from "@routa-ts/core";
+import { z } from "zod";
+
+const Principal = z.discriminatedUnion("type", [
+\tz.object({ type: z.literal("user"), id: z.string() }),
+\tz.object({ type: z.literal("service"), id: z.string() }),
+]);
+
+/** Decodes Basic credentials, or reports them malformed. */
+function decodeBasic(value: string) {
+\tconst decoded = atob(value);
+\tconst index = decoded.indexOf(":");
+\treturn index === -1
+\t\t? ({ type: "malformed" } as const)
+\t\t: ({ type: "credential", credential: { user: decoded.slice(0, index), password: decoded.slice(index + 1) } } as const);
+}
+
+export default createRouta({
+\tauthentication: {
+\t\tprincipal: Principal,
+\t\tschemes: {
+\t\t\tuserToken: bearer({
+\t\t\t\tauthenticate: (token) =>
+\t\t\t\t\ttoken === "user-token" ? { type: "authenticated", principal: { type: "user", id: "user_1" } } : { type: "rejected" },
+\t\t\t}),
+\t\t\tbasicUser: custom({
+\t\t\t\ttransport: { header: "authorization", scheme: "Basic" },
+\t\t\t\tchallenge: { scheme: "Basic", realm: "api" },
+\t\t\t\topenapi: { type: "http", scheme: "basic", description: "HTTP Basic with an account password." },
+\t\t\t\textract: (value) => decodeBasic(value),
+\t\t\t\tauthenticate: (credential) =>
+\t\t\t\t\tcredential.user === "ada" && credential.password === "secret"
+\t\t\t\t\t\t? { type: "authenticated", principal: { type: "user", id: "user_ada" } }
+\t\t\t\t\t\t: { type: "rejected" },
+\t\t\t}),${schemes}
+\t\t},${options}
+\t},
+});
+`;
+
+const accountRoute = `import { createRoute, createRouteRoot, requireAuth } from "@routa-ts/core";
+import { z } from "zod";
+
+// Type assertions only; never called.
+export const typeChecks = () => {
+\trequireAuth({ schemes: ["basicUser"] });
+\t// @ts-expect-error Only schemes src/routa.ts declares.
+\trequireAuth({ schemes: ["basicUsr"] });
+};
+
+export default createRouteRoot("/account")({
+\tget: createRoute({
+\t\tresponses: { ok: { status: 200, schema: z.object({ who: z.string() }) } },
+\t\trun: ({ ctx }) => {
+\t\t\tif (ctx.auth.status === "anonymous") {
+\t\t\t\treturn { type: "ok", data: { who: "anonymous" } };
+\t\t\t}
+
+\t\t\tconst scheme: "userToken" | "basicUser" = ctx.auth.scheme;
+\t\t\t// @ts-expect-error A public operation accepts either scheme.
+\t\t\tconst onlyBasic: "basicUser" = ctx.auth.scheme;
+\t\t\tvoid onlyBasic;
+
+\t\t\tif (ctx.auth.scheme === "basicUser") {
+\t\t\t\tconst type: "user" | "service" = ctx.auth.principal.type;
+\t\t\t\t// @ts-expect-error The principal is the user | service union.
+\t\t\t\tconst onlyUser: "user" = ctx.auth.principal.type;
+\t\t\t\tvoid [type, onlyUser];
+\t\t\t}
+
+\t\t\treturn { type: "ok", data: { who: \`\${scheme}:\${ctx.auth.principal.id}\` } };
+\t\t},
+\t}),
+\tput: createRoute({
+\t\tmiddleware: [requireAuth({ schemes: ["basicUser"] })],
+\t\tresponses: { ok: { status: 200, schema: z.object({ who: z.string() }) } },
+\t\trun: ({ ctx }) => {
+\t\t\tconst scheme: "basicUser" = ctx.auth.scheme;
+\t\t\t// @ts-expect-error Behind requireAuth({ schemes: ["basicUser"] }), the scheme is basicUser.
+\t\t\tconst other: "userToken" = ctx.auth.scheme;
+\t\t\tvoid other;
+\t\t\treturn { type: "ok", data: { who: \`\${scheme}:\${ctx.auth.principal.id}\` } };
+\t\t},
+\t}),
+});
+`;
+
+const basic = (user: string, password: string) =>
+	`Basic ${Buffer.from(`${user}:${password}`).toString("base64")}`;
+
+describe("custom credential schemes in a project", () => {
+	it("checks, types, and serves a custom scheme beside Bearer", async () => {
+		const cwd = project({
+			"src/routa.ts": customConfig("", '\n\t\tpriority: ["basicUser", "userToken"],'),
+			"src/routes/account/route.ts": accountRoute,
+		});
+
+		expectPassed(await run(["check"], { cwd }));
+		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
+			'export const routaAuthenticationSchemes = [\n\t"basicUser",\n\t"userToken"\n] as const;',
+		);
+
+		const { application } = await createProjectApplication(cwd, cwd, "dev");
+		const request = async (method: string, headers: Record<string, string>) => {
+			const response = await application.fetch(
+				new Request("http://localhost/account", { method, headers }),
+			);
+			return [response.status, response.headers.get("www-authenticate"), await response.json()];
+		};
+		const failed = expect.objectContaining({ title: "Authentication failed" });
+
+		expect(await request("GET", { authorization: basic("ada", "secret") })).toEqual([
+			200,
+			null,
+			{ who: "basicUser:user_ada" },
+		]);
+		expect(await request("GET", { authorization: "Bearer user-token" })).toEqual([
+			200,
+			null,
+			{ who: "userToken:user_1" },
+		]);
+		expect(await request("GET", { authorization: basic("ada", "wrong") })).toEqual([
+			401,
+			'Basic realm="api"',
+			failed,
+		]);
+		expect(await request("GET", { authorization: "Basic bm8tY29sb24=" })).toEqual([
+			401,
+			'Basic realm="api"',
+			failed,
+		]);
+		expect(await request("GET", { authorization: "Digest abc" })).toEqual([
+			401,
+			'Basic realm="api", Bearer',
+			failed,
+		]);
+		expect(await request("PUT", { authorization: "Bearer user-token" })).toEqual([
+			401,
+			'Basic realm="api"',
+			failed,
+		]);
+		expect(await request("PUT", {})).toEqual([
+			401,
+			'Basic realm="api"',
+			expect.objectContaining({ title: "Authentication required" }),
+		]);
+		expect(await request("PUT", { authorization: basic("ada", "secret") })).toEqual([
+			200,
+			null,
+			{ who: "basicUser:user_ada" },
+		]);
+		await application.dispose();
+	}, 30_000);
+
+	it("generates OpenAPI security from each custom scheme's public metadata", () => {
+		const document = generateOpenApi(
+			project({
+				"src/routa.ts": customConfig(
+					`
+\t\t\tclientCert: custom({
+\t\t\t\ttransport: { header: "x-client-cert" },
+\t\t\t\topenapi: { type: "mutualTLS", description: "A client certificate the TLS proxy verified." },
+\t\t\t\tauthenticate: () => ({ type: "rejected" }),
+\t\t\t}),
+\t\t\tdevice: custom({
+\t\t\t\ttransport: { cookie: "device" },
+\t\t\t\topenapi: { type: "apiKey", in: "cookie", name: "device" },
+\t\t\t\tauthenticate: () => ({ type: "rejected" }),
+\t\t\t}),`,
+				),
+				"src/routes/account/route.ts": accountRoute,
+			}),
+		) as Record<string, any>;
+		const operations = document.paths["/account"];
+
+		expect(document["x-routa-diagnostics"]).toBeUndefined();
+		expect(document.components.securitySchemes).toEqual({
+			userToken: { type: "http", scheme: "bearer" },
+			basicUser: {
+				type: "http",
+				scheme: "basic",
+				description: "HTTP Basic with an account password.",
+			},
+			clientCert: {
+				type: "mutualTLS",
+				description: "A client certificate the TLS proxy verified.",
+			},
+			device: { type: "apiKey", in: "cookie", name: "device" },
+		});
+		expect(operations.get.security).toEqual([
+			{},
+			{ userToken: [] },
+			{ basicUser: [] },
+			{ clientCert: [] },
+			{ device: [] },
+		]);
+		expect(operations.put.security).toEqual([{ basicUser: [] }]);
+		expect(Object.keys(operations.put.responses)).toEqual(["200", "401"]);
+	});
+
+	it("reads a custom scheme's transport, challenge, and OpenAPI metadata as contract facts", () => {
+		const validation = validateProject(
+			project({
+				"src/routa.ts": customConfig(
+					`
+\t\t\tclientCert: custom({
+\t\t\t\ttransport: { header: "X-Client-Cert" },
+\t\t\t\topenapi: { type: "mutualTLS" },
+\t\t\t\tauthenticate: () => ({ type: "rejected" }),
+\t\t\t}),`,
+				),
+			}),
+			{ write: false },
+		);
+
+		expect(validation.diagnostics).toEqual([]);
+		expect(validation.authentication?.schemes.slice(1)).toEqual([
+			{
+				name: "basicUser",
+				kind: "custom",
+				transport: { header: "authorization", scheme: "Basic" },
+				challengeScheme: "Basic",
+				realm: "api",
+				openapi: {
+					type: "http",
+					scheme: "basic",
+					description: "HTTP Basic with an account password.",
+				},
+			},
+			{
+				name: "clientCert",
+				kind: "custom",
+				transport: { header: "X-Client-Cert" },
+				openapi: { type: "mutualTLS" },
+			},
+		]);
+	});
+});
+
+describe("custom credential scheme diagnostics", () => {
+	const config = (schemes: string) =>
+		configWith(`{ principal: Principal, schemes: { ${schemes} } }`).replace(
+			'import { bearer, createRouta } from "@routa-ts/core";',
+			'import { apiKey, bearer, createRouta, custom, sessionCookie } from "@routa-ts/core";',
+		);
+	const scheme = (options: string) => `custom({ ${options}, authenticate: reject })`;
+	const header = (name: string, authScheme?: string) =>
+		authScheme === undefined
+			? scheme(
+					`transport: { header: "${name}" }, openapi: { type: "apiKey", in: "header", name: "${name}" }`,
+				)
+			: scheme(
+					`transport: { header: "${name}", scheme: "${authScheme}" }, openapi: { type: "http", scheme: "${authScheme}" }`,
+				);
+	const cookie = (name: string) =>
+		scheme(
+			`transport: { cookie: "${name}" }, openapi: { type: "apiKey", in: "cookie", name: "${name}" }`,
+		);
+	const token = "bearer({ authenticate: reject })";
+	const valid = 'transport: { header: "x-signed" }, openapi: { type: "mutualTLS" }';
+
+	it("reads extract and authenticate methods, but not a transport or openapi method", () => {
+		const methods = `${valid}, extract(value) { return { type: "credential", credential: value }; }, authenticate(credential) { return credential === "c" ? { type: "authenticated", principal: { id: credential, type: "user" } } : { type: "rejected" }; }`;
+		const validation = validateProject(
+			project({ "src/routa.ts": config(`a: custom({ ${methods} })`) }),
+			{
+				write: false,
+			},
+		);
+
+		expect(validation.diagnostics).toEqual([]);
+		expect(validation.authentication?.schemes).toEqual([
+			{
+				name: "a",
+				kind: "custom",
+				transport: { header: "x-signed" },
+				openapi: { type: "mutualTLS" },
+			},
+		]);
+
+		for (const [options, message] of [
+			[
+				'transport() { return { header: "x-signed" }; }, openapi: { type: "mutualTLS" }',
+				'Authentication scheme "a" declares a transport that is not a literal { header }, { header, scheme }, or { cookie } object.',
+			],
+			[
+				'transport: { header: "x-signed" }, openapi() { return { type: "mutualTLS" }; }',
+				'Authentication scheme "a" declares openapi metadata that is not a literal object.',
+			],
+		]) {
+			expect(diagnostics({ "src/routa.ts": config(`a: ${scheme(options!)}`) }), options).toEqual([
+				{ code: "ROUTA_AUTH_CONFIG_UNRESOLVED", message },
+			]);
+		}
+	});
+
+	it("reports transports another scheme already reads", () => {
+		const cases: Array<[string, string]> = [
+			[
+				`a: ${token}, b: ${header("Authorization", "bearer")}`,
+				'Authentication schemes "a" and "b" both read the Authorization Bearer credential.',
+			],
+			[
+				`a: ${token}, b: ${header("authorization")}`,
+				'Authentication schemes "a" and "b" both read the Authorization Bearer credential.',
+			],
+			[
+				`a: ${header("authorization", "Basic")}, b: ${header("authorization", "BASIC")}`,
+				'Authentication schemes "a" and "b" both read the Authorization Basic credential.',
+			],
+			[
+				`a: ${header("Authorization")}, b: ${header("authorization", "Basic")}`,
+				'Authentication schemes "a" and "b" both read the Authorization Basic credential.',
+			],
+			[
+				`a: ${header("X-Client-Cert")}, b: ${header("x-client-cert")}`,
+				'Authentication schemes "a" and "b" both read the x-client-cert header.',
+			],
+			[
+				`a: apiKey({ header: "x-api-key", authenticate: reject }), b: ${header("X-Api-Key")}`,
+				'Authentication schemes "a" and "b" both read the x-api-key header.',
+			],
+			[
+				`a: sessionCookie({ cookie: "sid", authenticate: reject }), b: ${cookie("sid")}`,
+				'Authentication schemes "a" and "b" both read the "sid" cookie.',
+			],
+			[
+				`a: ${cookie("sid")}, b: ${header("cookie")}`,
+				'Authentication schemes "a" and "b" both read the "sid" cookie.',
+			],
+		];
+
+		for (const [schemes, message] of cases) {
+			expect(diagnostics({ "src/routa.ts": config(schemes) }), schemes).toEqual([
+				{ code: "ROUTA_AUTH_TRANSPORT_OVERLAP", message },
+			]);
+		}
+
+		expect(
+			diagnostics({
+				"src/routa.ts": config(
+					`a: ${token}, b: ${header("authorization", "Basic")}, c: ${header("x-a")}, d: ${cookie("sid")}`,
+				),
+			}),
+		).toEqual([]);
+	});
+
+	it("reports transports, challenges, and OpenAPI metadata it cannot read or accept", () => {
+		const at = 'Authentication scheme "a"';
+		const cases: Array<[string, string, string]> = [
+			[
+				'openapi: { type: "mutualTLS" }',
+				"ROUTA_AUTH_CONFIG_INVALID",
+				`${at} declares no transport.`,
+			],
+			[
+				`transport: signed, openapi: { type: "mutualTLS" }`,
+				"ROUTA_AUTH_CONFIG_UNRESOLVED",
+				`${at} declares a transport that is not a literal { header }, { header, scheme }, or { cookie } object.`,
+			],
+			[
+				`transport: { header: "x-a", cookie: "a" }, openapi: { type: "mutualTLS" }`,
+				"ROUTA_AUTH_CONFIG_INVALID",
+				`${at} declares a transport with both header and cookie. Read one header or one cookie.`,
+			],
+			[
+				`transport: { header: name }, openapi: { type: "mutualTLS" }`,
+				"ROUTA_AUTH_CONFIG_UNRESOLVED",
+				`${at} declares a transport header that is not a string literal.`,
+			],
+			[
+				`transport: { header: "x a" }, openapi: { type: "mutualTLS" }`,
+				"ROUTA_AUTH_CONFIG_INVALID",
+				`${at} declares transport header "x a", which is not an HTTP header name.`,
+			],
+			[
+				`transport: { cookie: "a;b" }, openapi: { type: "apiKey", in: "cookie", name: "a;b" }`,
+				"ROUTA_AUTH_CONFIG_INVALID",
+				`${at} declares transport cookie "a;b", which is not a cookie name.`,
+			],
+			[
+				`transport: { header: "x-a", scheme: "Basic" }, openapi: { type: "mutualTLS" }`,
+				"ROUTA_AUTH_CONFIG_INVALID",
+				`${at} declares transport scheme "Basic" on the x-a header. A transport scheme applies only to the Authorization header.`,
+			],
+			[
+				`transport: { header: "authorization", scheme: "Ba sic" }, openapi: { type: "http", scheme: "basic" }`,
+				"ROUTA_AUTH_CONFIG_INVALID",
+				`${at} declares transport scheme "Ba sic", which is not an HTTP auth-scheme.`,
+			],
+			[
+				`${valid}, challenge: { scheme: "Ba sic" }`,
+				"ROUTA_AUTH_CHALLENGE_INVALID",
+				`${at} declares a challenge scheme that is not an HTTP auth-scheme.`,
+			],
+			[
+				`${valid}, challenge: { scheme: authScheme }`,
+				"ROUTA_AUTH_CHALLENGE_INVALID",
+				`${at} declares a challenge scheme that is not a string literal.`,
+			],
+			[
+				`${valid}, challenge: { error: "invalid" }`,
+				"ROUTA_AUTH_CHALLENGE_INVALID",
+				`${at} declares challenge "error". A custom challenge override accepts only scheme and realm.`,
+			],
+			[
+				'transport: { header: "x-signed" }',
+				"ROUTA_AUTH_CONFIG_INVALID",
+				`${at} declares no openapi metadata.`,
+			],
+			[
+				'transport: { header: "x-signed" }, openapi: security',
+				"ROUTA_AUTH_CONFIG_UNRESOLVED",
+				`${at} declares openapi metadata that is not a literal object.`,
+			],
+			[
+				'transport: { header: "x-signed" }, openapi: { type: "apiKey", in: "header", name: headerName }',
+				"ROUTA_AUTH_CONFIG_UNRESOLVED",
+				`${at} declares openapi name that is not a string literal.`,
+			],
+			[
+				'transport: { header: "x-signed" }, openapi: { type: "oauth2" }',
+				"ROUTA_AUTH_CONFIG_INVALID",
+				`${at} declares openapi type "oauth2". Use "http", "apiKey", or "mutualTLS".`,
+			],
+			[
+				'transport: { header: "x-signed" }, openapi: { type: "http", scheme: "basic" }',
+				"ROUTA_AUTH_CONFIG_INVALID",
+				`${at} declares openapi { type: "http" }, which needs an { header: "authorization", scheme } transport whose scheme is "basic".`,
+			],
+			[
+				'transport: { header: "authorization", scheme: "Basic" }, openapi: { type: "http", scheme: "basic", bearerFormat: "JWT" }',
+				"ROUTA_AUTH_CONFIG_INVALID",
+				`${at} declares openapi bearerFormat, which applies only to scheme "bearer".`,
+			],
+			[
+				'transport: { header: "authorization", scheme: "Basic" }, openapi: { type: "apiKey", in: "header", name: "authorization" }',
+				"ROUTA_AUTH_CONFIG_INVALID",
+				`${at} declares openapi { type: "apiKey" }, which cannot describe one Authorization auth-scheme. Use { type: "http", scheme: "Basic" }.`,
+			],
+			[
+				'transport: { header: "x-signed" }, openapi: { type: "apiKey", in: "header", name: "x-other" }',
+				"ROUTA_AUTH_CONFIG_INVALID",
+				`${at} declares openapi { type: "apiKey" }, which must name the transport: in: "header", name: "x-signed".`,
+			],
+			[
+				'transport: { cookie: "sid" }, openapi: { type: "mutualTLS" }',
+				"ROUTA_AUTH_CONFIG_INVALID",
+				`${at} declares openapi { type: "mutualTLS" }, which needs a header transport other than Authorization, such as a trusted proxy's client-certificate header.`,
+			],
+			[
+				'transport: { header: "x-signed" }, openapi: { type: "mutualTLS", scopes: {} }',
+				"ROUTA_AUTH_CONFIG_INVALID",
+				`${at} declares openapi "scopes", which { type: "mutualTLS" } does not accept.`,
+			],
+		];
+
+		for (const [options, code, message] of cases) {
+			expect(
+				diagnostics({
+					"src/routa.ts": config(`a: ${scheme(options)}`).replace(
+						"const reject",
+						'declare const signed: { header: string };\ndeclare const name: string;\ndeclare const authScheme: string;\ndeclare const security: { type: "mutualTLS" };\ndeclare const headerName: string;\nconst reject',
+					),
+				}),
+				options,
+			).toEqual([{ code, message }]);
+		}
 	});
 });
 

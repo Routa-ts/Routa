@@ -229,7 +229,9 @@ function securitySchemeObjects(authentication: AuthenticationMetadata): Record<s
 				? { type: "http", scheme: "bearer" }
 				: scheme.kind === "apiKey"
 					? { type: "apiKey", in: "header", name: scheme.header }
-					: { type: "apiKey", in: "cookie", name: scheme.cookie },
+					: scheme.kind === "sessionCookie"
+						? { type: "apiKey", in: "cookie", name: scheme.cookie }
+						: { ...scheme.openapi },
 		]),
 	);
 }

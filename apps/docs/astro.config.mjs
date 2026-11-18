@@ -108,6 +108,7 @@ export default defineConfig({
 						{ label: "Regenerate safely", slug: "docs/guides/regeneration" },
 						{ label: "Check and build", slug: "docs/guides/check-build" },
 						{ label: "Testing", slug: "docs/guides/testing" },
+						{ label: "Custom credential schemes", slug: "docs/guides/custom-credential-schemes" },
 						{ label: "Run and start", slug: "docs/guides/run-start" },
 						{ label: "Deploy", slug: "docs/guides/deploy" },
 						{ label: "API evolution", slug: "docs/guides/api-evolution" },

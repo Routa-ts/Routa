@@ -730,7 +730,7 @@ describe("authentication registration", () => {
 			],
 			[
 				{ principal: Principal, schemes: { userToken: { kind: "basic" } } },
-				'scheme "userToken" must be declared with bearer(), apiKey(), or sessionCookie().',
+				'scheme "userToken" must be declared with bearer(), apiKey(), sessionCookie(), or custom().',
 			],
 			[
 				{
