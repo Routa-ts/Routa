@@ -24,7 +24,7 @@
 		"test": "vp run unit",
 		"typecheck": "vp run build:packages && vp run --filter './packages/*' --filter './apps/*' typecheck",
 		"verify": "vp exec -c \"vp run check && vp run typecheck && vp run test && vp run generated:check && vp run --filter './examples/*' check && vp run --filter './examples/*' openapi:check && vp run --filter full-api auth:exercise && scripts/scaffold-error-smoke.sh && vp run pack:check\"",
-		"version": "vp exec changeset version",
+		"version": "vp exec changeset version && vp fmt",
 		"build:packages": "vp run compile",
 		"prepare:checks": "vp run prepare:local-cli && vp run --filter './apps/*' sync"
 	},
