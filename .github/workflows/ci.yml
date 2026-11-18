@@ -109,6 +109,11 @@ jobs:
         git diff "origin/$GITHUB_BASE_REF...HEAD" > "$changes"
         status=0
         for root in packages/core packages/cli; do
+          # With no paths under "$root", Fallow cannot tell which base the diff uses and exits 2.
+          if git diff --quiet "origin/$GITHUB_BASE_REF...HEAD" -- "$root"; then
+            printf '### Mutation report: %s\n\nNo changes under %s.\n\n' "$root" "$root" >> "$GITHUB_STEP_SUMMARY"
+            continue
+          fi
           {
             printf '### Mutation report: %s\n\n```text\n' "$root"
             vp exec fallow mutation --root "$root" --base "origin/$GITHUB_BASE_REF" --diff-file "$changes" --time-budget 10m --quiet || status=$?
