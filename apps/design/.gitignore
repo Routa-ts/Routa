@@ -19,3 +19,15 @@ pnpm-debug.log*
 
 # macOS-specific files
 .DS_Store
+
+# Local design scratch: references, web captures and exploration exports.
+# Keep anything you don't want in git in scratch/.
+/scratch/
+
+# Files pen.dev writes next to a .pen file when it captures a web page or
+# embeds an image or shader.
+/images/
+/fonts/
+/embedded-image*
+/screenshot-*
+/*.glsl
