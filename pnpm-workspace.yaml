@@ -14,3 +14,9 @@ peerDependencyRules:
 # runs, so mutation and `vp test` share it.
 publicHoistPattern:
   - vitest
+# @napi-rs/wasm-runtime accepts emnapi 2.0 prereleases as peers, so pnpm resolves to them.
+# 2.0.0-beta.2 crashes `astro check` with "this.bridge.deleteEnv is not a function".
+# Keep the stable 1.x line until emnapi 2.0 is released.
+overrides:
+  "@emnapi/core": 1.11.3
+  "@emnapi/runtime": 1.11.3
