@@ -103,11 +103,15 @@ jobs:
       command: |
         vp run build:packages
         vp exec node scripts/link-local-cli.mjs --root "$GITHUB_WORKSPACE"
+        # Fallow cannot scope its own diff when a PR changes "$root/package.json" and exits 2.
+        # A diff taken from the repository root has unambiguous paths.
+        changes="$RUNNER_TEMP/changes.diff"
+        git diff "origin/$GITHUB_BASE_REF...HEAD" > "$changes"
         status=0
         for root in packages/core packages/cli; do
           {
             printf '### Mutation report: %s\n\n```text\n' "$root"
-            vp exec fallow mutation --root "$root" --base "origin/$GITHUB_BASE_REF" --time-budget 10m --quiet || status=$?
+            vp exec fallow mutation --root "$root" --base "origin/$GITHUB_BASE_REF" --diff-file "$changes" --time-budget 10m --quiet || status=$?
             printf '```\n\n'
           } >> "$GITHUB_STEP_SUMMARY" 2>&1
         done
