@@ -924,37 +924,31 @@ export default route({
 
 		// Draw-in on scroll, replayed every time a block comes back into view. Browsers with
 		// CSS scroll-triggered animations (animation-trigger) do this in CSS; the rest use
-		// this observer. Content stays visible without JS or with reduced motion.
+		// the scroll check below. Content stays visible without JS or with reduced motion.
 		const nativeTriggers = CSS.supports("animation-trigger", "--t replay reset");
 		const revealed = document.querySelectorAll<HTMLElement>("[data-reveal]");
-		if (!reduceMotion && !nativeTriggers && "IntersectionObserver" in window) {
-			// Plays when the block reaches a band across the middle of the viewport...
-			const middle = new IntersectionObserver(
-				(entries) => {
-					for (const entry of entries) {
-						if (entry.isIntersecting) (entry.target as HTMLElement).dataset.reveal = "shown";
-					}
-				},
-				{ rootMargin: "-40% 0px -40% 0px" },
-			);
-			// ...rewinds only once it has fully left the viewport, and catches a scroll jump
-			// that lands the block above the band without ever crossing it.
-			const viewport = new IntersectionObserver(
-				(entries) => {
-					for (const entry of entries) {
-						const element = entry.target as HTMLElement;
-						const box = entry.boundingClientRect;
-						if (!entry.isIntersecting) element.dataset.reveal = "pending";
-						else if (box.top + box.height / 2 < innerHeight * 0.6) element.dataset.reveal = "shown";
-					}
-				},
-				{ threshold: [0, 0.25, 0.5, 0.75, 1] },
-			);
-			for (const element of revealed) {
-				element.dataset.reveal = "pending";
-				middle.observe(element);
-				viewport.observe(element);
-			}
+		if (!reduceMotion && !nativeTriggers) {
+			// Plays once the block's centre is at or above 60% of the viewport, and rewinds
+			// once it has fully left. Reading positions on scroll (not an observer band) means
+			// no jump can skip the trigger, whatever the viewport height.
+			let queued = false;
+			const update = () => {
+				queued = false;
+				for (const element of revealed) {
+					const box = element.getBoundingClientRect();
+					if (box.bottom <= 0 || box.top >= innerHeight) element.dataset.reveal = "pending";
+					else if (box.top + box.height / 2 < innerHeight * 0.6) element.dataset.reveal = "shown";
+				}
+			};
+			const queue = () => {
+				if (queued) return;
+				queued = true;
+				requestAnimationFrame(update);
+			};
+			for (const element of revealed) element.dataset.reveal = "pending";
+			addEventListener("scroll", queue, { passive: true });
+			addEventListener("resize", queue);
+			update();
 		}
 
 		// "Read the tree" path: type each folder tree out, then delete it and type the next.
@@ -1123,7 +1117,7 @@ export default route({
 			});
 			new IntersectionObserver(([entry]) => {
 				visible = Boolean(entry?.isIntersecting);
-				if (visible && !started) {
+				if (visible && !started && !stopped) {
 					started = true;
 					void run();
 				}
