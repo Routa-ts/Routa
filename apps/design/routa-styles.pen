@@ -37482,7 +37482,7 @@
               "fill": "$lm-ink-2",
               "textGrowth": "fixed-width",
               "width": "fill_container",
-              "content": "Variables panel → set one of logo-show-soft-c / soft-d / soft-e / soft-f to true and the rest false. The straight A/B marks stay available as logo-show-tree-a / tree-b.",
+              "content": "Variables panel → set one of logo-show-soft-c / soft-d / soft-e / soft-f / soft-g / soft-h to true and the rest false (soft-h is the current pick). The straight A/B marks stay available as logo-show-tree-a / tree-b.",
               "fontFamily": "$lm-font-sans",
               "fontSize": 16,
               "fontWeight": "normal"
@@ -38333,7 +38333,7 @@
               "x": 0,
               "y": 0,
               "name": "soft-e · curve + dots",
-              "enabled": false,
+              "enabled": "$logo-show-soft-e",
               "width": 36,
               "height": 36,
               "layout": "none",
@@ -38406,7 +38406,7 @@
               "x": 0,
               "y": 0,
               "name": "soft-g · branch dot colors",
-              "enabled": false,
+              "enabled": "$logo-show-soft-g",
               "width": 36,
               "height": 36,
               "layout": "none",
@@ -38469,6 +38469,7 @@
               "x": 0,
               "y": 0,
               "name": "soft-h · branch dot stroke",
+              "enabled": "$logo-show-soft-h",
               "width": 36,
               "height": 36,
               "layout": "none",
@@ -38528,7 +38529,7 @@
               "x": 0,
               "y": 0,
               "name": "soft-f · branch dot",
-              "enabled": false,
+              "enabled": "$logo-show-soft-f",
               "width": 36,
               "height": 36,
               "layout": "none",
@@ -38804,6 +38805,14 @@
       "value": false
     },
     "logo-show-soft-f": {
+      "type": "boolean",
+      "value": false
+    },
+    "logo-show-soft-g": {
+      "type": "boolean",
+      "value": false
+    },
+    "logo-show-soft-h": {
       "type": "boolean",
       "value": true
     }

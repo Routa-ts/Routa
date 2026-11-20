@@ -236,6 +236,29 @@ pre {
 	}
 }
 
+/* Phones: logo without the wordmark and tighter spacing, so brand, command and links
+   fit in one row down to 320px. */
+@media (max-width: 480px) {
+	.nav {
+		gap: 0.5rem;
+		padding-inline: 12px;
+	}
+
+	.nav__end,
+	.nav__links {
+		gap: 0.75rem;
+	}
+
+	.brand span {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+}
+
 .theme-toggle {
 	display: inline-grid;
 	place-items: center;
@@ -434,7 +457,8 @@ pre {
 	.cli {
 		gap: 10px;
 		padding: 14px 16px;
-		font-size: 14px;
+		/* The full pnpm command fits on one line down to 320px. */
+		font-size: clamp(12px, 3.6vw, 14px);
 	}
 }
 
@@ -470,7 +494,13 @@ pre {
 	font-size: 13px;
 }
 
-.cli--light[data-copied]::after {
+.cli[data-copy-failed]::after {
+	content: "Copy failed";
+	color: var(--cli-prompt);
+	font-size: 13px;
+}
+
+.cli--light:is([data-copied], [data-copy-failed])::after {
 	color: var(--green-text);
 }
 
@@ -639,8 +669,9 @@ pre {
 	fill: var(--green-text);
 }
 
+/* Not --blue: its dark-mode tint drops the white label below 4.5:1. */
 .badge--post {
-	fill: var(--blue);
+	fill: #0072ce;
 }
 
 /* ---- Code pair ---- */
@@ -1202,6 +1233,19 @@ pre {
 	html {
 		scroll-behavior: auto;
 	}
+
+	/* No slides, presses or nudges; the nav command still shows and hides, instantly. */
+	.cli,
+	.cli--nav,
+	.link-arrow span {
+		transition: none;
+	}
+
+	.cli:active,
+	.cli--nav,
+	.link-arrow:hover span {
+		transform: none;
+	}
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -1314,6 +1358,10 @@ pre {
 		vertical-align: -0.04em;
 		background: currentColor;
 		animation: caret 1s steps(1) infinite;
+	}
+
+	.url.is-paused .is-typing::after {
+		animation: none;
 	}
 }
 

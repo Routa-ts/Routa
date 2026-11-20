@@ -28,14 +28,14 @@ const urlExamples = [
 			text: "/:tenantId",
 			param: true,
 			file: "$tenantId/",
-			desc: "a typed param, from the folder name",
+			desc: "a path param, named after the folder",
 		},
 		{ text: "/projects", file: "projects/route.ts", desc: "the operations: GET, POST" },
 	],
 	[{ text: "/status", file: "status/route.ts", desc: "the operations: GET" }],
 	[
 		{ text: "/users", file: "users/", desc: "a folder" },
-		{ text: "/:userId", param: true, file: "$userId/", desc: "a typed param, from the folder name" },
+		{ text: "/:userId", param: true, file: "$userId/", desc: "a path param, named after the folder" },
 		{ text: "/sessions", file: "sessions/route.ts", desc: "the operations: GET, DELETE" },
 	],
 	[
@@ -44,7 +44,7 @@ const urlExamples = [
 			text: "/:orderId",
 			param: true,
 			file: "$orderId/route.ts",
-			desc: "a typed param, with its operations: GET, PATCH",
+			desc: "a path param, with its operations: GET, PATCH",
 		},
 	],
 ];
@@ -247,7 +247,12 @@ const footerColumns = [
 						beside schemas.ts for params, query, and responses, and middleware.ts, which runs for
 						everything below it.
 					</figcaption>
-					<div class="diagram__scroll">
+					<div
+						class="diagram__scroll"
+						tabindex="0"
+						role="region"
+						aria-label="Route tree diagram, scrolls sideways"
+					>
 						<svg class="tree" viewBox="0 0 1280 470" aria-hidden="true">
 							<g class="edges">
 								<path
@@ -444,7 +449,10 @@ export default route({
 			<section class="wrap facts" aria-label="How the tree works">
 				<div class="fact">
 					<h3>Folders branch</h3>
-					<p>A folder is a path segment. $name folders are typed params.</p>
+					<p>
+						A folder is a path segment. $name folders are path params; input.params gives them a
+						type.
+					</p>
 				</div>
 				<div class="fact">
 					<h3>Routes carry contracts</h3>
@@ -468,8 +476,8 @@ export default route({
 					</div>
 					<p class="visually-hidden">
 						For example, src/routes/tenants/$tenantId/projects/route.ts serves
-						/tenants/:tenantId/projects. tenants/ is a folder, $tenantId/ is a typed param named
-						from the folder, and projects/route.ts declares the operations GET and POST.
+						/tenants/:tenantId/projects. tenants/ is a folder, $tenantId/ is a path param named from
+						the folder, and projects/route.ts declares the operations GET and POST.
 					</p>
 					<div class="url" aria-hidden="true" data-url data-examples={JSON.stringify(urlExamples)}>
 						{urlSlots.map((segment) => (
@@ -481,7 +489,7 @@ export default route({
 							</div>
 						))}
 					</div>
-					<button type="button" class="url__toggle" data-url-toggle aria-pressed="false" hidden>
+					<button type="button" class="url__toggle" data-url-toggle hidden>
 						Pause examples
 					</button>
 				</div>
@@ -566,7 +574,12 @@ export default route({
 							routes/ holds tenants/$tenantId/ and status/. The middleware.ts in tenants/$tenantId/
 							runs for projects/ and members/ below it, and not for status/.
 						</figcaption>
-						<div class="diagram__scroll">
+						<div
+							class="diagram__scroll"
+							tabindex="0"
+							role="region"
+							aria-label="Middleware diagram, scrolls sideways"
+						>
 							<svg class="tree tree--sm" viewBox="0 0 784 316" aria-hidden="true">
 								<path class="edge-soft" d="M170 80H250"></path>
 								<path class="edge-soft" d="M170 80C215 80 205 270 250 270"></path>
@@ -796,50 +809,90 @@ export default route({
 		 * manager picked in the docs also picks the command copied here.
 		 */
 		const STORAGE_KEY = "starlight-synced-tabs__pkg";
-		const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+		const motionQuery = matchMedia("(prefers-reduced-motion: reduce)");
+		const reduceMotion = motionQuery.matches;
 		const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 		// Copy-to-clipboard command pills.
 		const copyStatus = document.querySelector<HTMLElement>("[data-copy-status]");
-		let stored: string | null = null;
-		try {
-			stored = localStorage.getItem(STORAGE_KEY);
-		} catch {}
-		const command =
-			stored !== null && stored in COMMANDS ? COMMANDS[stored as PackageManager] : COMMANDS.pnpm;
+		const readCommand = () => {
+			let stored: string | null = null;
+			try {
+				stored = localStorage.getItem(STORAGE_KEY);
+			} catch {}
+			return stored !== null && stored in COMMANDS ? COMMANDS[stored as PackageManager] : COMMANDS.pnpm;
+		};
+		let command = readCommand();
+		const cliButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-cli]")];
+		const navCli = document.querySelector<HTMLButtonElement>("[data-nav-cli]");
+		const showCommand = () => {
+			for (const button of cliButtons) {
+				const text = button.querySelector<HTMLElement>("[data-cmd-text]");
+				if (text) text.textContent = command;
+			}
+			navCli?.setAttribute("aria-label", `Copy ${command}`);
+		};
+		showCommand();
+		// Back/forward cache restores the page as it was; pick up a manager chosen in the docs.
+		addEventListener("pageshow", (event) => {
+			if (!event.persisted) return;
+			command = readCommand();
+			showCommand();
+		});
 
-		for (const button of document.querySelectorAll<HTMLButtonElement>("[data-cli]")) {
-			const text = button.querySelector<HTMLElement>("[data-cmd-text]");
-			if (text) text.textContent = command;
+		let statusTimer: ReturnType<typeof setTimeout> | undefined;
+		const announce = (message: string) => {
+			if (!copyStatus) return;
+			clearTimeout(statusTimer);
+			copyStatus.textContent = message;
+			statusTimer = setTimeout(() => (copyStatus.textContent = ""), 1400);
+		};
+		for (const button of cliButtons) {
+			let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
 			button.addEventListener("click", async () => {
+				clearTimeout(feedbackTimer);
+				delete button.dataset.copied;
+				delete button.dataset.copyFailed;
 				try {
 					await navigator.clipboard.writeText(command);
 					button.dataset.copied = "";
-					if (copyStatus) copyStatus.textContent = `Copied ${command} to clipboard`;
+					announce(`Copied ${command} to clipboard`);
 				} catch {
-					if (copyStatus) copyStatus.textContent = "Copy failed";
+					// Shown on the button too, since the compact nav hides the command text.
+					button.dataset.copyFailed = "";
+					announce(`Copy failed. The command is ${command}`);
 				}
-				setTimeout(() => {
+				feedbackTimer = setTimeout(() => {
 					delete button.dataset.copied;
-					if (copyStatus) copyStatus.textContent = "";
+					delete button.dataset.copyFailed;
 				}, 1400);
 			});
 		}
 
-		// The nav command shows whenever none of the page's own commands is on screen.
-		const navCli = document.querySelector<HTMLButtonElement>("[data-nav-cli]");
-		if (navCli) {
-			navCli.setAttribute("aria-label", `Copy ${command}`);
-			const pageClis = [...document.querySelectorAll<HTMLElement>("[data-cli]:not([data-nav-cli])")];
+		// The nav command shows whenever none of the page's own commands is visible. The
+		// observer's top edge sits below the sticky header, so a command behind it counts as
+		// hidden.
+		const header = document.querySelector<HTMLElement>(".nav");
+		if (navCli && header) {
+			const pageClis = cliButtons.filter((button) => button !== navCli);
 			const onScreen = new Set<Element>();
-			const observer = new IntersectionObserver((entries) => {
-				for (const entry of entries) {
-					if (entry.isIntersecting) onScreen.add(entry.target);
-					else onScreen.delete(entry.target);
-				}
-				navCli.toggleAttribute("data-shown", onScreen.size === 0);
-			});
-			for (const cli of pageClis) observer.observe(cli);
+			let observer: IntersectionObserver | undefined;
+			const watch = () => {
+				observer?.disconnect();
+				onScreen.clear();
+				observer = new IntersectionObserver(
+					(entries) => {
+						for (const entry of entries) {
+							if (entry.isIntersecting) onScreen.add(entry.target);
+							else onScreen.delete(entry.target);
+						}
+						navCli.toggleAttribute("data-shown", onScreen.size === 0);
+					},
+					{ rootMargin: `-${header.offsetHeight}px 0px 0px 0px` },
+				);
+				for (const cli of pageClis) observer.observe(cli);
+			};
+			new ResizeObserver(watch).observe(header);
 		}
 
 		// Theme toggle, shared with the docs through Starlight's storage key.
@@ -877,12 +930,19 @@ export default route({
 				},
 				{ rootMargin: "-40% 0px -40% 0px" },
 			);
-			// ...and rewinds only once it has fully left the viewport.
-			const viewport = new IntersectionObserver((entries) => {
-				for (const entry of entries) {
-					if (!entry.isIntersecting) (entry.target as HTMLElement).dataset.reveal = "pending";
-				}
-			});
+			// ...rewinds only once it has fully left the viewport, and catches a scroll jump
+			// that lands the block above the band without ever crossing it.
+			const viewport = new IntersectionObserver(
+				(entries) => {
+					for (const entry of entries) {
+						const element = entry.target as HTMLElement;
+						const box = entry.boundingClientRect;
+						if (!entry.isIntersecting) element.dataset.reveal = "pending";
+						else if (box.top + box.height / 2 < innerHeight * 0.6) element.dataset.reveal = "shown";
+					}
+				},
+				{ threshold: [0, 0.25, 0.5, 0.75, 1] },
+			);
 			for (const element of revealed) {
 				element.dataset.reveal = "pending";
 				middle.observe(element);
@@ -909,11 +969,12 @@ export default route({
 			let visible = false;
 			let started = false;
 			let wake: (() => void) | undefined;
+			let stopped = false;
 
 			const part = (slot: HTMLElement, key: (typeof keys)[number] | "bar") =>
 				slot.querySelector<HTMLElement>(`.url__${key}`) as HTMLElement;
 
-			const canRun = () => !paused && visible && !document.hidden;
+			const canRun = () => !stopped && !paused && visible && !document.hidden;
 			// Waits, then holds while paused, off screen or in a hidden tab.
 			const tick = async (ms: number) => {
 				await wait(ms);
@@ -1034,11 +1095,23 @@ export default route({
 			toggle.hidden = false;
 			toggle.addEventListener("click", () => {
 				paused = !paused;
-				toggle.setAttribute("aria-pressed", String(paused));
+				url.classList.toggle("is-paused", paused);
 				toggle.textContent = paused ? "Play examples" : "Pause examples";
 				resume();
 			});
 			document.addEventListener("visibilitychange", resume);
+			// Reduced motion turned on mid-play: freeze on the first example for this visit.
+			motionQuery.addEventListener("change", () => {
+				if (!motionQuery.matches || stopped) return;
+				stopped = true;
+				toggle.hidden = true;
+				for (const [index, slot] of slots.entries()) {
+					fill(slot, examples[0][index]);
+					slot.style.width = "";
+					part(slot, "bar").style.width = "";
+					for (const key of keys) part(slot, key).classList.remove("is-typing");
+				}
+			});
 			new IntersectionObserver(([entry]) => {
 				visible = Boolean(entry?.isIntersecting);
 				if (visible && !started) {
