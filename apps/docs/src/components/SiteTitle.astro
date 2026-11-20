@@ -1,0 +1,32 @@
+---
+/** Starlight `SiteTitle` override: the Routa mark beside "routa docs". */
+import Logo from "./Logo.astro";
+
+const { siteTitleHref } = Astro.locals.starlightRoute;
+---
+
+<a href={siteTitleHref} class="routa-site-title" translate="no">
+	<Logo size={32} />
+	<span>
+		routa <span class="routa-site-title__docs">docs</span>
+	</span>
+</a>
+
+<style>
+	.routa-site-title {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-width: 0;
+		color: var(--sl-color-white);
+		font-size: 22px;
+		font-weight: 800;
+		line-height: 1;
+		text-decoration: none;
+		white-space: nowrap;
+	}
+
+	.routa-site-title svg {
+		flex-shrink: 0;
+	}
+</style>

@@ -1,0 +1,42 @@
+---
+/**
+ * The Routa mark: a lowercase r whose green branch leaves the blue stem.
+ * The stem path carries a 1px transparent cut where the branch crosses it,
+ * so the mark sits cleanly on any background.
+ */
+interface Props {
+	size?: number | string;
+	class?: string;
+	/** Accessible name. Omit when visible text already names Routa. */
+	label?: string;
+}
+
+const { size = 36, class: className, label } = Astro.props;
+---
+
+<svg
+	class:list={["routa-logo", className]}
+	viewBox="0 0 36 36"
+	width={size}
+	height={size}
+	role={label ? "img" : undefined}
+	aria-label={label}
+	aria-hidden={label ? undefined : "true"}
+	focusable="false"
+>
+	<path
+		class="routa-logo__stem"
+		fill="#0072CE"
+		d="M6.2 13.562L6.2 4A2.533 2.533 0 0 1 11.267 4L11.267 7.38A13.533 13.533 0 0 0 6.2 13.562Z M6.2 25.13A3.533 3.533 0 0 0 11.267 25.13L11.267 32A2.533 2.533 0 0 1 6.2 32Z"
+	></path>
+	<path
+		class="routa-logo__branch"
+		d="M8.733 22.667l0-4a10 10 0 0 1 10-10l6.667 0"
+		fill="none"
+		stroke="#00985F"
+		stroke-width="5.067"
+		stroke-linecap="round"
+		pathLength="1"
+	></path>
+	<circle class="routa-logo__dot" cx="25.4" cy="8.667" r="4.4" fill="#17C283"></circle>
+</svg>
