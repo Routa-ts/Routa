@@ -849,15 +849,16 @@ export default route({
 		};
 		for (const button of cliButtons) {
 			let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
-			button.addEventListener("click", async () => {
+			// Runs after the clipboard write settles, so overlapping clicks can't let an older
+			// result's timer clear a newer one.
+			const show = (copied: boolean) => {
 				clearTimeout(feedbackTimer);
 				delete button.dataset.copied;
 				delete button.dataset.copyFailed;
-				try {
-					await navigator.clipboard.writeText(command);
+				if (copied) {
 					button.dataset.copied = "";
 					announce(`Copied ${command} to clipboard`);
-				} catch {
+				} else {
 					// Shown on the button too, since the compact nav hides the command text.
 					button.dataset.copyFailed = "";
 					announce(`Copy failed. The command is ${command}`);
@@ -866,6 +867,12 @@ export default route({
 					delete button.dataset.copied;
 					delete button.dataset.copyFailed;
 				}, 1400);
+			};
+			button.addEventListener("click", () => {
+				navigator.clipboard.writeText(command).then(
+					() => show(true),
+					() => show(false),
+				);
 			});
 		}
 
