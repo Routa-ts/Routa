@@ -4,32 +4,192 @@
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 
-/* Lattice identity — teal edges on graphite, Space Grotesk + Space Mono */
+/* Routes branch identity — navy ink, Routa blue, Overpass + Overpass Mono */
 @theme {
-	--font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
-	--font-mono: "Space Mono", ui-monospace, monospace;
+	--font-sans: "Overpass", ui-sans-serif, system-ui, sans-serif;
+	--font-mono: "Overpass Mono", ui-monospace, monospace;
 
-	--color-accent-50: #f0fdfa;
-	--color-accent-100: #ccfbf1;
-	--color-accent-200: #99f6e4;
-	--color-accent-300: #5eead4;
-	--color-accent-400: #2dd4bf;
-	--color-accent-500: #14b8a6;
-	--color-accent-600: #0d9488;
-	--color-accent-700: #0f766e;
-	--color-accent-800: #115e59;
-	--color-accent-900: #134e4a;
-	--color-accent-950: #042f2e;
+	--color-accent-50: #eef6fd;
+	--color-accent-100: #d6e9fa;
+	--color-accent-200: #aed3f5;
+	--color-accent-300: #7ab7ec;
+	--color-accent-400: #3f95df;
+	--color-accent-500: #1580d6;
+	--color-accent-600: #0072ce;
+	--color-accent-700: #005ca8;
+	--color-accent-800: #004a87;
+	--color-accent-900: #0c3a66;
+	--color-accent-950: #0a2340;
 
-	--color-gray-50: #f6f7f9;
-	--color-gray-100: #e4e7ed;
-	--color-gray-200: #c9ced8;
-	--color-gray-300: #8b93a4;
-	--color-gray-400: #6b7384;
-	--color-gray-500: #555d6e;
-	--color-gray-600: #3f4656;
-	--color-gray-700: #2a303c;
-	--color-gray-800: #1f2430;
-	--color-gray-900: #15181e;
-	--color-gray-950: #0f1115;
+	--color-gray-50: #f7f8fb;
+	--color-gray-100: #f2f4f8;
+	--color-gray-200: #e3e6ee;
+	--color-gray-300: #dde1ea;
+	--color-gray-400: #7a839b;
+	--color-gray-500: #646c84;
+	--color-gray-600: #5a6480;
+	--color-gray-700: #4a5470;
+	--color-gray-800: #2a3554;
+	--color-gray-900: #16203a;
+	--color-gray-950: #0f172c;
+}
+
+:root {
+	--routa-green: #00985f;
+	--sl-text-h1: 3.25rem;
+	--sl-text-h2: 1.625rem;
+}
+
+/* Light mode: header and sidebar on white like the landing nav, so the gray search
+   pill stands out from the bar (they were the same #F2F4F8 before). */
+:root[data-theme="light"] {
+	--sl-color-bg-nav: #ffffff;
+	--sl-color-bg-sidebar: #ffffff;
+	--sl-color-hairline-shade: #e3e6ee; /* landing --line */
+}
+
+/* Dark mode uses the landing page's dark palette (src/styles/landing.css), not the
+   light gray scale inverted, so the docs and the landing read as one site. */
+:root[data-theme="dark"] {
+	--routa-green: #17c283;
+	--sl-color-white: #e8ecf6; /* landing --ink */
+	--sl-color-gray-1: #d3d9e8;
+	--sl-color-gray-2: #b4bdd3; /* --text */
+	--sl-color-gray-3: #9aa3ba; /* --quiet */
+	--sl-color-gray-4: #6b7591;
+	--sl-color-gray-5: #34436a; /* --line-soft */
+	--sl-color-gray-6: #18233f; /* --card */
+	--sl-color-gray-7: #111b33; /* --panel */
+	--sl-color-black: #0a1120; /* --bg */
+	--sl-color-hairline: #24304f; /* --line */
+	--sl-color-hairline-light: #34436a;
+	--sl-color-hairline-shade: #24304f; /* header rule, like the landing nav */
+	--sl-color-accent-low: #0a2340;
+	--sl-color-accent: #3f95df; /* --blue */
+	--sl-color-accent-high: #aed3f5;
+	/* Header and sidebar sit on the page color, like the landing nav. */
+	--sl-color-bg-nav: #0a1120;
+	--sl-color-bg-sidebar: #0a1120;
+	--sl-color-bg-inline-code: #2a3a62; /* --chip */
+}
+
+.sl-markdown-content :is(h1, h2, h3, h4),
+h1#_top {
+	font-weight: 800;
+	letter-spacing: -0.01em;
+}
+
+h1#_top {
+	font-weight: 900;
+	letter-spacing: -0.02em;
+}
+
+/* Search reads as a soft pill, as in the header design. */
+site-search button[data-open-modal] {
+	border: 0;
+	border-radius: 999px;
+	background-color: var(--sl-color-gray-7, var(--sl-color-gray-6));
+}
+
+/* ---- Sidebar rail: a line per group, a dot per page, green on the current page ---- */
+
+.sidebar-content summary .large {
+	color: var(--sl-color-gray-3);
+	font-size: 0.75rem;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.sidebar-content ul ul li {
+	position: relative;
+	margin-inline-start: var(--sl-sidebar-item-padding-inline);
+	padding-inline-start: 0;
+	border-inline-start: 0;
+}
+
+.sidebar-content ul ul li::before {
+	content: "";
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: 7.5px;
+	width: 3px;
+	border-radius: 2px;
+	background: var(--sl-color-hairline-light);
+}
+
+.sidebar-content ul ul li:first-child::before {
+	top: 50%;
+}
+
+.sidebar-content ul ul li:last-child::before {
+	bottom: 50%;
+}
+
+.sidebar-content ul ul li:only-child::before {
+	display: none;
+}
+
+.sidebar-content ul ul a {
+	position: relative;
+	display: flex;
+	align-items: center;
+	min-height: 36px;
+	padding-block: 0.4em;
+	padding-inline: 30px 0;
+}
+
+.sidebar-content ul ul a::before {
+	content: "";
+	position: absolute;
+	top: 50%;
+	inset-inline-start: 5px;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--sl-color-gray-4);
+	transform: translateY(-50%);
+}
+
+.sidebar-content ul ul a[aria-current="page"],
+.sidebar-content ul ul a[aria-current="page"]:hover,
+.sidebar-content ul ul a[aria-current="page"]:focus {
+	background: none;
+	color: var(--sl-color-white);
+	font-weight: 800;
+}
+
+.sidebar-content ul ul a[aria-current="page"]::before {
+	inset-inline-start: 2px;
+	width: 14px;
+	height: 14px;
+	background: var(--routa-green);
+}
+
+/* ---- Prev / next: plain links instead of boxed cards ---- */
+
+.pagination-links {
+	padding-top: 1.25rem;
+	border-top: 1px solid var(--sl-color-hairline);
+}
+
+.pagination-links a {
+	border: 0;
+	box-shadow: none;
+	padding: 0;
+}
+
+.pagination-links a[rel="next"] .link-title {
+	font-weight: 700;
+}
+
+/* Dark code blocks match the landing's code panels: a lifted navy with an outline. */
+:root[data-theme="dark"] .expressive-code {
+	--ec-codeBg: #111b33;
+	--ec-brdCol: #2b3a60;
+	--ec-frm-edBg: #111b33;
+	--ec-frm-edTabBarBg: #111b33;
+	--ec-frm-edActTabBg: #111b33;
+	--ec-frm-trmBg: #111b33;
+	--ec-frm-trmTtbBg: #111b33;
 }

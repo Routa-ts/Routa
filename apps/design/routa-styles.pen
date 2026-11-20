@@ -114,7 +114,7 @@
               "children": [
                 {
                   "type": "frame",
-                  "id": "Ssp5o",
+                  "id": "Dvt9h",
                   "name": "Sidebar",
                   "width": 300,
                   "height": 856,
@@ -131,14 +131,14 @@
                   "children": [
                     {
                       "type": "frame",
-                      "id": "TCM02",
+                      "id": "qW0MZ",
                       "name": "GETTING STARTED",
                       "width": "fill_container",
                       "layout": "vertical",
                       "children": [
                         {
                           "type": "text",
-                          "id": "bsbjQ",
+                          "id": "aJGiK",
                           "name": "Head",
                           "fill": "$lm-ink-3",
                           "content": "GETTING STARTED",
@@ -149,7 +149,7 @@
                         },
                         {
                           "type": "frame",
-                          "id": "U6Tvsl",
+                          "id": "A3tlm5",
                           "name": "Install",
                           "width": "fill_container",
                           "height": 36,
@@ -158,15 +158,38 @@
                           "children": [
                             {
                               "type": "frame",
-                              "id": "H7vQwO",
+                              "id": "p2NVzM",
                               "name": "Rail",
                               "width": 18,
                               "height": 36,
-                              "layout": "none"
+                              "layout": "none",
+                              "children": [
+                                {
+                                  "type": "rectangle",
+                                  "cornerRadius": 2,
+                                  "id": "GNVNM",
+                                  "x": 7.5,
+                                  "y": 18,
+                                  "name": "Line",
+                                  "fill": "$lm-rule-strong",
+                                  "width": 3,
+                                  "height": 18
+                                },
+                                {
+                                  "type": "ellipse",
+                                  "id": "QCjkw",
+                                  "x": 5,
+                                  "y": 14,
+                                  "name": "Dot",
+                                  "fill": "$lm-ink-3",
+                                  "width": 8,
+                                  "height": 8
+                                }
+                              ]
                             },
                             {
                               "type": "text",
-                              "id": "sX30Y",
+                              "id": "cka6X",
                               "name": "t",
                               "fill": "$lm-ink-2",
                               "content": "Install",
@@ -178,7 +201,7 @@
                         },
                         {
                           "type": "frame",
-                          "id": "NwFic",
+                          "id": "c57rH4",
                           "name": "Your first route",
                           "width": "fill_container",
                           "height": 36,
@@ -187,15 +210,38 @@
                           "children": [
                             {
                               "type": "frame",
-                              "id": "xSSzh",
+                              "id": "BVFUR",
                               "name": "Rail",
                               "width": 18,
                               "height": 36,
-                              "layout": "none"
+                              "layout": "none",
+                              "children": [
+                                {
+                                  "type": "rectangle",
+                                  "cornerRadius": 2,
+                                  "id": "IaGbc",
+                                  "x": 7.5,
+                                  "y": 0,
+                                  "name": "Line",
+                                  "fill": "$lm-rule-strong",
+                                  "width": 3,
+                                  "height": 36
+                                },
+                                {
+                                  "type": "ellipse",
+                                  "id": "UR0GE",
+                                  "x": 5,
+                                  "y": 14,
+                                  "name": "Dot",
+                                  "fill": "$lm-ink-3",
+                                  "width": 8,
+                                  "height": 8
+                                }
+                              ]
                             },
                             {
                               "type": "text",
-                              "id": "rXKhE",
+                              "id": "k9H8Z",
                               "name": "t",
                               "fill": "$lm-ink-2",
                               "content": "Your first route",
@@ -207,7 +253,7 @@
                         },
                         {
                           "type": "frame",
-                          "id": "bZLx3",
+                          "id": "s8GQr",
                           "name": "Project layout",
                           "width": "fill_container",
                           "height": 36,
@@ -216,15 +262,38 @@
                           "children": [
                             {
                               "type": "frame",
-                              "id": "UG84x",
+                              "id": "IFo5f",
                               "name": "Rail",
                               "width": 18,
                               "height": 36,
-                              "layout": "none"
+                              "layout": "none",
+                              "children": [
+                                {
+                                  "type": "rectangle",
+                                  "cornerRadius": 2,
+                                  "id": "nV0cj",
+                                  "x": 7.5,
+                                  "y": 0,
+                                  "name": "Line",
+                                  "fill": "$lm-rule-strong",
+                                  "width": 3,
+                                  "height": 18
+                                },
+                                {
+                                  "type": "ellipse",
+                                  "id": "qAfNk",
+                                  "x": 5,
+                                  "y": 14,
+                                  "name": "Dot",
+                                  "fill": "$lm-ink-3",
+                                  "width": 8,
+                                  "height": 8
+                                }
+                              ]
                             },
                             {
                               "type": "text",
-                              "id": "LN8Uq",
+                              "id": "Hfxzx",
                               "name": "t",
                               "fill": "$lm-ink-2",
                               "content": "Project layout",
@@ -238,14 +307,14 @@
                     },
                     {
                       "type": "frame",
-                      "id": "Lf1wf",
+                      "id": "mMUmL",
                       "name": "ROUTES",
                       "width": "fill_container",
                       "layout": "vertical",
                       "children": [
                         {
                           "type": "text",
-                          "id": "Qy8Yx",
+                          "id": "EZ3Vb",
                           "name": "Head",
                           "fill": "$lm-ink-3",
                           "content": "ROUTES",
@@ -256,7 +325,7 @@
                         },
                         {
                           "type": "frame",
-                          "id": "bGoil",
+                          "id": "HYw2x",
                           "name": "Filesystem routes",
                           "width": "fill_container",
                           "height": 36,
@@ -265,19 +334,30 @@
                           "children": [
                             {
                               "type": "frame",
-                              "id": "Nstlh",
+                              "id": "t5cODc",
                               "name": "Rail",
                               "width": 18,
                               "height": 36,
                               "layout": "none",
                               "children": [
                                 {
+                                  "type": "rectangle",
+                                  "cornerRadius": 2,
+                                  "id": "e0XTG",
+                                  "x": 7.5,
+                                  "y": 18,
+                                  "name": "Line",
+                                  "fill": "$lm-rule-strong",
+                                  "width": 3,
+                                  "height": 18
+                                },
+                                {
                                   "type": "ellipse",
-                                  "id": "PV6T8",
+                                  "id": "w6AKjE",
                                   "x": 2,
                                   "y": 11,
                                   "name": "Dot",
-                                  "fill": "$lm-ink",
+                                  "fill": "$lm-get",
                                   "width": 14,
                                   "height": 14
                                 }
@@ -285,7 +365,7 @@
                             },
                             {
                               "type": "text",
-                              "id": "I7MtlK",
+                              "id": "m9ZaU",
                               "name": "t",
                               "fill": "$lm-ink",
                               "content": "Filesystem routes",
@@ -297,7 +377,7 @@
                         },
                         {
                           "type": "frame",
-                          "id": "d4gJyx",
+                          "id": "xj6Bf",
                           "name": "Route contracts",
                           "width": "fill_container",
                           "height": 36,
@@ -306,15 +386,38 @@
                           "children": [
                             {
                               "type": "frame",
-                              "id": "NhIzu",
+                              "id": "vDOct",
                               "name": "Rail",
                               "width": 18,
                               "height": 36,
-                              "layout": "none"
+                              "layout": "none",
+                              "children": [
+                                {
+                                  "type": "rectangle",
+                                  "cornerRadius": 2,
+                                  "id": "LP4XV",
+                                  "x": 7.5,
+                                  "y": 0,
+                                  "name": "Line",
+                                  "fill": "$lm-rule-strong",
+                                  "width": 3,
+                                  "height": 36
+                                },
+                                {
+                                  "type": "ellipse",
+                                  "id": "Km8K4",
+                                  "x": 5,
+                                  "y": 14,
+                                  "name": "Dot",
+                                  "fill": "$lm-ink-3",
+                                  "width": 8,
+                                  "height": 8
+                                }
+                              ]
                             },
                             {
                               "type": "text",
-                              "id": "qoxGn",
+                              "id": "nUMQR",
                               "name": "t",
                               "fill": "$lm-ink-2",
                               "content": "Route contracts",
@@ -326,7 +429,7 @@
                         },
                         {
                           "type": "frame",
-                          "id": "zL3zt",
+                          "id": "i1c2u",
                           "name": "Responses",
                           "width": "fill_container",
                           "height": 36,
@@ -335,15 +438,38 @@
                           "children": [
                             {
                               "type": "frame",
-                              "id": "UVMJ9",
+                              "id": "P7tGa4",
                               "name": "Rail",
                               "width": 18,
                               "height": 36,
-                              "layout": "none"
+                              "layout": "none",
+                              "children": [
+                                {
+                                  "type": "rectangle",
+                                  "cornerRadius": 2,
+                                  "id": "jHEqI",
+                                  "x": 7.5,
+                                  "y": 0,
+                                  "name": "Line",
+                                  "fill": "$lm-rule-strong",
+                                  "width": 3,
+                                  "height": 36
+                                },
+                                {
+                                  "type": "ellipse",
+                                  "id": "ayibs",
+                                  "x": 5,
+                                  "y": 14,
+                                  "name": "Dot",
+                                  "fill": "$lm-ink-3",
+                                  "width": 8,
+                                  "height": 8
+                                }
+                              ]
                             },
                             {
                               "type": "text",
-                              "id": "Yg5FU",
+                              "id": "e4zTQ",
                               "name": "t",
                               "fill": "$lm-ink-2",
                               "content": "Responses",
@@ -355,7 +481,7 @@
                         },
                         {
                           "type": "frame",
-                          "id": "NLoD2",
+                          "id": "LOhrW",
                           "name": "Path params",
                           "width": "fill_container",
                           "height": 36,
@@ -364,15 +490,38 @@
                           "children": [
                             {
                               "type": "frame",
-                              "id": "FupSU",
+                              "id": "ZIAKJ",
                               "name": "Rail",
                               "width": 18,
                               "height": 36,
-                              "layout": "none"
+                              "layout": "none",
+                              "children": [
+                                {
+                                  "type": "rectangle",
+                                  "cornerRadius": 2,
+                                  "id": "lK69V",
+                                  "x": 7.5,
+                                  "y": 0,
+                                  "name": "Line",
+                                  "fill": "$lm-rule-strong",
+                                  "width": 3,
+                                  "height": 18
+                                },
+                                {
+                                  "type": "ellipse",
+                                  "id": "Z6GZIN",
+                                  "x": 5,
+                                  "y": 14,
+                                  "name": "Dot",
+                                  "fill": "$lm-ink-3",
+                                  "width": 8,
+                                  "height": 8
+                                }
+                              ]
                             },
                             {
                               "type": "text",
-                              "id": "yp9ou",
+                              "id": "eeYEw",
                               "name": "t",
                               "fill": "$lm-ink-2",
                               "content": "Path params",
@@ -386,14 +535,14 @@
                     },
                     {
                       "type": "frame",
-                      "id": "q8XZV4",
+                      "id": "zSndM",
                       "name": "MIDDLEWARE",
                       "width": "fill_container",
                       "layout": "vertical",
                       "children": [
                         {
                           "type": "text",
-                          "id": "r0HaTD",
+                          "id": "Regew",
                           "name": "Head",
                           "fill": "$lm-ink-3",
                           "content": "MIDDLEWARE",
@@ -404,7 +553,7 @@
                         },
                         {
                           "type": "frame",
-                          "id": "uMqSo",
+                          "id": "h3Ea5d",
                           "name": "Typed context",
                           "width": "fill_container",
                           "height": 36,
@@ -413,15 +562,38 @@
                           "children": [
                             {
                               "type": "frame",
-                              "id": "XZbYt",
+                              "id": "oOBRb",
                               "name": "Rail",
                               "width": 18,
                               "height": 36,
-                              "layout": "none"
+                              "layout": "none",
+                              "children": [
+                                {
+                                  "type": "rectangle",
+                                  "cornerRadius": 2,
+                                  "id": "QC5kT",
+                                  "x": 7.5,
+                                  "y": 18,
+                                  "name": "Line",
+                                  "fill": "$lm-rule-strong",
+                                  "width": 3,
+                                  "height": 18
+                                },
+                                {
+                                  "type": "ellipse",
+                                  "id": "VNtbf",
+                                  "x": 5,
+                                  "y": 14,
+                                  "name": "Dot",
+                                  "fill": "$lm-ink-3",
+                                  "width": 8,
+                                  "height": 8
+                                }
+                              ]
                             },
                             {
                               "type": "text",
-                              "id": "IvNZE",
+                              "id": "b9jz2",
                               "name": "t",
                               "fill": "$lm-ink-2",
                               "content": "Typed context",
@@ -433,7 +605,7 @@
                         },
                         {
                           "type": "frame",
-                          "id": "xX1Qj",
+                          "id": "p40MLl",
                           "name": "Ordering",
                           "width": "fill_container",
                           "height": 36,
@@ -442,15 +614,38 @@
                           "children": [
                             {
                               "type": "frame",
-                              "id": "QxAlw",
+                              "id": "w6bud",
                               "name": "Rail",
                               "width": 18,
                               "height": 36,
-                              "layout": "none"
+                              "layout": "none",
+                              "children": [
+                                {
+                                  "type": "rectangle",
+                                  "cornerRadius": 2,
+                                  "id": "A6Pto",
+                                  "x": 7.5,
+                                  "y": 0,
+                                  "name": "Line",
+                                  "fill": "$lm-rule-strong",
+                                  "width": 3,
+                                  "height": 18
+                                },
+                                {
+                                  "type": "ellipse",
+                                  "id": "AaZlP",
+                                  "x": 5,
+                                  "y": 14,
+                                  "name": "Dot",
+                                  "fill": "$lm-ink-3",
+                                  "width": 8,
+                                  "height": 8
+                                }
+                              ]
                             },
                             {
                               "type": "text",
-                              "id": "aCBGx",
+                              "id": "KuBRv",
                               "name": "t",
                               "fill": "$lm-ink-2",
                               "content": "Ordering",
@@ -464,14 +659,14 @@
                     },
                     {
                       "type": "frame",
-                      "id": "VHURJ",
+                      "id": "s4alCg",
                       "name": "OPENAPI",
                       "width": "fill_container",
                       "layout": "vertical",
                       "children": [
                         {
                           "type": "text",
-                          "id": "lfYH4",
+                          "id": "KC7xV",
                           "name": "Head",
                           "fill": "$lm-ink-3",
                           "content": "OPENAPI",
@@ -482,7 +677,7 @@
                         },
                         {
                           "type": "frame",
-                          "id": "IE44L",
+                          "id": "kt3st",
                           "name": "Emit a spec",
                           "width": "fill_container",
                           "height": 36,
@@ -491,15 +686,38 @@
                           "children": [
                             {
                               "type": "frame",
-                              "id": "u5WKkK",
+                              "id": "xTOwp",
                               "name": "Rail",
                               "width": 18,
                               "height": 36,
-                              "layout": "none"
+                              "layout": "none",
+                              "children": [
+                                {
+                                  "type": "rectangle",
+                                  "cornerRadius": 2,
+                                  "id": "C3crG",
+                                  "x": 7.5,
+                                  "y": 18,
+                                  "name": "Line",
+                                  "fill": "$lm-rule-strong",
+                                  "width": 3,
+                                  "height": 18
+                                },
+                                {
+                                  "type": "ellipse",
+                                  "id": "VltmG",
+                                  "x": 5,
+                                  "y": 14,
+                                  "name": "Dot",
+                                  "fill": "$lm-ink-3",
+                                  "width": 8,
+                                  "height": 8
+                                }
+                              ]
                             },
                             {
                               "type": "text",
-                              "id": "FGVzh",
+                              "id": "FIYii",
                               "name": "t",
                               "fill": "$lm-ink-2",
                               "content": "Emit a spec",
@@ -511,7 +729,7 @@
                         },
                         {
                           "type": "frame",
-                          "id": "FaW1v",
+                          "id": "Y0pjs",
                           "name": "Scaffold from a spec",
                           "width": "fill_container",
                           "height": 36,
@@ -520,15 +738,38 @@
                           "children": [
                             {
                               "type": "frame",
-                              "id": "Sfo5p",
+                              "id": "s4s6WU",
                               "name": "Rail",
                               "width": 18,
                               "height": 36,
-                              "layout": "none"
+                              "layout": "none",
+                              "children": [
+                                {
+                                  "type": "rectangle",
+                                  "cornerRadius": 2,
+                                  "id": "a7u6j",
+                                  "x": 7.5,
+                                  "y": 0,
+                                  "name": "Line",
+                                  "fill": "$lm-rule-strong",
+                                  "width": 3,
+                                  "height": 18
+                                },
+                                {
+                                  "type": "ellipse",
+                                  "id": "mShvx",
+                                  "x": 5,
+                                  "y": 14,
+                                  "name": "Dot",
+                                  "fill": "$lm-ink-3",
+                                  "width": 8,
+                                  "height": 8
+                                }
+                              ]
                             },
                             {
                               "type": "text",
-                              "id": "iQahQ",
+                              "id": "r7WxSk",
                               "name": "t",
                               "fill": "$lm-ink-2",
                               "content": "Scaffold from a spec",
@@ -1833,6 +2074,45 @@
                 },
                 {
                   "type": "frame",
+                  "id": "RVeiB",
+                  "name": "Code pair heading",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 12,
+                  "padding": [
+                    40,
+                    0,
+                    8,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "lD9hQ",
+                      "name": "Title",
+                      "fill": "$lm-ink",
+                      "content": "The route is the spec.",
+                      "fontFamily": "$lm-font-sans",
+                      "fontSize": 48,
+                      "fontWeight": "900",
+                      "letterSpacing": -1.5
+                    },
+                    {
+                      "type": "text",
+                      "id": "Zqjer",
+                      "name": "Subhead",
+                      "fill": "$lm-ink-2",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Write the contract once. Routa generates the OpenAPI document from it, so there's nothing to keep in sync.",
+                      "fontFamily": "$lm-font-sans",
+                      "fontSize": 19,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
                   "id": "dGHDj",
                   "name": "Code pair",
                   "width": "fill_container",
@@ -2717,12 +2997,30 @@
                           "name": "Name",
                           "fill": "$lm-ink",
                           "textGrowth": "fixed-width",
-                          "width": 420,
+                          "width": 300,
                           "content": "success",
                           "fontFamily": "$lm-font-sans",
                           "fontSize": 56,
                           "fontWeight": "900",
                           "letterSpacing": -1.5
+                        },
+                        {
+                          "type": "path",
+                          "id": "w5SPi",
+                          "name": "Arrow",
+                          "geometry": "M2 12l82 0m-12-9l12 9-12 9",
+                          "viewBox": [
+                            0,
+                            0,
+                            88,
+                            24
+                          ],
+                          "width": 88,
+                          "height": 24,
+                          "stroke": "$lm-ink-3",
+                          "strokeWidth": 3,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
                         },
                         {
                           "type": "text",
@@ -2768,12 +3066,30 @@
                           "name": "Name",
                           "fill": "$lm-ink",
                           "textGrowth": "fixed-width",
-                          "width": 420,
+                          "width": 300,
                           "content": "created",
                           "fontFamily": "$lm-font-sans",
                           "fontSize": 56,
                           "fontWeight": "900",
                           "letterSpacing": -1.5
+                        },
+                        {
+                          "type": "path",
+                          "id": "H7OMVk",
+                          "name": "Arrow",
+                          "geometry": "M2 12l82 0m-12-9l12 9-12 9",
+                          "viewBox": [
+                            0,
+                            0,
+                            88,
+                            24
+                          ],
+                          "width": 88,
+                          "height": 24,
+                          "stroke": "$lm-ink-3",
+                          "strokeWidth": 3,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
                         },
                         {
                           "type": "text",
@@ -2819,12 +3135,30 @@
                           "name": "Name",
                           "fill": "$lm-ink",
                           "textGrowth": "fixed-width",
-                          "width": 420,
+                          "width": 300,
                           "content": "forbidden",
                           "fontFamily": "$lm-font-sans",
                           "fontSize": 56,
                           "fontWeight": "900",
                           "letterSpacing": -1.5
+                        },
+                        {
+                          "type": "path",
+                          "id": "GecDf",
+                          "name": "Arrow",
+                          "geometry": "M2 12l82 0m-12-9l12 9-12 9",
+                          "viewBox": [
+                            0,
+                            0,
+                            88,
+                            24
+                          ],
+                          "width": 88,
+                          "height": 24,
+                          "stroke": "$lm-ink-3",
+                          "strokeWidth": 3,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
                         },
                         {
                           "type": "text",
@@ -2870,12 +3204,30 @@
                           "name": "Name",
                           "fill": "$lm-ink",
                           "textGrowth": "fixed-width",
-                          "width": 420,
+                          "width": 300,
                           "content": "notFound",
                           "fontFamily": "$lm-font-sans",
                           "fontSize": 56,
                           "fontWeight": "900",
                           "letterSpacing": -1.5
+                        },
+                        {
+                          "type": "path",
+                          "id": "y2XCyx",
+                          "name": "Arrow",
+                          "geometry": "M2 12l82 0m-12-9l12 9-12 9",
+                          "viewBox": [
+                            0,
+                            0,
+                            88,
+                            24
+                          ],
+                          "width": 88,
+                          "height": 24,
+                          "stroke": "$lm-ink-3",
+                          "strokeWidth": 3,
+                          "strokeLinejoin": "round",
+                          "strokeLinecap": "round"
                         },
                         {
                           "type": "text",
@@ -4013,14 +4365,12 @@
                           "alignItems": "center",
                           "children": [
                             {
-                              "type": "ellipse",
-                              "id": "ZCcPy",
-                              "name": "Dot",
-                              "fill": "$lm-ink",
-                              "width": 14,
-                              "height": 14,
-                              "stroke": "$lm-ink",
-                              "strokeWidth": 2
+                              "id": "CxYwt",
+                              "type": "ref",
+                              "ref": "i9faB",
+                              "name": "Logo",
+                              "width": 28,
+                              "height": 28
                             },
                             {
                               "type": "text",
@@ -4818,6 +5168,61 @@
               "content": "Idea 10 after the Fable review. File tree and contract in the hero, real code, one metaphor (branch), method colours reserved for methods, plus the path anatomy, named outcomes, diagnostics and provenance borrowed from 9, 8 and 7.",
               "fontFamily": "Inter",
               "fontSize": 22,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "e7vza4",
+          "x": 1500,
+          "y": 2071,
+          "name": "Animation note · Read the path",
+          "width": 440,
+          "fill": "#FFF4B8",
+          "cornerRadius": 8,
+          "layout": "vertical",
+          "gap": 12,
+          "padding": 24,
+          "children": [
+            {
+              "type": "text",
+              "id": "aqRIA",
+              "name": "Label",
+              "fill": "#3D3400",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "← NOTE · NOT PART OF THE DESIGN",
+              "lineHeight": 1.45,
+              "fontFamily": "Inter",
+              "fontSize": 12,
+              "fontWeight": "700",
+              "letterSpacing": 1
+            },
+            {
+              "type": "text",
+              "id": "VABzI",
+              "name": "Title",
+              "fill": "#3D3400",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Animate the path through different folders",
+              "lineHeight": 1.45,
+              "fontFamily": "Inter",
+              "fontSize": 20,
+              "fontWeight": "800"
+            },
+            {
+              "type": "text",
+              "id": "O4C3I",
+              "name": "Body",
+              "fill": "#3D3400",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Cycle the big path and its labels through a few folder trees, about 3 s each:\n\n• tenants/ $tenantId/ projects/route.ts → /tenants/:tenantId/projects\n• status/route.ts → /status\n• users/ $userId/ sessions/route.ts → /users/:userId/sessions\n• orders/ $orderId/route.ts → /orders/:orderId\n\nSwap one segment at a time, left to right. The underline bars resize to each new segment, and the captions crossfade with them. Params ($name → :name) keep the muted color.\n\nEvery path must fit the 1280px column at 88px. With prefers-reduced-motion, show the first example and don't animate.",
+              "lineHeight": 1.45,
+              "fontFamily": "Inter",
+              "fontSize": 15,
               "fontWeight": "normal"
             }
           ]
@@ -37077,7 +37482,7 @@
               "fill": "$lm-ink-2",
               "textGrowth": "fixed-width",
               "width": "fill_container",
-              "content": "Variables panel → set one of logo-show-soft-c / soft-d / soft-e / soft-f to true and the rest false. The straight A/B marks stay available as logo-show-tree-a / tree-b.",
+              "content": "Variables panel → set one of logo-show-soft-c / soft-d / soft-e / soft-f / soft-g / soft-h to true and the rest false (soft-h is the current pick). The straight A/B marks stay available as logo-show-tree-a / tree-b.",
               "fontFamily": "$lm-font-sans",
               "fontSize": 16,
               "fontWeight": "normal"
@@ -38000,8 +38405,8 @@
               "id": "myUVZ",
               "x": 0,
               "y": 0,
-              "name": "soft-f · branch dot",
-              "enabled": "$logo-show-soft-f",
+              "name": "soft-g · branch dot colors",
+              "enabled": "$logo-show-soft-g",
               "width": 36,
               "height": 36,
               "layout": "none",
@@ -38041,7 +38446,7 @@
                   ],
                   "width": 36,
                   "height": 36,
-                  "stroke": "#00985F",
+                  "stroke": "#17c283ff",
                   "strokeWidth": 5.067,
                   "strokeLinejoin": "round",
                   "strokeLinecap": "round"
@@ -38049,6 +38454,129 @@
                 {
                   "type": "ellipse",
                   "id": "v1kN2G",
+                  "x": 21,
+                  "y": 4.267,
+                  "name": "Branch dot",
+                  "fill": "#17c283",
+                  "width": 8.8,
+                  "height": 8.8
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Wr4VR",
+              "x": 0,
+              "y": 0,
+              "name": "soft-h · branch dot stroke",
+              "enabled": "$logo-show-soft-h",
+              "width": 36,
+              "height": 36,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "path",
+                  "id": "p3BImA",
+                  "x": 0,
+                  "y": 0,
+                  "name": "Blue stem",
+                  "geometry": "M6.2 13.562l0-9.562a2.533 2.533 0 0 1 5.067 0l0 3.38a13.533 13.533 0 0 0-5.067 6.182z m0 11.568a3.533 3.533 0 0 0 5.067 0l0 6.87a2.533 2.533 0 0 1-5.067 0z",
+                  "viewBox": [
+                    0,
+                    0,
+                    36,
+                    36
+                  ],
+                  "fill": "#0072CE",
+                  "width": 36,
+                  "height": 36
+                },
+                {
+                  "type": "path",
+                  "id": "DoIFw",
+                  "x": 0,
+                  "y": 0,
+                  "name": "Green branch",
+                  "geometry": "M8.733 22.667l0-4a10 10 0 0 1 10-10l6.667 0",
+                  "viewBox": [
+                    0,
+                    0,
+                    36,
+                    36
+                  ],
+                  "width": 36,
+                  "height": 36,
+                  "stroke": "#17c283",
+                  "strokeWidth": 5.067,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
+                },
+                {
+                  "type": "ellipse",
+                  "id": "ZtGDx",
+                  "x": 21,
+                  "y": 4.267,
+                  "name": "Branch dot",
+                  "fill": "#17c283",
+                  "width": 8.8,
+                  "height": 8.8
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "mf9mM",
+              "x": 0,
+              "y": 0,
+              "name": "soft-f · branch dot",
+              "enabled": "$logo-show-soft-f",
+              "width": 36,
+              "height": 36,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "path",
+                  "id": "XwKpo",
+                  "x": 0,
+                  "y": 0,
+                  "name": "Blue stem",
+                  "geometry": "M8.733 32l0-28",
+                  "viewBox": [
+                    0,
+                    0,
+                    36,
+                    36
+                  ],
+                  "width": 36,
+                  "height": 36,
+                  "stroke": "#0072CE",
+                  "strokeWidth": 5.067,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
+                },
+                {
+                  "type": "path",
+                  "id": "xlaxU",
+                  "x": 0,
+                  "y": 0,
+                  "name": "Green branch",
+                  "geometry": "M8.733 22.667l0-4a10 10 0 0 1 10-10l6.667 0",
+                  "viewBox": [
+                    0,
+                    0,
+                    36,
+                    36
+                  ],
+                  "width": 36,
+                  "height": 36,
+                  "stroke": "#00985F",
+                  "strokeWidth": 5.067,
+                  "strokeLinejoin": "round",
+                  "strokeLinecap": "round"
+                },
+                {
+                  "type": "ellipse",
+                  "id": "NXDzx",
                   "x": 21,
                   "y": 4.267,
                   "name": "Branch dot",
@@ -38277,6 +38805,14 @@
       "value": false
     },
     "logo-show-soft-f": {
+      "type": "boolean",
+      "value": false
+    },
+    "logo-show-soft-g": {
+      "type": "boolean",
+      "value": false
+    },
+    "logo-show-soft-h": {
       "type": "boolean",
       "value": true
     }

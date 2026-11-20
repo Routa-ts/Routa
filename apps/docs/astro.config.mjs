@@ -1,7 +1,7 @@
 // @ts-check
 import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
-import { defineConfig } from "astro/config";
+import { defineConfig, fontProviders } from "astro/config";
 
 const site = "https://routa-ts.dev";
 const ogImage = new URL("/og.png", site).href;
@@ -10,6 +10,32 @@ const ogImage = new URL("/og.png", site).href;
 export default defineConfig({
 	site,
 	trailingSlash: "always",
+	// Self-hosted and preloaded. `block` waits for the font (briefly, it is preloaded) so
+	// WebKit browsers never flash the fallback; the metric-matched fallback still applies
+	// if the font fails to load.
+	fonts: [
+		{
+			provider: fontProviders.google(),
+			name: "Overpass",
+			cssVariable: "--font-overpass",
+			// Variable font: one file covers the whole weight range.
+			weights: ["400 900"],
+			styles: ["normal"],
+			display: "block",
+			subsets: ["latin"],
+			fallbacks: ["ui-sans-serif", "system-ui", "sans-serif"],
+		},
+		{
+			provider: fontProviders.google(),
+			name: "Overpass Mono",
+			cssVariable: "--font-overpass-mono",
+			weights: ["400 700"],
+			styles: ["normal"],
+			display: "block",
+			subsets: ["latin"],
+			fallbacks: ["ui-monospace", "monospace"],
+		},
+	],
 	integrations: [
 		starlight({
 			title: "Routa",
@@ -66,7 +92,7 @@ export default defineConfig({
 					tag: "link",
 					attrs: {
 						rel: "stylesheet",
-						href: "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap",
+						href: "https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;700;800;900&family=Overpass+Mono:wght@400;700&display=swap",
 					},
 				},
 			],
@@ -141,6 +167,31 @@ export default defineConfig({
 					],
 				},
 			],
+			components: {
+				SiteTitle: "./src/components/SiteTitle.astro",
+			},
+			// One navy code theme in both color modes, matching the landing page.
+			expressiveCode: {
+				themes: ["github-dark-default"],
+				styleOverrides: {
+					codeBackground: "#16203A",
+					borderColor: "#16203A",
+					borderRadius: "12px",
+					codeFontFamily: "var(--sl-font-mono)",
+					uiFontFamily: "var(--sl-font-mono)",
+					frames: {
+						editorTabBarBackground: "#16203A",
+						editorActiveTabBackground: "#16203A",
+						editorActiveTabIndicatorTopColor: "transparent",
+						editorActiveTabIndicatorBottomColor: "transparent",
+						editorTabBarBorderBottomColor: "#2A3554",
+						terminalTitlebarBackground: "#16203A",
+						terminalTitlebarBorderBottomColor: "#2A3554",
+						terminalBackground: "#16203A",
+						frameBoxShadowCssValue: "none",
+					},
+				},
+			},
 			customCss: ["./src/styles/global.css"],
 		}),
 	],

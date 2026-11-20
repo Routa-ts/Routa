@@ -1,21 +1,122 @@
 ---
 /**
- * Production marketing landing — Schematic composition (Lattice).
- * Docs live under /docs/.
+ * Production marketing landing. Docs live under /docs/.
  */
 import "../styles/landing.css";
-import { createCommandsByPackageManager, packageManagers } from "../lib/package-manager-commands";
+import { Font } from "astro:assets";
+import Logo from "../components/Logo.astro";
+import { createCommandsByPackageManager } from "../lib/package-manager-commands";
 
 const title = "Routa — Schema-first REST for TypeScript";
 const description =
-	"Filesystem routes with Zod contracts and OpenAPI in lockstep. Schema-first REST for new TypeScript APIs.";
+	"Your API is a file tree. Folders become paths, schemas sit beside routes, and Routa generates the OpenAPI document.";
 const canonical = new URL("/", Astro.site).href;
 const ogImage = new URL("/og.png", Astro.site).href;
+const github = "https://github.com/Routa-ts/Routa";
+// Routa itself uses pnpm, so the landing shows it unless the reader picked another
+// package manager in the docs.
+const createCommand = createCommandsByPackageManager.pnpm;
 
-const createCommands = packageManagers.map((id) => ({
-	id,
-	command: createCommandsByPackageManager[id],
-}));
+/**
+ * Folder trees the "Read the tree" path cycles through. Each entry is one URL
+ * segment; `param` marks a `$name` folder that becomes `:name`.
+ */
+const urlExamples = [
+	[
+		{ text: "/tenants", file: "tenants/", desc: "a folder" },
+		{
+			text: "/:tenantId",
+			param: true,
+			file: "$tenantId/",
+			desc: "a path param, named after the folder",
+		},
+		{ text: "/projects", file: "projects/route.ts", desc: "the operations: GET, POST" },
+	],
+	[{ text: "/status", file: "status/route.ts", desc: "the operations: GET" }],
+	[
+		{ text: "/users", file: "users/", desc: "a folder" },
+		{ text: "/:userId", param: true, file: "$userId/", desc: "a path param, named after the folder" },
+		{ text: "/sessions", file: "sessions/route.ts", desc: "the operations: GET, DELETE" },
+	],
+	[
+		{ text: "/orders", file: "orders/", desc: "a folder" },
+		{
+			text: "/:orderId",
+			param: true,
+			file: "$orderId/route.ts",
+			desc: "a path param, with its operations: GET, PATCH",
+		},
+	],
+];
+const urlSlots = [0, 1, 2].map((index) => urlExamples[0][index]);
+
+const outcomes = [
+	{ name: "success", status: 200, desc: "the list of projects, shaped by ListProjectsResponse" },
+	{ name: "created", status: 201, desc: "the new project, with its id" },
+	{ name: "forbidden", status: 403, desc: "the caller can't see this tenant" },
+	{ name: "notFound", status: 404, desc: "no project with that id" },
+];
+
+const diagnostics = [
+	{
+		code: "ROUTA_RESULT_TYPE",
+		file: "src/routes/tenants/$tenantId/projects/route.ts:22:12",
+		message: 'Run result type "notFound" is not declared.',
+		fix: "Use one of the declared result types: success.",
+	},
+	{
+		code: "ROUTA_MIDDLEWARE_ORDER",
+		file: "src/routes/tenants/$tenantId/middleware.ts",
+		message: "withProjects requires ctx.tenant before it is provided.",
+		fix: "Move middleware that provides tenant before withProjects.",
+	},
+	{
+		code: "ROUTA_MISSING_SUCCESS_RESPONSE",
+		file: "src/routes/status/route.ts",
+		message: "GET /status is missing a 2xx success response.",
+		fix: "Add a declared success response with a 2xx HTTP status.",
+	},
+];
+
+const sources = [
+	{ column: "Method", from: "the key in route.ts", example: "get: createRoute({ … })" },
+	{ column: "Path", from: "folder names, $name → :name", example: "tenants/$tenantId → /tenants/:tenantId" },
+	{ column: "Input", from: "input: params, query, headers, body", example: "query: ListProjectsQuery" },
+	{ column: "Response", from: "named outcomes in responses", example: "success: { status: 200, schema }" },
+	{ column: "Middleware", from: "middleware.ts in a parent folder", example: "ctx.tenant, typed in every handler" },
+];
+
+const routaOwns = ["Routing", "Validation", "Middleware context", "Response serialization", "Diagnostics", "OpenAPI"];
+const youOwn = ["Services", "Domain models", "Persistence", "Business rules", "Architecture"];
+
+const footerColumns = [
+	{
+		heading: "Docs",
+		links: [
+			{ label: "Getting started", href: "/docs/getting-started/installation/" },
+			{ label: "Route contracts", href: "/docs/concepts/route-contracts/" },
+			{ label: "Middleware", href: "/docs/concepts/middleware/" },
+			{ label: "OpenAPI", href: "/docs/concepts/openapi/" },
+		],
+	},
+	{
+		heading: "Project",
+		links: [
+			{ label: "Examples", href: "/docs/examples/basic-api/" },
+			{ label: "Changelog", href: `${github}/blob/main/packages/core/CHANGELOG.md` },
+			{ label: "GitHub", href: github },
+			{ label: "npm", href: "https://www.npmjs.com/package/@routa-ts/core" },
+		],
+	},
+	{
+		heading: "Community",
+		links: [
+			{ label: "Issues", href: `${github}/issues` },
+			{ label: "Contributing", href: "/docs/community/contributing/" },
+			{ label: "Security", href: "/docs/community/security/" },
+		],
+	},
+];
 ---
 
 <!doctype html>
@@ -44,203 +145,659 @@ const createCommands = packageManagers.map((id) => ({
 		<meta name="twitter:description" content={description} />
 		<meta name="twitter:image" content={ogImage} />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="preconnect" href="https://fonts.googleapis.com" />
-		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-		<link
-			href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
-			rel="stylesheet"
-		/>
+		<script is:inline>
+			// Apply the theme saved by the docs' theme picker before first paint.
+			try {
+				const theme = localStorage.getItem("starlight-theme");
+				if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+			} catch {}
+		</script>
+		<Font cssVariable="--font-overpass" preload />
+		<Font cssVariable="--font-overpass-mono" preload />
 	</head>
 	<body>
 		<a class="skip" href="#main">
 			Skip to content
 		</a>
-		<main id="main" class="lp-schematic">
-			<section class="hero" aria-label="Hero">
-				<svg
-					class="map"
-					viewBox="0 0 1200 700"
-					preserveAspectRatio="xMidYMid slice"
-					aria-hidden="true"
-				>
-					<path class="edge" d="M140 270 L350 180 L560 100" pathLength="1"></path>
-					<path class="edge" d="M560 100 L720 240 L920 320" pathLength="1"></path>
-					<path class="edge" d="M560 100 L800 100" pathLength="1"></path>
-					<path class="edge" d="M800 100 L1060 190 L920 320" pathLength="1"></path>
-					<circle class="node" cx="140" cy="270" r="8"></circle>
-					<circle class="node lit" cx="350" cy="180" r="9"></circle>
-					<circle class="node" cx="560" cy="100" r="8"></circle>
-					<circle class="node lit" cx="720" cy="240" r="9"></circle>
-					<circle class="node" cx="920" cy="320" r="8"></circle>
-					<circle class="node" cx="800" cy="100" r="7"></circle>
-					<circle class="node lit" cx="1060" cy="190" r="8"></circle>
-					<text x="140" y="248">
-						route
-					</text>
-					<text x="350" y="158">
-						schema
-					</text>
-					<text x="560" y="78">
-						middleware
-					</text>
-					<text x="720" y="218">
-						handler
-					</text>
-					<text x="920" y="298">
-						response
-					</text>
-					<text x="800" y="78">
-						openapi
-					</text>
-					<text x="1060" y="168">
-						check
-					</text>
+
+		<header class="nav">
+			<a class="brand" href="/">
+				<Logo class="brand__logo" />
+				<span>routa</span>
+			</a>
+			<button type="button" class="cli cli--nav" data-cli data-nav-cli>
+				<span class="cli__prompt" aria-hidden="true">
+					$
+				</span>
+				<span data-cmd-text>{createCommand}</span>
+				<svg class="cli__icon" viewBox="0 0 16 16" aria-hidden="true">
+					<rect x="5" y="5" width="9" height="9" rx="2"></rect>
+					<path d="M11 3V2.5A1.5 1.5 0 0 0 9.5 1h-7A1.5 1.5 0 0 0 1 2.5v7A1.5 1.5 0 0 0 2.5 11H3"></path>
 				</svg>
+			</button>
+			<div class="nav__end">
+				<nav aria-label="Primary">
+					<ul class="nav__links">
+						<li>
+							<a href="/docs/">Docs</a>
+						</li>
+						<li class="nav__extra">
+							<a href="/docs/examples/basic-api/">Examples</a>
+						</li>
+						<li class="nav__extra">
+							<a href={`${github}/blob/main/packages/core/CHANGELOG.md`}>Changelog</a>
+						</li>
+						<li>
+							<a href={github}>GitHub</a>
+						</li>
+					</ul>
+				</nav>
+				<button
+					type="button"
+					class="theme-toggle"
+					data-theme-toggle
+					aria-label="Switch to dark theme"
+				>
+					<svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+						<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"></path>
+					</svg>
+					<svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+						<circle cx="12" cy="12" r="4"></circle>
+						<path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>
+					</svg>
+				</button>
+			</div>
+		</header>
 
-				<div class="hero-copy">
-					<div class="brand-mark">
-						<img src="/favicon.svg" alt="" width="40" height="40" />
-						Routa
-						<span class="dot" aria-hidden="true"></span>
-					</div>
-					<h1 class="headline">Filesystem routes with contracts, not vibes</h1>
-					<p class="lede">
-						A schematic of the API: routes as edges, schemas as nodes, OpenAPI as projection.
-						Schema-first REST for TypeScript — Zod contracts on a Hono runtime.
+		<main id="main">
+			<section class="hero wrap" aria-labelledby="hero-title">
+				<h1 id="hero-title" class="hero__title">
+					Your API is
+					<br />a file tree.
+				</h1>
+				<div class="hero__row">
+					<p class="hero__sub">
+						Folders become paths. schemas.ts sits beside route.ts. Routa reads the tree, so your
+						handlers only decide what happens.
 					</p>
-					<div class="cta-row">
-						<a class="btn btn-primary" href="/docs/">
-							Get started
-						</a>
-						<a class="btn btn-ghost" href="https://github.com/Routa-ts/Routa">
-							GitHub
+					<div class="actions">
+						<button type="button" class="cli" data-cli>
+							<span class="cli__prompt" aria-hidden="true">
+								$
+							</span>
+							<span data-cmd-text>{createCommand}</span>
+							<svg class="cli__icon" viewBox="0 0 16 16" aria-hidden="true">
+								<rect x="5" y="5" width="9" height="9" rx="2"></rect>
+								<path d="M11 3V2.5A1.5 1.5 0 0 0 9.5 1h-7A1.5 1.5 0 0 0 1 2.5v7A1.5 1.5 0 0 0 2.5 11H3"></path>
+							</svg>
+							<span class="visually-hidden">Copy command</span>
+						</button>
+						<a class="link-arrow" href="/docs/">
+							Read the docs <span aria-hidden="true">→</span>
 						</a>
 					</div>
-					<div class="cli">
-						<div class="cli-tabs" role="tablist" aria-label="Package manager">
-							{createCommands.map(({ id }, index) => (
-								<button
-									type="button"
-									role="tab"
-									id={`pm-tab-${id}`}
-									aria-controls="pm-panel"
-									aria-selected={index === 0 ? "true" : "false"}
-									tabindex={index === 0 ? 0 : -1}
-									data-pm={id}
-								>
-									{id}
-								</button>
+				</div>
+			</section>
+
+			<div class="wrap tree-wrap">
+				<figure class="diagram diagram--hero" aria-labelledby="tree-caption">
+					<figcaption id="tree-caption" class="visually-hidden">
+						An example route tree. src/routes/ holds status/, which serves GET /status, and
+						tenants/$tenantId/. That folder holds projects/, whose route.ts declares GET and POST
+						beside schemas.ts for params, query, and responses, and middleware.ts, which runs for
+						everything below it.
+					</figcaption>
+					<div
+						class="diagram__scroll"
+						tabindex="0"
+						role="region"
+						aria-label="Route tree diagram, scrolls sideways"
+					>
+						<svg class="tree" viewBox="0 0 1280 470" aria-hidden="true">
+							<g class="edges">
+								<path
+									class="draw"
+									style="--d: 0.15s"
+									pathLength="1"
+									d="M230 234C310 234 310 94 390 94"
+								></path>
+								<path
+									class="draw"
+									style="--d: 0.15s"
+									pathLength="1"
+									d="M230 234C310 234 310 374 390 374"
+								></path>
+								<path class="draw" style="--d: 0.55s" pathLength="1" d="M530 94H700"></path>
+								<path
+									class="draw"
+									style="--d: 0.55s"
+									pathLength="1"
+									d="M640 374C710 374 710 294 780 294"
+								></path>
+								<path
+									class="draw"
+									style="--d: 0.55s"
+									pathLength="1"
+									d="M640 374C710 374 710 434 780 434"
+								></path>
+								<path
+									class="draw"
+									style="--d: 0.95s"
+									pathLength="1"
+									d="M930 294C965 294 965 220 1000 220"
+								></path>
+								<path
+									class="draw"
+									style="--d: 0.95s"
+									pathLength="1"
+									d="M930 294C965 294 965 296 1000 296"
+								></path>
+							</g>
+							<g class="pop" style="--d: 0s">
+								<rect class="pill" x="60" y="210" width="170" height="48" rx="24"></rect>
+								<text x="145" y="234">
+									src/routes/
+								</text>
+								<circle class="joint" cx="230" cy="234" r="7"></circle>
+							</g>
+							<g class="pop" style="--d: 0.4s">
+								<rect class="pill" x="390" y="70" width="140" height="48" rx="24"></rect>
+								<text x="460" y="94">
+									status/
+								</text>
+								<circle class="joint" cx="530" cy="94" r="7"></circle>
+								<rect class="pill" x="390" y="350" width="250" height="48" rx="24"></rect>
+								<text x="515" y="374">
+									tenants/$tenantId/
+								</text>
+								<circle class="joint" cx="640" cy="374" r="7"></circle>
+							</g>
+							<g class="pop" style="--d: 0.8s">
+								<rect class="pill pill--soft" x="700" y="70" width="168" height="48" rx="24"></rect>
+								<rect class="badge badge--get" x="708" y="82" width="62" height="24" rx="12"></rect>
+								<text class="badge-text" x="739" y="94">
+									GET
+								</text>
+								<text class="path-text" x="782" y="94">
+									/status
+								</text>
+								<rect class="pill" x="780" y="270" width="150" height="48" rx="24"></rect>
+								<text x="855" y="294">
+									projects/
+								</text>
+								<circle class="joint" cx="930" cy="294" r="7"></circle>
+								<rect
+									class="pill pill--muted"
+									x="780"
+									y="410"
+									width="190"
+									height="48"
+									rx="24"
+								></rect>
+								<text class="muted" x="875" y="434">
+									middleware.ts
+								</text>
+								<text class="note" x="990" y="434">
+									runs for everything below
+								</text>
+							</g>
+							<g class="pop" style="--d: 1.2s">
+								<rect class="pill" x="1000" y="196" width="258" height="48" rx="24"></rect>
+								<text class="start" x="1018" y="220">
+									route.ts
+								</text>
+								<rect
+									class="badge badge--get"
+									x="1112"
+									y="208"
+									width="62"
+									height="24"
+									rx="12"
+								></rect>
+								<text class="badge-text" x="1143" y="220">
+									GET
+								</text>
+								<rect
+									class="badge badge--post"
+									x="1184"
+									y="208"
+									width="62"
+									height="24"
+									rx="12"
+								></rect>
+								<text class="badge-text" x="1215" y="220">
+									POST
+								</text>
+								<rect class="pill" x="1000" y="272" width="142" height="48" rx="24"></rect>
+								<text x="1071" y="296">
+									schemas.ts
+								</text>
+								<text class="note note--mono" x="1004" y="346">
+									params · query · responses
+								</text>
+							</g>
+						</svg>
+					</div>
+				</figure>
+
+				<div class="heading">
+					<h2 class="title">The route is the spec.</h2>
+					<p class="sub">
+						Write the contract once. Routa generates the OpenAPI document from it, so there's
+						nothing to keep in sync.
+					</p>
+				</div>
+				<div class="code-pair">
+					<figure class="code-card">
+						<figcaption class="code-card__head">
+							<span>projects/route.ts</span>
+							<span class="code-card__tag">you write</span>
+						</figcaption>
+						<pre><code>{`const route = createRouteRoot("/tenants/:tenantId/projects");
+
+export default route({
+  get: createRoute({
+    input: {
+      params: ListProjectsParams,
+      query: ListProjectsQuery,
+    },
+    responses: {
+      success: { status: 200, schema: ListProjectsResponse },
+    },
+    run: ({ ctx, input }) =>
+      ({ type: "success", data: list(ctx, input) }),
+  }),
+});`}</code></pre>
+					</figure>
+					<figure class="code-card">
+						<figcaption class="code-card__head">
+							<span>openapi.json</span>
+							<span class="code-card__tag">generated</span>
+						</figcaption>
+						<pre><code>{`"/tenants/{tenantId}/projects": {
+  "get": {
+    "parameters": [
+      {
+        "name": "tenantId", "in": "path", "required": true,
+        "schema": { "type": "string" }
+      },
+      {
+        "name": "status", "in": "query", "required": false,
+        "schema": {
+          "type": "string", "enum": ["active", "archived"]
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": "Success",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ListProjectsResponse"
+            }
+          }
+        }
+      }
+    }
+  }
+}`}</code></pre>
+					</figure>
+				</div>
+			</div>
+
+			<section class="wrap facts" aria-label="How the tree works">
+				<div class="fact">
+					<h3>Folders branch</h3>
+					<p>
+						A folder is a path segment. $name folders are path params; input.params gives them a
+						type.
+					</p>
+				</div>
+				<div class="fact">
+					<h3>Routes carry contracts</h3>
+					<p>
+						schemas.ts sits beside route.ts. One schema, three uses: types, validation, OpenAPI.
+					</p>
+				</div>
+				<div class="fact">
+					<h3>Checked at the root</h3>
+					<p>routa check walks the whole tree before you ship.</p>
+				</div>
+			</section>
+
+			<section class="band band--surface" aria-labelledby="url-title">
+				<div class="wrap">
+					<div class="heading">
+						<p class="kicker">Every folder is a path segment.</p>
+						<h2 id="url-title" class="title title--xl">
+							Read the tree. You've read the URL.
+						</h2>
+					</div>
+					<p class="visually-hidden">
+						For example, src/routes/tenants/$tenantId/projects/route.ts serves
+						/tenants/:tenantId/projects. tenants/ is a folder, $tenantId/ is a path param named from
+						the folder, and projects/route.ts declares the operations GET and POST.
+					</p>
+					<div class="url" aria-hidden="true" data-url data-examples={JSON.stringify(urlExamples)}>
+						{urlSlots.map((segment) => (
+							<div class:list={["url__seg", { "is-param": segment?.param }]}>
+								<span class="url__text">{segment?.text}</span>
+								<span class="url__bar" />
+								<span class="url__file">{segment?.file}</span>
+								<span class="url__desc">{segment?.desc}</span>
+							</div>
+						))}
+					</div>
+					<button type="button" class="url__toggle" data-url-toggle hidden>
+						Pause examples
+					</button>
+				</div>
+			</section>
+
+			<section class="band" aria-labelledby="steps-title">
+				<div class="wrap">
+					<div class="heading">
+						<h2 id="steps-title" class="title">
+							Add a route in three steps.
+						</h2>
+						<p class="sub">
+							Start from a folder. Each step adds one thing, and nothing needs registering.
+						</p>
+					</div>
+					<ol class="steps">
+						<li class="step">
+							<span class="step__num">Step 1</span>
+							<h3>Make a folder</h3>
+							<p>tenants/$tenantId/projects/ becomes /tenants/:tenantId/projects.</p>
+							<code class="snippet">mkdir -p 'src/routes/tenants/$tenantId/projects'</code>
+						</li>
+						<li class="step">
+							<span class="step__num">Step 2</span>
+							<h3>Add the contract</h3>
+							<p>route.ts names the methods. schemas.ts holds what goes in and comes out.</p>
+							<code class="snippet">get: createRoute(&#123; … &#125;)</code>
+						</li>
+						<li class="step">
+							<span class="step__num">Step 3</span>
+							<h3>Run the check</h3>
+							<p>routa check validates the route graph, then runs TypeScript over it.</p>
+							<code class="snippet">✓ Routa check passed.</code>
+						</li>
+					</ol>
+				</div>
+			</section>
+
+			<section class="band band--surface" aria-labelledby="outcomes-title">
+				<div class="wrap">
+					<div class="heading">
+						<p class="kicker">Responses have names.</p>
+						<h2 id="outcomes-title" class="title title--xl">
+							Return a name. Routa writes the rest.
+						</h2>
+					</div>
+					<dl class="outcomes" data-reveal>
+						{outcomes.map((outcome, index) => (
+							<div class="outcome" style={`--d: ${index * 0.12}s`}>
+								<dt class="outcome__name">{outcome.name}</dt>
+								<dd class="outcome__status">
+									<svg class="outcome__arrow" viewBox="0 0 88 24" aria-hidden="true">
+										<path class="draw" pathLength="1" d="M2 12H84" />
+										<path class="draw draw--head" pathLength="1" d="M76 5l8 7-8 7" />
+									</svg>
+									<span class="outcome__code fade">{outcome.status}</span>
+								</dd>
+								<dd class="outcome__desc">{outcome.desc}</dd>
+							</div>
+						))}
+					</dl>
+					<code class="snippet snippet--block">
+						return &#123; type: "notFound", data: &#123; message: "No such project." &#125; &#125;
+					</code>
+				</div>
+			</section>
+
+			<section class="band" aria-labelledby="middleware-title">
+				<div class="wrap split">
+					<div class="split__copy">
+						<h2 id="middleware-title" class="title title--md">
+							Middleware covers its branch.
+						</h2>
+						<p class="body">
+							Put a middleware.ts in a folder and it runs for every route below it. What it adds to
+							ctx is typed in each of those handlers.
+						</p>
+						<code class="snippet snippet--block">ctx.tenant.id // typed below $tenantId/</code>
+					</div>
+					<figure class="diagram diagram--mw" aria-labelledby="mw-caption" data-reveal>
+						<figcaption id="mw-caption" class="visually-hidden">
+							routes/ holds tenants/$tenantId/ and status/. The middleware.ts in tenants/$tenantId/
+							runs for projects/ and members/ below it, and not for status/.
+						</figcaption>
+						<div
+							class="diagram__scroll"
+							tabindex="0"
+							role="region"
+							aria-label="Middleware diagram, scrolls sideways"
+						>
+							<svg class="tree tree--sm" viewBox="0 0 784 316" aria-hidden="true">
+								<path class="edge-soft" d="M170 80H250"></path>
+								<path class="edge-soft" d="M170 80C215 80 205 270 250 270"></path>
+								<path
+									class="edge-strong draw"
+									style="--d: 0.2s"
+									pathLength="1"
+									d="M470 80C515 80 515 40 560 40"
+								></path>
+								<path
+									class="edge-strong draw"
+									style="--d: 0.2s"
+									pathLength="1"
+									d="M470 80C515 80 515 160 560 160"
+								></path>
+								<rect class="pill pill--muted" x="30" y="58" width="140" height="44" rx="22"></rect>
+								<text class="muted" x="100" y="80">
+									routes/
+								</text>
+								<circle class="joint joint--muted" cx="170" cy="80" r="7"></circle>
+								<rect class="pill pill--ink" x="250" y="58" width="220" height="44" rx="22"></rect>
+								<text class="inverse" x="360" y="80">
+									tenants/$tenantId/
+								</text>
+								<circle class="joint" cx="470" cy="80" r="7"></circle>
+								<g class="fade" style="--d: 0.55s">
+									<rect
+										class="pill pill--tag"
+										x="250"
+										y="120"
+										width="246"
+										height="34"
+										rx="17"
+									></rect>
+									<text class="tag-text" x="373" y="137">
+										middleware.ts runs here and below
+									</text>
+								</g>
+								<rect class="pill" x="560" y="18" width="180" height="44" rx="22"></rect>
+								<text x="650" y="40">
+									projects/
+								</text>
+								<rect class="pill" x="560" y="138" width="180" height="44" rx="22"></rect>
+								<text x="650" y="160">
+									members/
+								</text>
+								<rect
+									class="pill pill--muted"
+									x="250"
+									y="248"
+									width="140"
+									height="44"
+									rx="22"
+								></rect>
+								<text class="muted" x="320" y="270">
+									status/
+								</text>
+							</svg>
+						</div>
+					</figure>
+				</div>
+			</section>
+
+			<section class="band band--ink" aria-labelledby="diagnostics-title">
+				<div class="wrap">
+					<div class="heading">
+						<p class="eyebrow">Diagnostics</p>
+						<h2 id="diagnostics-title" class="title">
+							Every failure says where and what to change.
+						</h2>
+						<p class="sub">
+							Each diagnostic names its code, the file, and the fix. No stack trace to read, no
+							guessing which layer drifted.
+						</p>
+					</div>
+					<ul class="diagnostics">
+						{diagnostics.map((diagnostic) => (
+							<li class="diagnostic">
+								<p class="diagnostic__code">
+									<span aria-hidden="true">✗ </span>
+									{diagnostic.code}
+								</p>
+								<p class="diagnostic__file">{diagnostic.file}</p>
+								<p class="diagnostic__msg">{diagnostic.message}</p>
+								<p class="diagnostic__fix">
+									<span aria-hidden="true">→ </span>
+									{diagnostic.fix}
+								</p>
+							</li>
+						))}
+					</ul>
+				</div>
+			</section>
+
+			<section class="band" aria-labelledby="sources-title">
+				<div class="wrap">
+					<div class="heading heading--split">
+						<h2 id="sources-title" class="title title--md">
+							Every column has a source.
+						</h2>
+						<p class="body">
+							Nothing is typed twice. Each part of an operation is read from one place in your tree.
+						</p>
+					</div>
+					<table class="sources">
+						<thead>
+							<tr>
+								<th scope="col">Column</th>
+								<th scope="col">Read from</th>
+								<th scope="col">Example</th>
+							</tr>
+						</thead>
+						<tbody>
+							{sources.map((source) => (
+								<tr>
+									<th scope="row">{source.column}</th>
+									<td>{source.from}</td>
+									<td>
+										<code>{source.example}</code>
+									</td>
+								</tr>
 							))}
+						</tbody>
+					</table>
+				</div>
+			</section>
+
+			<section class="band band--surface" aria-labelledby="boundary-title">
+				<div class="wrap">
+					<div class="heading">
+						<h2 id="boundary-title" class="title">
+							Routa holds the HTTP edge. You own the app.
+						</h2>
+					</div>
+					<div class="owners">
+						<div class="owner">
+							<h3 class="owner__head">
+								<Logo size={28} />
+								Routa owns
+							</h3>
+							<ul>
+								{routaOwns.map((item) => (
+									<li>{item}</li>
+								))}
+							</ul>
 						</div>
-						<div class="cli-body">
-							<code
-								id="pm-panel"
-								role="tabpanel"
-								aria-labelledby={`pm-tab-${createCommands[0].id}`}
-								data-cmd={createCommands[0].command}
-							>
-								<span aria-hidden="true">$</span>
-								<span data-cmd-text>{createCommands[0].command}</span>
-							</code>
-							<button type="button" class="cli-copy">
-								Copy
+						<div class="owner">
+							<h3 class="owner__head">
+								<span class="owner__ring" aria-hidden="true"></span>
+								You own
+							</h3>
+							<ul>
+								{youOwn.map((item) => (
+									<li>{item}</li>
+								))}
+							</ul>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<section class="band" aria-labelledby="start-title">
+				<div class="wrap">
+					<div class="cta">
+						<div>
+							<h2 id="start-title" class="title title--md">
+								Write your first route.
+							</h2>
+							<p class="sub">One command, one folder, one passing check.</p>
+						</div>
+						<div class="actions">
+							<button type="button" class="cli cli--light" data-cli>
+								<span class="cli__prompt" aria-hidden="true">
+									$
+								</span>
+								<span data-cmd-text>{createCommand}</span>
+								<span class="visually-hidden">Copy command</span>
 							</button>
-							<span class="visually-hidden" role="status" data-copy-status></span>
+							<a class="link-arrow" href="/docs/start/quickstart/">
+								Read the docs <span aria-hidden="true">→</span>
+							</a>
 						</div>
-					</div>
-				</div>
-			</section>
-
-			<section class="section">
-				<div class="section-inner">
-					<p class="section-kicker">Side by side</p>
-					<h2 class="section-title">Untyped handler vs contracted route</h2>
-					<p class="section-lede">
-						Same job. One hopes the status codes match the docs. The other declares the contract in
-						source.
-					</p>
-					<div class="compare">
-						<div class="code-panel">
-							<div class="code-panel__bar">
-								<span>without Routa</span>
-								<span>vibes</span>
-							</div>
-							<pre><code>app.post(<span class="str">"/users"</span>, <span class="kw">async</span> (c) => {"{"}
-  <span class="kw">const</span> body = <span class="kw">await</span> c.req.json();
-  <span class="cm">// validate… somewhere?</span>
-  <span class="kw">const</span> user = <span class="kw">await</span> create(body);
-  <span class="kw">return</span> c.json(user, <span class="str">201</span>);
-{"}"});</code></pre>
-						</div>
-						<div class="code-panel">
-							<div class="code-panel__bar">
-								<span>with Routa</span>
-								<span>contract</span>
-							</div>
-							<pre><code><span class="kw">const</span> route = <span class="fn">createRouteRoot</span>(<span class="str">"/users"</span>);
-
-<span class="kw">export default</span> route({"{"}
-  post: <span class="fn">createRoute</span>({"{"}
-    input: {"{"} body: CreateUserSchema {"}"},
-    responses: {"{"}
-      success: {"{"} status: <span class="str">201</span>, schema: UserSchema {"}"},
-    {"}"},
-    run: <span class="kw">async</span> ({"{"} input {"}"}) => ({"{"}
-      type: <span class="str">"success"</span>,
-      data: <span class="kw">await</span> users.createUser(input.body),
-    {"}"}),
-  {"}"}),
-{"}"});</code></pre>
-						</div>
-					</div>
-					<ul class="pillars" style="margin-top: 2.5rem">
-						<li>
-							<strong>Route = contract</strong>
-							<p>Path, methods, I/O, and outcomes in one file.</p>
-						</li>
-						<li>
-							<strong>Lattice composition</strong>
-							<p>Middleware and schemas form a typed graph you can check.</p>
-						</li>
-						<li>
-							<strong>OpenAPI peer</strong>
-							<p>Projection of the same lattice — scaffold or emit.</p>
-						</li>
-						<li>
-							<strong>CLI lifecycle</strong>
-							<p>check, build, start — in that order.</p>
-						</li>
-					</ul>
-					<ul class="built-on" style="margin-top: 2rem">
-						<li>Hono</li>
-						<li>Zod</li>
-						<li>OpenAPI</li>
-						<li>TypeScript</li>
-					</ul>
-					<p class="v0-note">
-						<strong>v0</strong>— intentionally narrow. Schema-first REST, not a fullstack
-						meta-framework.
-					</p>
-				</div>
-			</section>
-
-			<section class="close">
-				<div class="close-inner">
-					<div>
-						<h2>Map the docs</h2>
-						<p>From first route to OpenAPI lockstep.</p>
-					</div>
-					<div class="cta-row">
-						<a class="btn btn-primary" href="/docs/start/quickstart/">
-							Quickstart
-						</a>
-						<a class="btn btn-ghost" href="/docs/">
-							Documentation
-						</a>
 					</div>
 				</div>
 			</section>
 		</main>
+
+		<footer class="footer">
+			<div class="wrap">
+				<div class="footer__cols">
+					<div class="footer__brand">
+						<a class="brand brand--sm" href="/">
+							<Logo size={28} />
+							<span>routa</span>
+						</a>
+						<p>Schema-first REST for TypeScript.</p>
+					</div>
+					{footerColumns.map((column) => (
+						<nav aria-label={column.heading}>
+							<h2>{column.heading}</h2>
+							<ul>
+								{column.links.map((link) => (
+									<li>
+										<a href={link.href}>{link.label}</a>
+									</li>
+								))}
+							</ul>
+						</nav>
+					))}
+				</div>
+				<div class="footer__legal">
+					<span>MIT licensed</span>
+					<span>© Routa contributors</span>
+				</div>
+			</div>
+		</footer>
+		<span class="visually-hidden" role="status" data-copy-status></span>
+
 		<script>
 		import {
 			createCommandsByPackageManager as COMMANDS,
@@ -248,81 +805,325 @@ const createCommands = packageManagers.map((id) => ({
 		} from "../lib/package-manager-commands";
 
 		/**
-		 * Starlight persists synced tab selections under this key, so the choice made
-		 * here carries into every `<PackageManagers>` block in the docs and back.
+		 * Starlight persists synced tab selections under this key, so the package
+		 * manager picked in the docs also picks the command copied here.
 		 */
 		const STORAGE_KEY = "starlight-synced-tabs__pkg";
+		const motionQuery = matchMedia("(prefers-reduced-motion: reduce)");
+		const reduceMotion = motionQuery.matches;
+		const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-		const cli = document.querySelector(".cli");
-		const tabs = [...document.querySelectorAll<HTMLButtonElement>(".cli-tabs [data-pm]")];
-		const panel = document.querySelector<HTMLElement>("#pm-panel");
-		const commandText = document.querySelector<HTMLElement>("[data-cmd-text]");
-		const copyButton = document.querySelector<HTMLButtonElement>(".cli-copy");
+		// Copy-to-clipboard command pills.
 		const copyStatus = document.querySelector<HTMLElement>("[data-copy-status]");
-
-		function isPackageManager(value: string | null): value is PackageManager {
-			return value !== null && value in COMMANDS;
-		}
-
-		function select(manager: PackageManager, { focus = false } = {}) {
-			if (!panel || !commandText) return;
-
-			for (const tab of tabs) {
-				const selected = tab.dataset.pm === manager;
-				tab.setAttribute("aria-selected", String(selected));
-				tab.tabIndex = selected ? 0 : -1;
-				if (selected && focus) tab.focus();
+		const readCommand = () => {
+			let stored: string | null = null;
+			try {
+				stored = localStorage.getItem(STORAGE_KEY);
+			} catch {}
+			return stored !== null && stored in COMMANDS ? COMMANDS[stored as PackageManager] : COMMANDS.pnpm;
+		};
+		let command = readCommand();
+		const cliButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-cli]")];
+		const navCli = document.querySelector<HTMLButtonElement>("[data-nav-cli]");
+		const showCommand = () => {
+			for (const button of cliButtons) {
+				const text = button.querySelector<HTMLElement>("[data-cmd-text]");
+				if (text) text.textContent = command;
 			}
+			navCli?.setAttribute("aria-label", `Copy ${command}`);
+		};
+		showCommand();
+		// Back/forward cache restores the page as it was; pick up a manager chosen in the docs.
+		addEventListener("pageshow", (event) => {
+			if (!event.persisted) return;
+			command = readCommand();
+			showCommand();
+		});
 
-			commandText.textContent = COMMANDS[manager];
-			panel.dataset.cmd = COMMANDS[manager];
-			panel.setAttribute("aria-labelledby", `pm-tab-${manager}`);
-		}
-
-		if (cli && panel && commandText) {
-			const stored = localStorage.getItem(STORAGE_KEY);
-			if (isPackageManager(stored)) select(stored);
-
-			for (const tab of tabs) {
-				tab.addEventListener("click", () => {
-					const manager = tab.dataset.pm;
-					if (!isPackageManager(manager ?? null)) return;
-					select(manager as PackageManager);
-					localStorage.setItem(STORAGE_KEY, manager as PackageManager);
-				});
-			}
-
-			cli.querySelector(".cli-tabs")?.addEventListener("keydown", (event) => {
-				const key = (event as KeyboardEvent).key;
-				const step = key === "ArrowRight" ? 1 : key === "ArrowLeft" ? -1 : 0;
-				if (step === 0) return;
-				event.preventDefault();
-
-				const current = tabs.findIndex((tab) => tab.getAttribute("aria-selected") === "true");
-				const next = tabs[(current + step + tabs.length) % tabs.length];
-				const manager = next?.dataset.pm;
-				if (!isPackageManager(manager ?? null)) return;
-				select(manager as PackageManager, { focus: true });
-				localStorage.setItem(STORAGE_KEY, manager as PackageManager);
+		let statusTimer: ReturnType<typeof setTimeout> | undefined;
+		const announce = (message: string) => {
+			if (!copyStatus) return;
+			clearTimeout(statusTimer);
+			copyStatus.textContent = message;
+			statusTimer = setTimeout(() => (copyStatus.textContent = ""), 1400);
+		};
+		for (const button of cliButtons) {
+			let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
+			// Runs after the clipboard write settles, so overlapping clicks can't let an older
+			// result's timer clear a newer one.
+			const show = (copied: boolean) => {
+				clearTimeout(feedbackTimer);
+				delete button.dataset.copied;
+				delete button.dataset.copyFailed;
+				if (copied) {
+					button.dataset.copied = "";
+					announce(`Copied ${command} to clipboard`);
+				} else {
+					// Shown on the button too, since the compact nav hides the command text.
+					button.dataset.copyFailed = "";
+					announce(`Copy failed. The command is ${command}`);
+				}
+				feedbackTimer = setTimeout(() => {
+					delete button.dataset.copied;
+					delete button.dataset.copyFailed;
+				}, 1400);
+			};
+			button.addEventListener("click", () => {
+				navigator.clipboard.writeText(command).then(
+					() => show(true),
+					() => show(false),
+				);
 			});
 		}
 
-		copyButton?.addEventListener("click", async () => {
-			const command = panel?.dataset.cmd;
-			if (!command) return;
-			try {
-				await navigator.clipboard.writeText(command);
-				copyButton.textContent = "Copied";
-				if (copyStatus) copyStatus.textContent = `Copied ${command} to clipboard`;
-				setTimeout(() => {
-					copyButton.textContent = "Copy";
-					if (copyStatus) copyStatus.textContent = "";
-				}, 1400);
-			} catch {
-				copyButton.textContent = "Failed";
-				if (copyStatus) copyStatus.textContent = "Copy failed";
-			}
-		});
+		// The nav command shows whenever none of the page's own commands is visible. The
+		// observer's top edge sits below the sticky header, so a command behind it counts as
+		// hidden.
+		const header = document.querySelector<HTMLElement>(".nav");
+		if (navCli && header) {
+			const pageClis = cliButtons.filter((button) => button !== navCli);
+			const onScreen = new Set<Element>();
+			let observer: IntersectionObserver | undefined;
+			const watch = () => {
+				observer?.disconnect();
+				onScreen.clear();
+				observer = new IntersectionObserver(
+					(entries) => {
+						for (const entry of entries) {
+							if (entry.isIntersecting) onScreen.add(entry.target);
+							else onScreen.delete(entry.target);
+						}
+						navCli.toggleAttribute("data-shown", onScreen.size === 0);
+					},
+					{ rootMargin: `-${header.offsetHeight}px 0px 0px 0px` },
+				);
+				for (const cli of pageClis) observer.observe(cli);
+			};
+			new ResizeObserver(watch).observe(header);
+		}
+
+		// Theme toggle, shared with the docs through Starlight's storage key.
+		const themeToggle = document.querySelector<HTMLButtonElement>("[data-theme-toggle]");
+		if (themeToggle) {
+			const root = document.documentElement;
+			const isDark = () =>
+				root.dataset.theme === "dark" ||
+				(root.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+			const label = () =>
+				themeToggle.setAttribute("aria-label", `Switch to ${isDark() ? "light" : "dark"} theme`);
+			label();
+			themeToggle.addEventListener("click", () => {
+				const next = isDark() ? "light" : "dark";
+				root.dataset.theme = next;
+				try {
+					localStorage.setItem("starlight-theme", next);
+				} catch {}
+				label();
+			});
+		}
+
+		// Draw-in on scroll, replayed every time a block comes back into view. Browsers with
+		// CSS scroll-triggered animations (animation-trigger) do this in CSS; the rest use
+		// the scroll check below. Content stays visible without JS or with reduced motion.
+		const nativeTriggers = CSS.supports("animation-trigger", "--t replay reset");
+		const revealed = document.querySelectorAll<HTMLElement>("[data-reveal]");
+		if (!reduceMotion && !nativeTriggers) {
+			// Plays once the block's centre is at or above 60% of the viewport, and rewinds
+			// once it has fully left. Reading positions on scroll (not an observer band) means
+			// no jump can skip the trigger, whatever the viewport height.
+			let queued = false;
+			const update = () => {
+				queued = false;
+				for (const element of revealed) {
+					const box = element.getBoundingClientRect();
+					if (box.bottom <= 0 || box.top >= innerHeight) element.dataset.reveal = "pending";
+					else if (box.top + box.height / 2 < innerHeight * 0.6) element.dataset.reveal = "shown";
+				}
+			};
+			const queue = () => {
+				if (queued) return;
+				queued = true;
+				requestAnimationFrame(update);
+			};
+			for (const element of revealed) element.dataset.reveal = "pending";
+			addEventListener("scroll", queue, { passive: true });
+			addEventListener("resize", queue);
+			update();
+		}
+
+		// "Read the tree" path: type each folder tree out, then delete it and type the next.
+		type Segment = { text: string; file: string; desc: string; param?: boolean };
+		const url = document.querySelector<HTMLElement>("[data-url]");
+		const toggle = document.querySelector<HTMLButtonElement>("[data-url-toggle]");
+
+		if (url && toggle && !reduceMotion) {
+			const examples = JSON.parse(url.dataset.examples ?? "[]") as Segment[][];
+			const slots = [...url.querySelectorAll<HTMLElement>(".url__seg")];
+			const keys = ["text", "file", "desc"] as const;
+			// Milliseconds per character of the path; captions keep pace with it.
+			const TYPE = 75;
+			const ERASE = 35;
+			const HOLD = 2600;
+			const GAP = 400;
+			let current = 0;
+			let paused = false;
+			let visible = false;
+			let started = false;
+			let wake: (() => void) | undefined;
+			let stopped = false;
+
+			const part = (slot: HTMLElement, key: (typeof keys)[number] | "bar") =>
+				slot.querySelector<HTMLElement>(`.url__${key}`) as HTMLElement;
+
+			const canRun = () => !stopped && !paused && visible && !document.hidden;
+			// Waits, then holds while paused, off screen or in a hidden tab.
+			const tick = async (ms: number) => {
+				await wait(ms);
+				while (!canRun()) await new Promise<void>((resolve) => (wake = resolve));
+			};
+			const resume = () => {
+				if (!canRun()) return;
+				wake?.();
+				wake = undefined;
+			};
+
+			const fill = (slot: HTMLElement, segment?: Segment) => {
+				slot.classList.toggle("is-param", Boolean(segment?.param));
+				for (const key of keys) part(slot, key).textContent = segment?.[key] ?? "";
+			};
+
+			// Width of a segment's full text, measured without a visible change.
+			const measure = (slot: HTMLElement, segment?: Segment) => {
+				const text = part(slot, "text");
+				const typed = text.textContent;
+				text.textContent = segment?.text ?? "";
+				const width = text.offsetWidth;
+				text.textContent = typed;
+				return width;
+			};
+
+			// The underline grows and shrinks with the typed text. It measures the text
+			// itself, not the caret, so an empty segment has no underline at all.
+			const range = document.createRange();
+			const setBar = (slot: HTMLElement) => {
+				const text = part(slot, "text");
+				range.selectNodeContents(text);
+				const width = text.textContent ? range.getBoundingClientRect().width : 0;
+				part(slot, "bar").style.width = `${Math.max(width - 8, 0)}px`;
+			};
+
+			// Each slot takes its final width up front, so typing never reflows the captions.
+			const lockWidths = () => {
+				for (const [index, slot] of slots.entries()) {
+					slot.style.width = `${measure(slot, examples[current][index])}px`;
+					setBar(slot);
+				}
+			};
+
+			// Reserve the tallest example's height so the sections below never move.
+			const reserveHeight = () => {
+				const saved = slots.map((slot) => ({
+					width: slot.style.width,
+					param: slot.classList.contains("is-param"),
+					parts: keys.map((key) => part(slot, key).textContent),
+				}));
+				url.style.minHeight = "";
+				let tallest = 0;
+				for (const example of examples) {
+					for (const [index, slot] of slots.entries()) {
+						fill(slot, example[index]);
+						slot.style.width = "";
+					}
+					tallest = Math.max(tallest, url.offsetHeight);
+				}
+				for (const [index, slot] of slots.entries()) {
+					const state = saved[index];
+					slot.style.width = state.width;
+					slot.classList.toggle("is-param", state.param);
+					for (const [keyIndex, key] of keys.entries()) part(slot, key).textContent = state.parts[keyIndex];
+				}
+				url.style.minHeight = `${tallest}px`;
+				// Once frozen, slots keep their natural widths.
+				if (started && !stopped) lockWidths();
+			};
+
+			// Types (or deletes) one segment's path, file and description together, so all
+			// three start and finish at the same moment. The path sets the pace.
+			const step = async (slot: HTMLElement, segment: Segment, typing: boolean) => {
+				const elements = keys.map((key) => part(slot, key));
+				const full = keys.map((key) => segment[key]);
+				const steps = Math.max(...full.map((text) => text.length));
+				const interval = (segment.text.length * (typing ? TYPE : ERASE)) / steps;
+				elements[0].classList.add("is-typing");
+				for (let index = 1; index <= steps; index++) {
+					const progress = typing ? index / steps : 1 - index / steps;
+					for (const [position, element] of elements.entries()) {
+						element.textContent = full[position].slice(0, Math.ceil(full[position].length * progress));
+					}
+					setBar(slot);
+					await tick(interval);
+				}
+				elements[0].classList.remove("is-typing");
+			};
+
+			const run = async () => {
+				lockWidths();
+				for (;;) {
+					await tick(HOLD);
+					const shown = examples[current];
+					for (const [index, slot] of [...slots.entries()].reverse()) {
+						if (shown[index]) await step(slot, shown[index], false);
+					}
+					await tick(GAP);
+					current = (current + 1) % examples.length;
+					const next = examples[current];
+					for (const [index, slot] of slots.entries()) slot.classList.toggle("is-param", Boolean(next[index]?.param));
+					lockWidths();
+					for (const [index, slot] of slots.entries()) {
+						if (next[index]) await step(slot, next[index], true);
+					}
+				}
+			};
+
+			reserveHeight();
+			let lastWidth = url.offsetWidth;
+			new ResizeObserver(() => {
+				if (url.offsetWidth === lastWidth) return;
+				lastWidth = url.offsetWidth;
+				reserveHeight();
+			}).observe(url);
+			document.fonts?.ready.then(reserveHeight);
+
+			toggle.hidden = false;
+			toggle.addEventListener("click", () => {
+				paused = !paused;
+				url.classList.toggle("is-paused", paused);
+				toggle.textContent = paused ? "Play examples" : "Pause examples";
+				resume();
+			});
+			document.addEventListener("visibilitychange", resume);
+			// Reduced motion turned on mid-play: freeze on the first example for this visit.
+			motionQuery.addEventListener("change", () => {
+				if (!motionQuery.matches || stopped) return;
+				stopped = true;
+				current = 0;
+				toggle.hidden = true;
+				for (const [index, slot] of slots.entries()) {
+					fill(slot, examples[0][index]);
+					slot.style.width = "";
+					part(slot, "bar").style.width = "";
+					for (const key of keys) part(slot, key).classList.remove("is-typing");
+				}
+			});
+			new IntersectionObserver(([entry]) => {
+				visible = Boolean(entry?.isIntersecting);
+				if (visible && !started && !stopped) {
+					started = true;
+					void run();
+				}
+				resume();
+			}).observe(url);
+		}
 		</script>
 	</body>
 </html>

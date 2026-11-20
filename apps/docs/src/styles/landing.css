@@ -1,20 +1,97 @@
-/* Schematic landing — Lattice (teal / graphite / Space Grotesk + Space Mono) */
+/* Landing — "Routes branch": navy ink on white, Overpass + Overpass Mono */
 
 :root {
-	color-scheme: dark;
-	--bg: #0f1115;
-	--elevated: #15181e;
-	--text: #eceff4;
-	--muted: #8b93a4;
-	--edge: #0d9488;
-	--node: #5eead4;
-	--node-bright: #99f6e4;
-	--line: #2a303c;
-	--ink: #042f2e;
-	--code-dim: #7c8496;
-	--font: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
-	--mono: "Space Mono", ui-monospace, monospace;
+	color-scheme: light;
+	--ink: #16203a;
+	--text: #4a5470;
+	/* Large or decorative text only; --quiet is the small-text muted color (4.5:1+). */
+	--muted: #7a839b;
+	--quiet: #646c84;
+	--line: #e3e6ee;
+	--line-soft: #dde1ea;
+	--surface: #f2f4f8;
+	--white: #ffffff;
+	--blue: #0072ce;
+	--green: #00985f;
+	/* GET badge: the brand green darkened so white 13px text keeps 4.5:1. */
+	--green-text: #00804f;
+	--mint: #7fd8b0;
+	--code: #c9d1e6;
+	--code-bright: #e8ecf6;
+	--code-line: #2a3554;
+	--code-deep: #0f172c;
+	--error: #ff6b81;
+	--font: var(--font-overpass);
+	--mono: var(--font-overpass-mono);
 	--ease: cubic-bezier(0.22, 1, 0.36, 1);
+	--gutter: clamp(1rem, 5.5vw, 5rem);
+	/* Page, raised cards and the navy panels (code, CLI, bands). */
+	--navy: #16203a;
+	--bg: #ffffff;
+	--card: #ffffff;
+	--panel: var(--navy);
+	--panel-line: transparent;
+	/* The install command is the primary action: navy on light, Routa blue on dark. */
+	--cli-bg: var(--navy);
+	--cli-prompt: var(--mint);
+	/* Raised blocks (steps, diagrams), inline code chips and their edges. */
+	--raised: var(--surface);
+	--raised-line: transparent;
+	--chip: var(--navy);
+	--chip-line: transparent;
+}
+
+/* Dark: follows the system unless the Starlight theme picker chose light. */
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) {
+		color-scheme: dark;
+		--ink: #e8ecf6;
+		--text: #b4bdd3;
+		--muted: #8b95ad;
+		--quiet: #9aa3ba;
+		--line: #24304f;
+		--line-soft: #34436a;
+		--surface: #0f182c;
+		--blue: #3f95df;
+		--green: #17c283;
+		--bg: #0a1120;
+		--card: #18233f;
+		--panel: #111b33;
+		--panel-line: #2b3a60;
+		--code-deep: #0a1120;
+		--code-line: #2b3a60;
+		--cli-bg: #0072ce;
+		--cli-prompt: #d6e9fa;
+		--raised: #18233f;
+		--raised-line: #2b3a60;
+		--chip: #2a3a62;
+		--chip-line: #3a4c78;
+	}
+}
+
+:root[data-theme="dark"] {
+	color-scheme: dark;
+	--ink: #e8ecf6;
+	--text: #b4bdd3;
+	--muted: #8b95ad;
+	--quiet: #9aa3ba;
+	--line: #24304f;
+	--line-soft: #34436a;
+	--surface: #0f182c;
+	--blue: #3f95df;
+	--green: #17c283;
+	--bg: #0a1120;
+	--card: #18233f;
+	--panel: #111b33;
+	--panel-line: #2b3a60;
+	--code-deep: #0a1120;
+	--code-line: #2b3a60;
+	--cli-bg: #0072ce;
+	--cli-prompt: #d6e9fa;
+	--raised: #18233f;
+	--raised-line: #2b3a60;
+	--chip: #2a3a62;
+	--chip-line: #3a4c78;
 }
 
 *,
@@ -25,16 +102,35 @@
 
 html {
 	scroll-behavior: smooth;
+	scroll-padding-top: 88px;
 }
 
 body {
 	margin: 0;
-	min-height: 100vh;
 	background: var(--bg);
-	color: var(--text);
+	color: var(--ink);
 	font-family: var(--font);
-	-webkit-font-smoothing: antialiased;
 	line-height: 1.5;
+	-webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+p,
+ul,
+ol,
+dl,
+dd,
+figure,
+pre {
+	margin: 0;
+}
+
+ul,
+ol {
+	padding: 0;
+	list-style: none;
 }
 
 a {
@@ -43,18 +139,23 @@ a {
 }
 
 code,
-.mono {
+pre {
 	font-family: var(--mono);
+}
+
+:where(a, button, [tabindex]):focus-visible {
+	outline: 2px solid var(--blue);
+	outline-offset: 3px;
 }
 
 .skip {
 	position: absolute;
 	left: -9999px;
 	top: 0;
-	padding: 0.5rem 0.75rem;
-	background: var(--node);
-	color: var(--ink);
 	z-index: 100;
+	padding: 0.5rem 0.75rem;
+	background: var(--panel);
+	color: var(--white);
 }
 
 .skip:focus {
@@ -73,514 +174,1221 @@ code,
 	white-space: nowrap;
 }
 
-:where(a, button):focus-visible {
-	outline: 2px solid var(--node);
-	outline-offset: 3px;
+.wrap {
+	width: 100%;
+	max-width: calc(1280px + 2 * var(--gutter));
+	margin-inline: auto;
+	padding-inline: var(--gutter);
 }
 
-.brand-mark {
+/* ---- Nav ---- */
+
+/* Brand left, install command centered, links and theme toggle right. */
+.nav {
+	display: grid;
+	grid-template-columns: 1fr auto 1fr;
+	align-items: center;
+	gap: 1rem;
+	position: sticky;
+	top: 0;
+	z-index: 50;
+	padding: 18px clamp(1rem, 2.2vw, 2rem);
+	border-bottom: 1px solid var(--line);
+	background: color-mix(in srgb, var(--bg) 88%, transparent);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+}
+
+.brand {
+	justify-self: start;
+}
+
+.nav__end {
+	justify-self: end;
+	display: flex;
+	align-items: center;
+	gap: clamp(0.75rem, 2vw, 1.5rem);
+}
+
+/* The install command joins the nav once the page's own command scrolls away. */
+.cli--nav {
+	padding: 9px 14px;
+	gap: 10px;
+	font-size: 14px;
+	visibility: hidden;
+	opacity: 0;
+	transform: translateY(-4px);
+	transition:
+		opacity 0.2s var(--ease),
+		transform 0.2s var(--ease),
+		visibility 0.2s;
+}
+
+.cli--nav[data-shown] {
+	visibility: visible;
+	opacity: 1;
+	transform: none;
+}
+
+@media (max-width: 720px) {
+	.cli--nav [data-cmd-text] {
+		display: none;
+	}
+}
+
+/* Phones: logo without the wordmark and tighter spacing, so brand, command and links
+   fit in one row down to 320px. */
+@media (max-width: 480px) {
+	.nav {
+		gap: 0.5rem;
+		padding-inline: 12px;
+	}
+
+	.nav__end,
+	.nav__links {
+		gap: 0.75rem;
+	}
+
+	.brand span {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+}
+
+.theme-toggle {
+	display: inline-grid;
+	place-items: center;
+	width: 36px;
+	height: 36px;
+	padding: 0;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--ink);
+	cursor: pointer;
+}
+
+.theme-toggle:hover {
+	color: var(--blue);
+}
+
+.theme-toggle svg {
+	width: 18px;
+	height: 18px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.8;
+	stroke-linecap: round;
+}
+
+.theme-toggle .icon-sun,
+:root[data-theme="dark"] .theme-toggle .icon-moon {
+	display: none;
+}
+
+:root[data-theme="dark"] .theme-toggle .icon-sun {
+	display: block;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) .theme-toggle .icon-moon {
+		display: none;
+	}
+
+	:root:not([data-theme="light"]) .theme-toggle .icon-sun {
+		display: block;
+	}
+}
+
+.brand {
 	display: inline-flex;
 	align-items: center;
-	gap: 0.7rem;
-	font-family: var(--mono);
-	font-size: clamp(1.35rem, 3.5vw, 1.85rem);
-	font-weight: 700;
-	letter-spacing: 0.14em;
-	text-transform: uppercase;
+	gap: 10px;
+	font-size: 26px;
+	font-weight: 800;
+	letter-spacing: -0.5px;
 	line-height: 1;
 }
 
-.brand-mark img {
-	width: clamp(2rem, 4vw, 2.6rem);
-	height: clamp(2rem, 4vw, 2.6rem);
-	filter: invert(1);
+.brand--sm {
+	font-size: 20px;
+	letter-spacing: 0;
 }
 
-.brand-mark .dot {
-	width: 0.45rem;
-	height: 0.45rem;
-	border-radius: 50%;
-	background: var(--edge);
-	box-shadow: 0 0 0 0 color-mix(in oklab, var(--edge) 55%, transparent);
-	animation: pulse-dot 2.4s var(--ease) infinite;
-}
-
-@keyframes pulse-dot {
-	0%,
-	100% {
-		box-shadow: 0 0 0 0 color-mix(in oklab, var(--edge) 45%, transparent);
-	}
-	50% {
-		box-shadow: 0 0 0 0.45rem color-mix(in oklab, var(--edge) 0%, transparent);
-	}
-}
-
-.headline {
-	margin: 0;
-	font-size: clamp(2rem, 5.5vw, 3.35rem);
+.nav__links {
+	display: flex;
+	gap: clamp(1.25rem, 2.5vw, 2.25rem);
 	font-weight: 600;
-	letter-spacing: -0.035em;
-	line-height: 1.08;
 }
 
-.lede {
-	margin: 0;
-	max-width: 36rem;
+.nav__links a:hover,
+.footer a:hover {
+	color: var(--blue);
+}
+
+/* ---- Shared type ---- */
+
+.heading {
+	display: grid;
+	gap: 12px;
+	margin-bottom: clamp(2rem, 4vw, 3rem);
+}
+
+.kicker {
 	color: var(--muted);
-	font-size: clamp(1rem, 2vw, 1.125rem);
+	font-size: clamp(1.15rem, 2vw, 1.375rem);
+	font-weight: 700;
+}
+
+.eyebrow {
+	color: var(--code);
+	font-family: var(--mono);
+	font-size: 13px;
+	font-weight: 700;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+}
+
+.title {
+	font-size: clamp(2rem, 4.4vw, 3rem);
+	font-weight: 900;
+	letter-spacing: -0.03em;
+	line-height: 1.1;
+}
+
+.title--xl {
+	font-size: clamp(2.25rem, 5.4vw, 3.75rem);
+	line-height: 1.05;
+}
+
+.title--md {
+	font-size: clamp(2rem, 4vw, 2.75rem);
+}
+
+.sub,
+.body {
+	max-width: 47.5rem;
+	color: var(--text);
+	font-size: clamp(1.0625rem, 1.6vw, 1.1875rem);
 	line-height: 1.55;
 }
 
-.cta-row {
+.body {
+	font-size: clamp(1rem, 1.5vw, 1.125rem);
+}
+
+.band {
+	padding-block: clamp(4rem, 8vw, 6.5rem);
+}
+
+.band--surface {
+	background: var(--surface);
+}
+
+.band--ink {
+	background: var(--panel);
+	color: var(--white);
+}
+
+.band--ink .sub {
+	color: var(--code);
+}
+
+/* ---- Hero ---- */
+
+.hero {
+	display: grid;
+	gap: 24px;
+	padding-top: clamp(3.5rem, 7vw, 6rem);
+	padding-bottom: 40px;
+}
+
+.hero__title {
+	font-size: clamp(3rem, 7.5vw, 4.75rem);
+	font-weight: 900;
+	letter-spacing: -0.026em;
+	line-height: 1.03;
+}
+
+.hero__row {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
-	gap: 0.75rem;
+	justify-content: space-between;
+	gap: 24px 48px;
 }
 
-.btn {
-	display: inline-flex;
+.hero__sub {
+	max-width: 620px;
+	color: var(--text);
+	font-size: clamp(1.125rem, 1.8vw, 1.25rem);
+	line-height: 1.5;
+}
+
+.actions {
+	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
-	justify-content: center;
-	gap: 0.5rem;
-	padding: 0.7rem 1.05rem;
-	border: 2px solid var(--edge);
-	font-family: var(--mono);
-	font-size: 0.72rem;
-	letter-spacing: 0.05em;
-	text-transform: uppercase;
-	transition:
-		background 0.2s var(--ease),
-		color 0.2s var(--ease),
-		border-color 0.2s var(--ease);
-}
-
-/* `--node` rather than `--edge`: teal-600 on `--ink` only reaches 3.86:1. */
-.btn-primary {
-	background: var(--node);
-	border-color: var(--node);
-	color: var(--ink);
-}
-
-.btn-primary:hover {
-	background: var(--node-bright);
-	border-color: var(--node-bright);
-}
-
-.btn-ghost:hover {
-	border-color: var(--node);
-	color: var(--node);
+	gap: 12px 28px;
 }
 
 .cli {
 	display: inline-flex;
-	flex-direction: column;
-	align-items: stretch;
-	max-width: 100%;
-	border: 1px solid var(--line);
-	background: var(--elevated);
-	font-family: var(--mono);
-}
-
-.cli-tabs {
-	display: flex;
-	border-bottom: 1px solid var(--line);
-}
-
-.cli-tabs button {
-	padding: 0.5rem 0.85rem;
-	border: 0;
-	border-bottom: 2px solid transparent;
-	background: transparent;
-	color: var(--muted);
-	font-family: var(--mono);
-	font-size: 0.7rem;
-	letter-spacing: 0.06em;
-	cursor: pointer;
-}
-
-.cli-tabs button:hover {
-	color: var(--text);
-}
-
-.cli-tabs button[aria-selected="true"] {
-	border-bottom-color: var(--node);
-	color: var(--node);
-}
-
-.cli-body {
-	display: flex;
 	align-items: center;
-	gap: 0.65rem;
-	padding: 0.65rem 0.85rem;
-	overflow-x: auto;
-}
-
-.cli-body code {
-	display: flex;
-	gap: 0.5rem;
-	color: var(--node);
-	font-size: 0.75rem;
-	white-space: nowrap;
-}
-
-.cli-copy {
-	flex-shrink: 0;
-	margin-left: auto;
-	min-width: 2.75rem;
-	min-height: 1.75rem;
-	padding: 0.25rem 0.4rem;
+	gap: 14px;
+	max-width: 100%;
+	padding: 16px 20px;
 	border: 0;
-	background: transparent;
-	color: var(--muted);
-	font-family: var(--mono);
-	font-size: 0.65rem;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
+	border-radius: 999px;
+	background: var(--cli-bg);
+	color: var(--white);
+	font: 400 16px/1.2 var(--mono);
+	text-align: start;
+	white-space: nowrap;
 	cursor: pointer;
+	transition: transform 0.2s var(--ease);
 }
 
-.cli-copy:hover {
-	color: var(--node);
+@media (max-width: 420px) {
+	.cli {
+		gap: 10px;
+		padding: 14px 16px;
+		/* The full pnpm command fits on one line down to 320px. */
+		font-size: clamp(12px, 3.6vw, 14px);
+	}
 }
 
-.section {
-	padding: clamp(3.5rem, 8vw, 5.5rem) clamp(1.25rem, 4vw, 3rem);
+.cli:active {
+	transform: scale(0.98);
 }
 
-.section-inner {
-	width: min(68rem, 100%);
-	margin-inline: auto;
+.cli__prompt {
+	color: var(--cli-prompt);
 }
 
-.section-kicker {
-	margin: 0 0 0.65rem;
-	font-family: var(--mono);
-	font-size: 0.7rem;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
-	color: var(--edge);
+.cli--light {
+	background: var(--white);
+	color: var(--navy);
 }
 
-.section-title {
-	margin: 0 0 0.75rem;
-	font-size: clamp(1.5rem, 3vw, 2rem);
-	letter-spacing: -0.025em;
-	line-height: 1.15;
+.cli--light .cli__prompt {
+	color: var(--green-text);
 }
 
-.section-lede {
-	margin: 0 0 2rem;
-	max-width: 36rem;
-	color: var(--muted);
+.cli__icon {
+	width: 16px;
+	height: 16px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.5;
+	opacity: 0.85;
 }
 
-.pillars {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-	gap: 1.5rem 1.75rem;
-	margin: 0;
-	padding: 0;
-	list-style: none;
+.cli[data-copied]::after {
+	content: "Copied";
+	color: var(--cli-prompt);
+	font-size: 13px;
 }
 
-.pillars li {
-	padding-top: 1rem;
-	border-top: 1px solid var(--line);
+.cli[data-copy-failed]::after {
+	content: "Copy failed";
+	color: var(--cli-prompt);
+	font-size: 13px;
 }
 
-.pillars strong {
-	display: block;
-	margin-bottom: 0.35rem;
-	font-size: 1rem;
-	letter-spacing: -0.01em;
+.cli--light:is([data-copied], [data-copy-failed])::after {
+	color: var(--green-text);
 }
 
-.pillars p {
-	margin: 0;
-	color: var(--muted);
-	font-size: 0.92rem;
-}
-
-.built-on {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 0.5rem 0.65rem;
-	margin: 0;
-	padding: 0;
-	list-style: none;
-}
-
-.built-on li {
-	padding: 0.35rem 0.55rem;
-	border: 1px solid var(--line);
-	font-family: var(--mono);
-	font-size: 0.68rem;
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
-	color: var(--muted);
-}
-
-.v0-note {
-	padding: 1.25rem 0 0;
-	border-top: 1px solid var(--line);
-	font-family: var(--mono);
-	font-size: 0.72rem;
-	letter-spacing: 0.04em;
-	color: var(--muted);
-}
-
-.v0-note strong {
-	color: var(--node);
+.link-arrow {
+	font-size: 17px;
 	font-weight: 700;
 }
 
-.close {
-	padding: clamp(3rem, 7vw, 4.5rem) clamp(1.25rem, 4vw, 3rem);
-	border-top: 1px solid var(--line);
-	background: var(--elevated);
+.link-arrow span {
+	display: inline-block;
+	transition: transform 0.2s var(--ease);
 }
 
-.close-inner {
-	width: min(68rem, 100%);
-	margin-inline: auto;
-	display: flex;
-	flex-wrap: wrap;
-	align-items: end;
-	justify-content: space-between;
-	gap: 1.5rem;
+.link-arrow:hover span {
+	transform: translateX(3px);
 }
 
-.close h2 {
-	margin: 0 0 0.5rem;
-	font-size: clamp(1.35rem, 2.5vw, 1.75rem);
-	letter-spacing: -0.02em;
+/* ---- Diagrams ---- */
+
+.tree-wrap {
+	padding-top: 40px;
+	padding-bottom: clamp(4rem, 8vw, 6rem);
 }
 
-.close p {
-	margin: 0;
-	color: var(--muted);
-	max-width: 28rem;
-}
-
-.code-panel {
-	border: 1px solid var(--line);
-	background: color-mix(in oklab, var(--elevated) 88%, #000);
+.diagram {
+	border-radius: 24px;
+	background: var(--raised);
+	box-shadow: inset 0 0 0 1px var(--raised-line);
 	overflow: hidden;
 }
 
-.code-panel__bar {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 0.75rem;
-	padding: 0.55rem 0.85rem;
-	border-bottom: 1px solid var(--line);
-	font-family: var(--mono);
-	font-size: 0.65rem;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
-	color: var(--muted);
+.diagram--hero {
+	margin-bottom: clamp(3rem, 6vw, 5rem);
 }
 
-.code-panel pre {
-	margin: 0;
-	padding: 1rem 1.1rem 1.15rem;
+/* Narrow screens scroll the diagram sideways instead of shrinking its labels. */
+.diagram__scroll {
 	overflow-x: auto;
-	font-family: var(--mono);
-	font-size: 0.72rem;
-	line-height: 1.55;
-	color: #c5cad6;
+	overscroll-behavior-x: contain;
 }
 
-.code-panel .kw {
-	color: var(--node);
-}
-
-.code-panel .str {
-	color: #7dd3c0;
-}
-
-.code-panel .cm {
-	color: var(--code-dim);
-}
-
-.code-panel .fn {
-	color: #eceff4;
-}
-
-/* Schematic composition */
-
-.lp-schematic .hero {
-	position: relative;
-	min-height: 100vh;
-	display: grid;
-	align-items: end;
-	padding: clamp(2rem, 5vw, 3.5rem) clamp(1.25rem, 4vw, 3rem) clamp(2.5rem, 6vw, 4rem);
-	overflow: hidden;
-}
-
-.lp-schematic .map {
-	position: absolute;
-	inset: 0;
+.tree {
+	display: block;
 	width: 100%;
-	height: 100%;
-	pointer-events: none;
+	height: auto;
 }
 
-/*
- * Paths carry `pathLength="1"`, so the dash covers the whole edge regardless of
- * its real length. A fixed dasharray left the longer edges visibly broken.
- */
-.lp-schematic .map .edge {
-	fill: none;
-	stroke: color-mix(in oklab, var(--edge) 55%, var(--line));
-	stroke-width: 1.25;
-	stroke-dasharray: 1;
-	stroke-dashoffset: 1;
-	animation: draw-edge 1.2s var(--ease) forwards;
-}
+@media (max-width: 900px) {
+	.diagram--hero .tree {
+		min-width: 860px;
+	}
 
-.lp-schematic .map .edge:nth-of-type(2) {
-	animation-delay: 0.2s;
-}
-.lp-schematic .map .edge:nth-of-type(3) {
-	animation-delay: 0.4s;
-}
-.lp-schematic .map .edge:nth-of-type(4) {
-	animation-delay: 0.6s;
-}
-
-@keyframes draw-edge {
-	to {
-		stroke-dashoffset: 0;
+	.diagram--mw .tree {
+		min-width: 600px;
 	}
 }
 
-.lp-schematic .map .node {
-	fill: var(--bg);
-	stroke: var(--edge);
-	stroke-width: 2;
-	opacity: 0;
-	animation: node-in 0.5s var(--ease) forwards;
-}
-
-.lp-schematic .map .node.lit {
-	fill: var(--node);
-	stroke: var(--node);
-}
-
-/*
- * One rule per circle: with only five, the last two nodes fell back to a zero
- * delay and appeared before the sequence they are meant to conclude.
- */
-.lp-schematic .map .node:nth-of-type(1),
-.lp-schematic .map text:nth-of-type(1) {
-	animation-delay: 0.35s;
-}
-.lp-schematic .map .node:nth-of-type(2),
-.lp-schematic .map text:nth-of-type(2) {
-	animation-delay: 0.45s;
-}
-.lp-schematic .map .node:nth-of-type(3),
-.lp-schematic .map text:nth-of-type(3) {
-	animation-delay: 0.55s;
-}
-.lp-schematic .map .node:nth-of-type(4),
-.lp-schematic .map text:nth-of-type(4) {
-	animation-delay: 0.65s;
-}
-.lp-schematic .map .node:nth-of-type(5),
-.lp-schematic .map text:nth-of-type(5) {
-	animation-delay: 0.75s;
-}
-.lp-schematic .map .node:nth-of-type(6),
-.lp-schematic .map text:nth-of-type(6) {
-	animation-delay: 0.85s;
-}
-.lp-schematic .map .node:nth-of-type(7),
-.lp-schematic .map text:nth-of-type(7) {
-	animation-delay: 0.95s;
-}
-
-@keyframes node-in {
-	to {
-		opacity: 1;
-	}
-}
-
-.lp-schematic .map text {
-	fill: var(--muted);
+.tree text {
+	fill: var(--ink);
 	font-family: var(--mono);
-	font-size: 11px;
-	letter-spacing: 0.06em;
+	font-size: 17px;
+	font-weight: 700;
 	text-anchor: middle;
-	text-transform: uppercase;
-	opacity: 0;
-	animation: node-in 0.4s var(--ease) forwards;
+	dominant-baseline: central;
 }
 
-.lp-schematic .hero-copy {
-	position: relative;
-	z-index: 1;
-	width: min(40rem, 100%);
+.tree--sm text {
+	font-size: 14px;
+}
+
+.tree text.start,
+.tree text.path-text,
+.tree text.note {
+	text-anchor: start;
+}
+
+.tree text.path-text {
+	font-size: 16px;
+	font-weight: 400;
+}
+
+.tree text.muted {
+	fill: var(--quiet);
+}
+
+.tree text.inverse {
+	fill: var(--bg);
+}
+
+.tree text.note {
+	fill: var(--quiet);
+	font-family: var(--font);
+	font-size: 15px;
+	font-weight: 400;
+}
+
+.tree text.note--mono {
+	font-family: var(--mono);
+}
+
+.tree text.badge-text {
+	fill: var(--white);
+	font-size: 13px;
+}
+
+.tree text.tag-text {
+	font-family: var(--font);
+	font-size: 13px;
+}
+
+.tree .edges path,
+.edge-soft,
+.edge-strong {
+	fill: none;
+	stroke-linecap: round;
+}
+
+.tree .edges path {
+	stroke: var(--muted);
+	stroke-width: 2.4;
+}
+
+.edge-soft {
+	stroke: var(--line-soft);
+	stroke-width: 2.4;
+}
+
+.edge-strong {
+	stroke: var(--ink);
+	stroke-width: 3.5;
+}
+
+.pill {
+	fill: var(--bg);
+	stroke: var(--ink);
+	stroke-width: 2;
+}
+
+.pill--soft {
+	stroke: none;
+}
+
+.pill--muted {
+	stroke: var(--line-soft);
+}
+
+.pill--ink {
+	fill: var(--ink);
+}
+
+.pill--tag {
+	fill: var(--bg);
+	stroke: var(--ink);
+	stroke-width: 1.5;
+}
+
+.joint {
+	fill: var(--ink);
+}
+
+.joint--muted {
+	fill: var(--muted);
+}
+
+.badge--get {
+	fill: var(--green-text);
+}
+
+/* Not --blue: its dark-mode tint drops the white label below 4.5:1. */
+.badge--post {
+	fill: #0072ce;
+}
+
+/* ---- Code pair ---- */
+
+.code-pair {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr));
+	gap: 24px;
+}
+
+.code-card {
+	min-width: 0;
+	padding: 22px 28px;
+	border-radius: 16px;
+	background: var(--panel);
+	box-shadow: inset 0 0 0 1px var(--panel-line);
+	color: var(--code);
+}
+
+.code-card__head {
+	display: flex;
+	justify-content: space-between;
+	gap: 1rem;
+	padding-bottom: 12px;
+	margin-bottom: 16px;
+	border-bottom: 1px solid var(--code-line);
+	color: var(--code-bright);
+	font: 700 14px var(--mono);
+}
+
+.code-card__tag {
+	color: var(--code);
+	font-size: 13px;
+	font-weight: 400;
+}
+
+.code-card pre {
+	overflow-x: auto;
+	font-size: 14px;
+	line-height: 24px;
+}
+
+/* ---- Facts ---- */
+
+.facts {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+	gap: 24px;
+	padding-bottom: clamp(4rem, 8vw, 6rem);
+}
+
+.fact {
+	display: grid;
+	align-content: start;
+	gap: 12px;
+}
+
+.fact::before {
+	content: "";
+	width: 32px;
+	height: 6px;
+	border-radius: 999px;
+	background: var(--ink);
+}
+
+.fact h3 {
+	font-size: 22px;
+	font-weight: 800;
+}
+
+.fact p,
+.step p {
+	color: var(--text);
+	font-size: 16px;
+	line-height: 25px;
+}
+
+/* ---- Read the tree: the cycling URL ---- */
+
+.url {
+	container-type: inline-size;
+	display: flex;
+}
+
+/* The widest example is ~12.7em at full size; 7.6cqi keeps every one inside the column. */
+.url__seg {
 	display: flex;
 	flex-direction: column;
-	gap: 1.15rem;
-	padding: 1.5rem 0 0;
-	background: linear-gradient(
-		180deg,
-		transparent,
-		color-mix(in oklab, var(--bg) 92%, transparent) 18%,
-		var(--bg)
-	);
+	flex-shrink: 0;
+	overflow: hidden;
+	font-size: min(88px, 7.6cqi);
 }
 
-.lp-schematic .compare {
-	display: grid;
-	grid-template-columns: 1fr;
-	gap: 1rem;
+.url__text {
+	align-self: flex-start;
+	color: var(--ink);
+	font-size: inherit;
+	font-weight: 900;
+	letter-spacing: -0.034em;
+	line-height: 1.2;
+	white-space: nowrap;
+	/* Holds the line while the text is deleted and retyped. */
+	min-height: 1.2em;
 }
 
-@media (min-width: 800px) {
-	.lp-schematic .compare {
-		grid-template-columns: 1fr 1fr;
-	}
+.url__bar {
+	height: 6px;
+	margin: clamp(0.5rem, 1.6cqi, 1rem) 4px 6px;
+	border-radius: 999px;
+	background: var(--ink);
 }
 
-/*
- * The "without Routa" panel is de-emphasised by dropping syntax colour rather
- * than by lowering opacity, which previously pushed its text to 1.66:1.
- */
-.lp-schematic .compare .code-panel:first-child pre {
+/* Captions follow the segment's width instead of widening it. */
+.url__file,
+.url__desc {
+	width: 0;
+	min-width: calc(100% - 8px);
+	margin-inline: 4px;
+	overflow-wrap: anywhere;
+}
+
+.url__file {
+	color: var(--ink);
+	min-height: 1.3em;
+	font: 700 clamp(12px, 1.4cqi, 16px) / 1.3 var(--mono);
+}
+
+.url__desc {
+	margin-top: 2px;
+	color: var(--quiet);
+	font-size: clamp(12px, 1.3cqi, 15px);
+	line-height: 1.35;
+}
+
+.url__seg.is-param .url__text {
 	color: var(--muted);
 }
 
-.lp-schematic .compare .code-panel:first-child :is(.kw, .str, .fn) {
-	color: inherit;
+.url__seg.is-param .url__bar {
+	background: var(--muted);
 }
 
-.lp-schematic .compare .code-panel:last-child {
-	border-color: color-mix(in oklab, var(--edge) 45%, var(--line));
+.url__toggle {
+	margin-top: 2rem;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--quiet);
+	font: 600 14px var(--font);
+	text-decoration: underline;
+	text-underline-offset: 3px;
+	cursor: pointer;
 }
 
-/*
- * Declared last and marked `!important`: the previous universal-selector reset
- * lost to every class-based rule, so nothing was actually reduced. Keeping a
- * near-zero duration rather than `none` preserves each animation's end state.
- */
+.url__toggle:hover {
+	color: var(--ink);
+}
+
+/* ---- Steps ---- */
+
+.steps {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+	gap: 24px;
+}
+
+.step {
+	display: grid;
+	align-content: start;
+	justify-items: start;
+	gap: 14px;
+	padding: 28px;
+	border-radius: 24px;
+	background: var(--raised);
+	box-shadow: inset 0 0 0 1px var(--raised-line);
+}
+
+.step__num {
+	color: var(--quiet);
+	font-size: 14px;
+	font-weight: 700;
+}
+
+.step h3 {
+	font-size: 24px;
+	font-weight: 800;
+}
+
+.snippet {
+	display: inline-block;
+	max-width: 100%;
+	padding: 10px 16px;
+	/* Not a full pill: long commands wrap on narrow cards. */
+	border-radius: 16px;
+	background: var(--chip);
+	box-shadow: inset 0 0 0 1px var(--chip-line);
+	color: var(--code-bright);
+	font-size: 13px;
+	overflow-wrap: anywhere;
+}
+
+.snippet--block {
+	padding: 14px 18px;
+	border-radius: 12px;
+	font-size: 15px;
+}
+
+/* ---- Named outcomes ---- */
+
+.outcomes {
+	display: grid;
+	gap: 4px;
+	margin-bottom: 48px;
+}
+
+.outcome {
+	display: grid;
+	grid-template-columns: minmax(0, 300px) auto minmax(0, 1fr);
+	align-items: center;
+	column-gap: 32px;
+	padding-block: 10px;
+}
+
+.outcome__name {
+	font-size: clamp(2rem, 4.5vw, 3.5rem);
+	font-weight: 900;
+	letter-spacing: -0.027em;
+	line-height: 1.2;
+}
+
+.outcome__status {
+	display: flex;
+	align-items: center;
+	gap: 32px;
+}
+
+.outcome__arrow {
+	width: 88px;
+	height: 24px;
+	fill: none;
+	stroke: var(--muted);
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.outcome__code {
+	width: 110px;
+	color: var(--muted);
+	font: 700 clamp(1.75rem, 3.2vw, 2.5rem) var(--mono);
+}
+
+.outcome__desc {
+	color: var(--text);
+	font-size: 18px;
+}
+
+@media (max-width: 720px) {
+	.outcome {
+		grid-template-columns: 1fr auto;
+		row-gap: 2px;
+		padding-block: 12px;
+	}
+
+	.outcome__status {
+		gap: 14px;
+	}
+
+	.outcome__arrow {
+		width: 48px;
+	}
+
+	.outcome__code {
+		width: auto;
+	}
+
+	.outcome__desc {
+		grid-column: 1 / -1;
+		font-size: 16px;
+	}
+}
+
+/* ---- Middleware ---- */
+
+.split {
+	display: grid;
+	grid-template-columns: minmax(0, 440px) minmax(0, 1fr);
+	align-items: center;
+	gap: 56px;
+}
+
+.split__copy {
+	display: grid;
+	justify-items: start;
+	gap: 16px;
+}
+
+.split__copy .snippet--block {
+	font-size: 14px;
+}
+
+@media (max-width: 960px) {
+	.split {
+		grid-template-columns: 1fr;
+		gap: 40px;
+	}
+}
+
+/* ---- Diagnostics ---- */
+
+.diagnostics {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+	gap: 20px;
+}
+
+.diagnostic {
+	display: grid;
+	align-content: start;
+	gap: 8px;
+	padding: 24px;
+	border-radius: 12px;
+	background: var(--code-deep);
+	box-shadow: inset 0 0 0 1px var(--panel-line);
+	font-family: var(--mono);
+	font-size: 14px;
+	line-height: 22px;
+	overflow-wrap: anywhere;
+}
+
+.diagnostic__code {
+	color: var(--error);
+	font-weight: 700;
+}
+
+.diagnostic__file {
+	color: var(--code);
+}
+
+.diagnostic__msg {
+	color: var(--code-bright);
+}
+
+.diagnostic__fix {
+	margin-top: 4px;
+	padding-top: 12px;
+	border-top: 1px solid var(--code-line);
+	color: var(--mint);
+	font-size: 13px;
+	line-height: 20px;
+}
+
+/* ---- Sources table ---- */
+
+.heading--split {
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+	align-items: end;
+	gap: 12px 64px;
+}
+
+.heading--split .body {
+	max-width: 520px;
+}
+
+.sources {
+	width: 100%;
+	border-collapse: collapse;
+	text-align: left;
+}
+
+.sources thead th {
+	padding: 12px 0;
+	border-bottom: 2px solid var(--ink);
+	color: var(--quiet);
+	font: 700 12px var(--mono);
+	letter-spacing: 1px;
+	text-transform: uppercase;
+}
+
+.sources tbody th,
+.sources td {
+	padding: 18px 16px 18px 0;
+	border-bottom: 1px solid var(--line);
+	vertical-align: baseline;
+}
+
+.sources tbody th {
+	width: 200px;
+	font-size: 17px;
+	font-weight: 800;
+}
+
+.sources td {
+	color: var(--text);
+	font-size: 16px;
+}
+
+.sources td:nth-child(2) {
+	width: 420px;
+}
+
+.sources code {
+	font-size: 14px;
+	overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+	.sources thead {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+	}
+
+	.sources tr {
+		display: grid;
+		gap: 4px;
+		padding: 16px 0;
+		border-bottom: 1px solid var(--line);
+	}
+
+	.sources tbody th,
+	.sources td {
+		width: auto !important;
+		padding: 0;
+		border: 0;
+	}
+}
+
+/* ---- Ownership ---- */
+
+.owners {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+	gap: 24px;
+}
+
+.owner {
+	padding: 32px;
+	border-radius: 24px;
+	background: var(--card);
+	box-shadow: inset 0 0 0 1px var(--raised-line);
+}
+
+.owner__head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 18px;
+	font-size: 24px;
+	font-weight: 900;
+}
+
+.owner__ring {
+	width: 14px;
+	height: 14px;
+	margin-inline: 7px;
+	border: 2px solid var(--ink);
+	border-radius: 50%;
+}
+
+.owner li {
+	padding: 12px 0;
+	color: var(--text);
+	font-size: 18px;
+}
+
+.owner li + li {
+	border-top: 1px solid var(--line);
+}
+
+/* ---- Get started ---- */
+
+.cta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 32px;
+	padding: clamp(2.5rem, 5vw, 3.5rem) clamp(1.5rem, 5vw, 4rem);
+	border-radius: 32px;
+	background: var(--panel);
+	box-shadow: inset 0 0 0 1px var(--panel-line);
+	color: var(--white);
+}
+
+.cta .sub {
+	margin-top: 12px;
+	color: var(--code);
+	font-size: 18px;
+}
+
+/* ---- Footer ---- */
+
+.footer {
+	padding: 56px 0 36px;
+	border-top: 1px solid var(--line);
+}
+
+.footer__cols {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) repeat(3, minmax(0, 200px));
+	gap: 40px;
+}
+
+.footer__brand {
+	display: grid;
+	align-content: start;
+	gap: 12px;
+}
+
+.footer__brand p,
+.footer li,
+.footer__legal {
+	color: var(--quiet);
+	font-size: 15px;
+}
+
+.footer h2 {
+	margin-bottom: 10px;
+	font-size: 13px;
+	font-weight: 800;
+}
+
+.footer ul {
+	display: grid;
+	gap: 10px;
+}
+
+.footer__legal {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	gap: 8px;
+	margin-top: 40px;
+	padding-top: 20px;
+	border-top: 1px solid var(--line);
+	font-size: 13px;
+}
+
+@media (max-width: 720px) {
+	.nav__extra {
+		display: none;
+	}
+
+	.footer__cols {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.footer__brand {
+		grid-column: 1 / -1;
+	}
+}
+
+/* ---- Motion ---- */
+
 @media (prefers-reduced-motion: reduce) {
 	html {
 		scroll-behavior: auto;
 	}
 
-	*,
-	*::before,
-	*::after {
-		animation-delay: 0ms !important;
-		animation-duration: 0.01ms !important;
-		animation-iteration-count: 1 !important;
-		scroll-behavior: auto !important;
-		transition-duration: 0.01ms !important;
+	/* No slides, presses or nudges; the nav command still shows and hides, instantly. */
+	.cli,
+	.cli--nav,
+	.link-arrow span {
+		transition: none;
+	}
+
+	.cli:active,
+	.cli--nav,
+	.link-arrow:hover span {
+		transform: none;
+	}
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	/* The nav mark draws its branch once on load. */
+	.nav .routa-logo__branch {
+		stroke-dasharray: 1;
+		animation: draw 0.6s var(--ease) 0.15s backwards;
+	}
+
+	.nav .routa-logo__dot {
+		transform-box: fill-box;
+		transform-origin: center;
+		animation: pop 0.35s var(--ease) 0.65s backwards;
+	}
+
+	/* The hero tree grows from src/routes/ out to its files. */
+	.diagram--hero .draw {
+		stroke-dasharray: 1;
+		animation: draw 0.5s var(--ease) var(--d, 0s) backwards;
+	}
+
+	.diagram--hero .pop {
+		animation: fade-in 0.4s var(--ease) var(--d, 0s) backwards;
+	}
+
+	/* Scroll-revealed diagrams: arrows and covered branches draw in, and replay each
+	   time the block scrolls back to the middle of the viewport. Where CSS
+	   scroll-triggered animations exist, the block is its own trigger: it plays when
+	   its middle reaches the middle of the viewport (cover 40%–60%), from either
+	   direction, and resets once it is fully out of view. */
+	@supports (animation-trigger: --t replay reset) {
+		.outcomes {
+			timeline-trigger: --outcomes view() cover 40% cover 60% / cover;
+		}
+
+		.diagram--mw {
+			timeline-trigger: --middleware view() cover 40% cover 60% / cover;
+		}
+
+		[data-reveal] .draw {
+			stroke-dasharray: 1;
+			animation: draw 0.55s var(--ease) var(--d, 0s) both;
+		}
+
+		[data-reveal] .fade {
+			animation: fade-in 0.4s var(--ease) var(--d, 0s) both;
+		}
+
+		.outcome .draw--head {
+			animation-delay: calc(var(--d, 0s) + 0.35s);
+		}
+
+		.outcome .fade {
+			animation-delay: calc(var(--d, 0s) + 0.45s);
+		}
+
+		/* After the animation shorthand, which resets animation-trigger. */
+		.outcomes :is(.draw, .fade) {
+			animation-trigger: --outcomes replay reset;
+		}
+
+		.diagram--mw :is(.draw, .fade) {
+			animation-trigger: --middleware replay reset;
+		}
+	}
+
+	/* Elsewhere a small observer toggles data-reveal both ways. */
+	@supports not (animation-trigger: --t replay reset) {
+		[data-reveal] .draw {
+			stroke-dasharray: 1;
+			stroke-dashoffset: 0;
+			transition: stroke-dashoffset 0.55s var(--ease) var(--d, 0s);
+		}
+
+		[data-reveal] .fade {
+			transition: opacity 0.4s var(--ease) var(--d, 0s);
+		}
+
+		.outcome .draw--head {
+			transition-delay: calc(var(--d, 0s) + 0.35s);
+		}
+
+		.outcome .fade {
+			transition-delay: calc(var(--d, 0s) + 0.45s);
+		}
+
+		[data-reveal="pending"] .draw {
+			stroke-dashoffset: 1;
+		}
+
+		[data-reveal="pending"] .fade {
+			opacity: 0;
+		}
+	}
+
+	/* "Read the tree": the underline follows the typed text; a caret marks where typing is. */
+	.url__bar {
+		transition:
+			width 0.08s linear,
+			background-color 0.3s ease;
+	}
+
+	.url .is-typing::after {
+		content: "";
+		display: inline-block;
+		width: max(2px, 0.06em);
+		/* Short enough to sit inside the line box, so the caret never changes its height. */
+		height: 0.8em;
+		margin-left: 0.05em;
+		vertical-align: -0.04em;
+		background: currentColor;
+		animation: caret 1s steps(1) infinite;
+	}
+
+	.url.is-paused .is-typing::after {
+		animation: none;
+	}
+}
+
+@keyframes caret {
+	50% {
+		opacity: 0;
+	}
+}
+
+@keyframes draw {
+	from {
+		stroke-dashoffset: 1;
+	}
+	to {
+		stroke-dashoffset: 0;
+	}
+}
+
+@keyframes pop {
+	from {
+		opacity: 0;
+		transform: scale(0.4);
+	}
+}
+
+@keyframes fade-in {
+	from {
+		opacity: 0;
 	}
 }
