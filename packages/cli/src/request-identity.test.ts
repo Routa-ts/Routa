@@ -329,14 +329,26 @@ export const logger = createLogger({ sink: () => {} });
 				}
 				if (status === 410) {
 					// The optional declared header is sent and documented.
-					expect(documentedResponse!.headers?.["x-gone-since"], label).toMatchObject({
-						schema: { type: "string" },
-					});
+					const goneSince = documentedResponse!.headers?.["x-gone-since"] as
+						| { required?: boolean; schema?: unknown }
+						| undefined;
+					expect(goneSince?.schema, label).toEqual({ type: "string" });
+					expect(goneSince?.required ?? false, label).toBe(false);
 					expect(response.headers.get("x-gone-since"), label).toBe("2026-01-01");
 				}
 				if (status === 200) {
 					// The authenticated principal reaches the handler, and the body matches its schema.
 					expect(await response.json(), label).toEqual({ id: "svc_cert" });
+					expect(
+						(documentedResponse as { content?: Record<string, { schema?: unknown }> }).content?.[
+							"application/json"
+						]?.schema,
+						label,
+					).toMatchObject({
+						type: "object",
+						required: ["id"],
+						properties: { id: { type: "string" } },
+					});
 					// The outcome's declared header matches what OpenAPI documents for it.
 					expect(documentedResponse!.headers?.["etag"], label).toMatchObject({
 						required: true,
