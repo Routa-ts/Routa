@@ -322,7 +322,10 @@ export const logger = createLogger({ sink: () => {} });
 						schema: { type: "string" },
 					});
 					expect(response.headers.get("etag"), label).toBe('"v1"');
-					expect(response.headers.get("set-cookie"), label).toContain("seen=yes");
+					// The declared cookie keeps every attribute its handle declares.
+					expect(response.headers.get("set-cookie"), label).toBe(
+						"seen=yes; Path=/; HttpOnly; Secure; SameSite=Lax",
+					);
 					expect(Object.keys(documentedResponse!.headers!), label).toContain("Set-Cookie");
 				}
 			}
