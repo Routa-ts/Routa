@@ -31,7 +31,7 @@ export type RoutaLogSink = (event: RoutaLogEvent) => void;
  * Marks loggers `createLogger` returned. It exists only in types: no value carries it, so an
  * object written by hand cannot satisfy {@link RoutaLogger}.
  */
-declare const createdByCreateLogger: unique symbol;
+declare const useCreateLoggerWithASink: unique symbol;
 
 /**
  * A logger `createLogger` returned. Every event any of its methods writes, including its children's,
@@ -39,7 +39,7 @@ declare const createdByCreateLogger: unique symbol;
  * events to another backend from a sink. The logger is frozen, so its methods cannot be replaced.
  */
 export type RoutaLogger = {
-	readonly [createdByCreateLogger]: true;
+	readonly [useCreateLoggerWithASink]: true;
 	readonly log: (event: RoutaLogEvent) => void;
 	readonly trace: (event: string, message: string, data?: RoutaLogData) => void;
 	readonly debug: (event: string, message: string, data?: RoutaLogData) => void;
@@ -187,7 +187,7 @@ export function createLogger(options: CreateLoggerOptions = {}): RoutaLogger {
 			}
 		}
 
-		const logger: Omit<RoutaLogger, typeof createdByCreateLogger> = {
+		const logger: Omit<RoutaLogger, typeof useCreateLoggerWithASink> = {
 			log: (input) =>
 				deliver(() => {
 					const level = ownValue(input, "level");
@@ -238,7 +238,7 @@ export function createLogger(options: CreateLoggerOptions = {}): RoutaLogger {
  */
 function createDisabledLogger(): RoutaLogger {
 	const ignore = (): void => undefined;
-	const methods: Omit<RoutaLogger, typeof createdByCreateLogger> = {
+	const methods: Omit<RoutaLogger, typeof useCreateLoggerWithASink> = {
 		log: ignore,
 		trace: ignore,
 		debug: ignore,
