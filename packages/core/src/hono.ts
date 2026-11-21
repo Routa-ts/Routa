@@ -143,6 +143,8 @@ export async function createApplication(
 			"Omit logger to turn logging off.",
 		);
 	}
+	// Read before the services factory runs, so the factory cannot change the header requests use.
+	const correlationHeader = correlationHeaderOf(appOptions.correlation);
 	const logger = requestLogger ?? createLogger({ enabled: false });
 	const scope = createCleanupScope();
 	const services =
@@ -157,7 +159,7 @@ export async function createApplication(
 	let app: Hono;
 
 	try {
-		app = honoApp(routes, appOptions, services, requestLogger);
+		app = honoApp(routes, appOptions, services, requestLogger, correlationHeader);
 	} catch (error) {
 		await scope.release().catch((cleanupError: unknown) => logCleanupFailure(logger, cleanupError));
 		throw error;
@@ -224,25 +226,27 @@ export function createHonoApp(
 	if (logger !== undefined) {
 		assertCreatedLogger(logger, "createHonoApp received", "Omit logger to turn logging off.");
 	}
-	return honoApp(routes, options, undefined, logger);
+	return honoApp(routes, options, undefined, logger, correlationHeaderOf(options.correlation));
 }
 
 /**
- * @param options - Read as given, except for its logger
+ * @param options - Read as given, except for its logger and correlation
  * @param requestLogger - The logger already read from the options and checked, so a later change
  *   to them cannot replace it
+ * @param correlationHeader - The correlation header already read from the options and checked,
+ *   for the same reason
  */
 function honoApp(
 	routes: readonly HonoRoute[],
-	options: Omit<CreateHonoAppOptions, "logger">,
+	options: Omit<CreateHonoAppOptions, "logger" | "correlation">,
 	services: ServiceMapping | undefined,
 	requestLogger: RoutaLogger | undefined,
+	correlationHeader: string | undefined,
 ): Hono {
 	const app = new Hono();
 	const methodsByPath = new Map<string, Set<string>>();
 	const routeLogger = requestLogger ?? createLogger({ enabled: false });
 	const validateResponses = shouldValidateResponses(options);
-	const correlationHeader = correlationHeaderOf(options.correlation);
 	const authentication =
 		options.authentication === undefined
 			? undefined

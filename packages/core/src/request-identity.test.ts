@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
-import { createApplication, createHonoApp, type HonoRoute } from "./hono.js";
+import {
+	createApplication,
+	createHonoApp,
+	createProjectApplication,
+	type HonoRoute,
+} from "./hono.js";
 import {
 	bearer,
 	createMiddleware,
@@ -629,6 +634,49 @@ describe("correlation identity", () => {
 
 		expect(ignored.headers.get("x-trace-ref")).toBe("written");
 		expect(accepted.headers.get("x-trace-ref")).toBe("trace-1");
+	});
+
+	it("LOG-AC-08 echoes the header startup checked, whatever the services factory changes later", async () => {
+		// Each factory changes the correlation config after startup checked it.
+		const changing = (correlation: { header: string }) => () => {
+			correlation.header = "x-other";
+			return { clock: {} };
+		};
+		const projected = { header: "x-trace-ref" };
+		const direct = { header: "x-trace-ref" };
+		const modules: Record<string, unknown> = {
+			".routa/routes.gen.ts": {
+				routaCorrelationHeader: "x-trace-ref",
+				routaApplicationServices: ["clock"],
+				routaRoutes: [
+					{ file: "src/routes/echo/route.ts", path: "/echo", methods: ["GET"], middlewareFiles: [] },
+				],
+			},
+			"src/routa.ts": {
+				default: { logger: false, correlation: projected, services: changing(projected) },
+			},
+			"src/routes/echo/route.ts": { default: { get: echoRoute.contract } },
+		};
+		const applications = [
+			(await createProjectApplication(async (file) => modules[file], { runtimeMode: "start" }))
+				.application,
+			await createApplication([echoRoute], {
+				correlation: direct,
+				services: { factory: changing(direct), names: ["clock"] },
+			}),
+		];
+
+		for (const application of applications) {
+			const response = await application.fetch(
+				new Request("http://localhost/echo", {
+					headers: { "x-trace-ref": "trace-1", "x-other": "forged" },
+				}),
+			);
+
+			expect(response.headers.get("x-trace-ref")).toBe("trace-1");
+			expect(response.headers.get("x-other")).toBeNull();
+			await application.dispose();
+		}
 	});
 
 	it("LOG-AC-10 owns the correlation header over a declaration or handler that claims it", async () => {

@@ -138,7 +138,8 @@ correlation?: boolean | { header: string }
 
 Whether Routa accepts a caller's correlation ID, and from which request header. Off unless
 set. `true` reads `x-correlation-id`; `{ header: "x-trace-ref" }` reads another header. Header
-names compare case-insensitively.
+names compare case-insensitively. Routa reads the value once at startup, before the services
+factory runs, so later changes to the config object have no effect.
 
 Routa accepts the header's value when it is one value of 1 to 128 ASCII letters, digits, `.`,
 `_`, or `-`. It then exposes the value as `ctx.correlationId`, binds it to the request logger,

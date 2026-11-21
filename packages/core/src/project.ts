@@ -125,13 +125,14 @@ export async function buildProjectApplication(
 		replacement: replacements.services,
 	});
 	assertAuthenticationMetadata(config.authentication, metadata);
-	// Read once, so the correlation checked here is the one the application uses.
-	const correlation = config.correlation;
-	assertCorrelationMetadata(correlation, metadata);
+	// Read once into a value of Routa's own, so the header checked here is the one requests use,
+	// whatever code changes the config later.
+	const correlationHeader = correlationHeaderOf(config.correlation);
+	assertCorrelationMetadata(correlationHeader, metadata);
 	const application = await createApplication(routes, {
 		runtimeMode: options.runtimeMode,
 		...(config.authentication && { authentication: config.authentication }),
-		...(correlation !== undefined && { correlation }),
+		...(correlationHeader !== undefined && { correlation: { header: correlationHeader } }),
 		...(logger && { logger }),
 		...(config.lifecycleHeaders !== undefined && { lifecycleHeaders: config.lifecycleHeaders }),
 		...(config.responseValidation && { responseValidation: config.responseValidation }),
@@ -192,13 +193,10 @@ function assertAuthenticationMetadata(
  * Checks that `src/routa.ts` reads correlation from the header `routa generate` read, so generated
  * OpenAPI documents the header the running application echoes.
  *
- * @throws When the correlation config is invalid, or it and the generated metadata disagree
+ * @param configured - The lowercase header `src/routa.ts` configures, already validated
+ * @throws When it and the generated metadata disagree
  */
-function assertCorrelationMetadata(
-	correlation: RoutaConfig["correlation"],
-	metadata: MetadataModule,
-): void {
-	const configured = correlationHeaderOf(correlation);
+function assertCorrelationMetadata(configured: string | undefined, metadata: MetadataModule): void {
 	const generated = metadata.routaCorrelationHeader;
 
 	if (configured === generated) {
