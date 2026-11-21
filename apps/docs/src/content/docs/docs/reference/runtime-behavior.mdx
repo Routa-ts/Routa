@@ -135,11 +135,13 @@ wraps each of that app's handlers and finalizes an unanswered request as an empt
 Routa then identifies and logs with that status. Answer every request inside an app that sets
 `onError()` before you mount it.
 
-Give a mounted Routa app the same `correlation` setting as the app you mount it in: both off,
-or the same header name in any casing. Each app checks its correlation header only against its
-own credential schemes and declared response headers, so only the same setting lets those checks
-cover the mounted app. When the settings differ, the mounted app answers every request that
-reaches it, whether a Routa route, a Hono handler you added to it, or nothing would answer it,
+When the app you mount a Routa app in correlates, give the mounted app the same header name, in
+any casing. Each app checks its correlation header only against its own credential schemes and
+declared response headers, so only the same header lets those checks cover the mounted app. When
+the outer app has correlation off, it never echoes or logs a correlation ID, so the mounted app
+shares its identity without one, whatever its own setting. When the outer app correlates on a
+header the mounted app does not, including when the mounted app has correlation off, the mounted
+app answers every request that reaches it, whether a Routa route, a Hono handler you added to it, or nothing would answer it,
 with Routa's internal `500` problem, logged with the `[Unmatched]` route. The response keeps its `x-request-id`, and the outer app
 neither echoes nor logs a correlation ID for it, so a credential the mounted app reads from that
 header never reaches the response or the logs. The mounted app logs `http.error` and calls its `onRequestError` with
