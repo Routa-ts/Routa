@@ -382,6 +382,66 @@ describe("correlation config", () => {
 		}
 	});
 
+	it("LOG-AC-11 reads correlation in a createRouta that a local module re-exports from @routa-ts/core", async () => {
+		const reexport = 'export { createRouta } from "@routa-ts/core";\n';
+		const local = 'import { createRouta } from "./config-helpers.js";\n';
+
+		for (const [helpers, routa, header] of [
+			[reexport, `${local}export default createRouta({ port: 3000 });\n`, undefined],
+			[
+				reexport,
+				`${local}export default createRouta({ correlation: { header: "X-Trace-Ref" } });\n`,
+				"x-trace-ref",
+			],
+			[
+				reexport,
+				`${local}const shared = createRouta({ correlation: true });\nexport default createRouta({ port: 3000, ...shared });\n`,
+				"x-correlation-id",
+			],
+			[
+				'export { createRouta as defineApi } from "@routa-ts/core";\n',
+				'import { defineApi } from "./config-helpers.js";\nexport default defineApi({ correlation: true });\n',
+				"x-correlation-id",
+			],
+			[
+				'export * from "@routa-ts/core";\n',
+				'import * as helpers from "./config-helpers.js";\nexport default helpers.createRouta({ correlation: true });\n',
+				"x-correlation-id",
+			],
+		] as const) {
+			const cwd = project({
+				"src/config-helpers.ts": helpers,
+				"src/routa.ts": routa,
+				"src/routes/status/route.ts": statusRoute,
+			});
+			const result = validateProject(cwd, { write: false });
+
+			expect(result.diagnostics, routa).toEqual([]);
+			expect(result.warnings, routa).toEqual([]);
+			expect(result.correlationHeader, routa).toBe(header);
+
+			const generate = await run(["generate"], { cwd });
+			expect(generate.stderr ?? "", routa).toBe("");
+			expect(generate.code, routa).toBe(0);
+		}
+
+		// A local module that re-exports an application function named createRouta does not make
+		// it Routa's: its result is still read by its type, which may hold correlation.
+		const opaque = validateProject(
+			project({
+				"src/factory.ts":
+					'import type { RoutaConfig } from "@routa-ts/core";\nexport function createRouta(config: object): RoutaConfig {\n\treturn { ...config, correlation: { header: "x-other" } };\n}\n',
+				"src/config-helpers.ts": 'export { createRouta } from "./factory.js";\n',
+				"src/routa.ts": `${local}export default createRouta({ correlation: true });\n`,
+				"src/routes/status/route.ts": statusRoute,
+			}),
+			{ write: false },
+		);
+		expect(opaque.diagnostics.map(({ code, file }) => ({ code, file }))).toEqual([
+			{ code: "ROUTA_CORRELATION_CONFIG_UNRESOLVED", file: "src/routa.ts" },
+		]);
+	});
+
 	it("LOG-AC-11 reads a function named createRouta from another module by its type, not its argument", () => {
 		const routa =
 			'import { createRouta } from "./factory.js";\nexport default createRouta({ correlation: true });\n';

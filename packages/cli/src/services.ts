@@ -1,5 +1,5 @@
-import { existsSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, relative, sep } from "node:path";
 import {
 	callName,
 	coreCall,
@@ -234,8 +234,8 @@ export function routaConfigMember(
  * spread, to the value it stands for: through `const` bindings, imports, and re-exports, and into
  * the argument of each `createRouta` call, which returns its argument unchanged. The checker
  * resolves bindings without running any module. A call is `createRouta` when it calls the one
- * `@routa-ts/core` exports, imported under any name or called on a namespace import, as in
- * `core.createRouta()`; an application function that shares the name is read by its type.
+ * `@routa-ts/core` declares, as {@link callsCreateRouta} decides; an application function that
+ * shares the name is read by its type.
  *
  * @param file - The module containing `node`, relative to `cwd`
  * @returns The object literal it found, or the node it stopped at as written, so its type keeps
@@ -256,14 +256,80 @@ function configValue(
 		return { file: bound.file, node: value };
 	}
 
-	const call = ts.isCallExpression(value) ? coreCall(value, "createRouta") : undefined;
-
-	if (!call || depth >= maxBindingDepth) {
+	if (
+		!ts.isCallExpression(value)
+		|| depth >= maxBindingDepth
+		|| !callsCreateRouta(cwd, parser, bound.file, value)
+	) {
 		return bound;
 	}
 
-	const [argument] = call.arguments;
+	const [argument] = value.arguments;
 	return argument && configValue(cwd, parser, bound.file, argument, depth + 1);
+}
+
+/**
+ * Whether a call calls the `createRouta` that `@routa-ts/core` declares: imported from core under
+ * any name or called on a namespace import of it, as in `core.createRouta()`, or reached through
+ * a module that re-exports it, such as a local `export { createRouta } from "@routa-ts/core"`.
+ * The checker follows the imports and re-exports to the declaration without running any module,
+ * and the declaration must be in the `@routa-ts/core` package.
+ *
+ * @param file - The module containing `call`, relative to `cwd`
+ */
+function callsCreateRouta(
+	cwd: string,
+	parser: ts.SourceFileParser,
+	file: string,
+	call: ts.CallExpression,
+): boolean {
+	if (coreCall(call, "createRouta")) {
+		return true;
+	}
+
+	const callee = unwrapExpression(call.expression);
+	const name = ts.isPropertyAccessExpression(callee) ? callee.name : callee;
+	const declaredIn = parser.withChecker(join(cwd, file), (checker) => {
+		const symbol = checker.getSymbolAtLocation(name);
+		const resolved =
+			symbol && symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+		const [declaration, ...others] = resolved?.declarations ?? [];
+		return resolved?.name === "createRouta" && others.length === 0
+			? declaration?.resolve()?.getSourceFile().fileName
+			: undefined;
+	});
+
+	return declaredIn !== undefined && packageName(declaredIn) === coreModule;
+}
+
+const coreModule = "@routa-ts/core";
+
+/**
+ * The `name` in the nearest `package.json` above a file that has one, such as `@routa-ts/core`
+ * for its source or its published declarations.
+ */
+function packageName(file: string): string | undefined {
+	for (let directory = dirname(file); ; directory = dirname(directory)) {
+		const name = manifestName(join(directory, "package.json"));
+
+		if (name !== undefined || dirname(directory) === directory) {
+			return name;
+		}
+	}
+}
+
+/** The `name` a `package.json` declares, or `undefined` when it is missing or has none. */
+function manifestName(path: string): string | undefined {
+	if (!existsSync(path)) {
+		return undefined;
+	}
+
+	try {
+		const { name } = JSON.parse(readFileSync(path, "utf8")) as { name?: unknown };
+		return typeof name === "string" ? name : undefined;
+	} catch {
+		return undefined;
+	}
 }
 
 /**

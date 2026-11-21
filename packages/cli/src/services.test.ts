@@ -365,6 +365,28 @@ export default createRouta({ services: defineAppServices(() => ({ clock: { now: 
 		}
 	});
 
+	it("reads services from createRouta that a local module re-exports from @routa-ts/core", async () => {
+		const cwd = servicesProject({
+			"src/services.ts": clockContract,
+			"src/routes/status/route.ts": statusRoute,
+			"src/config-helpers.ts": 'export { createRouta } from "@routa-ts/core";\n',
+			"src/routa.ts": `import { createRouta } from "./config-helpers.js";
+import { defineAppServices } from "./services.js";
+
+export default createRouta({ services: defineAppServices(() => ({ clock: { now: () => "" } })) });
+`,
+		});
+
+		expect(validateProject(cwd, { write: false })).toMatchObject({
+			diagnostics: [],
+			warnings: [],
+		});
+		expect((await run(["generate"], { cwd })).code).toBe(0);
+		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
+			'export const routaApplicationServices = [\n\t"clock"\n] as const;',
+		);
+	});
+
 	it("reads services only from the default-exported createRouta config", async () => {
 		const factory = 'defineAppServices(() => ({ clock: { now: () => "" } }))';
 
