@@ -1362,7 +1362,8 @@ synchronously and never awaits a promise it returns. The default sink writes
 ```
 
 A sink that forwards to another backend leaves that backend's destination, buffering,
-flushing, and shutdown to you.
+flushing, and shutdown to you. Keep `data` under its own key when the backend reserves
+top-level fields, as Pino does for `level`, `time`, and `msg`.
 
 ```ts title="src/logger.ts"
 import { createLogger, type RoutaLogSink } from "@routa-ts/core";
@@ -1371,7 +1372,7 @@ import pino from "pino";
 const output = pino({ level: "trace" });
 
 const pinoSink: RoutaLogSink = ({ level, event, message, data }) =>
-	output[level]({ ...data, event }, message);
+	output[level]({ event, data }, message);
 
 export const logger = createLogger({ sink: pinoSink });
 ```

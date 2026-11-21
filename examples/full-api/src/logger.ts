@@ -4,10 +4,12 @@ import pretty from "pino-pretty";
 
 /**
  * Forwards each event to Pino at the same level. Routa has already redacted, escaped, and bounded
- * the event, so the sink only chooses the output.
+ * the event, so the sink only chooses the output. The data stays under its own key: Pino reads
+ * `level`, `time`, `msg`, and its other top-level fields as its own, so spreading the data there
+ * would let a `level` field change the line's level.
  */
 export function pinoSink(output: Logger): RoutaLogSink {
-	return ({ level, event, message, data }) => output[level]({ ...data, event }, message);
+	return ({ level, event, message, data }) => output[level]({ event, data }, message);
 }
 
 /**

@@ -80,7 +80,7 @@ import pino from "pino";
 const output = pino({ level: "trace" });
 
 const pinoSink: RoutaLogSink = ({ level, event, message, data }) =>
-	output[level]({ ...data, event }, message);
+	output[level]({ event, data }, message);
 
 export const logger = createLogger({ level: "info", sink: pinoSink });
 ```

@@ -63,8 +63,11 @@ import it wherever else you log, and choose where events go with a sink.
 
    <PackageManagers type="add" args="pino" />
 
-   Then forward each sanitized event at its own level. Pino passes every level through, so
-   the Routa logger's `level` stays the only filter.
+   Then forward each sanitized event at its own level, with its data under its own key.
+   Pino reads `level`, `time`, `msg`, `pid`, and `hostname` at the top level of its first
+   argument as its own fields, so spreading the data there would let a `level` field change
+   the line's level. Pino passes every level through, so the Routa logger's `level` stays
+   the only filter.
 
    ```ts title="src/logger.ts"
    import { createLogger, type RoutaLogSink } from "@routa-ts/core";
@@ -73,7 +76,7 @@ import it wherever else you log, and choose where events go with a sink.
    const output = pino({ level: "trace" });
 
    const pinoSink: RoutaLogSink = ({ level, event, message, data }) =>
-   	output[level]({ ...data, event }, message);
+   	output[level]({ event, data }, message);
 
    export const logger = createLogger({
    	level: "info",

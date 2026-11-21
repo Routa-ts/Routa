@@ -19,7 +19,7 @@ Runtime configuration is executable and typed in `src/routa.ts`:
 
 - `host` and `port` provide application defaults.
 - `HOST=0.0.0.0 PORT=4000 pnpm dev` demonstrates runtime environment overrides.
-- `src/logger.ts` creates the application's shared logger with `createLogger({ sink })`. The sink forwards each event, already redacted and escaped by Routa, to Pino. Pino is an example dependency, not part of Routa's contract, and the application owns its destination, buffering, and shutdown. Development uses `pino-pretty` for readable terminal output; `NODE_ENV=production pnpm start` keeps structured JSON for log collectors.
+- `src/logger.ts` creates the application's shared logger with `createLogger({ sink })`. The sink forwards each event, already redacted and escaped by Routa, to Pino, keeping the event data under `data` so a field such as `level` cannot replace Pino's own; `pnpm pino:exercise` asserts that line. Pino is an example dependency, not part of Routa's contract, and the application owns its destination, buffering, and shutdown. Development uses `pino-pretty` for readable terminal output; `NODE_ENV=production pnpm start` keeps structured JSON for log collectors.
 - `src/routa.ts` configures that logger, and `src/services.ts` imports it directly: the project catalog logs `projects.catalog_ready` through a child with a `service` binding. Request work passes `ctx.logger` instead, as `ProjectAudit.flush` does.
 - `LOG_LEVEL=debug pnpm dev` sets the shared logger's minimum level.
 - `ROUTA_DEMO_LOGGER=off pnpm dev` demonstrates `logger: false`; routes still receive a typed no-op `ctx.logger` and do not need conditional logging code. Modules that import the shared logger keep writing through it.
@@ -273,6 +273,7 @@ pnpm openapi:check
 pnpm openapi:breaking
 pnpm logger:exercise       # while the opt-in local showcase server is running
 pnpm auth:exercise         # the authentication credential matrix, no server needed
+pnpm pino:exercise         # the Pino line one event produces, no server needed
 pnpm routes
 pnpm routes:json
 ```
