@@ -2203,6 +2203,35 @@ paths:
 		expect(drift.stdout).toContain("No drift detected");
 	});
 
+	it("keeps one x-request-id when the source documents it in another case", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-identity-case-"));
+		createTypeScriptProject(cwd);
+		writeOpenApiPaths(
+			cwd,
+			`  /status:
+    get:
+      operationId: getStatus
+      responses:
+        "204":
+          description: Up
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+`,
+		);
+
+		const scaffold = await run(["scaffold", "openapi.yaml"], { cwd });
+		expect(scaffold.code).toBe(0);
+
+		const baseline = readFileSync(join(cwd, ".routa/openapi-baseline.json"), "utf8");
+		expect(baseline).not.toContain("X-Request-ID");
+
+		const drift = await run(["openapi", "check"], { cwd });
+		expect(drift.code).toBe(0);
+		expect(drift.stdout).toContain("No drift detected");
+	});
+
 	it("rejects structured parameter schemas that cannot arrive as strings", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-param-structured-"));
 		createTypeScriptProject(cwd);

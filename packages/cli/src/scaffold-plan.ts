@@ -444,12 +444,24 @@ function responsesWithIdentity(responses: Record<string, unknown>): Record<strin
 				? {
 						...response,
 						headers: {
-							...(isRecord(response.headers) ? response.headers : {}),
+							...withoutIdentityHeaders(response.headers),
 							...identityHeaders(undefined),
 						},
 					}
 				: response,
 		]),
+	);
+}
+
+/** A source response's headers without the ones Routa owns, in any spelling. */
+function withoutIdentityHeaders(headers: unknown): Record<string, unknown> {
+	if (!isRecord(headers)) {
+		return {};
+	}
+
+	const owned = new Set(Object.keys(identityHeaders(undefined)));
+	return Object.fromEntries(
+		Object.entries(headers).filter(([name]) => !owned.has(name.toLowerCase())),
 	);
 }
 
