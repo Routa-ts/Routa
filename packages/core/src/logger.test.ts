@@ -710,6 +710,33 @@ describe("factory-created loggers", () => {
 		expect(() => createHonoApp([], { logger: createLogger({ enabled: false }) })).not.toThrow();
 	});
 
+	it("LOG-AC-01 keeps writing to the logger it checked when the options change later", async () => {
+		const events: string[] = [];
+		const swapped = { ...customLogger, info: vi.fn() };
+		const routes = [
+			{
+				method: "get" as const,
+				path: "/status",
+				contract: createRoute({
+					responses: { ok: { status: 200, schema: z.object({ ok: z.boolean() }) } },
+					run: () => ({ type: "ok" as const, data: { ok: true } }),
+				}),
+			},
+		];
+		const honoOptions = { logger: createLogger({ sink: (event) => events.push(event.event) }) };
+		const applicationOptions = { ...honoOptions };
+		const hono = createHonoApp(routes, honoOptions);
+		const application = await createApplication(routes, applicationOptions);
+
+		honoOptions.logger = swapped as unknown as RoutaLogger;
+		applicationOptions.logger = swapped as unknown as RoutaLogger;
+		await hono.request("/status");
+		await application.fetch(new Request("http://localhost/status"));
+
+		expect(events).toEqual(["http.request", "http.request"]);
+		expect(swapped.info).not.toHaveBeenCalled();
+	});
+
 	it("LOG-AC-01 refuses an object whose brand is not the factory's own true value", () => {
 		const brand = Symbol.for("@routa-ts/core/createLogger");
 		const getter = vi.fn(() => true);

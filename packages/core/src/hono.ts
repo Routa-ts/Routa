@@ -199,10 +199,13 @@ export function createHonoApp(
 	routes: readonly HonoRoute[],
 	options: CreateHonoAppOptions = {},
 ): Hono {
-	if (options.logger !== undefined) {
-		assertCreatedLogger(options.logger, "createHonoApp received");
+	// Read each option once, so the logger checked here is the one every request uses.
+	const { logger, ...rest } = options;
+	if (logger === undefined) {
+		return honoApp(routes, rest, undefined);
 	}
-	return honoApp(routes, options, undefined);
+	assertCreatedLogger(logger, "createHonoApp received");
+	return honoApp(routes, { ...rest, logger }, undefined);
 }
 
 function honoApp(
@@ -212,21 +215,22 @@ function honoApp(
 ): Hono {
 	const app = new Hono();
 	const methodsByPath = new Map<string, Set<string>>();
-	const routeLogger = options.logger ?? createLogger({ enabled: false });
+	const requestLogger = options.logger;
+	const routeLogger = requestLogger ?? createLogger({ enabled: false });
 	const validateResponses = shouldValidateResponses(options);
 	const authentication =
 		options.authentication === undefined
 			? undefined
 			: runtimeAuthentication(options.authentication);
 
-	if (options.logger) {
+	if (requestLogger) {
 		app.use("*", async (context, next) => {
 			const startedAt = performance.now();
 
 			await next();
 
 			const url = new URL(context.req.raw.url);
-			options.logger?.info("http.request", "Request completed.", {
+			requestLogger.info("http.request", "Request completed.", {
 				method: context.req.raw.method,
 				path: url.pathname,
 				status: context.res.status,
@@ -297,7 +301,7 @@ function honoApp(
 			logger: routeLogger,
 			validateResponses,
 			lifecycleHeaders: options.lifecycleHeaders,
-			requestLogger: options.logger,
+			requestLogger,
 			createContext: route.createContext,
 			services,
 			authentication: prepared.authentication,
