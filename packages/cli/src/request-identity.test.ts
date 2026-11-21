@@ -316,6 +316,12 @@ export const logger = createLogger({ sink: () => {} });
 					expect(await response.json(), label).toEqual({ message: "Closed" });
 				}
 				if (status === 200) {
+					// The outcome's declared header matches what OpenAPI documents for it.
+					expect(documentedResponse!.headers?.["etag"], label).toMatchObject({
+						required: true,
+						schema: { type: "string" },
+					});
+					expect(response.headers.get("etag"), label).toBe('"v1"');
 					expect(response.headers.get("set-cookie"), label).toContain("seen=yes");
 					expect(Object.keys(documentedResponse!.headers!), label).toContain("Set-Cookie");
 				}
