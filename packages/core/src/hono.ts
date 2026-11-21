@@ -13,6 +13,7 @@ import type {
 	ResponseValidation,
 } from "./index.js";
 import { createLogger, type RoutaLogger } from "./logger.js";
+import { assertCreatedLogger } from "./logger-registry.js";
 import {
 	createRequestExecutor,
 	isBodylessStatus,
@@ -118,6 +119,9 @@ export async function createApplication(
 	options: CreateApplicationOptions = {},
 ): Promise<RoutaApplication> {
 	const { services: declaration, ...appOptions } = options;
+	if (appOptions.logger !== undefined) {
+		assertCreatedLogger(appOptions.logger, "createApplication received");
+	}
 	const logger = appOptions.logger ?? createLogger({ enabled: false });
 	const scope = createCleanupScope();
 	const services =
@@ -193,6 +197,9 @@ export function createHonoApp(
 	routes: readonly HonoRoute[],
 	options: CreateHonoAppOptions = {},
 ): Hono {
+	if (options.logger !== undefined) {
+		assertCreatedLogger(options.logger, "createHonoApp received");
+	}
 	return honoApp(routes, options, undefined);
 }
 

@@ -11,6 +11,7 @@ export type {
 	RoutaLogger,
 	RoutaLogLevel,
 	RoutaLogLevelWithSilent,
+	RoutaLogSink,
 } from "./logger.js";
 export { createLogger } from "./logger.js";
 export type {

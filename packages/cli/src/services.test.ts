@@ -970,6 +970,7 @@ function servicesProject(files: Record<string, string>): string {
 				paths: {
 					"@routa-ts/core": [join(repoRoot, "packages/core/src/index.ts")],
 					"@routa-ts/core/hono": [join(repoRoot, "packages/core/src/hono.ts")],
+					"@routa-ts/core/testing": [join(repoRoot, "packages/core/src/testing.ts")],
 					zod: [join(repoRoot, "packages/core/node_modules/zod/index.d.ts")],
 				},
 			},

@@ -2,6 +2,7 @@ import { isAuthenticationGuard, runtimeAuthentication } from "./authentication.j
 import type { CreateApplicationOptions, HonoRoute, RoutaApplication } from "./hono.js";
 import type { RoutaConfig } from "./index.js";
 import { createLogger, type RoutaLogger } from "./logger.js";
+import { assertCreatedLogger } from "./logger-registry.js";
 import type { ApplicationServicesDeclaration } from "./services.js";
 
 /**
@@ -102,6 +103,11 @@ export async function buildProjectApplication(
 		checkFolderGuards: metadata.routaAuthenticationSchemes !== undefined,
 	});
 	const config = ((await load("src/routa.ts")) as { default?: RoutaConfig }).default ?? {};
+	if (config.logger !== undefined && config.logger !== false) {
+		assertCreatedLogger(config.logger, "src/routa.ts configures");
+	}
+	// An omitted logger is the JSON console logger at info; `false` leaves the application's
+	// loggers as no-ops without touching any logger the project shares elsewhere.
 	const logger = config.logger === false ? undefined : (config.logger ?? createLogger());
 	const services = pairServices(config.services, metadata.routaApplicationServices, {
 		file: "src/routa.ts",

@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
 import { createMiddleware, createRoute, type RequestServicesContext } from "./index.js";
-import { createLogger } from "./logger.js";
+import { createLogger, type RoutaLogger } from "./logger.js";
 import { createTestApplication, type ProjectModules } from "./testing.js";
 
 const withRequest = createMiddleware({
@@ -346,5 +346,85 @@ describe("createTestApplication", () => {
 		await expect(createTestApplication(withoutMiddleware)).rejects.toThrow(
 			".routa/testing.gen.ts does not list src/middleware.ts. Run routa generate.",
 		);
+	});
+});
+
+describe("project logger configuration", () => {
+	it("LOG-AC-01 refuses a src/routa.ts logger createLogger did not create", async () => {
+		const handWritten = { info: () => undefined, child: () => handWritten };
+		const { modules, built } = projectModules({ config: { logger: handWritten } });
+
+		await expect(createTestApplication(modules)).rejects.toThrow(
+			new TypeError(
+				"src/routa.ts configures a logger that createLogger did not create. Routa accepts only loggers from createLogger, so redaction runs before any output. Forward events to your backend from a sink instead: logger: createLogger({ sink: (event) => backend.write(event) }). Set logger: false to turn logging off.",
+			),
+		);
+		expect(built).toEqual([]);
+	});
+
+	it("LOG-AC-02 writes JSON console lines at info when src/routa.ts sets no logger", async () => {
+		const consoleLog = vi.spyOn(console, "log").mockImplementation(() => undefined);
+		const { modules } = projectModules({
+			config: {
+				logger: undefined,
+				services: ({ logger }: { logger: RoutaLogger }) => {
+					logger.debug("clock.debug", "Below info.");
+					logger.info("clock.ready", "Clock ready.", { apiKey: "k_1", zone: "UTC" });
+					return { clock: { now: () => "noon" } };
+				},
+			},
+		});
+
+		try {
+			const app = await createTestApplication(modules);
+			await app.dispose();
+			const lines = consoleLog.mock.calls.map(([line]) => JSON.parse(String(line)));
+
+			expect(lines.filter((line) => line.event.startsWith("clock."))).toEqual([
+				{
+					timestamp: expect.any(String),
+					level: "info",
+					event: "clock.ready",
+					message: "Clock ready.",
+					data: { apiKey: "[Redacted]", zone: "UTC" },
+				},
+			]);
+		} finally {
+			consoleLog.mockRestore();
+		}
+	});
+
+	it("LOG-AC-02 gives a disabled application a no-op ctx.logger without changing a shared logger", async () => {
+		const events: string[] = [];
+		// A logger a project would import from its own module, in src/routa.ts and in services.
+		const shared = createLogger({ sink: (event) => events.push(event.event) });
+		const route = {
+			get: createRoute({
+				responses: { ok: { status: 200, schema: z.boolean() } },
+				run: ({ ctx }) => {
+					ctx.logger.info("route.request_logger", "Through ctx.logger.");
+					shared.info("route.shared_logger", "Through the imported logger.");
+					return { type: "ok", data: ctx.logger.isLevelEnabled("fatal") };
+				},
+			}),
+		};
+		const enabled = await createTestApplication(
+			projectModules({ config: { logger: shared }, route }).modules,
+		);
+		const disabled = await createTestApplication(
+			projectModules({ config: { logger: false }, route }).modules,
+		);
+
+		expect(await (await disabled.request("/orders")).json()).toBe(false);
+		expect(events).toEqual(["route.shared_logger"]);
+		expect(await (await enabled.request("/orders")).json()).toBe(true);
+		expect(events).toEqual([
+			"route.shared_logger",
+			"route.request_logger",
+			"route.shared_logger",
+			"http.request",
+		]);
+		await enabled.dispose();
+		await disabled.dispose();
 	});
 });
