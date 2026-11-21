@@ -311,6 +311,36 @@ export default createRouta(config);
 		}
 	});
 
+	it("reads services from a default re-exported or imported from another module", async () => {
+		for (const routa of [
+			'export { default } from "./config.js";\n',
+			'import config from "./config.js";\n\nexport default config;\n',
+		]) {
+			const cwd = servicesProject({
+				"src/services.ts": clockContract,
+				"src/routes/status/route.ts": statusRoute,
+				"src/config.ts": `import { createRouta } from "@routa-ts/core";
+import { defineAppServices } from "./services.js";
+
+export default createRouta({ services: defineAppServices(() => ({ clock: { now: () => "" } })) });
+`,
+				"src/routa.ts": routa,
+			});
+
+			expect(validateProject(cwd, { write: false }), routa).toMatchObject({
+				diagnostics: [],
+				warnings: [],
+			});
+			expect((await run(["generate"], { cwd })).code).toBe(0);
+			expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
+				'export const routaApplicationServices = [\n\t"clock"\n] as const;',
+			);
+
+			const { application } = await createProjectApplication(cwd, cwd, "dev");
+			await application.dispose();
+		}
+	});
+
 	it("reads services only from the default-exported createRouta config", async () => {
 		const factory = 'defineAppServices(() => ({ clock: { now: () => "" } }))';
 

@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { join, sep } from "node:path";
+import { join, relative, sep } from "node:path";
 import {
 	callName,
 	createRouteObject,
@@ -183,13 +183,16 @@ function declaredContract(
 }
 
 /**
- * A part of the `createRouta` config Routa cannot read, which may hold a member: a spread or a
- * config argument whose `value` it cannot follow, a computed `key` it cannot read, or a default
- * export re-exported from another module.
+ * A part of the `createRouta` config Routa cannot read, which may hold a member: a spread, a
+ * config argument, or a default export whose `value` it cannot follow, or a computed `key` it
+ * cannot read.
  */
-export type HiddenPart =
-	| { readonly kind: "value" | "key"; readonly file: string; readonly node: ts.Node }
-	| { readonly kind: "export" };
+export type HiddenPart = {
+	readonly kind: "value" | "key";
+	/** The module the part is written in, relative to the project root. */
+	readonly file: string;
+	readonly node: ts.Node;
+};
 
 type ConfigMember = {
 	/** The member's value, and the module it is written in. */
@@ -199,46 +202,43 @@ type ConfigMember = {
 };
 
 /**
- * Finds a member, such as `services`, of the default-exported `createRouta({ ... })` call in
- * `src/routa.ts`, the config Routa loads at startup. The export may be the call itself or a
- * `const` bound to it, exported with `export default` or `export { config as default }`; any
- * other default export may hide the member.
+ * Finds a member, such as `services`, of the `createRouta({ ... })` call `src/routa.ts` exports
+ * as default, the config Routa loads at startup. The export may be the call itself or name a
+ * `const` bound to it, declared locally or in a module the default is imported or re-exported
+ * from, which the TypeScript checker resolves without running it. Any other default export may
+ * hide the member.
  */
 export function routaConfigMember(
 	cwd: string,
 	parser: ts.SourceFileParser,
 	member: string,
 ): ConfigMember {
-	const sourceFile = parseTypeScriptFile(join(cwd, configFile), parser);
-	const exported = defaultExport(sourceFile);
-	const call = exported && exported !== "unreadable" && createRoutaCall(sourceFile, exported);
+	const exported = defaultExport(parseTypeScriptFile(join(cwd, configFile), parser));
 
-	if (!call) {
-		return {
-			hidden:
-				exported === undefined
-					? []
-					: exported === "unreadable"
-						? [{ kind: "export" }]
-						: [{ kind: "value", file: configFile, node: exported }],
-		};
+	if (!exported) {
+		return { hidden: [] };
+	}
+
+	const { file, node } = boundValue(cwd, parser, configFile, exported);
+
+	if (!ts.isCallExpression(node) || callName(node.expression) !== "createRouta") {
+		return { hidden: [{ kind: "value", file, node }] };
 	}
 
 	// The config argument is read like a spread: an object literal or a `const` binding to one.
-	const argument = call.arguments[0];
-	const config = argument && spreadObject(cwd, configFile, argument, parser, 0);
+	const argument = node.arguments[0];
+	const config = argument && spreadObject(cwd, file, argument, parser, 0);
 
 	return config
 		? objectMember(cwd, config.file, config.object, parser, 1, member)
-		: { hidden: argument ? [{ kind: "value", file: configFile, node: argument }] : [] };
+		: { hidden: argument ? [{ kind: "value", file, node: argument }] : [] };
 }
 
 /**
- * What a module exports as default: the expression of `export default`, the local binding
- * `export { config as default }` names, or `"unreadable"` for a default re-exported from another
- * module.
+ * What a module exports as default: the expression of `export default`, or the name in
+ * `export { config as default }`, which may re-export from another module.
  */
-function defaultExport(sourceFile: ts.SourceFile): ts.Expression | "unreadable" | undefined {
+function defaultExport(sourceFile: ts.SourceFile): ts.Node | undefined {
 	for (const statement of sourceFile.statements) {
 		if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
 			return statement.expression;
@@ -251,42 +251,82 @@ function defaultExport(sourceFile: ts.SourceFile): ts.Expression | "unreadable" 
 			&& ts.isNamedExports(statement.exportClause)
 		) {
 			const element = statement.exportClause.elements.find((item) => item.name.text === "default");
-			const local = element && (element.propertyName ?? element.name);
 
-			if (local) {
-				return !statement.moduleSpecifier && ts.isIdentifier(local) ? local : "unreadable";
+			if (element) {
+				// The checker resolves the exported name to what it names, here or in the source module.
+				return element.name;
 			}
 		}
 	}
 }
 
-/** The `createRouta(...)` call an expression is, or a local `const` it names is bound to. */
-function createRoutaCall(
-	sourceFile: ts.SourceFile,
-	expression: ts.Expression,
-): ts.CallExpression | undefined {
-	let node: ts.Expression | undefined = unwrapExpression(expression);
+/**
+ * Follows a name to the value it is bound to: through imports and re-exports, to a `const`
+ * initializer or an `export default` expression, which the checker resolves without running any
+ * module. It stops at any other node, such as a call, or a binding it cannot follow.
+ *
+ * @param file - The module containing `node`, relative to `cwd`
+ * @returns The node it stopped at, and the module it is written in
+ */
+function boundValue(
+	cwd: string,
+	parser: ts.SourceFileParser,
+	file: string,
+	node: ts.Node,
+	depth = 0,
+): { file: string; node: ts.Node } {
+	const value = ts.isExpression(node) ? unwrapExpression(node) : node;
+	const target =
+		ts.isIdentifier(value) && depth <= maxBindingDepth
+			? parser.withChecker(join(cwd, file), (checker) => {
+					const symbol = checker.getSymbolAtLocation(value);
+					const resolved =
+						symbol && symbol.flags & ts.SymbolFlags.Alias
+							? checker.getAliasedSymbol(symbol)
+							: symbol;
+					const [declaration, ...others] = resolved?.declarations ?? [];
+					const declared = others.length === 0 ? declaration?.resolve() : undefined;
+					return declared && { fileName: declared.getSourceFile().fileName, pos: declared.pos };
+				})
+			: undefined;
 
-	if (ts.isIdentifier(node)) {
-		const name = node.text;
-		node = undefined;
+	if (!target) {
+		return { file, node: value };
+	}
 
-		for (const statement of sourceFile.statements) {
-			if (
-				ts.isVariableStatement(statement)
-				&& (statement.declarationList.flags & ts.NodeFlags.Const) !== 0
-			) {
-				const declaration = statement.declarationList.declarations.find(
-					(item) => ts.isIdentifier(item.name) && item.name.text === name,
-				);
-				node = declaration?.initializer ? unwrapExpression(declaration.initializer) : node;
+	// Read the declaration from this parser's own parse of its module, where later reads find it.
+	const declaredFile = relative(cwd, target.fileName);
+	const declared = boundInitializer(
+		parseTypeScriptFile(join(cwd, declaredFile), parser),
+		target.pos,
+	);
+
+	return declared
+		? boundValue(cwd, parser, declaredFile, declared, depth + 1)
+		: { file, node: value };
+}
+
+/**
+ * The value a top-level declaration at `pos` binds: an `export default` expression, or the
+ * initializer of a `const`.
+ */
+function boundInitializer(sourceFile: ts.SourceFile, pos: number): ts.Expression | undefined {
+	for (const statement of sourceFile.statements) {
+		if (ts.isExportAssignment(statement) && !statement.isExportEquals && statement.pos === pos) {
+			return statement.expression;
+		}
+
+		if (
+			ts.isVariableStatement(statement)
+			&& (statement.declarationList.flags & ts.NodeFlags.Const) !== 0
+		) {
+			const declaration = statement.declarationList.declarations.find((item) => item.pos === pos);
+
+			if (declaration) {
+				return declaration.initializer;
 			}
 		}
 	}
-
-	return node && ts.isCallExpression(node) && callName(node.expression) === "createRouta"
-		? node
-		: undefined;
 }
 
 /**

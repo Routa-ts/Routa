@@ -129,6 +129,31 @@ describe("generated test applications", () => {
 		await app.dispose();
 	}, 30_000);
 
+	it("LOG-AC-11 generate and echo correlation configured in a re-exported default", async () => {
+		const cwd = project({
+			"src/routa.ts": 'export { default } from "./config.js";\n',
+			"src/config.ts": config('\tcorrelation: { header: "X-Trace-Ref" },'),
+			"src/routes/status/route.ts": statusRoute,
+		});
+		const check = await run(["check"], { cwd });
+		expect(check.stderr ?? "").toBe("");
+		expect(check.code).toBe(0);
+		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
+			'export const routaCorrelationHeader = "x-trace-ref";',
+		);
+		const openApi = JSON.parse(JSON.stringify(generateOpenApi(cwd))) as OpenApi;
+		expect(openApi.paths["/status"]!.get!.responses["200"]!.headers).toEqual({
+			"x-request-id": requestIdHeader,
+			"x-trace-ref": correlationHeader(),
+		});
+		const app = await testApp(cwd);
+
+		const response = await app.request("/status", { headers: { "x-trace-ref": "trace-1" } });
+
+		expect(response.headers.get("x-trace-ref")).toBe("trace-1");
+		await app.dispose();
+	}, 30_000);
+
 	it("LOG-AC-11 refuse to start when src/routa.ts changed correlation after generation", async () => {
 		const cwd = await generated('\tcorrelation: { header: "X-Trace-Ref" },');
 		writeFileSync(join(cwd, "src/routa.ts"), config("\tcorrelation: true,"));
@@ -279,6 +304,57 @@ describe("correlation config", () => {
 		]);
 	});
 
+	it("LOG-AC-11 reads correlation in a default re-exported or imported from another module", () => {
+		const reexports = [
+			'export { default } from "./config.js";\n',
+			'export { config as default } from "./config.js";\n',
+			'import config from "./config.js";\nexport default config;\n',
+		];
+		const configModule = (members: string) =>
+			`import { createRouta } from "@routa-ts/core";\nexport const config = createRouta({ ${members} });\nexport default config;\n`;
+
+		for (const routa of reexports) {
+			for (const [members, header] of [
+				["port: 3000", undefined],
+				['correlation: { header: "X-Trace-Ref" }', "x-trace-ref"],
+			] as const) {
+				const result = validateProject(
+					project({
+						"src/routa.ts": routa,
+						"src/config.ts": configModule(members),
+						"src/routes/status/route.ts": statusRoute,
+					}),
+					{ write: false },
+				);
+				expect(result.diagnostics, `${routa} ${members}`).toEqual([]);
+				expect(result.warnings, `${routa} ${members}`).toEqual([]);
+				expect(result.correlationHeader, `${routa} ${members}`).toBe(header);
+			}
+
+			const cwd = project({
+				"src/routa.ts": routa,
+				"src/config.ts": configModule(
+					'correlation: { header: process.env.CORRELATION_HEADER ?? "x-trace" }',
+				),
+				"src/routes/status/route.ts": statusRoute,
+			});
+			expect(
+				validateProject(cwd, { write: false }).diagnostics.map(({ code, file, message }) => ({
+					code,
+					file,
+					message,
+				})),
+				routa,
+			).toEqual([
+				{
+					code: "ROUTA_CORRELATION_CONFIG_UNRESOLVED",
+					file: "src/config.ts",
+					message: "The correlation config in src/routa.ts cannot be statically read.",
+				},
+			]);
+		}
+	});
+
 	it("LOG-AC-11 rejects a spread, key, argument, or export whose type may hold correlation", () => {
 		const unresolved = {
 			code: "ROUTA_CORRELATION_CONFIG_UNRESOLVED",
@@ -298,18 +374,19 @@ describe("correlation config", () => {
 			),
 			config("\t...settings,", "declare const settings: any;\n"),
 			config("\t...settings,", "declare const settings: Record<string, unknown>;\n"),
+			config("\t...settings,", 'declare const settings: Record<"correlation", boolean>;\n'),
 			config(
 				"\t...(settings as object | { correlation: true }),",
 				"declare const settings: object;\n",
 			),
 			config("\t[key]: true,", "declare const key: string;\n"),
-			`import { createRouta, type RoutaConfig } from "@routa-ts/core";\ndeclare const settings: RoutaConfig;\nexport default createRouta(settings);\n`,
-			'export { default } from "./config.js";\n',
+			`import { createRouta, type RoutaConfig } from "@routa-ts/core";\ndeclare const settings: RoutaConfig & { correlation: true };\nexport default createRouta(settings);\n`,
+			config(
+				"\t...shared,",
+				'const shared = createRouta({ correlation: { header: "x-trace-ref" } });\n',
+			),
 		]) {
-			expect(
-				diagnostics({ "src/routa.ts": routa, "src/config.ts": config("\tcorrelation: true,") }),
-				routa,
-			).toEqual([unresolved]);
+			expect(diagnostics({ "src/routa.ts": routa }), routa).toEqual([unresolved]);
 		}
 	});
 
@@ -332,6 +409,25 @@ describe("correlation config", () => {
 			],
 			[
 				`import { createRouta } from "@routa-ts/core";\nconst listen = (): { port: number } => ({ port: 3000 });\nexport default createRouta(listen());\n`,
+				undefined,
+			],
+			// Only Routa's own RoutaConfig declares correlation in these types.
+			[
+				`import { createRouta, type RoutaConfig } from "@routa-ts/core";\ndeclare const settings: RoutaConfig;\nexport default createRouta(settings);\n`,
+				undefined,
+			],
+			[
+				config(
+					"\tcorrelation: true,\n\t...shared,",
+					"const shared = createRouta({ port: 3000 });\n",
+				),
+				"x-correlation-id",
+			],
+			[
+				config(
+					"\t...base,",
+					'import type { RoutaConfig } from "@routa-ts/core";\ndeclare const base: Partial<RoutaConfig>;\n',
+				),
 				undefined,
 			],
 		] as const) {

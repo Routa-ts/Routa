@@ -1,5 +1,5 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { propertyName, unwrapExpression } from "./ast.js";
 import type { Diagnostic } from "./project.js";
 import { type HiddenPart, routaConfigMember, spreadObject } from "./services.js";
@@ -91,7 +91,7 @@ export function applicationCorrelation(
 					code: "ROUTA_CORRELATION_CONFIG_UNRESOLVED",
 					severity: "error",
 					message: `The createRouta config in ${configFile} has a spread, computed key, config argument, or default export whose type may hold correlation, so routa generate cannot read the correlation header.`,
-					file: hiding.kind === "export" ? configFile : hiding.file,
+					file: hiding.file,
 					suggestion:
 						"Write correlation as a visible member of the createRouta call in src/routa.ts, after every spread, and spread only values whose type has no correlation member, such as { host: string; port: number }. Generated OpenAPI documents the correlation header, so routa generate reads it without running src/routa.ts.",
 				},
@@ -146,15 +146,11 @@ export function applicationCorrelation(
 
 /**
  * Whether a part of the config Routa cannot read may set `correlation` at runtime, by its type:
- * a spread or argument whose type may have a `correlation` member, or a computed key whose type
- * may be `"correlation"`. A default export re-exported from another module always may. The
- * checker resolves the types without running any module; a type it cannot resolve may.
+ * a spread, argument, or default export whose type may have a `correlation` member, or a computed
+ * key whose type may be `"correlation"`. The checker resolves the types without running any
+ * module; a type it cannot resolve may.
  */
 function mayHoldCorrelation(cwd: string, parser: ts.SourceFileParser, part: HiddenPart): boolean {
-	if (part.kind === "export") {
-		return true;
-	}
-
 	return (
 		parser.withChecker(join(cwd, part.file), (checker) => {
 			const type = checker.getTypeAtLocation(part.node);
@@ -175,6 +171,8 @@ const maxTypeDepth = 8;
  * Whether a value of `type`, spread into an object, may set member `name`: when the type is
  * `any`, `unknown`, or unresolved, declares the member, even optionally, or has a string index
  * signature. A union may when any of its members may. `undefined`, `null`, and `never` add nothing.
+ * A member only `@routa-ts/core` declares does not count: every value `createRouta` returns has
+ * the type `RoutaConfig`, whose optional `correlation` says nothing about the value itself.
  */
 function mayHaveMember(checker: ts.Checker, type: ts.Type, name: string, depth: number): boolean {
 	if (depth > maxTypeDepth || type.flags & ts.TypeFlags.AnyOrUnknown || type.isErrorType()) {
@@ -199,12 +197,33 @@ function mayHaveMember(checker: ts.Checker, type: ts.Type, name: string, depth: 
 	}
 
 	const apparent = checker.getApparentType(type) ?? type;
+	const member = checker.getPropertyOfType(apparent, name);
 	return (
-		checker.getPropertyOfType(apparent, name) !== undefined
+		(member !== undefined
+			&& (member.declarations.length === 0
+				|| member.declarations.some((declaration) => !declaredByRouta(declaration))))
 		|| checker
 			.getIndexInfosOfType(apparent)
 			.some((info) => !(info.keyType.flags & (ts.TypeFlags.NumberLike | ts.TypeFlags.ESSymbolLike)))
 	);
+}
+
+/** Whether a declaration is written in the `@routa-ts/core` package, such as `RoutaConfig`'s. */
+function declaredByRouta(declaration: ts.NodeHandle): boolean {
+	const fileName = declaration.resolve()?.getSourceFile().fileName;
+	return fileName !== undefined && packageName(dirname(fileName)) === "@routa-ts/core";
+}
+
+/** The name in the nearest `package.json` at or above `directory`. */
+function packageName(directory: string): string | undefined {
+	const manifest = join(directory, "package.json");
+
+	if (existsSync(manifest)) {
+		return (JSON.parse(readFileSync(manifest, "utf8")) as { name?: string }).name;
+	}
+
+	const parent = dirname(directory);
+	return parent === directory ? undefined : packageName(parent);
 }
 
 /**

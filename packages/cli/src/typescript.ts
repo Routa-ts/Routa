@@ -3,8 +3,8 @@ import type { Node, SourceFile } from "typescript/unstable/ast";
 import { API, type Checker } from "typescript/unstable/sync";
 
 export * from "typescript/unstable/ast";
-export type { Checker, Type } from "typescript/unstable/sync";
-export { TypeFlags } from "typescript/unstable/sync";
+export type { Checker, NodeHandle, Type } from "typescript/unstable/sync";
+export { SymbolFlags, TypeFlags } from "typescript/unstable/sync";
 export {
 	isStringLiteralLikeNode as isStringLiteralLike,
 	isTypeAssertion as isTypeAssertionExpression,

@@ -345,13 +345,19 @@ OpenAPI document, so Routa reads them without running `src/routa.ts`.
 ROUTA_CORRELATION_CONFIG_UNRESOLVED: src/routa.ts: The correlation config in src/routa.ts cannot be statically read.
 ```
 
+When `src/routa.ts` imports or re-exports its default from another module, such as
+`export { default } from "./config.js"`, Routa follows it to the `createRouta` call there and
+reads `correlation` by the same rules, reporting the file that holds it.
+
 It also fails when a part of the `createRouta` config Routa cannot read may set
 `correlation`: a spread, a config argument, or a default export whose TypeScript type has a
 `correlation` member, even an optional one, a string index signature, or is `any` or
-`unknown`; a computed key whose type may be `"correlation"`, such as `string`; or a default
-re-exported from another module. Routa asks the type checker, so it still runs no module. A
-part whose type has no `correlation` member, such as a spread of
-`{ host: string; port: number }`, is ignored.
+`unknown`; or a computed key whose type may be `"correlation"`, such as `string`. Routa asks
+the type checker, so it still runs no module. A part whose type has no `correlation` member,
+such as a spread of `{ host: string; port: number }`, is ignored, and so is the optional
+`correlation` of Routa's own `RoutaConfig`, which every `createRouta` result and every value
+typed `RoutaConfig` carries. Startup still refuses a config whose correlation differs from
+what `routa generate` recorded.
 
 ```ts title="src/routa.ts"
 import { createRouta } from "@routa-ts/core";
@@ -424,9 +430,10 @@ its value. Write `header`, `cookie`, `transport`, `openapi`, `priority`, and
 
 ### `ROUTA_AUTH_SPREAD_UNRESOLVED`
 
-Warning. The default-exported `createRouta` config in `src/routa.ts` has a spread, computed
-key, or config argument that Routa cannot read, such as `...makeConfig()` or
-`createRouta(makeConfig())`, and no visible `authentication` member after it. Authentication
+Warning. The default-exported `createRouta` config in `src/routa.ts`, or in the module
+`src/routa.ts` imports or re-exports its default from, has a spread, computed key, or config
+argument that Routa cannot read, such as `...makeConfig()` or `createRouta(makeConfig())`,
+and no visible `authentication` member after it. Authentication
 inside it never reaches generated metadata or OpenAPI. If the unread part does supply
 authentication, `routa dev` and `routa start` refuse to start. An unread part that holds only
 tuning values starts normally.
@@ -596,9 +603,10 @@ Each binding must be a `const` declaration or a relative import.
 
 ### `ROUTA_SERVICES_SPREAD_UNRESOLVED`
 
-Warning. The default-exported `createRouta` config in `src/routa.ts` has a spread, computed
-key, or config argument that Routa cannot read, such as `...makeConfig()` or
-`createRouta(makeConfig())`, and no visible `services` member after it. Services inside it
+Warning. The default-exported `createRouta` config in `src/routa.ts`, or in the module
+`src/routa.ts` imports or re-exports its default from, has a spread, computed key, or config
+argument that Routa cannot read, such as `...makeConfig()` or `createRouta(makeConfig())`,
+and no visible `services` member after it. Services inside it
 never reach generated metadata. If the unread part does supply services, `routa dev` and
 `routa start` refuse to start when no visible `services` member exists, and a visible member
 it follows may be replaced by a factory Routa never checked. An unread part that holds only
