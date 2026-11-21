@@ -564,7 +564,8 @@ describe("request error reporting", () => {
 
 		expect(response.status).toBe(500);
 		expect(await response.json()).toMatchObject({ title: "Invalid handler output" });
-		expect(caught).toBeInstanceOf(InvalidHandlerOutputError);
+		expect((caught as object).constructor).toBe(InvalidHandlerOutputError);
+		expect((caught as Error).cause).toBeUndefined();
 		expect((caught as InvalidHandlerOutputError).issues).toEqual([
 			{ code: "invalid_type", path: [] },
 		]);
@@ -646,6 +647,72 @@ describe("request error reporting", () => {
 		expect(
 			calls.map((call) => [call.error === thrown, call.diagnostic.code, call.diagnostic.stage]),
 		).toEqual([[true, "unexpected_failure", "response"]]);
+	});
+
+	it("LOG-AC-13 passes what a schema's error map throws while Routa reads the issues", async () => {
+		const { calls, onRequestError } = recorder();
+		let thrown: unknown;
+		const localized = () => {
+			try {
+				return z.string().parse(7);
+			} catch (error) {
+				thrown = error;
+				throw error;
+			}
+		};
+		const app = createHonoApp(
+			[
+				{
+					method: "get",
+					path: "/x",
+					contract: createRoute({
+						responses: {
+							ok: { status: 200, schema: z.object({ n: z.number({ error: localized }) }) },
+						},
+						run: () => ({ type: "ok", data: { n: "seven" as unknown as number } }),
+					}),
+				},
+			],
+			{ onRequestError, responseValidation: "always" },
+		);
+
+		const response = await app.request("/x");
+
+		expect(response.status).toBe(500);
+		expect(await response.json()).toMatchObject({ title: "Invalid handler output" });
+		expect(calls.map((call) => [call.error === thrown, call.diagnostic.code])).toEqual([
+			[true, "unexpected_failure"],
+		]);
+	});
+
+	it("LOG-AC-13 names the middleware stage when reading a middleware's run throws", async () => {
+		const { calls, onRequestError } = recorder();
+		const thrown = new Error("no implementation");
+		const lazy = createMiddleware({ run: ({ next }) => next() });
+		Object.defineProperty(lazy, "run", {
+			get() {
+				throw thrown;
+			},
+		});
+		const app = createHonoApp(
+			[
+				{
+					method: "get",
+					path: "/x",
+					contract: createRoute({
+						middleware: [lazy],
+						responses: { ok: { status: 204 } },
+						run: () => ({ type: "ok" }),
+					}),
+				},
+			],
+			{ onRequestError },
+		);
+
+		expect((await app.request("/x")).status).toBe(500);
+		expect(calls.map((call) => [call.error === thrown, call.diagnostic.stage])).toEqual([
+			[true, "middleware"],
+		]);
 	});
 
 	it("LOG-AC-13 keeps the handler stage of an error that middleware wrapped and unwrapped", async () => {

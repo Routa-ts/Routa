@@ -349,7 +349,8 @@ async function runWithMiddleware(
 			return await failures.at("handler", () => runHandler(stages.at(-1) as Stage));
 		}
 
-		const { run } = item;
+		// A contract can compute `run`; reading it is part of the middleware's stage.
+		const run = failures.sync("middleware", () => item.run);
 
 		if (!run) {
 			return await dispatch(index + 1, stages);
@@ -607,7 +608,7 @@ function outputSchemaError(
 ): InvalidHandlerOutputError {
 	const issues = handlerOutputIssues(error, path);
 	return thrownBySchemaCode.has(error)
-		? new OutputCodeError(message, error, issues)
+		? outputCodeError(message, error, issues)
 		: new InvalidHandlerOutputError(message, issues);
 }
 
@@ -620,10 +621,18 @@ function outputSchemaError(
  *   error is
  */
 function parseOutput(schema: z.ZodTypeAny, value: unknown): unknown {
-	let parsed: ReturnType<z.ZodTypeAny["safeParse"]>;
+	let failure: ZodError;
 
 	try {
-		parsed = schema.safeParse(value);
+		const parsed = schema.safeParse(value);
+
+		if (parsed.success) {
+			return parsed.data;
+		}
+
+		// Reading the issues runs the schema's error maps, which are application code too.
+		failure = parsed.error;
+		void failure.issues;
 	} catch (error) {
 		if (error instanceof ZodError) {
 			thrownBySchemaCode.add(error);
@@ -632,11 +641,7 @@ function parseOutput(schema: z.ZodTypeAny, value: unknown): unknown {
 		throw error;
 	}
 
-	if (!parsed.success) {
-		throw parsed.error;
-	}
-
-	return parsed.data;
+	throw failure;
 }
 
 /**
@@ -1268,7 +1273,7 @@ function finalizeResponse(
  * Serializes a response body as JSON, the representation that goes on the wire.
  *
  * @throws {InvalidHandlerOutputError} When JSON has no representation for the value
- * @throws {OutputCodeError} When serializing throws, for a bigint, a circular reference, or the
+ * @throws {InvalidHandlerOutputError} When serializing throws, for a bigint, a circular reference, or the
  *   value's own `toJSON()` or getter; it carries what was thrown, which `onRequestError` receives
  */
 function jsonText(data: unknown): string {
@@ -1277,7 +1282,7 @@ function jsonText(data: unknown): string {
 	try {
 		text = JSON.stringify(data);
 	} catch (error) {
-		throw new OutputCodeError(
+		throw outputCodeError(
 			`Failed to serialize response as JSON: ${error instanceof Error ? error.message : String(error)}`,
 			error,
 		);
@@ -1394,18 +1399,20 @@ class RequestServicesError extends Error {
  * `onRequestError` receives the thrown value. It is kept privately rather than as `cause`, so
  * middleware that unwraps `cause` from `next()` still sees the invalid output it always saw.
  */
-class OutputCodeError extends InvalidHandlerOutputError {
-	readonly #thrown: unknown;
+const outputCodeThrew = new WeakMap<InvalidHandlerOutputError, unknown>();
 
-	constructor(message: string, thrown: unknown, issues?: readonly HandlerOutputIssue[]) {
-		super(message, issues);
-		this.#thrown = thrown;
-	}
-
-	/** What application code threw, readable only here, where the class is in scope. */
-	static thrownBy(error: OutputCodeError): unknown {
-		return error.#thrown;
-	}
+/**
+ * The same `InvalidHandlerOutputError` Routa has always answered with, so middleware that catches
+ * `next()` sees no new class or `cause`, remembering privately what application code threw.
+ */
+function outputCodeError(
+	message: string,
+	thrown: unknown,
+	issues?: readonly HandlerOutputIssue[],
+): InvalidHandlerOutputError {
+	const error = new InvalidHandlerOutputError(message, issues);
+	outputCodeThrew.set(error, thrown);
+	return error;
 }
 
 /**
@@ -1455,8 +1462,8 @@ class FailureStages {
  * own error rather than the error Routa wraps it in to answer the request.
  */
 function thrownValue(error: unknown): unknown {
-	if (error instanceof OutputCodeError) {
-		return OutputCodeError.thrownBy(error);
+	if (error instanceof InvalidHandlerOutputError && outputCodeThrew.has(error)) {
+		return outputCodeThrew.get(error);
 	}
 
 	return error instanceof AuthenticatorError || error instanceof RequestServicesError
