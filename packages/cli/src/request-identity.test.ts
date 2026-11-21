@@ -149,6 +149,8 @@ describe("correlation config", () => {
 				'const correlation = { header: "x-trace-ref" } as const;\n',
 				"x-trace-ref",
 			],
+			['\tcorrelation: { header: "Constructor" },', "", "constructor"],
+			['\tcorrelation: { header: "__proto__" },', "", "__proto__"],
 			["\tcorrelation: false,", "", undefined],
 			["", "", undefined],
 		] as const) {

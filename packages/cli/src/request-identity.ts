@@ -17,17 +17,17 @@ const defaultCorrelationHeader = "x-correlation-id";
 const headerName = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
 /** Headers a correlation ID cannot use: Routa's own on every response, and credential headers. */
-const claimedHeaders: Readonly<Record<string, string>> = {
-	[requestIdHeader]: "carries the request identity Routa generates",
-	authorization: "is a credential header",
-	"proxy-authorization": "is a credential header",
-	cookie: "is a credential header",
-	"set-cookie": "is a credential header",
-	"content-type": "is a header Routa owns on every response",
-	"content-length": "is a header Routa owns on every response",
-	"transfer-encoding": "is a header Routa owns on every response",
-	connection: "is a header Routa owns on every response",
-};
+const claimedHeaders: ReadonlyMap<string, string> = new Map([
+	[requestIdHeader, "carries the request identity Routa generates"],
+	["authorization", "is a credential header"],
+	["proxy-authorization", "is a credential header"],
+	["cookie", "is a credential header"],
+	["set-cookie", "is a credential header"],
+	["content-type", "is a header Routa owns on every response"],
+	["content-length", "is a header Routa owns on every response"],
+	["transfer-encoding", "is a header Routa owns on every response"],
+	["connection", "is a header Routa owns on every response"],
+]);
 
 /**
  * The OpenAPI Header Objects for the identity Routa sends on every response: `x-request-id`
@@ -113,7 +113,7 @@ export function applicationCorrelation(
 	}
 
 	const name = header.toLowerCase();
-	const claimed = claimedHeaders[name];
+	const claimed = claimedHeaders.get(name);
 
 	if (claimed) {
 		return fail(
