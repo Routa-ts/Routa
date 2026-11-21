@@ -1615,7 +1615,9 @@ describe("request error reporter (types)", () => {
 			const reporter: RequestErrorReporter = (error, diagnostic) => {
 				expectType<unknown>(error);
 				expectType<RequestErrorCode>(diagnostic.code);
-				expectType<"unexpected_failure" | "contract_violation">(diagnostic.code);
+				expectType<"unexpected_failure" | "contract_violation" | "configuration_error">(
+					diagnostic.code,
+				);
 				expectType<RequestErrorStage>(diagnostic.stage);
 				expectType<string>(diagnostic.requestId);
 				expectType<string | undefined>(diagnostic.correlationId);

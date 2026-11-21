@@ -1345,7 +1345,7 @@ function failedResponse(error: unknown): Response {
 	try {
 		return errorResponse(error);
 	} catch {
-		return internalError();
+		return internalErrorResponse();
 	}
 }
 
@@ -1380,10 +1380,11 @@ function errorResponse(error: unknown): Response {
 		});
 	}
 
-	return internalError();
+	return internalErrorResponse();
 }
 
-function internalError(): Response {
+/** Routa's generic `500` problem, which says nothing about what failed. */
+export function internalErrorResponse(): Response {
 	return problem("https://routa-ts.dev/problems/internal", "Internal Server Error", 500);
 }
 
@@ -1394,7 +1395,7 @@ function internalError(): Response {
  * the request's path, an issue's path, which can hold request data such as a record key, or any
  * error's message, name, or stack, which may carry credentials or personal data.
  */
-function logRequestError(
+export function logRequestError(
 	event: FrameworkEvent,
 	diagnostic: RequestErrorDiagnostic,
 	error: unknown,

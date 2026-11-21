@@ -11,6 +11,7 @@ import type {
 	AuthenticationConfig,
 	CorrelationConfig,
 	HttpMethod,
+	RequestErrorDiagnostic,
 	RequestErrorReporter,
 	ResponseValidation,
 } from "./index.js";
@@ -18,7 +19,9 @@ import { createLogger, type RoutaLogger } from "./logger.js";
 import { assertCreatedLogger, requestLoggers } from "./logger-registry.js";
 import {
 	createRequestExecutor,
+	internalErrorResponse,
 	isBodylessStatus,
+	logRequestError,
 	type RequestScope,
 	type RuntimeRouteContract,
 } from "./request-execution.js";
@@ -272,7 +275,7 @@ function honoApp(
 			? undefined
 			: runtimeAuthentication(options.authentication);
 	assertCorrelationReadsNoCredential(correlationHeader, authentication);
-	const requests = identifyRequests(app, routeLogger, correlationHeader);
+	const requests = identifyRequests(app, routeLogger, correlationHeader, report);
 
 	const registeredRoutes = new Set<string>();
 
@@ -352,13 +355,8 @@ function honoApp(
 				return await next();
 			}
 
-			return requests.prepared(
-				context,
-				await executeRoute(
-					context.req.raw,
-					context.req.param(),
-					requests.matched(context, route.path),
-				),
+			return requests.answer(context, route.path, (state) =>
+				executeRoute(context.req.raw, context.req.param(), state),
 			);
 		});
 	}
@@ -373,41 +371,54 @@ function honoApp(
 		allowedMethods.add("OPTIONS");
 		const allow = Array.from(allowedMethods).sort().join(", ");
 
-		app.on("OPTIONS", path, (context) => {
-			requests.matched(context, path);
-			return requests.prepared(
+		app.on("OPTIONS", path, (context) =>
+			requests.answer(
 				context,
-				new Response(null, {
-					status: 204,
-					headers: automaticOptionsHeaders(context.req.raw, allow),
-				}),
-			);
-		});
+				path,
+				() =>
+					new Response(null, {
+						status: 204,
+						headers: automaticOptionsHeaders(context.req.raw, allow),
+					}),
+			),
+		);
 
-		app.all(path, (context) => {
-			requests.matched(context, path);
-			return requests.prepared(
+		app.all(path, (context) =>
+			requests.answer(
 				context,
-				new Response("Method Not Allowed", {
-					status: 405,
-					headers: {
-						allow,
-					},
-				}),
-			);
-		});
+				path,
+				() =>
+					new Response("Method Not Allowed", {
+						status: 405,
+						headers: {
+							allow,
+						},
+					}),
+			),
+		);
 	}
 
 	return app;
 }
 
-/** A request's identity, the route pattern that matched it, and the response Routa prepared for it. */
-type TrackedRequest = RequestIdentity & { route?: string; prepared?: Response };
+/**
+ * A request's identity, the correlation header of the app that identified it, the route pattern
+ * that matched it, and the response Routa prepared for it.
+ */
+type TrackedRequest = {
+	readonly requestId: string;
+	/** Removed when a mounted Routa app refuses the request, so the owner never echoes or logs it. */
+	correlationId?: string;
+	readonly correlationHeader: string | undefined;
+	route?: string;
+	prepared?: Response;
+};
 
 /**
  * The identity of each request a Routa app is handling, by its Hono context. When one Routa app
  * is mounted in another with `route()`, Hono passes one context through both, so the first Routa
- * app identifies the request and the app it mounts reuses that identity.
+ * app identifies the request and the app it mounts reuses that identity, when both apps have the
+ * same correlation setting.
  */
 const identified = new WeakMap<Context, TrackedRequest>();
 
@@ -424,7 +435,11 @@ const unansweredMessage =
  *
  * The first Routa app a request reaches owns its identity. A Routa app mounted in it reuses that
  * identity, with its own request logger, and leaves the headers and the event to the owner, so
- * handlers, headers, and the one event agree.
+ * handlers, headers, and the one event agree. Each app checks its correlation header against its
+ * own credential schemes and declared headers, so a mounted app reuses the identity only when its
+ * correlation setting is the owner's. Otherwise it refuses every request it answers: it takes
+ * the correlation ID out of the shared identity, so the owner neither echoes nor logs it, and
+ * answers Routa's internal `500`, which it logs and reports as a `configuration_error`.
  *
  * Routa writes these headers in place only on a response it prepared for this request. Any other
  * response, such as one a handler added to the returned Hono app reuses across requests, or one
@@ -441,22 +456,28 @@ const unansweredMessage =
  * The event says the response was prepared, not that it was sent or received: Routa logs it
  * before the body is transmitted. A request whose handling throws past Hono logs nothing.
  *
- * @returns `matched` records the route pattern that matched a request and returns this app's
- *   state for it; `prepared` records a response Routa prepared for the request and returns it
+ * @returns `answer` records the route pattern that matched a request, calls `respond` with this
+ *   app's state for it, and records the response Routa prepared
  */
 function identifyRequests(
 	app: Hono,
 	logger: RoutaLogger,
 	correlationHeader: string | undefined,
+	report: ReportRequestError | undefined,
 ): {
-	matched: (context: Context, path: string) => RequestState;
-	prepared: (context: Context, response: Response) => Response;
+	answer: (
+		context: Context,
+		path: string,
+		respond: (state: RequestState) => Response | Promise<Response>,
+	) => Promise<Response>;
 } {
 	const deriveLogger = requestLoggers(logger);
 	// This app's view of each request: its identity, and this app's request logger.
 	const states = new WeakMap<Context, RequestState>();
 	// The requests whose identity this app owns.
 	const owned = new WeakSet<Context>();
+	// The requests an app with another correlation setting identified, which this app refuses.
+	const refused = new WeakSet<Context>();
 	const stateFor = ({ requestId, correlationId }: RequestIdentity): RequestState => ({
 		requestId,
 		...(correlationId !== undefined && { correlationId }),
@@ -471,7 +492,13 @@ function identifyRequests(
 			const owner = identified.get(context);
 
 			if (owner) {
-				states.set(context, stateFor(owner));
+				if (owner.correlationHeader === correlationHeader) {
+					states.set(context, stateFor(owner));
+				} else {
+					refused.add(context);
+					states.set(context, stateFor({ requestId: owner.requestId }));
+				}
+
 				await next();
 				return;
 			}
@@ -485,6 +512,7 @@ function identifyRequests(
 			const request: TrackedRequest = {
 				requestId,
 				...(correlationId !== undefined && { correlationId }),
+				correlationHeader,
 			};
 			const state = stateFor(request);
 			identified.set(context, request);
@@ -501,15 +529,17 @@ function identifyRequests(
 				// Routa did not accept, such as one a handler forwarded from upstream. No other header
 				// Routa writes can be the correlation header, and no other header is touched.
 				if (correlationHeader !== undefined) {
-					if (correlationId === undefined) {
+					if (request.correlationId === undefined) {
 						headers.delete(correlationHeader);
 					} else {
-						headers.set(correlationHeader, correlationId);
+						headers.set(correlationHeader, request.correlationId);
 					}
 				}
 			}
 
-			state.event("info", "http.response.prepared", "Response prepared.", {
+			// A mounted app that refused the request took its correlation ID out of the identity.
+			const logged = request.correlationId === correlationId ? state : stateFor(request);
+			logged.event("info", "http.response.prepared", "Response prepared.", {
 				method: loggedMethod(context.req.raw.method),
 				route: request.route ?? unmatchedRoute,
 				status: context.res.status,
@@ -537,17 +567,48 @@ function identifyRequests(
 		return { request, state };
 	};
 
+	const refuse = (context: Context, request: TrackedRequest, state: RequestState) => {
+		delete request.correlationId;
+		const diagnostic: RequestErrorDiagnostic = Object.freeze({
+			code: "configuration_error",
+			stage: "identity",
+			requestId: request.requestId,
+			method: loggedMethod(context.req.raw.method),
+			route: request.route ?? unmatchedRoute,
+			status: 500,
+		});
+
+		try {
+			logRequestError(state.event, diagnostic, undefined);
+		} catch {
+			// A failing logger must not skip reporting or replace the error response.
+		}
+
+		report?.(
+			new Error(
+				`A Routa app ${correlationSetting(correlationHeader)} is mounted in a Routa app ${correlationSetting(request.correlationHeader)}. Routa checks each app's credential schemes and declared headers against its own correlation header, so a mounted Routa app must have the same correlation setting as the app it is mounted in.`,
+			),
+			diagnostic,
+		);
+		return internalErrorResponse();
+	};
+
 	return {
-		matched: (context, path) => {
+		answer: async (context, path, respond) => {
 			const { request, state } = tracked(context);
 			request.route = path;
-			return state;
-		},
-		prepared: (context, response) => {
-			tracked(context).request.prepared = response;
+			const response = refused.has(context)
+				? refuse(context, request, state)
+				: await respond(state);
+			request.prepared = response;
 			return response;
 		},
 	};
+}
+
+/** Describes an app's correlation setting by its header, for a configuration error. */
+function correlationSetting(header: string | undefined): string {
+	return header === undefined ? "with correlation off" : `that correlates on ${header}`;
 }
 
 /**

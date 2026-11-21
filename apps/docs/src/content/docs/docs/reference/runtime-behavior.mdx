@@ -123,10 +123,9 @@ carries the identity.
 
 When you mount one Routa app in another with `outer.route("/api", inner)`, both built by
 `createHonoApp`, the request is identified once, by the outer app. Handlers in the inner app
-see the same `ctx.requestId` and `ctx.correlationId`, and the outer app's `correlation` setting
-decides whether a correlation ID is accepted. Only the outer app sets the identity headers and
-logs `http.response.prepared`, through its logger, with the route pattern the inner app
-declares, such as `/whoami`, without the mount prefix. The inner app's request logger still
+see the same `ctx.requestId` and `ctx.correlationId`. Only the outer app sets the identity
+headers and logs `http.response.prepared`, through its logger, with the route pattern the inner
+app declares, such as `/whoami`, without the mount prefix. The inner app's request logger still
 writes to the inner app's logger, bound to the same identity. Only the outer app fails an
 unanswered request, so outer middleware that answers after `await next()` can answer for the
 inner app. A Routa app mounted in a plain Hono app owns the request instead, so it fails an
@@ -135,6 +134,16 @@ Routa app. Hono's `route()` also changes a mounted app that sets its own `app.on
 wraps each of that app's handlers and finalizes an unanswered request as an empty `200`, which
 Routa then identifies and logs with that status. Answer every request inside an app that sets
 `onError()` before you mount it.
+
+Give a mounted Routa app the same `correlation` setting as the app you mount it in: both off,
+or the same header name in any casing. Each app checks its correlation header only against its
+own credential schemes and declared response headers, so only the same setting lets those checks
+cover the mounted app. When the settings differ, the mounted app answers each request it matches
+with Routa's internal `500` problem. The response keeps its `x-request-id`, and the outer app
+neither echoes nor logs a correlation ID for it, so a credential the mounted app reads from that
+header never reaches the response or the logs. The mounted app logs `http.error` and calls its `onRequestError` with
+`code` `configuration_error` and `stage` `identity`. The error it passes names both settings and
+holds no header value.
 
 ## Status Codes Routa Produces
 
@@ -153,6 +162,7 @@ Routa then identifies and logs with that status. Answer every request inside an 
 | `500`  | A route-file or method service factory failed during the request                      |
 | `500`  | A handler or middleware threw an error it did not handle                              |
 | `500`  | An authenticator threw, or returned a result or principal that breaks its contract    |
+| `500`  | A mounted Routa app's `correlation` setting differs from the app it is mounted in     |
 
 Every other status comes from your contract: a handler outcome or a middleware reject.
 

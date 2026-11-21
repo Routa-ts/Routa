@@ -269,7 +269,7 @@ The diagnostic holds the same facts as the request's `http.error` event:
 
 | Field           | Value                                                                    |
 | --------------- | ------------------------------------------------------------------------ |
-| `code`          | `unexpected_failure` or `contract_violation`                             |
+| `code`          | `unexpected_failure`, `contract_violation`, or `configuration_error`     |
 | `stage`         | Where the request failed, from the table below                           |
 | `requestId`     | The request's `x-request-id`                                             |
 | `correlationId` | The accepted correlation ID; absent when Routa accepted none             |
@@ -283,9 +283,11 @@ The diagnostic holds the same facts as the request's `http.error` event:
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `unexpected_failure` | Application code threw, or Routa failed for a reason it did not expect. The callback receives what was thrown: for an authenticator, extractor, principal schema, services factory, response data `JSON.stringify` throws for, such as a bigint, a circular reference, or a throwing `toJSON()` or getter, or a refinement in a response, header, cookie, or `provides` schema, its own error                                                                               |
 | `contract_violation` | Application code produced a value its declared contract forbids, such as response data, headers, or cookies that fail the outcome's schema, response data JSON writes no text for, such as `undefined`, a `next()` payload that fails `provides`, a services factory result that is not exactly its declared services, or an authenticator result or principal that fails its contract without throwing. The callback receives Routa's error, which describes the violation |
+| `configuration_error` | The application is configured in a way Routa cannot serve safely: a Routa app mounted in another with a different `correlation` setting. The callback receives Routa's error, which names both settings                                                                                                                                                                                                |
 
 | `stage`          | Where the failure happened                                                                                                                                                                                                   |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `identity`       | Identifying the request: a mounted Routa app's `correlation` setting differs from the app it is mounted in                              |
 | `authentication` | Resolving credentials: an authenticator or extractor threw or returned an invalid result                                                                                                                                     |
 | `context`        | Building a low-level `createContext` value, including reading the object it returns                                                                                                                                          |
 | `input`          | Reading input, such as a schema refinement that throws instead of reporting an issue                                                                                                                                         |

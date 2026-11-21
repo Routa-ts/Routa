@@ -1618,7 +1618,8 @@ type RequestErrorReporter = (
 ```
 
 The `onRequestError` option of `createRouta`, `createHonoApp`, and `createApplication`. Routa
-calls it once for each request that fails unexpectedly or breaks its response contract, with
+calls it once for each request that fails unexpectedly, breaks its response contract, or reaches
+a mounted Routa app whose `correlation` setting differs from the app it is mounted in, with
 the value that was thrown and a frozen [`RequestErrorDiagnostic`](#requesterrordiagnostic). It
 has already chosen the response and does not wait for the callback.
 [Configuration](/docs/reference/configuration/#onrequesterror) lists which failures are not
@@ -1683,7 +1684,7 @@ assignment that bypasses the types throws inside the callback and never changes 
 ## `RequestErrorCode`
 
 ```ts
-type RequestErrorCode = "unexpected_failure" | "contract_violation"
+type RequestErrorCode = "unexpected_failure" | "contract_violation" | "configuration_error"
 ```
 
 Whether application code threw, or produced a value its declared contract forbids. The
@@ -1697,6 +1698,7 @@ import type { RequestErrorCode } from "@routa-ts/core";
 export const errorTitles: Record<RequestErrorCode, string> = {
 	unexpected_failure: "Unexpected request failure",
 	contract_violation: "Contract violation",
+	configuration_error: "Configuration error",
 };
 ```
 
@@ -1706,6 +1708,7 @@ export const errorTitles: Record<RequestErrorCode, string> = {
 
 ```ts
 type RequestErrorStage =
+	| "identity"
 	| "authentication"
 	| "context"
 	| "input"
@@ -1724,6 +1727,7 @@ import type { RequestErrorStage } from "@routa-ts/core";
 
 // The team each alert goes to. A Record over the union, so TypeScript flags a missing stage.
 export const stageOwners: Record<RequestErrorStage, string> = {
+	identity: "platform",
 	authentication: "identity",
 	context: "platform",
 	input: "api",
