@@ -103,10 +103,12 @@ correlation header it already carries. `http.response.prepared` still records it
 `101`.
 
 An error thrown by a handler you add to that Hono app goes to Hono's error handler, because the
-handler is your Hono code rather than a Routa route. Hono's default handler prints the error,
-including its message and stack, to the console and answers `500 Internal Server Error`. That
-response carries `x-request-id` and is logged once as `http.response.prepared`, without an
-`http.error` event. Set `app.onError()` to decide what such failures print and return.
+handler is your Hono code rather than a Routa route. Hono's default handler answers an
+`HTTPException` with its own response and prints nothing. For any other error it prints the
+error, including its message and stack, to the console and answers `500 Internal Server Error`.
+Either response carries `x-request-id` and is logged once as `http.response.prepared` with its
+status, without an `http.error` event. Set `app.onError()` to decide what such failures print
+and return.
 
 A handler or middleware you add that neither returns a response nor calls `next()` leaves the
 request unanswered. Hono fails such a request through its error handler only after the whole
@@ -127,7 +129,10 @@ writes to the inner app's logger, bound to the same identity. Only the outer app
 unanswered request, so outer middleware that answers after `await next()` can answer for the
 inner app. A Routa app mounted in a plain Hono app owns the request instead, so it fails an
 unanswered request before the host app's middleware returns; answer such requests inside the
-Routa app.
+Routa app. Hono's `route()` also changes a mounted app that sets its own `app.onError()`: it
+wraps each of that app's handlers and finalizes an unanswered request as an empty `200`, which
+Routa then identifies and logs with that status. Answer every request inside an app that sets
+`onError()` before you mount it.
 
 ## Status Codes Routa Produces
 

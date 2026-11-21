@@ -49,7 +49,7 @@ services in an in-memory test application, and where Routa's own checks already 
 
    type GetUserArgs = Parameters<typeof route.get.run>[0];
 
-   const ctx = { logger: createLogger({ enabled: false }) };
+   const ctx = { requestId: "test-request", logger: createLogger({ enabled: false }) };
    const response: GetUserArgs["response"] = {
    	success: (data) => ({ type: "success", data }),
    	notFound: () => ({ type: "notFound" }),
@@ -283,14 +283,14 @@ settles keeps it pending, and your test runner's timeout reports the hang. Alway
 
 ## Troubleshooting
 
-| Problem                                   | Fix                                                                                                                       |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Imports fail with `ERR_MODULE_NOT_FOUND`  | Use `.js` extensions in relative imports. Generated projects are ESM.                                                     |
-| A handler test cannot construct `ctx`     | Pass the keys the route's middleware provides, plus a logger. `createLogger({ enabled: false })` keeps test output clean. |
-| A handler reads `ctx.services`            | Pass `services` in `ctx` with test implementations of the contract, or replace the scope's factory in `createTestApp`.    |
-| Type errors on `route.get.run`            | Metadata is stale. Run `routa generate`.                                                                                  |
-| `.routa/testing.gen.ts does not list ...` | You added a route or middleware file since the last generation. Run `routa generate`.                                     |
-| Vitest picks up files under `.routa/`     | Generated metadata contains no tests; narrow `include` in the Vitest config if a glob is too broad.                       |
+| Problem                                   | Fix                                                                                                                                         |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Imports fail with `ERR_MODULE_NOT_FOUND`  | Use `.js` extensions in relative imports. Generated projects are ESM.                                                                       |
+| A handler test cannot construct `ctx`     | Pass the keys the route's middleware provides, plus a `requestId` and a logger. `createLogger({ enabled: false })` keeps test output clean. |
+| A handler reads `ctx.services`            | Pass `services` in `ctx` with test implementations of the contract, or replace the scope's factory in `createTestApp`.                      |
+| Type errors on `route.get.run`            | Metadata is stale. Run `routa generate`.                                                                                                    |
+| `.routa/testing.gen.ts does not list ...` | You added a route or middleware file since the last generation. Run `routa generate`.                                                       |
+| Vitest picks up files under `.routa/`     | Generated metadata contains no tests; narrow `include` in the Vitest config if a glob is too broad.                                         |
 
 <Aside type="caution" title="v0 status">
 	Schema, handler, and in-memory application testing with `createTestApp` and service
