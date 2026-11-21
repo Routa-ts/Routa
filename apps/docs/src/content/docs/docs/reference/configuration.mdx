@@ -215,12 +215,14 @@ import { createRouta } from "@routa-ts/core";
 import { tracker } from "./tracker.js";
 
 export default createRouta({
-	// Returning the delivery promise lets Routa contain a delivery that fails.
-	onRequestError: (error, diagnostic) => tracker.captureException(error, { tags: diagnostic }),
+	// Awaiting the delivery lets Routa contain a delivery that fails.
+	onRequestError: async (error, diagnostic) => {
+		await tracker.send(error, { tags: diagnostic });
+	},
 });
 ```
 
-`tracker` stands for your error tracking client, such as Sentry's. The callback is a runtime
+`tracker` stands for your error tracking client, whose `send` returns a promise. With a client whose capture call returns something else, such as an event ID, call it in a block body instead of returning its result. The callback is a runtime
 value: `routa check` and `routa generate` never read or run it, and it does not change generated
 OpenAPI.
 
