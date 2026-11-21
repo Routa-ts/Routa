@@ -577,6 +577,77 @@ describe("request error reporting", () => {
 		});
 	});
 
+	it("LOG-AC-13 keeps a refinement ZodError off cause, so unwrapping middleware still answers 500", async () => {
+		const { calls, onRequestError } = recorder();
+		const unwrap = createMiddleware({
+			run: async ({ next }) => {
+				try {
+					return await next();
+				} catch (error) {
+					throw (error as Error).cause ?? error;
+				}
+			},
+		});
+		const app = createHonoApp(
+			[
+				{
+					method: "get",
+					path: "/x",
+					contract: createRoute({
+						middleware: [unwrap],
+						responses: {
+							ok: {
+								status: 200,
+								schema: z.object({ ok: z.boolean() }).refine(() => z.string().parse(7)),
+							},
+						},
+						run: () => ({ type: "ok", data: { ok: true } }),
+					}),
+				},
+			],
+			{ onRequestError, responseValidation: "always" },
+		);
+
+		const response = await app.request("/x");
+
+		expect(response.status).toBe(500);
+		expect(await response.json()).toMatchObject({ title: "Invalid handler output" });
+		expect(calls.map((call) => [call.error instanceof z.ZodError, call.diagnostic.code])).toEqual([
+			[true, "unexpected_failure"],
+		]);
+	});
+
+	it("LOG-AC-13 passes what a body's toJSON throws while Routa compares the response", async () => {
+		const { calls, onRequestError } = recorder();
+		let thrown: unknown;
+		const body = {
+			ok: true,
+			toJSON(key?: string) {
+				if (key === undefined) {
+					try {
+						z.string().parse(7);
+					} catch (error) {
+						thrown = error;
+						throw error;
+					}
+				}
+				return { ok: true };
+			},
+		};
+		const app = createHonoApp([get("/x", () => ({ type: "ok", data: body }))], {
+			onRequestError,
+			responseValidation: "always",
+		});
+
+		const response = await app.request("/x");
+
+		expect(response.status).toBe(500);
+		expect(await response.json()).toMatchObject({ title: "Invalid handler output" });
+		expect(
+			calls.map((call) => [call.error === thrown, call.diagnostic.code, call.diagnostic.stage]),
+		).toEqual([[true, "unexpected_failure", "response"]]);
+	});
+
 	it("LOG-AC-13 keeps the handler stage of an error that middleware wrapped and unwrapped", async () => {
 		const { calls, onRequestError } = recorder();
 		const database = new Error("connection reset");

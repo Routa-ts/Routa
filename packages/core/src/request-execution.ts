@@ -1097,7 +1097,19 @@ function assertUnchanged(
 	original: unknown,
 	root: readonly PropertyKey[] = [],
 ): void {
-	const path = firstChange(parsed, original, root);
+	let path: readonly PropertyKey[] | undefined;
+
+	try {
+		path = firstChange(parsed, original, root);
+	} catch (error) {
+		// The comparison runs the value's own `toJSON()` and getters; a `ZodError` they throw is
+		// the application's code failing, like a throwing refinement.
+		if (error instanceof ZodError) {
+			thrownBySchemaCode.add(error);
+		}
+
+		throw error;
+	}
 
 	if (path) {
 		throw new InvalidHandlerOutputError(
@@ -1379,12 +1391,20 @@ class RequestServicesError extends Error {
  * Application code threw while Routa checked or serialized a value it produced: a response body's
  * `toJSON()` or getter, or a schema refinement on a response or provided context. Routa answers it
  * as invalid handler output, whatever was thrown, so a `ZodError` never reads as a client error.
- * `onRequestError` receives the thrown value, as `cause`.
+ * `onRequestError` receives the thrown value. It is kept privately rather than as `cause`, so
+ * middleware that unwraps `cause` from `next()` still sees the invalid output it always saw.
  */
 class OutputCodeError extends InvalidHandlerOutputError {
-	constructor(message: string, cause: unknown, issues?: readonly HandlerOutputIssue[]) {
+	readonly #thrown: unknown;
+
+	constructor(message: string, thrown: unknown, issues?: readonly HandlerOutputIssue[]) {
 		super(message, issues);
-		this.cause = cause;
+		this.#thrown = thrown;
+	}
+
+	/** What application code threw, readable only here, where the class is in scope. */
+	static thrownBy(error: OutputCodeError): unknown {
+		return error.#thrown;
 	}
 }
 
@@ -1435,9 +1455,11 @@ class FailureStages {
  * own error rather than the error Routa wraps it in to answer the request.
  */
 function thrownValue(error: unknown): unknown {
-	return error instanceof AuthenticatorError
-		|| error instanceof RequestServicesError
-		|| error instanceof OutputCodeError
+	if (error instanceof OutputCodeError) {
+		return OutputCodeError.thrownBy(error);
+	}
+
+	return error instanceof AuthenticatorError || error instanceof RequestServicesError
 		? error.cause
 		: error;
 }
