@@ -576,6 +576,28 @@ function parseSchema(schema: z.ZodTypeAny, value: unknown): unknown {
 }
 
 /**
+ * Parses a value application code produced, such as a response body or provided context.
+ *
+ * @throws {ZodError} When the value does not match the schema
+ * @throws {OutputCodeError} When the schema's own code, such as a refinement, threw instead
+ */
+function parseOutput(schema: z.ZodTypeAny, value: unknown): unknown {
+	let parsed: ReturnType<z.ZodTypeAny["safeParse"]>;
+
+	try {
+		parsed = schema.safeParse(value);
+	} catch (error) {
+		throw new OutputCodeError("Validating the output threw.", error);
+	}
+
+	if (!parsed.success) {
+		throw parsed.error;
+	}
+
+	return parsed.data;
+}
+
+/**
  * Ensures middleware required context keys are present before the middleware runs.
  *
  * @param requires - Context keys declared by the middleware
@@ -714,7 +736,7 @@ function parseMiddlewareProvides(
 
 	for (const [key, schema] of Object.entries(provides ?? {})) {
 		try {
-			validated[key] = parseSchema(schema, providedCtx[key]);
+			validated[key] = parseOutput(schema, providedCtx[key]);
 		} catch (error) {
 			if (error instanceof ZodError) {
 				throw new InvalidHandlerOutputError(
@@ -936,7 +958,7 @@ function validateResult(produced: ProducedResult, validateResponse: boolean): Va
 			// mutate both. Compare against the wire copy taken before parsing.
 			const snapshot: unknown = JSON.parse(text);
 
-			assertUnchanged(parseSchema(response.schema, result.data), snapshot);
+			assertUnchanged(parseOutput(response.schema, result.data), snapshot);
 			assertUnchanged(result.data, snapshot);
 		} catch (error) {
 			if (error instanceof ZodError) {
@@ -969,7 +991,7 @@ function validatedHeaders(
 
 	if (validateResponse && outcome.headers) {
 		try {
-			assertUnchanged(parseSchema(outcome.headers, values), { ...values }, ["headers"]);
+			assertUnchanged(parseOutput(outcome.headers, values), { ...values }, ["headers"]);
 		} catch (error) {
 			if (error instanceof ZodError) {
 				throw new InvalidHandlerOutputError(
@@ -1003,7 +1025,7 @@ function validatedCookies(
 
 		if (validateResponse && effect.kind === "set") {
 			try {
-				assertUnchanged(parseSchema(effect.cookie.schema, effect.value), effect.value, [
+				assertUnchanged(parseOutput(effect.cookie.schema, effect.value), effect.value, [
 					"cookies",
 					effect.cookie.name,
 				]);
@@ -1191,7 +1213,7 @@ function finalizeResponse(
  * Serializes a response body as JSON, the representation that goes on the wire.
  *
  * @throws {InvalidHandlerOutputError} When JSON cannot represent the value
- * @throws {ResponseSerializationError} When the value's own code, such as `toJSON()` or a getter,
+ * @throws {OutputCodeError} When the value's own code, such as `toJSON()` or a getter,
  * throws
  */
 function jsonText(data: unknown): string {
@@ -1203,7 +1225,7 @@ function jsonText(data: unknown): string {
 		const unrepresentable = error instanceof TypeError ? unrepresentableIn(data) : undefined;
 
 		throw unrepresentable === undefined
-			? new ResponseSerializationError(error)
+			? new OutputCodeError("Serializing the response body threw.", error)
 			: new InvalidHandlerOutputError(
 					`Failed to serialize response as JSON: the data contains ${unrepresentable}.`,
 				);
@@ -1356,13 +1378,14 @@ class RequestServicesError extends Error {
 }
 
 /**
- * A response body's own code, such as `toJSON()` or a getter, threw while Routa serialized it.
- * Routa answers it as invalid handler output, whatever was thrown, so a `ZodError` never reads as
- * a client error. `onRequestError` receives the thrown value, as `cause`.
+ * Application code threw while Routa checked or serialized a value it produced: a response body's
+ * `toJSON()` or getter, or a schema refinement on a response or provided context. Routa answers it
+ * as invalid handler output, whatever was thrown, so a `ZodError` never reads as a client error.
+ * `onRequestError` receives the thrown value, as `cause`.
  */
-class ResponseSerializationError extends InvalidHandlerOutputError {
-	constructor(cause: unknown) {
-		super("Serializing the response body threw.");
+class OutputCodeError extends InvalidHandlerOutputError {
+	constructor(message: string, cause: unknown) {
+		super(message);
 		this.cause = cause;
 	}
 }
@@ -1417,7 +1440,7 @@ class FailureStages {
 function thrownValue(error: unknown): unknown {
 	return error instanceof AuthenticatorError
 		|| error instanceof RequestServicesError
-		|| error instanceof ResponseSerializationError
+		|| error instanceof OutputCodeError
 		? error.cause
 		: error;
 }
