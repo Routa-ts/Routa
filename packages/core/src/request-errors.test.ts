@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
 import { AuthenticationContractError } from "./authentication.js";
+import { InvalidHandlerOutputError } from "./handler-output-error.js";
 import {
 	createApplication,
 	createHonoApp,
@@ -425,6 +426,70 @@ describe("request error reporting", () => {
 				diagnostic.stage,
 			]),
 		).toEqual([[true, "contract_violation", "authentication"]]);
+	});
+
+	it("LOG-AC-13 passes what a response body throws while Routa serializes it", async () => {
+		const thrown: ReadonlyArray<[string, unknown]> = [
+			["error", new Error("secret")],
+			["type error", new TypeError("secret")],
+			["zod error", new z.ZodError([])],
+		];
+
+		for (const [name, error] of thrown) {
+			const { calls, onRequestError } = recorder();
+			const { events, logger } = capture();
+			const body = {
+				toJSON() {
+					throw error;
+				},
+			};
+			const app = createHonoApp([get("/x", () => ({ type: "ok", data: body }))], {
+				logger,
+				onRequestError,
+			});
+
+			const response = await app.request("/x");
+
+			expect(response.status, name).toBe(500);
+			expect(await response.json(), name).toMatchObject({ title: "Invalid handler output" });
+			expect(
+				calls.map((call) => [call.error === error, call.diagnostic.code, call.diagnostic.stage]),
+				name,
+			).toEqual([[true, "unexpected_failure", "response"]]);
+			expect(events.find((event) => event.event === "http.error")?.data, name).toMatchObject({
+				code: "unexpected_failure",
+				stage: "response",
+			});
+		}
+	});
+
+	it("LOG-AC-13 reports a body JSON cannot represent as Routa's contract violation", async () => {
+		const circular: Record<string, unknown> = { ok: true };
+		circular.self = circular;
+		const bodies: ReadonlyArray<[string, unknown]> = [
+			["bigint", { ok: true, n: 1n }],
+			["circular", circular],
+			["nested circular", { ok: true, list: [{ circular }] }],
+			["undefined", undefined],
+		];
+
+		for (const [name, data] of bodies) {
+			const { calls, onRequestError } = recorder();
+			const app = createHonoApp([get("/x", () => ({ type: "ok", data }))], { onRequestError });
+
+			const response = await app.request("/x");
+
+			expect(response.status, name).toBe(500);
+			expect(await response.json(), name).toMatchObject({ title: "Invalid handler output" });
+			expect(
+				calls.map((call) => [
+					call.error instanceof InvalidHandlerOutputError,
+					call.diagnostic.code,
+					call.diagnostic.stage,
+				]),
+				name,
+			).toEqual([[true, "contract_violation", "response"]]);
+		}
 	});
 
 	it("LOG-AC-13 reports one failure once, with the error middleware lets escape", async () => {

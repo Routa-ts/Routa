@@ -360,7 +360,9 @@ passes the mode explicitly; Routa does not infer it from `NODE_ENV`.
 Routa sends the value the handler returned, never the parsed value. Data that does not match
 the schema, or that the schema would change, produces a handler-output problem. Data that
 cannot be serialized as JSON also produces a handler-output problem rather than a partial
-response. See [Configuration](/docs/reference/configuration/) for the policy table.
+response: data JSON cannot represent, such as a bigint or a circular reference, is a contract
+violation, and a `toJSON()` method or getter in the data that throws is an unexpected failure
+whose thrown value goes to `onRequestError`. See [Configuration](/docs/reference/configuration/) for the policy table.
 
 An outcome's declared `headers` are part of the same step. In every mode Routa checks that
 the result writes only declared names, writes each once whatever its case, includes every
