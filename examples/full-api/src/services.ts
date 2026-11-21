@@ -1,5 +1,6 @@
 import { defineServices, type RoutaLogger } from "@routa-ts/core";
 import { DemoIdentityDirectory, type IdentityDirectory } from "./identities.js";
+import { logger } from "./logger.js";
 
 export type ProjectStatus = "active" | "archived";
 
@@ -26,6 +27,13 @@ const defineAppServices = defineServices<AppServices>();
 
 /** Fixed showcase data. A real application would wrap its database client here. */
 class DemoProjectCatalog implements ProjectCatalog {
+	// The shared logger, imported directly: this work belongs to no request.
+	readonly #log = logger.child({ service: "projects" });
+
+	constructor() {
+		this.#log.info("projects.catalog_ready", "Project catalog ready.", { store: "demo" });
+	}
+
 	list(tenant: { id: string; name: string }, status: ProjectStatus, label: string): Project[] {
 		const projects: Project[] = [
 			{ id: "project_1", tenantId: tenant.id, name: `${tenant.name} ${label} Portal`, status },
