@@ -280,6 +280,18 @@ describe("createLogger sanitization", () => {
 		expect(JSON.parse(JSON.stringify(data))).toEqual(data);
 	});
 
+	it("LOG-AC-04 skips non-enumerable properties and reads non-enumerable items as holes", () => {
+		const { events, logger } = capture();
+		const hidden = Object.defineProperty([], "0", { value: "internal-only" });
+		const mixed = Object.defineProperty([1, 2], "1", { value: "internal-only", enumerable: false });
+		const object = Object.defineProperty({ shown: 1 }, "hidden", { value: "internal-only" });
+
+		logger.info("hidden", "Hidden.", { hidden, mixed, object });
+
+		expect(events[0]?.data).toEqual({ hidden: [null], mixed: [1, null], object: { shown: 1 } });
+		expect(JSON.stringify(events[0])).not.toContain("internal-only");
+	});
+
 	it("LOG-AC-04 escapes control characters in every emitted string", () => {
 		const { events, logger } = capture();
 		const forged = 'ok\n{"level":"fatal"}\r\t\u001b[31m\u007f\u0085\u2028\u202e\u0000';

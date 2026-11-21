@@ -597,6 +597,20 @@ function ownValue(value: unknown, key: string): unknown {
 	return "value" in descriptor ? descriptor.value : unsupportedMarker;
 }
 
+/**
+ * Reads an object's or array's member like {@link ownValue}, except that a missing or
+ * non-enumerable one reads as `undefined`: dropped from an object, a hole in an array.
+ */
+function memberValue(value: object, key: string): unknown {
+	const descriptor = Object.getOwnPropertyDescriptor(value, key);
+
+	if (!descriptor?.enumerable) {
+		return undefined;
+	}
+
+	return "value" in descriptor ? descriptor.value : unsupportedMarker;
+}
+
 function sanitizeItems(
 	value: readonly unknown[],
 	traversal: Traversal,
@@ -613,7 +627,7 @@ function sanitizeItems(
 
 		const key = String(index);
 		items.push(
-			sanitizeMember(() => ownValue(value, key), traversal, followPaths(pending, key)) ?? null,
+			sanitizeMember(() => memberValue(value, key), traversal, followPaths(pending, key)) ?? null,
 		);
 	}
 
@@ -631,7 +645,7 @@ function sanitizeEntries(
 	for (const key of keys.slice(0, maxEntries)) {
 		const name = safeText(key);
 		const next = isSensitiveName(name) ? "redact" : followPaths(pending, name);
-		const item = sanitizeMember(() => ownValue(value, key), traversal, next);
+		const item = sanitizeMember(() => memberValue(value, key), traversal, next);
 
 		if (item !== undefined) {
 			entries.push([name, item]);

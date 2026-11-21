@@ -1327,12 +1327,12 @@ them, and never changes your objects.
   bindings and data alike. `createLogger` throws for a path with an empty segment.
 - **Values.** Strings, booleans, `null`, and finite numbers are kept. A `bigint` becomes its
   decimal string, limited like any other string; a `Date` becomes its ISO string; and `NaN`,
-  `Infinity`, and an invalid date become `null`. An `undefined` property is dropped and an
-  `undefined` array item becomes `null`. Plain objects and arrays are copied. Every other
-  value, including class instances, `Error`, `Map`, `Set`, typed arrays, functions, symbols,
-  and accessor properties, becomes `[Unsupported]`. Symbol keys and non-enumerable
-  properties are skipped, and a reference back to an enclosing object becomes `[Circular]`.
-  Getters and `toJSON` methods never run.
+  `Infinity`, and an invalid date become `null`. An `undefined` property is dropped, and an
+  array item that is `undefined`, a hole, or non-enumerable becomes `null`. Plain objects and
+  arrays are copied. Every other value, including class instances, `Error`, `Map`, `Set`,
+  typed arrays, functions, symbols, and accessor properties, becomes `[Unsupported]`. Symbol
+  keys and non-enumerable object properties are skipped, and a reference back to an enclosing
+  object becomes `[Circular]`. Getters and `toJSON` methods never run.
 - **Strings.** Control characters (C0, DEL, C1), line and paragraph separators, and
   bidirectional formatting characters are escaped as `\n`, `\r`, `\t`, or `\uXXXX` in the
   event name, message, timestamp, keys, and values, so one event is one line.
