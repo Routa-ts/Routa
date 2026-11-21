@@ -1647,9 +1647,12 @@ means, which failures are not reported, and what happens when the callback fails
 
 ```ts title="src/routa.ts"
 import { createRouta, type RequestErrorReporter } from "@routa-ts/core";
+import { tracker } from "./tracker.js";
 
+// Send the original error to a tracker your application owns, never to stdout or Routa's
+// logger: it can hold a credential or other request data.
 const onRequestError: RequestErrorReporter = (error, diagnostic) => {
-	console.error(diagnostic.requestId, diagnostic.stage, error);
+	void tracker.capture(error, { ...diagnostic });
 };
 
 export default createRouta({ onRequestError });
