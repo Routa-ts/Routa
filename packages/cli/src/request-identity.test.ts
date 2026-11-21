@@ -293,6 +293,18 @@ export const logger = createLogger({ sink: () => {} });
 						expect(response.headers.has(name), `${label} ${name}`).toBe(true);
 					}
 				}
+				// A response sets cookies only when OpenAPI documents Set-Cookie for it, and always does
+				// when OpenAPI marks Set-Cookie required.
+				const documentedCookie = documentedResponse!.headers?.["Set-Cookie"] as
+					| { required?: boolean }
+					| undefined;
+				const sentCookie = response.headers.getSetCookie().length > 0;
+				if (sentCookie) {
+					expect(documentedCookie, `${label} Set-Cookie`).toBeDefined();
+				}
+				if (documentedCookie?.required) {
+					expect(sentCookie, `${label} Set-Cookie`).toBe(true);
+				}
 				for (const [name] of response.headers) {
 					if (!lifecycle.has(name) && !transport.has(name)) {
 						expect(Object.keys(documentedResponse!.headers ?? {}), `${label} ${name}`).toContain(
