@@ -404,8 +404,16 @@ function identifyRequests(
 
 		await next();
 
-		const { headers, status } = context.res;
-		headers.set(requestIdHeader, requestId);
+		let { headers } = context.res;
+		try {
+			headers.set(requestIdHeader, requestId);
+		} catch {
+			// Response.redirect() and fetch() responses have immutable headers, so Routa sets its
+			// headers on a copy of the response.
+			context.res = new Response(context.res.body, context.res);
+			({ headers } = context.res);
+			headers.set(requestIdHeader, requestId);
+		}
 
 		// Only an accepted value is echoed. No header Routa writes can be the correlation header,
 		// so the echo never replaces one, and without a value it leaves the response alone.
@@ -416,7 +424,7 @@ function identifyRequests(
 		state.logger.info("http.response.prepared", "Response prepared.", {
 			method: loggedMethod(context.req.raw.method),
 			route: state.route ?? unmatchedRoute,
-			status,
+			status: context.res.status,
 			durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
 		});
 	});

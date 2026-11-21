@@ -439,6 +439,30 @@ describe("request identity", () => {
 		expect(events.filter((event) => event.event === "http.response.prepared")).toEqual([]);
 	});
 
+	it("LOG-AC-06 identifies a response whose headers are immutable, such as Response.redirect()", async () => {
+		const { events, logger } = capture();
+		const app = createHonoApp([], { logger, correlation: true });
+		app.get("/old", () => Response.redirect("https://example.com/new", 302));
+
+		const response = await app.request("/old", { headers: { "x-correlation-id": "trace-1" } });
+
+		expect(response.status).toBe(302);
+		expect(response.headers.get("location")).toBe("https://example.com/new");
+		expect(response.headers.get("x-request-id")).toMatch(uuid);
+		expect(response.headers.get("x-correlation-id")).toBe("trace-1");
+		expect(events.map((event) => [event.event, event.data])).toEqual([
+			[
+				"http.response.prepared",
+				expect.objectContaining({
+					requestId: response.headers.get("x-request-id"),
+					correlationId: "trace-1",
+					route: "[Unmatched]",
+					status: 302,
+				}),
+			],
+		]);
+	});
+
 	it("LOG-AC-07 keeps identity in context and headers with logging off", async () => {
 		const app = await createApplication([echoRoute]);
 
