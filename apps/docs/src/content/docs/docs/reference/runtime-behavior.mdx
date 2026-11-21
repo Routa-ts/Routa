@@ -118,7 +118,9 @@ logs `http.response.prepared`, through its logger, with the route pattern the in
 declares, such as `/whoami`, without the mount prefix. The inner app's request logger still
 writes to the inner app's logger, bound to the same identity. Only the outer app fails an
 unanswered request, so outer middleware that answers after `await next()` can answer for the
-inner app.
+inner app. A Routa app mounted in a plain Hono app owns the request instead, so it fails an
+unanswered request before the host app's middleware returns; answer such requests inside the
+Routa app.
 
 ## Status Codes Routa Produces
 
