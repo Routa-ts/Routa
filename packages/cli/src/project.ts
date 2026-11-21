@@ -13,6 +13,7 @@ import { basename, dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	callName,
+	coreCall,
 	createRouteObject,
 	objectLiteral,
 	objectProperties,
@@ -29,7 +30,6 @@ import {
 	type AuthenticationMetadata,
 	type AuthenticationRequirementMetadata,
 	authenticationFailedDescription,
-	coreCall,
 	folderGuard,
 	rejectsAmbiguousCredentials,
 	requireAuthMiddleware,

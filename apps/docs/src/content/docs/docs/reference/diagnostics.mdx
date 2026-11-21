@@ -349,7 +349,11 @@ When `src/routa.ts` imports or re-exports its default from another module, such 
 `export { default } from "./config.js"`, Routa follows it to the `createRouta` call there and
 reads `correlation` by the same rules, reporting the file that holds it. It reads a spread or
 config argument the same way when it names an object literal or a `createRouta` call, such as
-`...shared` with `const shared = createRouta({ port: 3000 })`.
+`...shared` with `const shared = createRouta({ port: 3000 })`. A `createRouta` call is one to
+the function `@routa-ts/core` exports, imported under any name, as in
+`import { createRouta as defineApi }`, or called on a namespace import, as in
+`core.createRouta()`. An application function named `createRouta` is read by its type, like
+any other call.
 
 It also fails when any other part of the config may set `correlation`: a spread, a config
 argument, or a default export whose TypeScript type has a `correlation` member, even an

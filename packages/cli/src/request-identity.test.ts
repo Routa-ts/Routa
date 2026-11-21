@@ -355,6 +355,61 @@ describe("correlation config", () => {
 		}
 	});
 
+	it("LOG-AC-11 reads correlation in createRouta imported under another name or as a namespace", () => {
+		const aliased = 'import { createRouta as defineApi } from "@routa-ts/core";\n';
+		const namespace = 'import * as routa from "@routa-ts/core";\n';
+
+		for (const [routa, header] of [
+			[`${aliased}export default defineApi({ port: 3000 });\n`, undefined],
+			[`${aliased}export default defineApi({ correlation: true });\n`, "x-correlation-id"],
+			[
+				`${aliased}const shared = defineApi({ correlation: { header: "X-Trace-Ref" } });\nexport default defineApi({ port: 3000, ...shared });\n`,
+				"x-trace-ref",
+			],
+			[`${namespace}export default routa.createRouta({ port: 3000 });\n`, undefined],
+			[
+				`${namespace}export default routa.createRouta({ correlation: { header: "X-Trace-Ref" } });\n`,
+				"x-trace-ref",
+			],
+		] as const) {
+			const result = validateProject(
+				project({ "src/routa.ts": routa, "src/routes/status/route.ts": statusRoute }),
+				{ write: false },
+			);
+			expect(result.diagnostics, routa).toEqual([]);
+			expect(result.warnings, routa).toEqual([]);
+			expect(result.correlationHeader, routa).toBe(header);
+		}
+	});
+
+	it("LOG-AC-11 reads a function named createRouta from another module by its type, not its argument", () => {
+		const routa =
+			'import { createRouta } from "./factory.js";\nexport default createRouta({ correlation: true });\n';
+		const result = (factory: string) =>
+			validateProject(
+				project({
+					"src/routa.ts": routa,
+					"src/factory.ts": factory,
+					"src/routes/status/route.ts": statusRoute,
+				}),
+				{ write: false },
+			);
+
+		// Its result may hold correlation, which Routa cannot read.
+		expect(
+			result(
+				'import type { RoutaConfig } from "@routa-ts/core";\nexport function createRouta(config: object): RoutaConfig {\n\treturn { ...config, correlation: { header: "x-other" } };\n}\n',
+			).diagnostics.map(({ code, file }) => ({ code, file })),
+		).toEqual([{ code: "ROUTA_CORRELATION_CONFIG_UNRESOLVED", file: "src/routa.ts" }]);
+
+		// Its result has no correlation, whatever its argument holds.
+		const opaque = result(
+			"export function createRouta(_config: object): { port: number } {\n\treturn { port: 3000 };\n}\n",
+		);
+		expect(opaque.diagnostics).toEqual([]);
+		expect(opaque.correlationHeader).toBeUndefined();
+	});
+
 	it("LOG-AC-11 rejects a spread, key, argument, or export whose type may hold correlation", () => {
 		const unresolved = {
 			code: "ROUTA_CORRELATION_CONFIG_UNRESOLVED",

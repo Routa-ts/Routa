@@ -661,6 +661,33 @@ export default createRouta({ ...base, port: 3000 });
 		});
 	});
 
+	it("reads authentication from createRouta imported under another name or as a namespace", () => {
+		const config = configWith(
+			'{ principal: Principal, schemes: { userToken: bearer({ challenge: { realm: "api" }, authenticate: reject }) } }',
+		);
+
+		for (const routa of [
+			config
+				.replace("{ bearer, createRouta }", "{ bearer, createRouta as defineApi }")
+				.replace("export default createRouta(", "export default defineApi("),
+			config
+				.replace("{ bearer, createRouta }", "{ bearer }")
+				.replace(
+					'import { z } from "zod";',
+					'import * as core from "@routa-ts/core";\nimport { z } from "zod";',
+				)
+				.replace("export default createRouta(", "export default core.createRouta("),
+		]) {
+			const validation = validateProject(project({ "src/routa.ts": routa }), { write: false });
+
+			expect(validation.diagnostics, routa).toEqual([]);
+			expect(validation.authentication, routa).toEqual({
+				schemes: [{ name: "userToken", kind: "bearer", realm: "api" }],
+				multipleCredentials: "priority",
+			});
+		}
+	});
+
 	it("reads an authenticate method like an authenticate property", () => {
 		const validation = validateProject(
 			project({

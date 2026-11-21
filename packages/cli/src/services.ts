@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import {
 	callName,
+	coreCall,
 	createRouteObject,
 	objectLiteral,
 	objectProperties,
@@ -232,7 +233,9 @@ export function routaConfigMember(
  * Follows a part of the config, such as the default export, the `createRouta` argument, or a
  * spread, to the value it stands for: through `const` bindings, imports, and re-exports, and into
  * the argument of each `createRouta` call, which returns its argument unchanged. The checker
- * resolves bindings without running any module.
+ * resolves bindings without running any module. A call is `createRouta` when it calls the one
+ * `@routa-ts/core` exports, imported under any name or called on a namespace import, as in
+ * `core.createRouta()`; an application function that shares the name is read by its type.
  *
  * @param file - The module containing `node`, relative to `cwd`
  * @returns The object literal it found, or the node it stopped at as written, so its type keeps
@@ -253,15 +256,13 @@ function configValue(
 		return { file: bound.file, node: value };
 	}
 
-	if (
-		!ts.isCallExpression(value)
-		|| callName(value.expression) !== "createRouta"
-		|| depth >= maxBindingDepth
-	) {
+	const call = ts.isCallExpression(value) ? coreCall(value, "createRouta") : undefined;
+
+	if (!call || depth >= maxBindingDepth) {
 		return bound;
 	}
 
-	const [argument] = value.arguments;
+	const [argument] = call.arguments;
 	return argument && configValue(cwd, parser, bound.file, argument, depth + 1);
 }
 
