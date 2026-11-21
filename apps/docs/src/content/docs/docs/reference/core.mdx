@@ -1026,7 +1026,7 @@ factory. Call it directly in tests of routes that use no application services. E
 the app receives, matched or not, gets a generated
 [request identity](/docs/reference/runtime-behavior/#request-identity) and an `x-request-id`
 response header, once: an app mounted in another Routa app with `route()` reuses the outer
-app's identity.
+app's identity, including its correlation ID.
 
 | Parameter                    | Type                        | Purpose                                                                            |
 | ---------------------------- | --------------------------- | ---------------------------------------------------------------------------------- |
@@ -1619,8 +1619,8 @@ type RequestErrorReporter = (
 
 The `onRequestError` option of `createRouta`, `createHonoApp`, and `createApplication`. Routa
 calls it once for each request that fails unexpectedly, breaks its response contract, or reaches
-a mounted Routa app when the app it is mounted in correlates on a header the mounted app does not
-use, with the value that was thrown and a frozen [`RequestErrorDiagnostic`](#requesterrordiagnostic). It
+a mounted Routa app when the app it is mounted in correlates on a header the mounted app reads a
+credential from or declares, with the value that was thrown and a frozen [`RequestErrorDiagnostic`](#requesterrordiagnostic). It
 has already chosen the response and does not wait for the callback.
 [Configuration](/docs/reference/configuration/#onrequesterror) lists which failures are not
 reported and what happens when the callback fails.
