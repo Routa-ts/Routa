@@ -337,7 +337,8 @@ go: every middleware, services factory, and handler already reads `ctx.requestId
 `routa check` cannot read the `correlation` value in `src/routa.ts`. It accepts `true`,
 `false`, or `{ header: "..." }` with a string literal, written in place or as a `const` object
 literal; anything else, such as `correlation: process.env.CORRELATION === "on"` or
-`{ header: process.env.HEADER }`, fails. Whether correlation is on and its header change the
+`{ header: process.env.HEADER }`, fails. A string-literal computed key such as
+`["correlation"]` is read as the plain key it spells, so its value must be readable too. Whether correlation is on and its header change the
 OpenAPI document, so Routa reads them without running `src/routa.ts`.
 
 ```text
@@ -375,7 +376,9 @@ credential and never replaces `x-request-id`.
 ### `ROUTA_CORRELATION_SPREAD_UNRESOLVED`
 
 Warning. The default-exported `createRouta` config in `src/routa.ts` has a spread, computed
-key, or config argument that Routa cannot read, and no visible `correlation` member after it.
+key, or config argument that Routa cannot read, and no visible `correlation` member after it,
+or `src/routa.ts` re-exports its default from another module. Routa follows
+`export default createRouta(...)` and `export { config as default }` for a local `const`.
 Correlation inside it never reaches generated metadata or OpenAPI. If the unread part does turn
 correlation on, `routa dev` and `routa start` refuse to start.
 

@@ -213,18 +213,54 @@ describe("correlation config", () => {
 		}
 	});
 
-	it("LOG-AC-09 warns when a spread it cannot read may hold correlation", () => {
-		const result = validateProject(
-			project({
-				"src/routa.ts": config("\t...settings(),", "const settings = () => ({});\n"),
-				"src/routes/status/route.ts": statusRoute,
-			}),
-			{ write: false },
-		);
+	it("LOG-AC-11 reads correlation behind a named default export and a string-literal computed key", () => {
+		for (const [routa, header] of [
+			[
+				`import { createRouta } from "@routa-ts/core";\nconst config = createRouta({ correlation: { header: "X-Trace-Ref" } });\nexport { config as default };\n`,
+				"x-trace-ref",
+			],
+			[config('\t["correlation"]: true,'), "x-correlation-id"],
+		] as const) {
+			const result = validateProject(
+				project({ "src/routa.ts": routa, "src/routes/status/route.ts": statusRoute }),
+				{ write: false },
+			);
+			expect(result.diagnostics, routa).toEqual([]);
+			expect(result.warnings, routa).toEqual([]);
+			expect(result.correlationHeader, routa).toBe(header);
+		}
 
-		expect(result.warnings.map((warning) => warning.code)).toContain(
-			"ROUTA_CORRELATION_SPREAD_UNRESOLVED",
-		);
+		expect(
+			diagnostics({
+				"src/routa.ts": config('\t["correlation"]: { header: process.env.CORR ?? "x-trace" },'),
+			}),
+		).toEqual([
+			{
+				code: "ROUTA_CORRELATION_CONFIG_UNRESOLVED",
+				message: "The correlation config in src/routa.ts cannot be statically read.",
+			},
+		]);
+	});
+
+	it("LOG-AC-09 warns when a spread or default export it cannot read may hold correlation", () => {
+		for (const routa of [
+			config("\t...settings(),", "const settings = () => ({});\n"),
+			'export { default } from "./config.js";\n',
+		]) {
+			const result = validateProject(
+				project({
+					"src/routa.ts": routa,
+					"src/config.ts": config("\tcorrelation: true,"),
+					"src/routes/status/route.ts": statusRoute,
+				}),
+				{ write: false },
+			);
+
+			expect(
+				result.warnings.map((warning) => warning.code),
+				routa,
+			).toContain("ROUTA_CORRELATION_SPREAD_UNRESOLVED");
+		}
 	});
 });
 

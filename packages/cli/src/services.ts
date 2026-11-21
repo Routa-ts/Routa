@@ -191,7 +191,8 @@ type ConfigMember = {
 /**
  * Finds a member, such as `services`, of the default-exported `createRouta({ ... })` call in
  * `src/routa.ts`, the config Routa loads at startup. The export may be the call itself or a
- * `const` bound to it; any other default export may hide the member.
+ * `const` bound to it, exported with `export default` or `export { config as default }`; any
+ * other default export may hide the member.
  */
 export function routaConfigMember(
 	cwd: string,
@@ -199,8 +200,8 @@ export function routaConfigMember(
 	member: string,
 ): ConfigMember {
 	const sourceFile = parseTypeScriptFile(join(cwd, configFile), parser);
-	const exported = sourceFile.statements.find(ts.isExportAssignment)?.expression;
-	const call = exported && createRoutaCall(sourceFile, exported);
+	const exported = defaultExport(sourceFile);
+	const call = exported && exported !== "unreadable" && createRoutaCall(sourceFile, exported);
 
 	if (!call) {
 		return { hidden: exported !== undefined };
@@ -213,6 +214,33 @@ export function routaConfigMember(
 	return config
 		? objectMember(cwd, config.file, config.object, parser, 1, member)
 		: { hidden: argument !== undefined };
+}
+
+/**
+ * What a module exports as default: the expression of `export default`, the local binding
+ * `export { config as default }` names, or `"unreadable"` for a default re-exported from another
+ * module.
+ */
+function defaultExport(sourceFile: ts.SourceFile): ts.Expression | "unreadable" | undefined {
+	for (const statement of sourceFile.statements) {
+		if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
+			return statement.expression;
+		}
+
+		if (
+			ts.isExportDeclaration(statement)
+			&& !statement.isTypeOnly
+			&& statement.exportClause
+			&& ts.isNamedExports(statement.exportClause)
+		) {
+			const element = statement.exportClause.elements.find((item) => item.name.text === "default");
+			const local = element && (element.propertyName ?? element.name);
+
+			if (local) {
+				return !statement.moduleSpecifier && ts.isIdentifier(local) ? local : "unreadable";
+			}
+		}
+	}
 }
 
 /** The `createRouta(...)` call an expression is, or a local `const` it names is bound to. */
@@ -270,15 +298,32 @@ function objectMember(
 			found = member.declaration
 				? member
 				: { declaration: found.declaration, hidden: found.hidden || member.hidden };
-		} else if (ts.isComputedPropertyName(property.name)) {
-			found = { ...found, hidden: true };
-		} else if (propertyName(property.name) === name) {
-			// A visible member replaces whatever an earlier unreadable part held.
-			found = { declaration: { file, node: memberValue(property) }, hidden: false };
+		} else {
+			const key = memberKey(property.name);
+
+			if (key === undefined) {
+				found = { ...found, hidden: true };
+			} else if (key === name) {
+				// A visible member replaces whatever an earlier unreadable part held.
+				found = { declaration: { file, node: memberValue(property) }, hidden: false };
+			}
 		}
 	}
 
 	return found;
+}
+
+/**
+ * A config member's key. A computed key that is a string or number literal, such as
+ * `["correlation"]`, is the plain key it spells; any other computed key cannot be read.
+ */
+function memberKey(name: ts.PropertyName): string | undefined {
+	if (!ts.isComputedPropertyName(name)) {
+		return propertyName(name);
+	}
+
+	const key = unwrapExpression(name.expression);
+	return ts.isStringLiteralLike(key) || ts.isNumericLiteral(key) ? key.text : undefined;
 }
 
 /**
