@@ -1239,9 +1239,9 @@ function finalizeResponse(
 /**
  * Serializes a response body as JSON, the representation that goes on the wire.
  *
- * @throws {InvalidHandlerOutputError} When JSON cannot represent the value
- * @throws {OutputCodeError} When the value's own code, such as `toJSON()` or a getter,
- * throws
+ * @throws {InvalidHandlerOutputError} When JSON has no representation for the value
+ * @throws {OutputCodeError} When serializing throws, for a bigint, a circular reference, or the
+ *   value's own `toJSON()` or getter; it carries what was thrown, which `onRequestError` receives
  */
 function jsonText(data: unknown): string {
 	let text: string | undefined;
@@ -1249,13 +1249,10 @@ function jsonText(data: unknown): string {
 	try {
 		text = JSON.stringify(data);
 	} catch (error) {
-		const unrepresentable = error instanceof TypeError ? unrepresentableIn(data) : undefined;
-
-		throw unrepresentable === undefined
-			? new OutputCodeError("Serializing the response body threw.", error)
-			: new InvalidHandlerOutputError(
-					`Failed to serialize response as JSON: the data contains ${unrepresentable}.`,
-				);
+		throw new OutputCodeError(
+			`Failed to serialize response as JSON: ${error instanceof Error ? error.message : String(error)}`,
+			error,
+		);
 	}
 
 	if (text === undefined) {
@@ -1263,48 +1260,6 @@ function jsonText(data: unknown): string {
 	}
 
 	return text;
-}
-
-/**
- * Finds why `JSON.stringify` threw a `TypeError` for `data`, which it does for a bigint and a
- * circular reference. It serializes `data` again, so it runs only after a failure: a value's own
- * code that throws a `TypeError` runs twice.
- *
- * @returns What JSON cannot represent, or `undefined` when the value's own code threw instead
- */
-function unrepresentableIn(data: unknown): "a bigint" | "a circular reference" | undefined {
-	const found = Symbol("unrepresentable");
-	// The objects being serialized, from the root to the one whose property is being read.
-	const ancestors: unknown[] = [];
-	let reason: "a bigint" | "a circular reference" | undefined;
-
-	try {
-		JSON.stringify(data, function (this: unknown, _key, value: unknown) {
-			while (ancestors.length > 0 && ancestors.at(-1) !== this) {
-				ancestors.pop();
-			}
-
-			if (typeof value === "bigint") {
-				reason = "a bigint";
-			} else if (typeof value === "object" && value !== null) {
-				if (ancestors.includes(value)) {
-					reason = "a circular reference";
-				}
-
-				ancestors.push(value);
-			}
-
-			if (reason !== undefined) {
-				throw found;
-			}
-
-			return value;
-		});
-	} catch {
-		// Either `found`, or the value's own code threw.
-	}
-
-	return reason;
 }
 
 /**

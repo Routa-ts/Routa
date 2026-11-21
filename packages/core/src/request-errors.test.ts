@@ -195,7 +195,6 @@ describe("request error reporting", () => {
 		const cases: ReadonlyArray<[RequestErrorStage, HonoRoute, RequestInit?]> = [
 			["response", get("/x", () => ({ type: "ok", data: { ok: "yes" } }))],
 			["response", get("/x", () => ({ type: "missing" }))],
-			["response", get("/x", () => ({ type: "ok", data: { ok: true, n: 1n } }))],
 			[
 				"response",
 				{
@@ -578,17 +577,16 @@ describe("request error reporting", () => {
 		});
 	});
 
-	it("LOG-AC-13 reports a body JSON cannot represent as Routa's contract violation", async () => {
+	it("LOG-AC-13 reports what JSON.stringify throws, and a body JSON has no text for", async () => {
 		const circular: Record<string, unknown> = { ok: true };
 		circular.self = circular;
-		const bodies: ReadonlyArray<[string, unknown]> = [
+		const thrownBy: ReadonlyArray<[string, unknown]> = [
 			["bigint", { ok: true, n: 1n }],
 			["circular", circular],
 			["nested circular", { ok: true, list: [{ circular }] }],
-			["undefined", undefined],
 		];
 
-		for (const [name, data] of bodies) {
+		for (const [name, data] of thrownBy) {
 			const { calls, onRequestError } = recorder();
 			const app = createHonoApp([get("/x", () => ({ type: "ok", data }))], { onRequestError });
 
@@ -598,13 +596,64 @@ describe("request error reporting", () => {
 			expect(await response.json(), name).toMatchObject({ title: "Invalid handler output" });
 			expect(
 				calls.map((call) => [
-					call.error instanceof InvalidHandlerOutputError,
+					call.error instanceof TypeError,
 					call.diagnostic.code,
 					call.diagnostic.stage,
 				]),
 				name,
-			).toEqual([[true, "contract_violation", "response"]]);
+			).toEqual([[true, "unexpected_failure", "response"]]);
 		}
+
+		const { calls, onRequestError } = recorder();
+		const app = createHonoApp([get("/x", () => ({ type: "ok", data: undefined }))], {
+			onRequestError,
+		});
+
+		expect((await app.request("/x")).status).toBe(500);
+		expect(
+			calls.map((call) => [call.error instanceof InvalidHandlerOutputError, call.diagnostic.code]),
+		).toEqual([[true, "contract_violation"]]);
+	});
+
+	it("LOG-AC-13 serializes a failing body once and shows middleware the parent's message", async () => {
+		let calls = 0;
+		let caught: unknown;
+		const watch = createMiddleware({
+			run: async ({ next }) => {
+				try {
+					return await next();
+				} catch (error) {
+					caught = error;
+					throw error;
+				}
+			},
+		});
+		const body = {
+			toJSON() {
+				calls += 1;
+				throw new TypeError("Could not serialize invoice total");
+			},
+		};
+		const app = createHonoApp(
+			[
+				{
+					method: "get",
+					path: "/x",
+					contract: createRoute({
+						middleware: [watch],
+						responses: { ok: { status: 200, schema: z.unknown() } },
+						run: () => ({ type: "ok", data: body }),
+					}),
+				},
+			],
+			{ responseValidation: "always" },
+		);
+
+		expect((await app.request("/x")).status).toBe(500);
+		expect(calls).toBe(1);
+		expect((caught as Error).message).toBe(
+			"Failed to serialize response as JSON: Could not serialize invoice total",
+		);
 	});
 
 	it("LOG-AC-13 keeps the error mapping's 400 for an escaping ZodError and an unreadable body", async () => {
