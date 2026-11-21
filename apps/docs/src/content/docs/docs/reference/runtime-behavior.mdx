@@ -80,8 +80,9 @@ Routa owns these values:
 
 - `ctx.requestId` and `ctx.correlationId` are readonly. Middleware cannot declare them in
   `provides` or pass them to `next()`, and cannot assign them; `ctx.logger` is reserved the same
-  way. TypeScript, `routa check` (`ROUTA_CONTEXT_RESERVED`), and route registration reject each
-  case, and an assignment that bypasses the types fails the request as a `500`.
+  way. TypeScript and `routa check` (`ROUTA_CONTEXT_RESERVED`) reject each case, and route
+  registration rejects a reserved key in `provides`. A `next()` payload or an assignment that
+  bypasses the types fails the request that reaches it as a `500`.
 - An outcome or reject cannot declare `x-request-id`, or the configured correlation header, in
   `headers` (`ROUTA_RESPONSE_HEADER_RESERVED`).
 - The request logger keeps `requestId` and `correlationId` whatever event data or `child()`

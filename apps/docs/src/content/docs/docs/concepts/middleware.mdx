@@ -87,8 +87,9 @@ export const withLocale = createMiddleware({
 Every middleware also reads the readonly [request identity](/docs/reference/core/#requestidentitycontext),
 `ctx.requestId` and `ctx.correlationId`, without requiring it. Routa generates `requestId` for
 each request, so no middleware provides it: `services`, `requestId`, `correlationId`, and
-`logger` are reserved, and TypeScript, `routa check` (`ROUTA_CONTEXT_RESERVED`), and
-registration reject a middleware that provides one or passes one to `next()`.
+`logger` are reserved. TypeScript and `routa check` (`ROUTA_CONTEXT_RESERVED`) reject a
+middleware that provides one or passes one to `next()`, registration rejects one in `provides`,
+and a request whose middleware passes one to `next()` past the types fails as a `500`.
 
 ### Service Requirements
 
