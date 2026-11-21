@@ -148,6 +148,12 @@ header never reaches the response or the logs. The mounted app logs `http.error`
 `code` `configuration_error` and `stage` `identity`. The error it passes names both settings and
 holds no header value.
 
+This rule covers `route()` mounting only. An app that forwards a request to another app through
+its `fetch`, for example with Hono's `mount()` or `inner.fetch(c.req.raw)`, sends a new request:
+the other app identifies it again and checks nothing against the forwarding app's settings. Do
+not correlate the forwarding app on a header the other app reads a credential from, or the
+forwarding app echoes and logs that credential.
+
 ## Status Codes Routa Produces
 
 | Status | Cause                                                                                 |
