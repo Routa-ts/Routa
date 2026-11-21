@@ -1,6 +1,7 @@
 ---
 "@routa-ts/core": minor
 "@routa-ts/cli": minor
+"create-routa-ts": patch
 ---
 
 Generate a request identity for every request, add opt-in correlation, and replace the automatic request events with safe ones.
@@ -11,7 +12,7 @@ Generate a request identity for every request, add opt-in correlation, and repla
 - `http.request` is replaced by `http.response.prepared`, written once per prepared response with `requestId`, `correlationId` when present, `method` (a standard method or `_OTHER`), `route` (the route pattern or `[Unmatched]`), `status`, and `durationMs`. It says the response was prepared, not sent. `http.error` now carries `requestId`, `method`, `route`, `status`, and handler-output `issues`, and no longer the request path or any error's message, name, stack, or authentication scheme.
 - `requestId`, `correlationId`, and `logger` are reserved context keys like `services`: TypeScript, `routa check` (`ROUTA_CONTEXT_RESERVED`), and registration reject middleware that provides one or passes one to `next()`, and an assignment that bypasses the types fails the request. `x-request-id` and the configured correlation header are reserved response headers: TypeScript (for `x-request-id`), `routa check` (`ROUTA_RESPONSE_HEADER_RESERVED`), and registration reject an outcome or reject that declares one, and Routa sets both last on every response.
 - `routa check` reads `correlation` from `src/routa.ts` without running it and reports `ROUTA_CORRELATION_CONFIG_UNRESOLVED`, `ROUTA_CORRELATION_HEADER_INVALID`, `ROUTA_CORRELATION_HEADER_CONFLICT`, and the warning `ROUTA_CORRELATION_SPREAD_UNRESOLVED`. `.routa/routes.gen.ts` exports `routaCorrelationHeader` when correlation is on, and startup refuses a `src/routa.ts` that disagrees with it.
-- Generated OpenAPI documents `x-request-id` on every operation response, and the correlation header as optional when correlation is on. `routa scaffold` writes `x-request-id` into the baseline it creates.
+- Generated OpenAPI documents `x-request-id` on every operation response, and the correlation header as optional when correlation is on. `routa scaffold` and `create-routa-ts` write `x-request-id` into the baselines they create.
 
 Migration:
 

@@ -57,6 +57,18 @@ describe("create-routa-ts", () => {
 		expect(readFileSync(join(cwd, "my-api/.routa/openapi-baseline.json"), "utf8")).toContain(
 			'"operationId": "getStatus"',
 		);
+		// Routa sends x-request-id on every response, so the baseline documents it as generated
+		// OpenAPI does, and the new project's first openapi check reports no drift.
+		const baseline = JSON.parse(
+			readFileSync(join(cwd, "my-api/.routa/openapi-baseline.json"), "utf8"),
+		) as { paths: Record<string, Record<string, { responses: Record<string, any> }>> };
+		expect(baseline.paths["/status"]?.get?.responses["200"].headers).toEqual({
+			"x-request-id": {
+				required: true,
+				description: "The request identity Routa generated for this request.",
+				schema: { type: "string", format: "uuid" },
+			},
+		});
 		expect(readFileSync(join(cwd, "my-api/.routa/routes.gen.ts"), "utf8")).toContain('"/status"');
 		expect(readFileSync(join(cwd, "my-api/.routa/testing.gen.ts"), "utf8")).toContain(
 			'"src/routes/status/route.ts": () => import("../src/routes/status/route.js"),',
