@@ -321,8 +321,8 @@ function assertLoggerOptions(options: unknown): asserts options is CreateLoggerO
  * `then` never runs and its rejection is always handled. Any other value is resolved as `await`
  * would resolve it, which runs a thenable's `then`.
  *
- * A promise whose `constructor` getter throws cannot be observed: every intrinsic that attaches a
- * handler reads `constructor` first.
+ * A promise whose `constructor` or `Symbol.species` lookup throws cannot be observed: every
+ * intrinsic that attaches a handler reads both first.
  *
  * @throws When `delivery` cannot be observed
  */
@@ -774,6 +774,14 @@ function sanitizeMerged(base: RoutaLogData, added: unknown, paths: PendingPaths)
 	const keys = Object.keys(added);
 	for (const key of keys.slice(0, maxEntries + 1)) {
 		members.set(safeText(key), { key, read: () => memberValue(added, key) });
+	}
+
+	// An added key past the ones read above still replaces a base key of the same name, so how
+	// many other fields the data holds never decides which value a binding's name logs.
+	for (const name of Object.keys(base)) {
+		if (Object.prototype.propertyIsEnumerable.call(added, name)) {
+			members.set(name, { key: name, read: () => memberValue(added, name) });
+		}
 	}
 
 	// The merged object is never built, so `added` stands in for it as the root: a reference back

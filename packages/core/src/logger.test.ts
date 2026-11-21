@@ -661,6 +661,20 @@ describe("createLogger sanitization", () => {
 		expect(JSON.stringify(budget?.data?.data)).toContain("[Truncated]");
 	});
 
+	it("LOG-AC-03 replaces a binding with event data wherever the data lists it", () => {
+		const { events, logger } = capture();
+		const unrelated = Object.fromEntries(
+			Array.from({ length: 101 }, (_, index) => [`field${index}`, index]),
+		);
+		const child = logger.child({ outcome: "pending" });
+
+		child.info("late", "Late.", { ...unrelated, outcome: "success" });
+		child.info("early", "Early.", { outcome: "success", ...unrelated });
+
+		expect(events.map((event) => event.data?.outcome)).toEqual(["success", "success"]);
+		expect(Object.keys(events[0]?.data as object)).toHaveLength(101);
+	});
+
 	it("LOG-AC-04 counts redacted values against the per-event budget", () => {
 		const { events, logger } = capture({ redact: ["rows.*.*"] });
 		const rows = Array.from({ length: 100 }, () => Array.from({ length: 100 }, () => "secret"));
