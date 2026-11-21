@@ -1294,7 +1294,8 @@ compared after [escaping](#sanitization).
 The [limits](#sanitization) apply to that merged `data` as one object, bindings first, so
 a child whose bindings fill 100 keys leaves an event's own keys as one `[Truncated]` key.
 A child's bindings are merged and limited the same way over its parent's.
-No method throws, and loggers are frozen.
+No method throws. Loggers are frozen and their members are `readonly`, so TypeScript
+rejects replacing a method.
 
 Only `createLogger` creates a `RoutaLogger`. TypeScript rejects a hand-written object of the
 same shape, and Routa configuration rejects one at runtime; see

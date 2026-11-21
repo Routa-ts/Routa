@@ -905,6 +905,22 @@ describe("factory-created loggers", () => {
 		expect(lookalike).toBe(customLogger);
 	});
 
+	it("LOG-AC-01 types and freezes every logger method against replacement", () => {
+		for (const logger of [
+			createLogger({ sink: () => undefined }),
+			createLogger({ enabled: false }),
+		]) {
+			expect(() => {
+				// @ts-expect-error A logger's methods cannot be replaced.
+				logger.info = () => undefined;
+			}).toThrow(TypeError);
+			expect(() => {
+				// @ts-expect-error A logger's methods cannot be replaced.
+				logger.child({}).child = () => logger;
+			}).toThrow(TypeError);
+		}
+	});
+
 	it("LOG-AC-01 refuses a logger createLogger did not create, with the migration", async () => {
 		const migration =
 			"Routa accepts only loggers from createLogger, so redaction runs before any output. Forward events to your backend from a sink instead: logger: createLogger({ sink: (event) => backend.write(event) }). Omit logger to turn logging off.";

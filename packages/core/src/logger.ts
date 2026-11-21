@@ -36,21 +36,21 @@ declare const createdByCreateLogger: unique symbol;
 /**
  * A logger `createLogger` returned. Every event any of its methods writes, including its children's,
  * is sanitized before its sink receives it. Routa accepts no other logger implementation; send
- * events to another backend from a sink.
+ * events to another backend from a sink. The logger is frozen, so its methods cannot be replaced.
  */
 export type RoutaLogger = {
 	readonly [createdByCreateLogger]: true;
-	log: (event: RoutaLogEvent) => void;
-	trace: (event: string, message: string, data?: RoutaLogData) => void;
-	debug: (event: string, message: string, data?: RoutaLogData) => void;
-	info: (event: string, message: string, data?: RoutaLogData) => void;
-	warn: (event: string, message: string, data?: RoutaLogData) => void;
-	error: (event: string, message: string, data?: RoutaLogData) => void;
-	fatal: (event: string, message: string, data?: RoutaLogData) => void;
-	silent: (event: string, message: string, data?: RoutaLogData) => void;
-	child: (bindings: RoutaLogData) => RoutaLogger;
-	bindings: () => RoutaLogData;
-	isLevelEnabled: (level: RoutaLogLevelWithSilent) => boolean;
+	readonly log: (event: RoutaLogEvent) => void;
+	readonly trace: (event: string, message: string, data?: RoutaLogData) => void;
+	readonly debug: (event: string, message: string, data?: RoutaLogData) => void;
+	readonly info: (event: string, message: string, data?: RoutaLogData) => void;
+	readonly warn: (event: string, message: string, data?: RoutaLogData) => void;
+	readonly error: (event: string, message: string, data?: RoutaLogData) => void;
+	readonly fatal: (event: string, message: string, data?: RoutaLogData) => void;
+	readonly silent: (event: string, message: string, data?: RoutaLogData) => void;
+	readonly child: (bindings: RoutaLogData) => RoutaLogger;
+	readonly bindings: () => RoutaLogData;
+	readonly isLevelEnabled: (level: RoutaLogLevelWithSilent) => boolean;
 };
 
 export type CreateLoggerOptions = {
