@@ -85,8 +85,22 @@ const loggerConsumerTest = `import { createLogger, type RoutaLogEvent, type Rout
 import { createLogger as createFromSubpath } from "@routa-ts/core/logger";
 import { expect, it, vi } from "vitest";
 
+const ignore = () => undefined;
+// Every RoutaLogger member, so the factory brand is the only thing missing.
 // @ts-expect-error Routa accepts only loggers that createLogger created.
-const handWritten: RoutaLogger = { info: () => undefined };
+const handWritten: RoutaLogger = {
+	log: ignore,
+	trace: ignore,
+	debug: ignore,
+	info: ignore,
+	warn: ignore,
+	error: ignore,
+	fatal: ignore,
+	silent: ignore,
+	child: () => handWritten,
+	bindings: () => ({}),
+	isLevelEnabled: () => true,
+};
 
 it("redacts before the sink and writes JSON by default", () => {
 	const events: RoutaLogEvent[] = [];
