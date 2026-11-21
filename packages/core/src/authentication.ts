@@ -1283,7 +1283,7 @@ const anonymous: AnonymousAuthContext = Object.freeze({ status: "anonymous" });
  * and credentials of no accepted scheme fail. In strict mode, more than one eligible credential
  * is ambiguous.
  *
- * @throws {AuthenticatorError} When the authenticator throws
+ * @throws {AuthenticatorError} When the authenticator throws, or reading its result or principal does
  * @throws {AuthenticationContractError} When it returns an invalid result or principal
  */
 export async function resolveAuthentication(
@@ -1404,12 +1404,10 @@ async function authenticate(
 			typeof result === "object" && result !== null
 				? (result as { type?: unknown }).type
 				: undefined;
-	} catch {
-		// A getter threw. Its error may carry the credential, or a ZodError the generic error mapping
-		// would answer with 400 and its messages.
-		throw new AuthenticationContractError(
-			`Reading the result type from scheme "${scheme.name}" threw.`,
-		);
+	} catch (error) {
+		// A getter threw. Its error may carry the credential, or be a ZodError the generic error
+		// mapping would answer with 400 and its messages.
+		throw new AuthenticatorError(scheme.name, error, "result");
 	}
 
 	if (type === "rejected") {
@@ -1428,12 +1426,10 @@ async function authenticate(
 		parsed = await authentication.principal.safeParseAsync(
 			(result as { principal?: unknown }).principal,
 		);
-	} catch {
+	} catch (error) {
 		// A refinement or transform threw, possibly a ZodError with application messages. It must
 		// not reach the generic error mapping, which would answer 400 with those messages.
-		throw new AuthenticationContractError(
-			`Parsing the principal from scheme "${scheme.name}" threw.`,
-		);
+		throw new AuthenticatorError(scheme.name, error, "result");
 	}
 
 	if (!parsed.success) {
@@ -1448,11 +1444,9 @@ async function authenticate(
 
 	try {
 		principal = isPrincipal(parsed.data);
-	} catch {
+	} catch (error) {
 		// A getter on the parsed value threw; its error may carry application or provider detail.
-		throw new AuthenticationContractError(
-			`Reading the principal parsed from scheme "${scheme.name}" threw.`,
-		);
+		throw new AuthenticatorError(scheme.name, error, "result");
 	}
 
 	if (!principal) {
@@ -1519,11 +1513,18 @@ export function authenticationFailure(
 	};
 }
 
+const authenticatorFailures = {
+	authenticate: "Authenticator for scheme",
+	extract: "Credential extraction for scheme",
+	result: "Reading the result or principal of scheme",
+} as const;
+
 /**
- * An authenticator or a custom scheme's extractor threw. Routa answers with the generic `500`
- * problem and logs neither the scheme nor the thrown value, because anything the thrown value
- * carries, including its message, stack, and name, is set by application or provider code and may
- * carry the credential. Only `onRequestError` receives the thrown value, as `cause`.
+ * Authentication code threw: an authenticator, a custom scheme's extractor, or a getter or principal
+ * schema step while Routa read the result. Routa answers with the generic `500` problem and logs
+ * neither the scheme nor the thrown value, because anything the thrown value carries, including its
+ * message, stack, and name, is set by application or provider code and may carry the credential.
+ * Only `onRequestError` receives the thrown value, as `cause`.
  */
 export class AuthenticatorError extends Error {
 	override readonly name = "AuthenticatorError";
@@ -1531,14 +1532,9 @@ export class AuthenticatorError extends Error {
 	constructor(
 		readonly scheme: string,
 		cause: unknown,
-		stage: "authenticate" | "extract" = "authenticate",
+		stage: keyof typeof authenticatorFailures = "authenticate",
 	) {
-		super(
-			stage === "extract"
-				? `Credential extraction for scheme "${scheme}" threw.`
-				: `Authenticator for scheme "${scheme}" threw.`,
-			{ cause },
-		);
+		super(`${authenticatorFailures[stage]} "${scheme}" threw.`, { cause });
 	}
 }
 

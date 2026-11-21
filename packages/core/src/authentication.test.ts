@@ -383,7 +383,7 @@ describe("authenticator failures", () => {
 		expect(response.status).toBe(500);
 		expect(await response.text()).not.toContain("secret-tenant-detail");
 		expect(events.find((event) => event.event === "http.error")?.data).toEqual(
-			failedWhoami("contract_violation"),
+			failedWhoami("unexpected_failure"),
 		);
 		expect(JSON.stringify(events)).not.toContain("secret-tenant-detail");
 	});
@@ -413,7 +413,7 @@ describe("authenticator failures", () => {
 		expect(response.status).toBe(500);
 		expect(await response.text()).not.toContain("secret-getter-detail");
 		expect(events.find((event) => event.event === "http.error")?.data).toEqual(
-			failedWhoami("contract_violation"),
+			failedWhoami("unexpected_failure"),
 		);
 		expect(JSON.stringify(events)).not.toContain("secret-getter-detail");
 	});
@@ -446,7 +446,7 @@ describe("authenticator failures", () => {
 		expect(response.status).toBe(500);
 		expect(await response.text()).not.toContain("provider said");
 		expect(events.find((event) => event.event === "http.error")?.data).toEqual(
-			failedWhoami("contract_violation"),
+			failedWhoami("unexpected_failure"),
 		);
 		expect(JSON.stringify(events)).not.toContain("secret-token-value");
 	});

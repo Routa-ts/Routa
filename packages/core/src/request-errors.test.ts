@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
+import { AuthenticationContractError } from "./authentication.js";
 import {
 	createApplication,
 	createHonoApp,
@@ -324,6 +325,106 @@ describe("request error reporting", () => {
 		expect(statuses).toEqual(sent.map(([, , status]) => status));
 		expect(calls).toEqual([]);
 		expect(events.filter((event) => event.event === "http.error")).toEqual([]);
+	});
+
+	it("LOG-AC-13 passes what authentication code throws while Routa reads its result", async () => {
+		const thrown = new Error("secret");
+		const fail = () => {
+			throw thrown;
+		};
+		const route = get("/x", () => ({ type: "ok", data: { ok: true } }), {
+			contract: createRoute({
+				middleware: [requireAuth()],
+				responses: { ok: { status: 200 } },
+				run: () => ({ type: "ok" }),
+			}),
+		});
+		const authenticated = () => ({ type: "authenticated", principal: { id: "u", type: "user" } });
+		const cases: ReadonlyArray<[string, () => unknown, z.ZodType]> = [
+			[
+				"result type getter",
+				() => ({
+					get type() {
+						return fail();
+					},
+				}),
+				principal,
+			],
+			["principal refinement", authenticated, principal.refine(fail as () => boolean)],
+			[
+				"parsed principal getter",
+				authenticated,
+				principal.transform(() => ({
+					type: "user",
+					get id(): string {
+						return fail();
+					},
+				})),
+			],
+		];
+
+		for (const [name, authenticate, schema] of cases) {
+			const { calls, onRequestError } = recorder();
+			const { events, logger } = capture();
+			const app = createHonoApp([route], {
+				logger,
+				onRequestError,
+				authentication: {
+					principal: schema as never,
+					schemes: { token: bearer({ authenticate: authenticate as never }) },
+				},
+			});
+
+			const response = await app.request("/x", { headers: { authorization: "Bearer token" } });
+
+			expect(response.status, name).toBe(500);
+			expect(await response.json(), name).toMatchObject({ title: "Internal Server Error" });
+			expect(
+				calls.map(({ error, diagnostic }) => [error === thrown, diagnostic.code, diagnostic.stage]),
+				name,
+			).toEqual([[true, "unexpected_failure", "authentication"]]);
+			expect(events.find((event) => event.event === "http.error")?.data, name).toMatchObject({
+				code: "unexpected_failure",
+				stage: "authentication",
+			});
+		}
+	});
+
+	it("LOG-AC-13 reports a principal that fails the schema without throwing as Routa's contract violation", async () => {
+		const { calls, onRequestError } = recorder();
+		const app = createHonoApp(
+			[
+				get("/x", () => ({ type: "ok", data: { ok: true } }), {
+					contract: createRoute({
+						middleware: [requireAuth()],
+						responses: { ok: { status: 200 } },
+						run: () => ({ type: "ok" }),
+					}),
+				}),
+			],
+			{
+				onRequestError,
+				authentication: {
+					principal,
+					schemes: {
+						token: bearer({
+							authenticate: () => ({ type: "authenticated", principal: { id: 1, type: "user" } }),
+						}) as never,
+					},
+				},
+			},
+		);
+
+		const response = await app.request("/x", { headers: { authorization: "Bearer token" } });
+
+		expect(response.status).toBe(500);
+		expect(
+			calls.map(({ error, diagnostic }) => [
+				error instanceof AuthenticationContractError,
+				diagnostic.code,
+				diagnostic.stage,
+			]),
+		).toEqual([[true, "contract_violation", "authentication"]]);
 	});
 
 	it("LOG-AC-13 reports one failure once, with the error middleware lets escape", async () => {
