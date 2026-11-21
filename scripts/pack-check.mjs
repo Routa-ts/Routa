@@ -558,7 +558,8 @@ function scaffoldConsumer(name, flags) {
 
 /**
  * Starts the packaged `routa start` server, waits until it serves the starter route, then runs
- * `check(port, signal, output, logs)` against it, where `logs()` reads the output so far.
+ * `check(port, signal, output, logs, stop)` against it, where `logs()` reads the output so far and
+ * `stop()` stops the server and resolves once both of its output streams have ended.
  *
  * This guards the packaged runtime entry (dist/runtime.js), which `routa check`
  * and `routa build` never exercise.
@@ -581,6 +582,33 @@ async function smokeTestStart(cwd, check, env = {}) {
 	child.stderr.on("data", (chunk) => {
 		output += chunk;
 	});
+	// "close" fires once the process has exited and both of its output streams have ended.
+	const closed = new Promise((resolveClosed) => child.once("close", resolveClosed));
+	const signalTree = (signal) => {
+		if (process.platform !== "win32" && child.pid) {
+			try {
+				process.kill(-child.pid, signal);
+				return;
+			} catch {
+				// Fall back to the direct child below.
+			}
+		}
+
+		child.kill(signal);
+	};
+	let stopping;
+	const stop = () => {
+		stopping ??= (async () => {
+			signalTree("SIGTERM");
+			const timeout = sleep(10_000).then(() => "timeout");
+
+			if ((await Promise.race([closed, timeout])) === "timeout") {
+				signalTree("SIGKILL");
+				throw new Error(`routa start did not stop within 10s of SIGTERM.\n${output}`);
+			}
+		})();
+		return stopping;
+	};
 
 	try {
 		const deadline = Date.now() + 30_000;
@@ -643,18 +671,15 @@ async function smokeTestStart(cwd, check, env = {}) {
 			AbortSignal.timeout(Math.max(1, deadline - Date.now())),
 			output,
 			() => output,
+			stop,
 		);
-	} finally {
-		if (process.platform !== "win32" && child.pid) {
-			try {
-				process.kill(-child.pid, "SIGTERM");
-			} catch {
-				child.kill("SIGTERM");
-			}
-		} else {
-			child.kill("SIGTERM");
-		}
+	} catch (error) {
+		// Stop the server either way, but report the check's failure over a failure to stop.
+		await stop().catch(() => {});
+		throw error;
 	}
+
+	await stop();
 }
 
 /** Checks the response contract route: header, repeated `Set-Cookie` fields, and an empty body. */
@@ -791,7 +816,7 @@ async function checkAuthentication(port, signal, output) {
  * identity and carry no error text.
  */
 function checkIdentity(logging) {
-	return async (port, signal, _output, logs) => {
+	return async (port, signal, _output, logs, stop) => {
 		const observe = async (path, headers) => {
 			const response = await fetch(`http://127.0.0.1:${port}${path}`, { headers, signal });
 			await response.arrayBuffer();
@@ -835,8 +860,6 @@ function checkIdentity(logging) {
 			}
 		}
 
-		// The server writes its output as it handles requests; give it a moment to arrive.
-		const deadline = Date.now() + 5_000;
 		const lines = () =>
 			logs()
 				.split("\n")
@@ -849,9 +872,35 @@ function checkIdentity(logging) {
 				});
 		const reported = () =>
 			lines().find((line) => line.reported !== undefined && line.requestId === failed.requestId);
+		const prepared = () =>
+			lines().find(
+				(line) =>
+					line.event === "http.response.prepared" && line.data?.requestId === accepted.requestId,
+			);
+		const error = () =>
+			lines().find(
+				(line) => line.event === "http.error" && line.data?.requestId === failed.requestId,
+			);
 
-		while (!reported() && Date.now() < deadline) {
-			await sleep(100);
+		if (!logging) {
+			// Stop the server and read both streams to their end, so a request event written to
+			// either one, as JSON or as plain text, cannot arrive after the check.
+			await stop();
+			const leaked = logs()
+				.split("\n")
+				.filter((line) => /\bhttp\.[a-z]/.test(line));
+
+			if (leaked.length > 0) {
+				fail(`expected logger: false to log no request events, got ${JSON.stringify(leaked)}`);
+			}
+		} else {
+			// The report goes to stderr and the events to stdout, and the two streams arrive
+			// independently: wait for all three, and fail if any is missing after five seconds.
+			const deadline = Date.now() + 5_000;
+
+			while (!(reported() && prepared() && error()) && Date.now() < deadline) {
+				await sleep(50);
+			}
 		}
 
 		if (
@@ -868,32 +917,18 @@ function checkIdentity(logging) {
 			);
 		}
 
-		const events = lines().filter((line) => typeof line.event === "string");
-		const prepared = events.find(
-			(line) =>
-				line.event === "http.response.prepared" && line.data?.requestId === accepted.requestId,
-		);
-		const error = events.find((line) => line.event === "http.error");
-
 		if (!logging) {
-			// Every output line, JSON or not, so an event written as plain text fails too.
-			const leaked = logs()
-				.split("\n")
-				.filter((line) => /\bhttp\.[a-z]/.test(line));
-
-			if (leaked.length > 0) {
-				fail(`expected logger: false to log no request events, got ${JSON.stringify(leaked)}`);
-			}
-
 			return;
 		}
 
+		const events = lines().filter((line) => typeof line.event === "string");
+
 		if (
-			prepared?.level !== "info"
-			|| prepared.data.correlationId !== "trace-1"
-			|| prepared.data.route !== "/status"
-			|| error?.data?.requestId !== failed.requestId
-			|| JSON.stringify(error).includes("hunter2")
+			prepared()?.level !== "info"
+			|| prepared().data.correlationId !== "trace-1"
+			|| prepared().data.route !== "/status"
+			|| error() === undefined
+			|| JSON.stringify(events).includes("hunter2")
 		) {
 			fail(`expected JSON request events that share the identity, got ${JSON.stringify(events)}`);
 		}
