@@ -11,6 +11,7 @@ import type {
 	AuthenticationConfig,
 	CorrelationConfig,
 	HttpMethod,
+	RequestErrorReporter,
 	ResponseValidation,
 } from "./index.js";
 import { createLogger, type RoutaLogger } from "./logger.js";
@@ -27,6 +28,7 @@ import {
 	type ProjectApplication,
 	type ProjectModuleLoader,
 } from "./project.js";
+import { type ReportRequestError, requestErrorReporterOf } from "./request-errors.js";
 import {
 	acceptedCorrelation,
 	correlationHeaderOf,
@@ -99,6 +101,11 @@ export type CreateHonoAppOptions = {
 	authentication?: AuthenticationConfig;
 	/** The `correlation` from `createRouta`: which request header carries a correlation ID. */
 	correlation?: CorrelationConfig;
+	/**
+	 * The `onRequestError` from `createRouta`: observes each unexpected request failure and
+	 * response contract violation, whether or not a logger is configured.
+	 */
+	onRequestError?: RequestErrorReporter;
 };
 
 export type CreateApplicationOptions = CreateHonoAppOptions & {
@@ -144,8 +151,10 @@ export async function createApplication(
 			"Omit logger to turn logging off.",
 		);
 	}
-	// Read before the services factory runs, so the factory cannot change the header requests use.
+	// Read before the services factory runs, so the factory cannot change the header requests use,
+	// or the reporter.
 	const correlationHeader = correlationHeaderOf(appOptions.correlation);
+	const report = requestErrorReporterOf(appOptions.onRequestError);
 	const logger = requestLogger ?? createLogger({ enabled: false });
 	const scope = createCleanupScope();
 	const services =
@@ -160,7 +169,7 @@ export async function createApplication(
 	let app: Hono;
 
 	try {
-		app = honoApp(routes, appOptions, services, requestLogger, correlationHeader);
+		app = honoApp(routes, appOptions, services, { requestLogger, correlationHeader, report });
 	} catch (error) {
 		await scope.release().catch((cleanupError: unknown) => logCleanupFailure(logger, cleanupError));
 		throw error;
@@ -227,22 +236,31 @@ export function createHonoApp(
 	if (logger !== undefined) {
 		assertCreatedLogger(logger, "createHonoApp received", "Omit logger to turn logging off.");
 	}
-	return honoApp(routes, options, undefined, logger, correlationHeaderOf(options.correlation));
+	return honoApp(routes, options, undefined, {
+		requestLogger: logger,
+		correlationHeader: correlationHeaderOf(options.correlation),
+		report: requestErrorReporterOf(options.onRequestError),
+	});
 }
 
 /**
- * @param options - Read as given, except for its logger and correlation
- * @param requestLogger - The logger already read from the options and checked, so a later change
- *   to them cannot replace it
- * @param correlationHeader - The correlation header already read from the options and checked,
- *   for the same reason
+ * The options read once and checked at startup, so a later change to the options cannot replace
+ * them: the logger, the correlation header, and the contained `onRequestError`.
+ */
+type CheckedOptions = {
+	readonly requestLogger: RoutaLogger | undefined;
+	readonly correlationHeader: string | undefined;
+	readonly report: ReportRequestError | undefined;
+};
+
+/**
+ * @param options - Read as given, except for the options `checked` holds
  */
 function honoApp(
 	routes: readonly HonoRoute[],
-	options: Omit<CreateHonoAppOptions, "logger" | "correlation">,
+	options: Omit<CreateHonoAppOptions, "logger" | "correlation" | "onRequestError">,
 	services: ServiceMapping | undefined,
-	requestLogger: RoutaLogger | undefined,
-	correlationHeader: string | undefined,
+	{ requestLogger, correlationHeader, report }: CheckedOptions,
 ): Hono {
 	const app = new Hono();
 	const methodsByPath = new Map<string, Set<string>>();
@@ -324,6 +342,7 @@ function honoApp(
 			route: routeKey,
 			path: route.path,
 			middlewareNames: route.middlewareNames,
+			report,
 		});
 
 		app.on(honoMethod, route.path, async (context, next) => {

@@ -1346,8 +1346,8 @@ function extractCredential(
 			hasCredential = type === "credential" && Object.hasOwn(result, "credential");
 			credential = hasCredential ? result.credential : undefined;
 		}
-	} catch {
-		throw new AuthenticatorError(scheme.name, "extract");
+	} catch (error) {
+		throw new AuthenticatorError(scheme.name, error, "extract");
 	}
 
 	if (type === "malformed") {
@@ -1393,8 +1393,8 @@ async function authenticate(
 				...(context.services === undefined ? {} : { services: context.services }),
 			}) as AuthenticatorContext,
 		]);
-	} catch {
-		throw new AuthenticatorError(scheme.name);
+	} catch (error) {
+		throw new AuthenticatorError(scheme.name, error);
 	}
 
 	let type: unknown;
@@ -1521,20 +1521,23 @@ export function authenticationFailure(
 
 /**
  * An authenticator or a custom scheme's extractor threw. Routa answers with the generic `500`
- * problem and logs only the scheme, because anything the thrown value carries, including its
- * message, stack, and name, is set by application or provider code and may carry the credential.
+ * problem and logs neither the scheme nor the thrown value, because anything the thrown value
+ * carries, including its message, stack, and name, is set by application or provider code and may
+ * carry the credential. Only `onRequestError` receives the thrown value, as `cause`.
  */
 export class AuthenticatorError extends Error {
 	override readonly name = "AuthenticatorError";
 
 	constructor(
 		readonly scheme: string,
+		cause: unknown,
 		stage: "authenticate" | "extract" = "authenticate",
 	) {
 		super(
 			stage === "extract"
 				? `Credential extraction for scheme "${scheme}" threw.`
 				: `Authenticator for scheme "${scheme}" threw.`,
+			{ cause },
 		);
 	}
 }

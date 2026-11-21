@@ -56,12 +56,15 @@ async function foreignCore(): Promise<typeof AuthenticationModule> {
 const requirementKey = Symbol.for("@routa-ts/core/requireAuth");
 
 /** What `http.error` logs for a failed GET /whoami: its identity and route, never the error. */
-const failedWhoami = {
+/** The `http.error` data of a failed `/whoami` request. */
+const failedWhoami = (code: "unexpected_failure" | "contract_violation") => ({
 	requestId: expect.any(String),
 	method: "GET",
 	route: "/whoami",
 	status: 500,
-};
+	code,
+	stage: "authentication",
+});
 
 const whoami: HonoRoute = {
 	method: "get",
@@ -315,7 +318,9 @@ describe("authenticator failures", () => {
 			status: 500,
 		});
 		const logged = JSON.stringify(events);
-		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedWhoami);
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual(
+			failedWhoami("unexpected_failure"),
+		);
 		expect(logged).not.toContain("secret-token-value");
 		expect(logged).not.toContain("provider said");
 	});
@@ -332,7 +337,9 @@ describe("authenticator failures", () => {
 		});
 
 		expect(response.status).toBe(500);
-		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedWhoami);
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual(
+			failedWhoami("unexpected_failure"),
+		);
 		expect(JSON.stringify(events)).not.toContain("SecretToken123");
 	});
 
@@ -349,7 +356,7 @@ describe("authenticator failures", () => {
 
 		expect(response.status).toBe(500);
 		const error = events.find((event) => event.event === "http.error");
-		expect(error?.data).toEqual(failedWhoami);
+		expect(error?.data).toEqual(failedWhoami("contract_violation"));
 		expect(JSON.stringify(events)).not.toContain("PrincipalSecret");
 	});
 
@@ -375,7 +382,9 @@ describe("authenticator failures", () => {
 
 		expect(response.status).toBe(500);
 		expect(await response.text()).not.toContain("secret-tenant-detail");
-		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedWhoami);
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual(
+			failedWhoami("contract_violation"),
+		);
 		expect(JSON.stringify(events)).not.toContain("secret-tenant-detail");
 	});
 
@@ -403,7 +412,9 @@ describe("authenticator failures", () => {
 
 		expect(response.status).toBe(500);
 		expect(await response.text()).not.toContain("secret-getter-detail");
-		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedWhoami);
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual(
+			failedWhoami("contract_violation"),
+		);
 		expect(JSON.stringify(events)).not.toContain("secret-getter-detail");
 	});
 
@@ -413,7 +424,9 @@ describe("authenticator failures", () => {
 		const response = await app.request("/whoami", { headers: { authorization: "Bearer abc" } });
 
 		expect(response.status).toBe(500);
-		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedWhoami);
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual(
+			failedWhoami("contract_violation"),
+		);
 	});
 
 	it("keeps an error thrown while reading the result type a safe server error", async () => {
@@ -432,7 +445,9 @@ describe("authenticator failures", () => {
 
 		expect(response.status).toBe(500);
 		expect(await response.text()).not.toContain("provider said");
-		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedWhoami);
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual(
+			failedWhoami("contract_violation"),
+		);
 		expect(JSON.stringify(events)).not.toContain("secret-token-value");
 	});
 
@@ -453,7 +468,9 @@ describe("authenticator failures", () => {
 		const response = await app.request("/whoami", { headers: { authorization: "Bearer abc" } });
 
 		expect(response.status).toBe(500);
-		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedWhoami);
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual(
+			failedWhoami("contract_violation"),
+		);
 	});
 });
 

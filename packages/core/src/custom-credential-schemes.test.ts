@@ -387,7 +387,7 @@ describe("custom schemes in credential selection", () => {
 
 describe("custom scheme failures", () => {
 	/** The data `http.error` logs for a failed GET /whoami, after its request ID. */
-	const failedWhoami = '"method":"GET","route":"/whoami","status":500}';
+	const failedWhoami = '"method":"GET","route":"/whoami","status":500,"code":"';
 
 	function failing(
 		extract: (value: string) => unknown,

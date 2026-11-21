@@ -1,14 +1,22 @@
 import { ZodError, type z } from "zod";
 import {
 	type AuthContext,
+	AuthenticatorError,
 	authenticationFailure,
 	resolveAuthentication,
 	type RouteAuthentication,
 } from "./authentication.js";
-import type { AnyRouteContract, MiddlewareContract, RouteInput } from "./index.js";
+import type {
+	AnyRouteContract,
+	MiddlewareContract,
+	RequestErrorDiagnostic,
+	RequestErrorStage,
+	RouteInput,
+} from "./index.js";
 import { type HandlerOutputIssue, InvalidHandlerOutputError } from "./handler-output-error.js";
 import type { RoutaLogger } from "./logger.js";
 import type { FrameworkEvent } from "./logger-registry.js";
+import { type ReportRequestError, requestErrorCode } from "./request-errors.js";
 import { loggedMethod, type RequestIdentity, type RequestState } from "./request-identity.js";
 import {
 	type CookieEntry,
@@ -98,7 +106,9 @@ type RequestExecutorOptions = {
 	/** Names the route in messages, such as `GET /orders`. */
 	route?: string | undefined;
 	/** The route's path pattern, which framework events log instead of the request's path. */
-	path?: string | undefined;
+	path: string;
+	/** The application's `onRequestError`, already contained so it cannot affect the request. */
+	report?: ReportRequestError | undefined;
 	/** Names each middleware in messages, such as `withCache`, in chain order. */
 	middlewareNames?: readonly string[] | undefined;
 };
@@ -144,18 +154,24 @@ export function createRequestExecutor(
 		params: Record<string, string>,
 		state: RequestState,
 		constructed: CleanupScope[],
+		failures: FailureStages,
 	): Promise<Response> => {
 		const lifecycle = lifecycleHeaders(contract.deprecation, options.lifecycleHeaders);
 		const select = (produced: ProducedResult) =>
-			finalizeResponse(validateResult(produced, options.validateResponses), lifecycle);
+			failures.sync("response", () =>
+				finalizeResponse(validateResult(produced, options.validateResponses), lifecycle),
+			);
 		// Credentials resolve before negotiation, input, and middleware, so a request presenting an
 		// invalid credential fails the same way whatever else it gets wrong.
+		const { authentication } = options;
 		const resolved =
-			options.authentication
-			&& (await resolveAuthentication(options.authentication, request, {
-				logger: state.logger,
-				services: options.services,
-			}));
+			authentication
+			&& (await failures.at("authentication", () =>
+				resolveAuthentication(authentication, request, {
+					logger: state.logger,
+					services: options.services,
+				}),
+			));
 
 		if (resolved && !("auth" in resolved)) {
 			const { result, outcome } = authenticationFailure(resolved, options.head);
@@ -172,9 +188,12 @@ export function createRequestExecutor(
 		}
 
 		const inputReader = new RequestInputReader(request, params);
-		const input = await inputReader.parse(contract.input);
-		const context = toRecord(options.createContext ? await options.createContext() : {});
-		assertNoServices(context, "createContext() returned");
+		const input = await failures.at("input", () => inputReader.parse(contract.input));
+		const context = await failures.at("context", async () => {
+			const value = toRecord(options.createContext ? await options.createContext() : {});
+			assertNoServices(value, "createContext() returned");
+			return value;
+		});
 		// A copy, so `ctx.services` can be defined even when createContext returns a frozen object.
 		const ctx = { ...context };
 		const first: Stage = {
@@ -192,6 +211,7 @@ export function createRequestExecutor(
 			input,
 			first,
 			inputReader,
+			failures,
 			{ scopes: options.requestServices ?? [], constructed },
 			(index) =>
 				`${options.middlewareNames?.[index] || `middleware[${index}]`}${options.route ? ` on ${options.route}` : ""}`,
@@ -201,17 +221,34 @@ export function createRequestExecutor(
 
 	return async (request, params, state) => {
 		const constructed: CleanupScope[] = [];
+		const failures = new FailureStages();
 		let response: Response;
 
 		try {
-			response = await execute(request, params, state, constructed);
+			response = await execute(request, params, state, constructed, failures);
 		} catch (error) {
 			response = errorResponse(error);
 
-			try {
-				logRequestError(state.event, request, options.path, error, response);
-			} catch {
-				// A failing logger must not skip request cleanup or replace the error response.
+			// Only a failure Routa answers with a server error is unexpected. Rejected input answers
+			// 4xx; declared outcomes and rejects never reach this catch.
+			if (response.status >= 500) {
+				const diagnostic: RequestErrorDiagnostic = Object.freeze({
+					code: requestErrorCode(error),
+					// Every part of the chain records its stage; `handler` is never reached.
+					stage: failures.of(error) ?? "handler",
+					...identityOf(state),
+					method: loggedMethod(request.method),
+					route: options.path,
+					status: response.status,
+				});
+
+				try {
+					logRequestError(state.event, diagnostic, error);
+				} catch {
+					// A failing logger must not skip reporting or cleanup, or replace the error response.
+				}
+
+				options.report?.(thrownValue(error), diagnostic);
 			}
 		}
 
@@ -249,6 +286,7 @@ export function createRequestExecutor(
  * @param routeInput - Parsed input passed to the final handler
  * @param first - The context, services, and request logger the first middleware sees
  * @param inputReader - Reader used to parse middleware-specific input
+ * @param failures - Records the stage where each failure happened
  * @param requestServices - The request-scoped factories, and the cleanup scopes of those started
  * @param label - Names the middleware at an index, and its route, in messages
  * @param select - Turns the result that ends the request into its response
@@ -259,6 +297,7 @@ async function runWithMiddleware(
 	routeInput: Record<string, unknown>,
 	first: Stage,
 	inputReader: RequestInputReader,
+	failures: FailureStages,
 	requestServices: { scopes: readonly RequestScope[]; constructed: CleanupScope[] },
 	label: (index: number) => string,
 	select: (produced: ProducedResult) => Response,
@@ -297,46 +336,62 @@ async function runWithMiddleware(
 	async function dispatch(index: number, stages: readonly Stage[]): Promise<Response> {
 		for (const scope of requestServices.scopes) {
 			if (scope.after === index) {
-				stages = [...stages, await startStage(scope, stages.at(-1) as Stage)];
+				const stage = stages.at(-1) as Stage;
+				stages = [...stages, await failures.at("services", () => startStage(scope, stage))];
 			}
 		}
 
-		const stage = stages.at(-1) as Stage;
-		const { ctx, services } = stage;
 		const item = middleware[index];
 
 		if (!item) {
-			// Framework-owned context is applied last so middleware or a low-level
-			// createContext implementation cannot replace the configured logger or services.
-			const response = Object.create(null) as Record<string, (...args: unknown[]) => RuntimeResult>;
-			for (const [type, outcome] of Object.entries(contract.responses)) {
-				response[type] = (...args) => buildResult(type, outcome, args);
-			}
-			assertServicesKept({ ctx, services });
-			const handlerCtx = { ...ctx };
-			exposeFramework(handlerCtx, stage);
-			const result = await contract.run({
-				input: routeInput,
-				ctx: handlerCtx,
-				response: Object.freeze(response),
-			});
-
-			if (isRuntimeResult(result)) {
-				return select({
-					result,
-					outcomes: contract.responses,
-					producer: "the route handler",
-					label: (type) => `outcome "${type}"`,
-				});
-			}
-
-			throw new InvalidHandlerOutputError("Handler returned invalid output.");
+			return await failures.at("handler", () => runHandler(stages.at(-1) as Stage));
 		}
 
-		if (!item.run) {
+		const { run } = item;
+
+		if (!run) {
 			return await dispatch(index + 1, stages);
 		}
 
+		return await failures.at("middleware", () => runMiddleware(index, item, run, stages));
+	}
+
+	async function runHandler(stage: Stage): Promise<Response> {
+		const { ctx, services } = stage;
+		// Framework-owned context is applied last so middleware or a low-level
+		// createContext implementation cannot replace the configured logger or services.
+		const response = Object.create(null) as Record<string, (...args: unknown[]) => RuntimeResult>;
+		for (const [type, outcome] of Object.entries(contract.responses)) {
+			response[type] = (...args) => buildResult(type, outcome, args);
+		}
+		assertServicesKept({ ctx, services });
+		const handlerCtx = { ...ctx };
+		exposeFramework(handlerCtx, stage);
+		const result = await contract.run({
+			input: routeInput,
+			ctx: handlerCtx,
+			response: Object.freeze(response),
+		});
+
+		if (isRuntimeResult(result)) {
+			return select({
+				result,
+				outcomes: contract.responses,
+				producer: "the route handler",
+				label: (type) => `outcome "${type}"`,
+			});
+		}
+
+		throw new InvalidHandlerOutputError("Handler returned invalid output.");
+	}
+
+	async function runMiddleware(
+		index: number,
+		item: RuntimeMiddlewareContract,
+		run: NonNullable<RuntimeMiddlewareContract["run"]>,
+		stages: readonly Stage[],
+	): Promise<Response> {
+		const { ctx, services } = stages.at(-1) as Stage;
 		assertMiddlewareRequires(item.requires, ctx);
 		assertMiddlewareServices(item.requiresServices, services, label(index));
 
@@ -345,8 +400,8 @@ async function runWithMiddleware(
 		// next() resolves to this token, never to the selected result itself, so middleware cannot
 		// read or mutate the outcome; returning the token is how it continues.
 		const continuation = Object.freeze(Object.create(null) as object);
-		const input = await inputReader.parse(item.input);
-		const result = await item.run({
+		const input = await failures.at("input", () => inputReader.parse(item.input));
+		const result = await run({
 			input,
 			ctx,
 			/**
@@ -1211,29 +1266,22 @@ function errorResponse(error: unknown): Response {
 
 /**
  * Logs a failed server request through its request logger, so the event carries the request's
- * identity. It holds the method, the route pattern, the status, and for invalid handler output how
- * many issues Routa found and their distinct codes. It never holds the request's path, an issue's
- * path, which can hold request data such as a record key, or any error's message, name, or stack,
- * which may carry credentials or personal data.
- *
- * @param path - The route's path pattern, when the executor knows it
- * @param response - The response prepared for the request
+ * identity. It holds the method, the route pattern, the status, the failure's code and stage, and
+ * for invalid handler output how many issues Routa found and their distinct codes. It never holds
+ * the request's path, an issue's path, which can hold request data such as a record key, or any
+ * error's message, name, or stack, which may carry credentials or personal data.
  */
 function logRequestError(
 	event: FrameworkEvent,
-	request: Request,
-	path: string | undefined,
+	diagnostic: RequestErrorDiagnostic,
 	error: unknown,
-	response: Response,
 ): void {
-	if (response.status < 500) {
-		return;
-	}
-
 	event("error", "http.error", "Request failed.", {
-		method: loggedMethod(request.method),
-		...(path !== undefined && { route: path }),
-		status: response.status,
+		method: diagnostic.method,
+		route: diagnostic.route,
+		status: diagnostic.status,
+		code: diagnostic.code,
+		stage: diagnostic.stage,
 		...(error instanceof InvalidHandlerOutputError
 			&& error.issues && {
 				issueCount: error.issues.length,
@@ -1254,6 +1302,59 @@ class RequestServicesError extends Error {
 	constructor(cause: unknown) {
 		super("Request services construction failed.", { cause });
 	}
+}
+
+/**
+ * Records where a request failed. Each part of the chain marks a failure that passes through it,
+ * and the first mark wins, so a handler's error that middleware rethrows keeps the handler's
+ * stage. A different value that middleware throws instead is marked as its own. Errors are never
+ * wrapped, so middleware that catches `next()` still sees what was thrown.
+ */
+class FailureStages {
+	private error: unknown;
+	private stage: RequestErrorStage | undefined;
+
+	/** Runs `step`, marking a failure it throws or rejects with as happening in `stage`. */
+	async at<T>(stage: RequestErrorStage, step: () => T | Promise<T>): Promise<T> {
+		try {
+			return await step();
+		} catch (error) {
+			this.mark(error, stage);
+			throw error;
+		}
+	}
+
+	/** Like `at`, for a step that must stay synchronous. */
+	sync<T>(stage: RequestErrorStage, step: () => T): T {
+		try {
+			return step();
+		} catch (error) {
+			this.mark(error, stage);
+			throw error;
+		}
+	}
+
+	/** The stage where `error` was first seen, if it was. */
+	of(error: unknown): RequestErrorStage | undefined {
+		return this.stage !== undefined && Object.is(this.error, error) ? this.stage : undefined;
+	}
+
+	private mark(error: unknown, stage: RequestErrorStage): void {
+		if (this.of(error) === undefined) {
+			this.error = error;
+			this.stage = stage;
+		}
+	}
+}
+
+/**
+ * The value application code threw: an authenticator's or a services factory's own error rather
+ * than the error Routa wraps it in to answer the request.
+ */
+function thrownValue(error: unknown): unknown {
+	return error instanceof AuthenticatorError || error instanceof RequestServicesError
+		? error.cause
+		: error;
 }
 
 /** The identity fields of a request's state, without its logger. */

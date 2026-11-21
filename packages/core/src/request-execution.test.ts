@@ -4,7 +4,7 @@ import { createMiddleware, createRoute, createRouteRootFactory } from "./index.j
 import { createLogger } from "./logger.js";
 import { createRequestExecutor, type RuntimeRouteContract } from "./request-execution.js";
 
-const executionOptions = { validateResponses: true };
+const executionOptions = { validateResponses: true, path: "/" };
 const state = {
 	requestId: "00000000-0000-4000-8000-000000000000",
 	logger: createLogger({ enabled: false }),

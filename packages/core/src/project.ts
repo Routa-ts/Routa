@@ -134,6 +134,8 @@ export async function buildProjectApplication(
 		...(config.authentication && { authentication: config.authentication }),
 		...(correlationHeader !== undefined && { correlation: { header: correlationHeader } }),
 		...(logger && { logger }),
+		// Passed whatever the logger is, so `logger: false` keeps it. createApplication checks it.
+		...(config.onRequestError !== undefined && { onRequestError: config.onRequestError }),
 		...(config.lifecycleHeaders !== undefined && { lifecycleHeaders: config.lifecycleHeaders }),
 		...(config.responseValidation && { responseValidation: config.responseValidation }),
 		...(services && { services: services as ApplicationServicesDeclaration }),
