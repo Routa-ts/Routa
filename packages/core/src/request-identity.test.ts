@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
 import {
 	createApplication,
@@ -773,6 +773,58 @@ describe("request identity", () => {
 				},
 			],
 		]);
+	});
+
+	it("LOG-AC-06 fails a request nothing on the Hono app answered as a 500 that carries its identity", async () => {
+		const { events, logger } = capture();
+		const app = createHonoApp([], { logger, correlation: true });
+		// Sets a header, then neither returns a response nor calls next().
+		app.use("/silent", async (context) => {
+			context.header("x-written", "kept");
+		});
+		const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		try {
+			const response = await app.request("/silent", {
+				headers: { "x-correlation-id": "trace-1" },
+			});
+
+			expect(response.status).toBe(500);
+			expect(await response.text()).toBe("Internal Server Error");
+			expect(response.headers.get("x-request-id")).toMatch(uuid);
+			expect(response.headers.get("x-correlation-id")).toBe("trace-1");
+			expect(events.map((event) => [event.event, event.data])).toEqual([
+				[
+					"http.response.prepared",
+					{
+						requestId: response.headers.get("x-request-id"),
+						correlationId: "trace-1",
+						method: "GET",
+						route: "[Unmatched]",
+						status: 500,
+						durationMs: expect.any(Number),
+					},
+				],
+			]);
+			// Hono's error handler received the error Hono fails an unanswered request with.
+			expect(errors).toHaveBeenCalledWith(
+				expect.objectContaining({ message: expect.stringContaining("Context is not finalized") }),
+			);
+		} finally {
+			errors.mockRestore();
+		}
+
+		// An error handler the application installs answers instead, and still gets identity.
+		app.onError((_error, context) => context.text("handled", 503));
+		const handled = await app.request("/silent");
+
+		expect(handled.status).toBe(503);
+		expect(await handled.text()).toBe("handled");
+		expect(handled.headers.get("x-request-id")).toMatch(uuid);
+		expect(events.at(-1)?.data).toMatchObject({
+			requestId: handled.headers.get("x-request-id"),
+			status: 503,
+		});
 	});
 
 	it("LOG-AC-07 keeps identity in context and headers with logging off", async () => {

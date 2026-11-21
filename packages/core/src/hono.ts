@@ -382,6 +382,10 @@ function honoApp(
 /** A request's state, the route pattern that matched it, and the response Routa prepared for it. */
 type TrackedRequest = RequestState & { route?: string; prepared?: Response };
 
+/** What Hono's error says when nothing on the app returned a response or called `next()`. */
+const unansweredMessage =
+	"Context is not finalized. Did you forget to return a Response object or `await next()`?";
+
 /**
  * Gives every request that reaches the app its identity, before anything else runs: a generated
  * UUID, the caller's correlation ID when the configured header carries a valid one, and a request
@@ -394,6 +398,11 @@ type TrackedRequest = RequestState & { route?: string; prepared?: Response };
  * whose headers are immutable, is copied first, so one request's identity never reaches another's.
  * A response the runtime cannot copy, such as a `101` upgrade response, is returned as it is,
  * without identity headers, and its event still logs its status.
+ *
+ * When nothing on the app answers a request, Hono fails it only after the whole chain returns,
+ * where Routa cannot identify the response. Routa raises the same error inside the chain instead,
+ * so Hono's error handler, or one the application set with `onError`, answers it there and the
+ * answer carries the identity.
  *
  * The event says the response was prepared, not that it was sent or received: Routa logs it
  * before the body is transmitted. A request whose handling throws past Hono logs nothing.
@@ -412,47 +421,58 @@ function identifyRequests(
 	const deriveLogger = requestLoggers(logger);
 	const requests = new WeakMap<Context, TrackedRequest>();
 
-	app.use("*", async (context, next) => {
-		const startedAt = performance.now();
-		const requestId = crypto.randomUUID();
-		const correlationId =
-			correlationHeader === undefined
-				? undefined
-				: acceptedCorrelation(context.req.raw.headers, correlationHeader);
-		const state: TrackedRequest = {
-			requestId,
-			...(correlationId !== undefined && { correlationId }),
-			// Both names are bound on every request, `correlationId` without a value when none was
-			// accepted, so no binding of the configured logger and no event data can supply either.
-			...deriveLogger({ requestId, correlationId }),
-		};
-		requests.set(context, state);
+	app.use(
+		"*",
+		async (context, next) => {
+			const startedAt = performance.now();
+			const requestId = crypto.randomUUID();
+			const correlationId =
+				correlationHeader === undefined
+					? undefined
+					: acceptedCorrelation(context.req.raw.headers, correlationHeader);
+			const state: TrackedRequest = {
+				requestId,
+				...(correlationId !== undefined && { correlationId }),
+				// Both names are bound on every request, `correlationId` without a value when none was
+				// accepted, so no binding of the configured logger and no event data can supply either.
+				...deriveLogger({ requestId, correlationId }),
+			};
+			requests.set(context, state);
 
-		await next();
+			await next();
 
-		if (context.res === state.prepared || adoptResponse(context)) {
-			const { headers } = context.res;
-			headers.set(requestIdHeader, requestId);
+			if (context.res === state.prepared || adoptResponse(context)) {
+				const { headers } = context.res;
+				headers.set(requestIdHeader, requestId);
 
-			// Routa owns the configured correlation header, so a response never presents a value
-			// Routa did not accept, such as one a handler forwarded from upstream. No other header
-			// Routa writes can be the correlation header, and no other header is touched.
-			if (correlationHeader !== undefined) {
-				if (correlationId === undefined) {
-					headers.delete(correlationHeader);
-				} else {
-					headers.set(correlationHeader, correlationId);
+				// Routa owns the configured correlation header, so a response never presents a value
+				// Routa did not accept, such as one a handler forwarded from upstream. No other header
+				// Routa writes can be the correlation header, and no other header is touched.
+				if (correlationHeader !== undefined) {
+					if (correlationId === undefined) {
+						headers.delete(correlationHeader);
+					} else {
+						headers.set(correlationHeader, correlationId);
+					}
 				}
 			}
-		}
 
-		state.event("info", "http.response.prepared", "Response prepared.", {
-			method: loggedMethod(context.req.raw.method),
-			route: state.route ?? unmatchedRoute,
-			status: context.res.status,
-			durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
-		});
-	});
+			state.event("info", "http.response.prepared", "Response prepared.", {
+				method: loggedMethod(context.req.raw.method),
+				route: state.route ?? unmatchedRoute,
+				status: context.res.status,
+				durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
+			});
+		},
+		async (context, next) => {
+			await next();
+
+			// Reading `context.res` here would make Hono create a placeholder 200 response.
+			if (!context.finalized) {
+				throw new Error(unansweredMessage);
+			}
+		},
+	);
 
 	const stateOf = (context: Context) => {
 		const state = requests.get(context);

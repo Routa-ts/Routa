@@ -99,6 +99,13 @@ returns, goes back unchanged, without `x-request-id` or the correlation echo, an
 correlation header it already carries. `http.response.prepared` still records it with status
 `101`.
 
+A handler or middleware you add that neither returns a response nor calls `next()` leaves the
+request unanswered. Hono fails such a request through its error handler only after the whole
+chain returns, where Routa cannot reach the response. Routa raises the same error, `Context is
+not finalized`, inside the chain instead, so Hono's default `500 Internal Server Error`, or the
+response of a handler you set with `app.onError()`, carries `x-request-id` and is logged once
+with its status.
+
 ## Status Codes Routa Produces
 
 | Status | Cause                                                                                 |
