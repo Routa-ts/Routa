@@ -321,8 +321,8 @@ function assertLoggerOptions(options: unknown): asserts options is CreateLoggerO
  * `then` never runs and its rejection is always handled. Any other value is resolved as `await`
  * would resolve it, which runs a thenable's `then`.
  *
- * A promise whose `constructor` or `Symbol.species` lookup throws cannot be observed: every
- * intrinsic that attaches a handler reads both first.
+ * A promise subclass whose `constructor`, `Symbol.species`, or species constructor throws cannot
+ * be observed: every intrinsic that attaches a handler runs them first.
  *
  * @throws When `delivery` cannot be observed
  */
@@ -599,7 +599,7 @@ function sanitizeObject(value: object, traversal: Traversal, pending: PendingPat
 
 	const isArray = Array.isArray(value);
 
-	if (isArray ? Object.getPrototypeOf(value) !== Array.prototype : !isPlainObject(value)) {
+	if (isArray ? !isPlainArray(value) : !isPlainObject(value)) {
 		return unsupportedMarker;
 	}
 
@@ -619,8 +619,23 @@ function isPlainObject(value: unknown): value is object {
 		return false;
 	}
 
-	const prototype = Object.getPrototypeOf(value);
-	return prototype === Object.prototype || prototype === null;
+	const prototype: unknown = Object.getPrototypeOf(value);
+	// `Object.prototype` of any realm, such as an object from `node:vm` or another frame, is the
+	// only non-array prototype whose own prototype is `null`.
+	return (
+		prototype === null || (!Array.isArray(prototype) && Object.getPrototypeOf(prototype) === null)
+	);
+}
+
+/**
+ * An array whose prototype is `Array.prototype` of any realm, which is itself an array whose
+ * prototype is that realm's `Object.prototype`. A subclass's prototype is not an array.
+ */
+function isPlainArray(value: readonly unknown[]): boolean {
+	const prototype: unknown = Object.getPrototypeOf(value);
+	return (
+		Array.isArray(prototype) && Object.getPrototypeOf(Object.getPrototypeOf(prototype)) === null
+	);
 }
 
 /** A date's time value, read through the intrinsic so no method of the value runs. */
@@ -776,11 +791,15 @@ function sanitizeMerged(base: RoutaLogData, added: unknown, paths: PendingPaths)
 		members.set(safeText(key), { key, read: () => memberValue(added, key) });
 	}
 
-	// An added key past the ones read above still replaces a base key of the same name, so how
-	// many other fields the data holds never decides which value a binding's name logs.
-	for (const name of Object.keys(base)) {
-		if (Object.prototype.propertyIsEnumerable.call(added, name)) {
-			members.set(name, { key: name, read: () => memberValue(added, name) });
+	// An added key past the ones read above still replaces a base key that escapes to the same
+	// name, so how many other fields the data holds never decides which value a binding logs.
+	if (Object.keys(base).length > 0) {
+		for (const key of keys.slice(maxEntries + 1)) {
+			const name = safeText(key);
+
+			if (Object.hasOwn(base, name)) {
+				members.set(name, { key, read: () => memberValue(added, key) });
+			}
 		}
 	}
 

@@ -1,3 +1,4 @@
+import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
 import { createApplication, createHonoApp } from "./hono.js";
@@ -673,6 +674,33 @@ describe("createLogger sanitization", () => {
 
 		expect(events.map((event) => event.data?.outcome)).toEqual(["success", "success"]);
 		expect(Object.keys(events[0]?.data as object)).toHaveLength(101);
+	});
+
+	it("LOG-AC-03 replaces a binding with a late event key that escapes to the same name", () => {
+		const { events, logger } = capture();
+		const unrelated = Object.fromEntries(
+			Array.from({ length: 101 }, (_, index) => [`field${index}`, index]),
+		);
+
+		logger.child({ "line\nbreak": "old" }).info("late", "Late.", {
+			...unrelated,
+			"line\nbreak": "new",
+		});
+
+		expect(events[0]?.data?.["line\\nbreak"]).toBe("new");
+	});
+
+	it("LOG-AC-04 copies plain objects and arrays from another realm", () => {
+		const { events, logger } = capture();
+		const foreign = runInNewContext("({ answer: 42, nested: { list: [1, 2] } })") as object;
+
+		logger.info("foreign", "Foreign data.", foreign as Record<string, unknown>);
+		logger.info("nested", "Nested foreign data.", { foreign });
+
+		expect(events.map((event) => event.data)).toEqual([
+			{ answer: 42, nested: { list: [1, 2] } },
+			{ foreign: { answer: 42, nested: { list: [1, 2] } } },
+		]);
 	});
 
 	it("LOG-AC-04 counts redacted values against the per-event budget", () => {
