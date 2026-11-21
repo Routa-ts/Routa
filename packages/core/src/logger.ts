@@ -168,7 +168,10 @@ export function createLogger(options: CreateLoggerOptions = {}): RoutaLogger {
 				const delivery: unknown = sink(event);
 
 				if (delivery !== undefined) {
-					Promise.resolve(delivery).then(undefined, () => report("sink_failed"));
+					// The intrinsic `then` still attaches to a promise whose own `then` was replaced.
+					void Promise.prototype.then.call(Promise.resolve(delivery), undefined, () =>
+						report("sink_failed"),
+					);
 				}
 			} catch {
 				report("sink_failed");
