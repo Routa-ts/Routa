@@ -106,6 +106,14 @@ not finalized`, inside the chain instead, so Hono's default `500 Internal Server
 response of a handler you set with `app.onError()`, carries `x-request-id` and is logged once
 with its status.
 
+When you mount one Routa app in another with `outer.route("/api", inner)`, both built by
+`createHonoApp`, the request is identified once, by the outer app. Handlers in the inner app
+see the same `ctx.requestId` and `ctx.correlationId`, and the outer app's `correlation` setting
+decides whether a correlation ID is accepted. Only the outer app sets the identity headers and
+logs `http.response.prepared`, through its logger, with the route pattern the inner app
+declares, such as `/whoami`, without the mount prefix. The inner app's request logger still
+writes to the inner app's logger, bound to the same identity.
+
 ## Status Codes Routa Produces
 
 | Status | Cause                                                                                 |

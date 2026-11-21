@@ -1024,7 +1024,8 @@ routes that read them need [`createApplication`](#createapplication) with a serv
 factory. Call it directly in tests of routes that use no application services. Every request
 the app receives, matched or not, gets a generated
 [request identity](/docs/reference/runtime-behavior/#request-identity) and an `x-request-id`
-response header.
+response header, once: an app mounted in another Routa app with `route()` reuses the outer
+app's identity.
 
 | Parameter                    | Type                        | Purpose                                                                            |
 | ---------------------------- | --------------------------- | ---------------------------------------------------------------------------------- |

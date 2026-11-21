@@ -31,6 +31,7 @@ import {
 	acceptedCorrelation,
 	correlationHeaderOf,
 	loggedMethod,
+	type RequestIdentity,
 	requestIdHeader,
 	type RequestState,
 	unmatchedRoute,
@@ -379,8 +380,15 @@ function honoApp(
 	return app;
 }
 
-/** A request's state, the route pattern that matched it, and the response Routa prepared for it. */
-type TrackedRequest = RequestState & { route?: string; prepared?: Response };
+/** A request's identity, the route pattern that matched it, and the response Routa prepared for it. */
+type TrackedRequest = RequestIdentity & { route?: string; prepared?: Response };
+
+/**
+ * The identity of each request a Routa app is handling, by its Hono context. When one Routa app
+ * is mounted in another with `route()`, Hono passes one context through both, so the first Routa
+ * app identifies the request and the app it mounts reuses that identity.
+ */
+const identified = new WeakMap<Context, TrackedRequest>();
 
 /** What Hono's error says when nothing on the app returned a response or called `next()`. */
 const unansweredMessage =
@@ -392,6 +400,10 @@ const unansweredMessage =
  * logger bound to both. Once the response is prepared, it sets `x-request-id` last, over any value
  * something else wrote, echoes an accepted correlation ID or removes the correlation header when
  * it accepted none, and logs `http.response.prepared`.
+ *
+ * The first Routa app a request reaches owns its identity. A Routa app mounted in it reuses that
+ * identity, with its own request logger, and leaves the headers and the event to the owner, so
+ * handlers, headers, and the one event agree.
  *
  * Routa writes these headers in place only on a response it prepared for this request. Any other
  * response, such as one a handler added to the returned Hono app reuses across requests, or one
@@ -407,8 +419,8 @@ const unansweredMessage =
  * The event says the response was prepared, not that it was sent or received: Routa logs it
  * before the body is transmitted. A request whose handling throws past Hono logs nothing.
  *
- * @returns `matched` records the route pattern that matched a request and returns the request's
- *   state; `prepared` records a response Routa prepared for the request and returns it
+ * @returns `matched` records the route pattern that matched a request and returns this app's
+ *   state for it; `prepared` records a response Routa prepared for the request and returns it
  */
 function identifyRequests(
 	app: Hono,
@@ -419,29 +431,44 @@ function identifyRequests(
 	prepared: (context: Context, response: Response) => Response;
 } {
 	const deriveLogger = requestLoggers(logger);
-	const requests = new WeakMap<Context, TrackedRequest>();
+	// This app's view of each request: its identity, and this app's request logger.
+	const states = new WeakMap<Context, RequestState>();
+	const stateFor = ({ requestId, correlationId }: RequestIdentity): RequestState => ({
+		requestId,
+		...(correlationId !== undefined && { correlationId }),
+		// Both names are bound on every request, `correlationId` without a value when none was
+		// accepted, so no binding of the configured logger and no event data can supply either.
+		...deriveLogger({ requestId, correlationId }),
+	});
 
 	app.use(
 		"*",
 		async (context, next) => {
+			const owner = identified.get(context);
+
+			if (owner) {
+				states.set(context, stateFor(owner));
+				await next();
+				return;
+			}
+
 			const startedAt = performance.now();
 			const requestId = crypto.randomUUID();
 			const correlationId =
 				correlationHeader === undefined
 					? undefined
 					: acceptedCorrelation(context.req.raw.headers, correlationHeader);
-			const state: TrackedRequest = {
+			const request: TrackedRequest = {
 				requestId,
 				...(correlationId !== undefined && { correlationId }),
-				// Both names are bound on every request, `correlationId` without a value when none was
-				// accepted, so no binding of the configured logger and no event data can supply either.
-				...deriveLogger({ requestId, correlationId }),
 			};
-			requests.set(context, state);
+			const state = stateFor(request);
+			identified.set(context, request);
+			states.set(context, state);
 
 			await next();
 
-			if (context.res === state.prepared || adoptResponse(context)) {
+			if (context.res === request.prepared || adoptResponse(context)) {
 				const { headers } = context.res;
 				headers.set(requestIdHeader, requestId);
 
@@ -459,7 +486,7 @@ function identifyRequests(
 
 			state.event("info", "http.response.prepared", "Response prepared.", {
 				method: loggedMethod(context.req.raw.method),
-				route: state.route ?? unmatchedRoute,
+				route: request.route ?? unmatchedRoute,
 				status: context.res.status,
 				durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
 			});
@@ -474,24 +501,25 @@ function identifyRequests(
 		},
 	);
 
-	const stateOf = (context: Context) => {
-		const state = requests.get(context);
+	const tracked = (context: Context) => {
+		const request = identified.get(context);
+		const state = states.get(context);
 
-		if (!state) {
+		if (!request || !state) {
 			throw new Error("Routa received a request its identity middleware did not see.");
 		}
 
-		return state;
+		return { request, state };
 	};
 
 	return {
 		matched: (context, path) => {
-			const state = stateOf(context);
-			state.route = path;
+			const { request, state } = tracked(context);
+			request.route = path;
 			return state;
 		},
 		prepared: (context, response) => {
-			stateOf(context).prepared = response;
+			tracked(context).request.prepared = response;
 			return response;
 		},
 	};

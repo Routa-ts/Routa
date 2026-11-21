@@ -827,6 +827,92 @@ describe("request identity", () => {
 		});
 	});
 
+	it("LOG-AC-06 identifies a request once when one Routa app is mounted in another", async () => {
+		const outer = capture();
+		const inner = capture();
+		const whoami: HonoRoute = {
+			method: "get",
+			path: "/whoami",
+			contract: createRoute({
+				responses: {
+					ok: {
+						status: 200,
+						schema: z.object({ requestId: z.string(), correlationId: z.string().nullable() }),
+					},
+				},
+				run: ({ ctx }) => {
+					ctx.logger.info("whoami.read", "Read the identity.");
+					return {
+						type: "ok",
+						data: { requestId: ctx.requestId, correlationId: ctx.correlationId ?? null },
+					};
+				},
+			}),
+		};
+		const mounted = (correlation: boolean) => {
+			const app = createHonoApp([], { logger: outer.logger, correlation });
+			app.route("/api", createHonoApp([whoami], { logger: inner.logger, correlation: true }));
+			return app;
+		};
+		const prepared = () =>
+			[...outer.events, ...inner.events].filter(
+				(event) => event.event === "http.response.prepared",
+			);
+
+		const response = await mounted(true).request("/api/whoami", {
+			headers: { "x-correlation-id": "trace-1" },
+		});
+		const body = (await response.json()) as { requestId: string; correlationId: string };
+
+		expect(body).toEqual({ requestId: expect.stringMatching(uuid), correlationId: "trace-1" });
+		expect(response.headers.get("x-request-id")).toBe(body.requestId);
+		expect(response.headers.get("x-correlation-id")).toBe("trace-1");
+		// The outer app identified the request and logged it; the mounted app's handler logged
+		// through its own logger with the same identity.
+		expect(outer.events.map((event) => [event.event, event.data])).toEqual([
+			[
+				"http.response.prepared",
+				{
+					requestId: body.requestId,
+					correlationId: "trace-1",
+					method: "GET",
+					route: "/whoami",
+					status: 200,
+					durationMs: expect.any(Number),
+				},
+			],
+		]);
+		expect(inner.events.map((event) => [event.event, event.data])).toEqual([
+			["whoami.read", { requestId: body.requestId, correlationId: "trace-1" }],
+		]);
+
+		for (const [path, init, status, route] of [
+			["/api/nowhere", {}, 404, "[Unmatched]"],
+			["/api/whoami", { method: "DELETE" }, 405, "/whoami"],
+		] as const) {
+			outer.events.length = 0;
+			inner.events.length = 0;
+			const other = await mounted(true).request(path, init);
+
+			expect(other.status, path).toBe(status);
+			expect(
+				prepared().map((event) => event.data),
+				path,
+			).toEqual([
+				expect.objectContaining({ requestId: other.headers.get("x-request-id"), route, status }),
+			]);
+		}
+
+		// The outer app's correlation config decides for the whole request.
+		const uncorrelated = await mounted(false).request("/api/whoami", {
+			headers: { "x-correlation-id": "trace-1" },
+		});
+		const uncorrelatedBody = (await uncorrelated.json()) as { correlationId: string | null };
+
+		expect(uncorrelatedBody.correlationId).toBeNull();
+		expect(uncorrelated.headers.has("x-correlation-id")).toBe(false);
+	});
+
 	it("LOG-AC-07 keeps identity in context and headers with logging off", async () => {
 		const app = await createApplication([echoRoute]);
 
