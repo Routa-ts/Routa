@@ -971,6 +971,26 @@ describe("createLogger failure containment", () => {
 });
 
 describe("createLogger options", () => {
+	it("LOG-AC-03 reads each option once, so the redact paths it validated are the ones applied", () => {
+		const events: RoutaLogEvent[] = [];
+		let reads = 0;
+		const options = {
+			sink: (event: RoutaLogEvent) => events.push(event),
+			get redact() {
+				reads += 1;
+				return reads === 1 ? ["user.email"] : [];
+			},
+		};
+
+		createLogger(options).info("signed.in", "Signed in.", {
+			user: { email: "ada@example.com" },
+			password: "hunter2",
+		});
+
+		expect(reads).toBe(1);
+		expect(events[0]?.data).toEqual({ user: { email: "[Redacted]" }, password: "[Redacted]" });
+	});
+
 	it("rejects options it cannot honor before any event is written", () => {
 		const invalid: Array<[unknown, string]> = [
 			[

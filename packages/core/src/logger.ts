@@ -23,7 +23,9 @@ export type RoutaLogEvent = {
  * Receives each sanitized event a logger writes, such as to forward it to Pino or another backend.
  * Routa calls it synchronously and never awaits a returned promise. A throw or rejection loses
  * that event and is reported once; the application owns the backend's buffering, flushing, and
- * shutdown.
+ * shutdown. A returned promise subclass whose `constructor`, `Symbol.species`, or species
+ * constructor throws cannot be observed, so its rejection can remain unhandled; handle such
+ * rejections in the backend.
  */
 export type RoutaLogSink = (event: RoutaLogEvent) => void;
 
@@ -103,8 +105,8 @@ type RawEvent = {
  * @returns A logger that writes events through the configured sink.
  * @throws {TypeError} When an option is unknown or invalid
  */
-export function createLogger(options: CreateLoggerOptions = {}): RoutaLogger {
-	assertLoggerOptions(options);
+export function createLogger(input: CreateLoggerOptions = {}): RoutaLogger {
+	const options = snapshotLoggerOptions(input);
 	if (options.enabled === false || options.level === "silent") {
 		return createDisabledLogger();
 	}
@@ -262,6 +264,25 @@ const optionNames = ["enabled", "level", "sink", "redact", "now"] as const;
  * @throws {TypeError} When an option is unknown or has the wrong shape, so a mistake surfaces when
  *   the logger is created instead of as missing or unredacted output
  */
+/**
+ * Reads each option once, then validates that copy, so a getter cannot pass validation with one
+ * value and configure the logger with another.
+ */
+function snapshotLoggerOptions(input: unknown): CreateLoggerOptions {
+	if (typeof input !== "object" || input === null || Array.isArray(input)) {
+		throw new TypeError("createLogger options must be an object.");
+	}
+
+	const snapshot: Record<string, unknown> = {};
+	for (const name of Object.keys(input)) {
+		const value: unknown = (input as Record<string, unknown>)[name];
+		snapshot[name] = Array.isArray(value) ? [...(value as unknown[])] : value;
+	}
+
+	assertLoggerOptions(snapshot);
+	return snapshot;
+}
+
 function assertLoggerOptions(options: unknown): asserts options is CreateLoggerOptions {
 	if (typeof options !== "object" || options === null || Array.isArray(options)) {
 		throw new TypeError("createLogger options must be an object.");
