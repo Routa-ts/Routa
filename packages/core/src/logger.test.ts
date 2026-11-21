@@ -1207,8 +1207,10 @@ describe("factory-created loggers", () => {
 	it("LOG-AC-01 accepts a logger another copy of @routa-ts/core created", async () => {
 		// The CLI runs the application with its own copy of the package, which may not be the copy
 		// src/routa.ts imported createLogger from.
-		const specifier = "./logger.js?copy";
-		const copy = (await import(/* @vite-ignore */ specifier)) as typeof LoggerModule;
+		// Resetting the module registry loads a second logger-registry.js too, so the copy marks
+		// its loggers with nothing it shares with this test's copy except the registered symbol.
+		vi.resetModules();
+		const copy = (await import("./logger.js")) as typeof LoggerModule;
 		const events: RoutaLogEvent[] = [];
 		const logger = copy.createLogger({ sink: (event) => events.push(event) });
 
