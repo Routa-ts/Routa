@@ -362,6 +362,27 @@ describe("project logger configuration", () => {
 		expect(built).toEqual([]);
 	});
 
+	it("LOG-AC-01 reads the src/routa.ts logger once, so the logger it checked is the one used", async () => {
+		const events: string[] = [];
+		const checked = createLogger({ sink: (event) => events.push(event.event) });
+		const swapped = { info: vi.fn(), child: () => swapped };
+		const config = { services: () => ({ clock: { now: () => "noon" } }) };
+		const read = vi.fn((): unknown => (read.mock.calls.length === 1 ? checked : swapped));
+		Object.defineProperty(config, "logger", { enumerable: true, get: read });
+		const { modules } = projectModules();
+
+		const app = await createTestApplication({
+			...modules,
+			"src/routa.ts": () => Promise.resolve({ default: config }),
+		});
+		await app.request("/orders");
+		await app.dispose();
+
+		expect(read).toHaveBeenCalledTimes(1);
+		expect(events).toEqual(["http.request"]);
+		expect(swapped.info).not.toHaveBeenCalled();
+	});
+
 	it("LOG-AC-02 writes JSON console lines at info when src/routa.ts sets no logger", async () => {
 		const consoleLog = vi.spyOn(console, "log").mockImplementation(() => undefined);
 		const { modules } = projectModules({

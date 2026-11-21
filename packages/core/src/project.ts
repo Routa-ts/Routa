@@ -103,16 +103,18 @@ export async function buildProjectApplication(
 		checkFolderGuards: metadata.routaAuthenticationSchemes !== undefined,
 	});
 	const config = ((await load("src/routa.ts")) as { default?: RoutaConfig }).default ?? {};
-	if (config.logger !== undefined && config.logger !== false) {
+	// Read once, so the logger checked here is the one the application uses.
+	const configured = config.logger;
+	if (configured !== undefined && configured !== false) {
 		assertCreatedLogger(
-			config.logger,
+			configured,
 			"src/routa.ts configures",
 			"Set logger: false to turn logging off.",
 		);
 	}
 	// An omitted logger is the JSON console logger at info; `false` leaves the application's
 	// loggers as no-ops without touching any logger the project shares elsewhere.
-	const logger = config.logger === false ? undefined : (config.logger ?? createLogger());
+	const logger = configured === false ? undefined : (configured ?? createLogger());
 	const services = pairServices(config.services, metadata.routaApplicationServices, {
 		file: "src/routa.ts",
 		scope: "application services",
