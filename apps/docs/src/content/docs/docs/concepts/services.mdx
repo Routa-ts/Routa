@@ -351,12 +351,14 @@ and fail in the other.
 At runtime, Routa checks that every name in `requiresServices` is on the middleware's
 `ctx.services` immediately before it runs. A missing name, which only a project that bypassed
 `routa check` can reach, stops the request before the callback with the standard `500` problem.
-The client gets no details. The `http.error` log names the middleware, the service, the route,
-and the method:
+The client gets no details. The `http.error` log records the request identity, the method, the
+route, and the status, and no error text:
 
 ```txt
-Middleware withRateLimit on GET /orders requires service "limiter", but ctx.services does not provide it where the middleware runs. Declare "limiter" in a services scope that runs before the middleware.
+{"timestamp":"2026-01-01T00:00:00.000Z","level":"error","event":"http.error","message":"Request failed.","data":{"requestId":"5e8f2a1c-3b4d-4c6e-9f0a-1b2c3d4e5f6a","method":"GET","route":"/orders","status":500}}
 ```
+
+Run `routa check` to find the placement; it reports the same mistake from source.
 
 Routa checks names at runtime, not the members of the services.
 
@@ -500,7 +502,7 @@ requests to finish their cleanup before releasing application services.
 When a request factory throws or returns the wrong names, Routa skips every later factory,
 middleware, and the handler, and responds with the standard `500` problem, whatever the
 factory threw. A `ZodError` from a factory is an internal failure, not a validation error.
-The error is logged as `http.error` and never reaches the client. A middleware reject also
+Routa logs `http.error` without the error's text, and the error never reaches the client. A middleware reject also
 skips later factories. Either way, Routa releases the scopes the request started, including
 the callbacks a failed factory registered, after the chain unwinds and in the same order. It
 does not retry a factory or substitute a service.

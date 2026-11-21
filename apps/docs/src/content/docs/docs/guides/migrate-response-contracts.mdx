@@ -447,7 +447,8 @@ export const audit = createMiddleware({
 });
 ```
 
-Routa already logs every request's method, path, status, and duration as `http.request`.
+Routa already logs every response's method, route pattern, status, and duration, with the
+request's identity, as `http.response.prepared`.
 TypeScript reports `Return the value next() resolved to, unchanged.` for a changed value,
 and Routa answers `500 Invalid handler output` for anything else returned after `next()`.
 `MiddlewareNext` and `MiddlewareRunArgs` lost their unused reject type parameter, so drop

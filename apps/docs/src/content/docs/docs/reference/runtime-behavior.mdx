@@ -12,7 +12,9 @@ directly.
 
 ## Request Pipeline
 
-For each matched route, in order:
+Before anything else, every request that reaches the app gets its
+[request identity](#request-identity), whether or not a route matches it. Then, for each
+matched route, in order:
 
 1. **Credential resolution.** Only when `src/routa.ts` configures
    [`authentication`](/docs/reference/configuration/#authentication). Routa reads the request's
@@ -31,7 +33,8 @@ For each matched route, in order:
    else after `next()` fails as invalid handler output. Declared `provides` values are parsed
    before any are merged, and undeclared top-level keys are omitted.
 6. **Handler.** `run` receives the parsed input and the accumulated context, with
-   framework-owned values such as `logger` applied last so they cannot be replaced.
+   framework-owned values such as `logger`, `requestId`, and `correlationId` applied last so
+   they cannot be replaced.
 7. **Response validation.** As soon as the handler or a middleware returns an outcome, before
    earlier middleware resume, the result shape and `type` are checked against the
    outcomes of whoever returned it: the route's `responses` for the handler, or that
@@ -43,6 +46,43 @@ For each matched route, in order:
    repeated `Set-Cookie` fields, and, when enabled, lifecycle headers. A bodyless outcome gets
    no content headers. The selected response is then fixed: changes that code makes later to
    the objects the result was built from do not reach the client.
+9. **Identity headers.** Once any response is prepared, Routa sets `x-request-id` and, when it
+   accepted one, the correlation header, over anything else that wrote them, and logs
+   `http.response.prepared`.
+
+## Request Identity
+
+Routa generates a UUID for every request it receives and never takes one from the request.
+Handlers, middleware, and services factories read it as `ctx.requestId`, every response
+carries it as `x-request-id`, and every event the request logger writes includes it. The same
+holds for unmatched requests, validation failures, middleware rejects, authentication
+failures, `406`, automatic `OPTIONS`, `405`, and server errors.
+
+```txt
+GET /status
+x-request-id: client-chosen
+
+HTTP/1.1 200 OK
+x-request-id: 3c9e1f7a-2b4d-4e8f-a6c5-9d0b1e2f3a4b
+```
+
+With [`correlation`](/docs/reference/configuration/#correlation) on, Routa also accepts one
+valid correlation ID from the configured header, exposes it as `ctx.correlationId`, binds it to
+the request logger, and echoes it. Without a valid value the header is absent from the
+response. A correlation ID associates requests across systems; it is not authentication and
+not tracing identity.
+
+Routa owns these values:
+
+- `ctx.requestId` and `ctx.correlationId` are readonly. Middleware cannot declare them in
+  `provides` or pass them to `next()`, and cannot assign them; `ctx.logger` is reserved the same
+  way. TypeScript, `routa check` (`ROUTA_CONTEXT_RESERVED`), and route registration reject each
+  case, and an assignment that bypasses the types fails the request as a `500`.
+- An outcome or reject cannot declare `x-request-id`, or the configured correlation header, in
+  `headers` (`ROUTA_RESPONSE_HEADER_RESERVED`).
+- The request logger keeps `requestId` and `correlationId` whatever event data or `child()`
+  bindings name them. The logger you configured, and any module that imports it, stays without
+  them, so concurrent requests never share identity.
 
 ## Status Codes Routa Produces
 
@@ -279,19 +319,18 @@ handled as an internal error. Both produce a generic `500` problem response.
 
 ## Logging
 
-When a logger is configured, `createHonoApp` records `http.request` at `info` for every
-completed request with `method`, `path`, `status`, and `durationMs`, and `http.error` at
-`error` for responses of 500 or above with the error message, name, and stack. Response
+When a logger is configured, `createHonoApp` records `http.response.prepared` at `info` once
+for every response it prepares, with `requestId`, `method`, `route`, `status`, and
+`durationMs`, and `http.error` at `error` for responses of 500 or above with `requestId`,
+`method`, `route`, and `status`. The
+[events table](/docs/reference/configuration/#events-routa-writes) defines each field. Response
 and middleware context schema failures also include structured `issues` containing only
 each Zod issue's `code` and `path`; rejected values are never logged.
 
-For an authenticator that throws, `http.error` carries the message
-`Authenticator for scheme "<name>" threw.` and the `scheme`, never anything the thrown value
-carries, such as its message, stack, or name, because a provider error may include the
-credential. An
-invalid principal logs the scheme in the message and the principal schema's `issues`. Request
-events record no headers or cookies, so Bearer tokens, API keys, and session values never reach
-the logs.
+Request events never carry the request's path, query, body, raw headers, cookies, credentials,
+principal, or any error's message, name, or stack. A thrown authenticator, an invalid principal,
+and a failed services factory all log the same `http.error` fields, so a provider error that
+includes a credential never reaches the logs.
 
 Every event passes through the logger's
 [sanitization](/docs/reference/core/#sanitization) before its sink receives it. A sink that

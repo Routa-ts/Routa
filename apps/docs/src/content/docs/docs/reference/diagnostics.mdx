@@ -159,11 +159,17 @@ An outcome's `headers` declares two names that differ only in case, such as `eta
 
 ### `ROUTA_RESPONSE_HEADER_RESERVED`
 
-An outcome's `headers` declares a header Routa owns: `content-type`, `content-length`,
-`transfer-encoding`, `connection`, or `set-cookie`.
+An outcome's or reject's `headers` declares a header Routa owns: `content-type`,
+`content-length`, `transfer-encoding`, `connection`, `set-cookie`, `x-request-id`, or the
+header [`correlation`](/docs/reference/configuration/#correlation) reads and echoes.
 
-**Fix:** remove it. Routa sets content headers from the body and the transport. Declare
-response cookies as cookies, never as a `set-cookie` header.
+```text
+ROUTA_RESPONSE_HEADER_RESERVED: src/routes/status/route.ts: Response header "x-request-id" is reserved: Routa owns x-request-id: z.object({ "x-request-id": z.string() })
+```
+
+**Fix:** remove it. Routa sets content headers from the body and the transport, and sends the
+request identity and the accepted correlation ID itself; read them as `ctx.requestId` and
+`ctx.correlationId`. Declare response cookies as cookies, never as a `set-cookie` header.
 
 ### `ROUTA_RESPONSE_HEADER_LIFECYCLE`
 
@@ -307,13 +313,74 @@ locally or imported. Routa would otherwise miss the context the middleware provi
 
 ### `ROUTA_CONTEXT_RESERVED`
 
-A middleware provides `services` or passes it to `next()`. Routa reserves `ctx.services`
-for injected [services](/docs/concepts/services/). When `src/routa.ts` configures
-`authentication`, a middleware that provides `auth` fails too, because Routa resolves
-`ctx.auth` from the request's credential.
+A middleware provides `services`, `requestId`, `correlationId`, or `logger`, or passes one of
+them to `next()`. Routa reserves `ctx.services` for injected
+[services](/docs/concepts/services/), `ctx.requestId` and `ctx.correlationId` for the
+[request identity](/docs/reference/runtime-behavior/#request-identity), and `ctx.logger` for
+the request logger. When `src/routa.ts` configures `authentication`, a middleware that
+provides `auth` fails too, because Routa resolves `ctx.auth` from the request's credential.
+
+```text
+ROUTA_CONTEXT_RESERVED: src/routes/middleware.ts: Middleware withRequest provides ctx.requestId, which Routa reserves for the request identity it generates.
+ROUTA_CONTEXT_RESERVED: src/routes/middleware.ts: Middleware withRequest passes ctx.requestId to next(), which Routa reserves for the request identity it generates.
+```
 
 **Fix:** rename the context key. When the value is an application dependency, declare it
-as an application service instead.
+as an application service instead. A middleware that generated or copied a request ID can
+go: every middleware, services factory, and handler already reads `ctx.requestId`, and
+`correlation` accepts a caller's ID as `ctx.correlationId`.
+
+## Correlation
+
+### `ROUTA_CORRELATION_CONFIG_UNRESOLVED`
+
+`routa check` cannot read the `correlation` value in `src/routa.ts`. It accepts `true`,
+`false`, or `{ header: "..." }` with a string literal, written in place or as a `const` object
+literal; anything else, such as `correlation: process.env.CORRELATION === "on"` or
+`{ header: process.env.HEADER }`, fails. Whether correlation is on and its header change the
+OpenAPI document, so Routa reads them without running `src/routa.ts`.
+
+```text
+ROUTA_CORRELATION_CONFIG_UNRESOLVED: src/routa.ts: The correlation config in src/routa.ts cannot be statically read.
+```
+
+**Fix:** write `correlation: true`, `correlation: false`, or
+`correlation: { header: "x-correlation-id" }`.
+
+### `ROUTA_CORRELATION_HEADER_INVALID`
+
+The correlation `header` is not an HTTP header name.
+
+```text
+ROUTA_CORRELATION_HEADER_INVALID: src/routa.ts: The correlation header "x trace" in src/routa.ts is not a valid header name.
+```
+
+**Fix:** use a name made only of letters, digits, and the characters allowed in a header
+name, such as `x-correlation-id`.
+
+### `ROUTA_CORRELATION_HEADER_CONFLICT`
+
+The correlation `header` names, in any casing, `x-request-id`, a credential header
+(`authorization`, `proxy-authorization`, `cookie`, or `set-cookie`), or another header Routa
+owns on every response (`content-type`, `content-length`, `transfer-encoding`, or
+`connection`). Startup rejects the same names.
+
+```text
+ROUTA_CORRELATION_HEADER_CONFLICT: src/routa.ts: The correlation header "X-Request-ID" in src/routa.ts names x-request-id, which carries the request identity Routa generates.
+```
+
+**Fix:** choose a header of its own, such as `x-correlation-id`. A correlation ID is not a
+credential and never replaces `x-request-id`.
+
+### `ROUTA_CORRELATION_SPREAD_UNRESOLVED`
+
+Warning. The default-exported `createRouta` config in `src/routa.ts` has a spread, computed
+key, or config argument that Routa cannot read, and no visible `correlation` member after it.
+Correlation inside it never reaches generated metadata or OpenAPI. If the unread part does turn
+correlation on, `routa dev` and `routa start` refuse to start.
+
+**Fix:** declare `correlation` as a member of the `createRouta` object after any spread, or
+spread a `const` object literal Routa can follow.
 
 ## Authentication
 

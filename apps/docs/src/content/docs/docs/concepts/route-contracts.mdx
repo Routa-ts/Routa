@@ -11,7 +11,6 @@ It is the source of truth from which Routa derives types, runtime validation, ge
 metadata, and OpenAPI.
 
 ```ts title="src/routes/users/route.ts"
-import { randomUUID } from "node:crypto";
 import { createRoute, createRouteRoot } from "@routa-ts/core";
 import { CreateUserSchema, EmailConflictSchema, UserSchema } from "./schemas.js";
 import * as users from "../../services/users.js";
@@ -34,25 +33,17 @@ export default route({
 			},
 		},
 		run: async ({ input, ctx, response }) => {
-			const correlationId = randomUUID();
-
-			ctx.logger.info("users.create", "Creating a user.", {
-				correlationId,
-			});
+			// ctx.logger binds the request's requestId to every event.
+			ctx.logger.info("users.create", "Creating a user.");
 
 			const created = await users.createUser(input.body);
 
 			if (!created) {
-				ctx.logger.warn("users.create_conflict", "Email is already in use.", {
-					correlationId,
-				});
+				ctx.logger.warn("users.create_conflict", "Email is already in use.");
 				return response.emailConflict({ message: "Email already in use." });
 			}
 
-			ctx.logger.info("users.created", "User created.", {
-				correlationId,
-				userId: created.id,
-			});
+			ctx.logger.info("users.created", "User created.", { userId: created.id });
 
 			return response.success(created);
 		},
@@ -121,10 +112,14 @@ cookies, so return the object when an outcome sets one. See
 
 ## Handler Context
 
-Every handler receives `ctx.logger`, the configured
-[`createLogger`](/docs/reference/core/#createlogger) logger, regardless of configuration. When logging is disabled, `ctx.logger` is a complete no-op implementation
-of the same type, so handler code never needs a configuration guard. Middleware adds its
-own typed keys to `ctx` on top of that.
+Every handler receives `ctx.logger`, the request logger of the configured
+[`createLogger`](/docs/reference/core/#createlogger) logger, regardless of configuration. Its
+events carry the request's `requestId`, which Routa generates and sends as `x-request-id`, and
+the handler reads the same value as `ctx.requestId`. With
+[correlation](/docs/reference/configuration/#correlation) on, `ctx.correlationId` holds the
+caller's accepted correlation ID. When logging is disabled, `ctx.logger` is a complete no-op
+implementation of the same type, so handler code never needs a configuration guard, and the
+identity stays. Middleware adds its own typed keys to `ctx` on top of that.
 
 ## Rules
 

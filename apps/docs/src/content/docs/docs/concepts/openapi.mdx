@@ -32,6 +32,32 @@ Middleware `rejects` are documented exactly like route outcomes: description, bo
 and cookies. Middleware `openapi` metadata contributes `security` and `x-routa-authz`, and
 route `deprecation` metadata marks the operation deprecated.
 
+### Request Identity Headers
+
+Every response of every operation documents `x-request-id`, the
+[request identity](/docs/reference/runtime-behavior/#request-identity) Routa sends on every
+response, after the outcome's own headers. When `src/routa.ts` turns
+[correlation](/docs/reference/configuration/#correlation) on, each response also documents
+the correlation header as optional, because Routa echoes it only for a valid incoming value:
+
+```json
+"headers": {
+	"x-request-id": {
+		"required": true,
+		"description": "The request identity Routa generated for this request.",
+		"schema": { "type": "string", "format": "uuid" }
+	},
+	"x-correlation-id": {
+		"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+		"schema": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._-]+$" }
+	}
+}
+```
+
+Generation reads `correlation` from source without running `src/routa.ts`, so the same source
+always produces the same document. A scaffold writes `x-request-id` into the baseline it
+creates, so a scaffolded project starts without drift.
+
 ### Authentication
 
 When `src/routa.ts` configures [`authentication`](/docs/reference/configuration/#authentication),

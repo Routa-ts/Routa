@@ -33,7 +33,9 @@ import it wherever else you log, and choose where events go with a sink.
    ```
 
 2. Configure it in `src/routa.ts`. Routa writes its own events, such as `api.started`,
-   through it, and every handler receives it as `ctx.logger`.
+   through it. Every handler receives its request logger as `ctx.logger`: a child bound to
+   the request's `requestId`, and its `correlationId` when
+   [correlation](/docs/reference/configuration/#correlation) is on.
 
    ```ts title="src/routa.ts"
    import { createRouta } from "@routa-ts/core";
@@ -66,7 +68,34 @@ import it wherever else you log, and choose where events go with a sink.
    `src/routa.ts` to silence Routa's logging for the application; a module that imports the
    shared logger keeps writing through it.
 
-4. Send events to your backend with a sink. Install Pino:
+4. Pass `ctx.logger` to work that belongs to one request. Its events carry the request's
+   identity, which no event data or child binding replaces. The shared logger carries none,
+   so a service correlates with a request only when you pass the request logger in.
+
+   ```ts title="src/receipts.ts"
+   import type { RoutaLogger } from "@routa-ts/core";
+
+   export function sendReceipt(log: RoutaLogger, orderId: string): void {
+   	log.info("receipts.sent", "Receipt sent.", { orderId });
+   }
+   ```
+
+   ```ts title="src/routes/orders/route.ts"
+   import { createRoute, createRouteRoot } from "@routa-ts/core";
+   import { sendReceipt } from "../../receipts.js";
+
+   export default createRouteRoot("/orders")({
+   	post: createRoute({
+   		responses: { created: { status: 201 } },
+   		run: ({ ctx }) => {
+   			sendReceipt(ctx.logger, "ord_1");
+   			return { type: "created" };
+   		},
+   	}),
+   });
+   ```
+
+5. Send events to your backend with a sink. Install Pino:
 
    <PackageManagers type="add" args="pino" />
 
@@ -163,11 +192,20 @@ With the logger from step 1, the default sink writes this line alongside Routa's
 because names match whole, not as substrings. Your `customer` object still holds the
 real email.
 
-With the Pino sink from step 4, Pino writes the same sanitized event in its own format, with
+With the Pino sink from step 5, Pino writes the same sanitized event in its own format, with
 the data under `data` and the message as `msg`:
 
 ```txt
 {"level":30,"time":1767225600000,"pid":4242,"hostname":"api-1","event":"billing.charged","data":{"service":"billing","customer":{"id":"cus_1","email":"[Redacted]"},"token":"[Redacted]","tokenCount":1},"msg":"Customer charged."}
+```
+
+Send `POST /orders` from step 4, with the logger from step 1. The request logger's event carries the same `requestId`
+as the response's `x-request-id`, and Routa follows it with its own
+[`http.response.prepared`](/docs/reference/configuration/#events-routa-writes) event:
+
+```txt
+{"timestamp":"2026-01-01T00:00:00.000Z","level":"info","event":"receipts.sent","message":"Receipt sent.","data":{"requestId":"6f1c2a8e-5d4b-4c3a-9e2f-1b0a9c8d7e6f","orderId":"ord_1"}}
+{"timestamp":"2026-01-01T00:00:00.001Z","level":"info","event":"http.response.prepared","message":"Response prepared.","data":{"requestId":"6f1c2a8e-5d4b-4c3a-9e2f-1b0a9c8d7e6f","method":"POST","route":"/orders","status":201,"durationMs":0.42}}
 ```
 
 ## Troubleshooting
@@ -181,12 +219,14 @@ the data under `data` and the message as `msg`:
 | A value ends in `[Truncated]`                                                  | It passed a [traversal limit](/docs/reference/core/#sanitization). Log a smaller, flatter value                                                                                    |
 | The console shows `routa.logger.sink_failed` or `routa.logger.event_discarded` | Your sink threw or rejected, or an event could not be sanitized. Each `createLogger()` call, its children included, reports each kind once; later failures of that kind are silent |
 | Logs still appear with `logger: false`                                         | They come from a module that imports the shared logger. Create it with `enabled: false` to silence it everywhere                                                                   |
+| A service's events have no `requestId`                                         | The service writes through the shared logger. Pass it `ctx.logger` from the handler, as in step 4                                                                                  |
 
 <Aside type="caution" title="What redaction does not cover">
 	Redaction matches field names and paths. It does not find a secret inside a message string
 	or under a name it does not know, and it cannot see what your sink or a direct backend call
-	adds. Routa does not yet generate request IDs; its automatic `http.request` and `http.error`
-	events still include the request path and, for `http.error`, the error message and stack.
+	adds. Routa's own request events leave out the request's path, query, body, credentials, and
+	error text. `http.error` names no error yet; an error reporter that receives the original
+	error is not shipped.
 </Aside>
 
 ## Next Steps

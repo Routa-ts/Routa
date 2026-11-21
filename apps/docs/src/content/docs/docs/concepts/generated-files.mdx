@@ -71,6 +71,11 @@ to run `routa generate` when an entry has no `middlewareFiles`. Projects without
 authentication get none of these, and their startup does not check folder files, because no
 guard can run there.
 
+When `src/routa.ts` turns [correlation](/docs/reference/configuration/#correlation) on, the
+file exports `routaCorrelationHeader`, the lowercase header it reads and echoes. Startup
+refuses a `src/routa.ts` whose correlation differs from it and asks you to run
+`routa generate`. Projects without correlation get no such export.
+
 Refresh it after adding, moving, or removing a route file, changing which methods a route
 declares, or changing middleware layout:
 
