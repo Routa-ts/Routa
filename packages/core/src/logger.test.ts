@@ -749,22 +749,35 @@ describe("createLogger failure containment", () => {
 		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
 		const unhandled = vi.fn<(reason: unknown) => void>();
 		process.on("unhandledRejection", unhandled);
-		const logger = createLogger({
-			sink: () =>
-				// oxlint-disable-next-line unicorn/no-thenable -- the sink's own throwing then is the hostile input.
-				Object.defineProperty(Promise.reject(new Error("sink down")), "then", {
-					value: () => {
-						throw new Error("own then");
-					},
-				}) as unknown as void,
-		});
+		class Delivery extends Promise<void> {}
+		const thenable = {
+			// oxlint-disable-next-line unicorn/no-thenable -- a sink may return any thenable.
+			then: (_: unknown, reject: (reason: unknown) => void) => reject(new Error("sink down")),
+		};
+		const loggers = [Promise, Delivery, undefined].map((Kind) =>
+			createLogger({
+				sink: () =>
+					(Kind
+						? // oxlint-disable-next-line unicorn/no-thenable -- the sink's own throwing then is the hostile input.
+							Object.defineProperty(Kind.reject(new Error("sink down")), "then", {
+								value: () => {
+									throw new Error("own then");
+								},
+							})
+						: thenable) as unknown as void,
+			}),
+		);
 
 		try {
-			expect(() => logger.info("rejects", "Rejects.")).not.toThrow();
+			for (const logger of loggers) {
+				expect(() => logger.info("rejects", "Rejects.")).not.toThrow();
+			}
 			await new Promise((resolve) => setTimeout(resolve, 10));
 
 			expect(unhandled).not.toHaveBeenCalled();
 			expect(fallbackLines(consoleError).map((line) => line.event)).toEqual([
+				"routa.logger.sink_failed",
+				"routa.logger.sink_failed",
 				"routa.logger.sink_failed",
 			]);
 		} finally {

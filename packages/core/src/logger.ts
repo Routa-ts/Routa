@@ -168,10 +168,7 @@ export function createLogger(options: CreateLoggerOptions = {}): RoutaLogger {
 				const delivery: unknown = sink(event);
 
 				if (delivery !== undefined) {
-					// The intrinsic `then` still attaches to a promise whose own `then` was replaced.
-					void Promise.prototype.then.call(Promise.resolve(delivery), undefined, () =>
-						report("sink_failed"),
-					);
+					observeRejection(delivery, () => report("sink_failed"));
 				}
 			} catch {
 				report("sink_failed");
@@ -315,6 +312,26 @@ function assertLoggerOptions(options: unknown): asserts options is CreateLoggerO
 				`createLogger redact path ${JSON.stringify(path)} has an empty segment. Separate field names with single dots, such as "user.email".`,
 			);
 		}
+	}
+}
+
+/**
+ * Calls `onRejected` if what a sink returned rejects, without waiting for it. A native promise,
+ * a subclass's instance included, gets the handler through the intrinsic `then`, so its own
+ * `then` never runs and its rejection is always handled. Any other value is resolved as `await`
+ * would resolve it, which runs a thenable's `then`.
+ *
+ * A promise whose `constructor` getter throws cannot be observed: every intrinsic that attaches a
+ * handler reads `constructor` first.
+ *
+ * @throws When `delivery` cannot be observed
+ */
+function observeRejection(delivery: unknown, onRejected: () => void): void {
+	try {
+		// Throws a TypeError, before reading anything, for a value that is not a native promise.
+		void Promise.prototype.then.call(delivery, undefined, onRejected);
+	} catch {
+		void Promise.prototype.then.call(Promise.resolve(delivery), undefined, onRejected);
 	}
 }
 
