@@ -165,7 +165,7 @@ holds no header value.
 | `500`  | A route-file or method service factory failed during the request                      |
 | `500`  | A handler or middleware threw an error it did not handle                              |
 | `500`  | An authenticator threw, or returned a result or principal that breaks its contract    |
-| `500`  | A mounted Routa app's `correlation` setting differs from the app it is mounted in     |
+| `500`  | A mounted Routa app's outer app correlates on a header the mounted app does not use   |
 
 Every other status comes from your contract: a handler outcome or a middleware reject.
 
