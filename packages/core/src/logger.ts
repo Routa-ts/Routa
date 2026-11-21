@@ -54,7 +54,10 @@ export type RoutaLogger = {
 };
 
 export type CreateLoggerOptions = {
-	/** `false` makes every method a no-op. Defaults to `true`. */
+	/**
+	 * `false` makes every method a no-op that reads nothing it is given, as level `"silent"` does.
+	 * Defaults to `true`.
+	 */
 	enabled?: boolean;
 	/** The least severe level written. Defaults to `"info"`. */
 	level?: RoutaLogLevelWithSilent;
@@ -102,8 +105,11 @@ type RawEvent = {
  */
 export function createLogger(options: CreateLoggerOptions = {}): RoutaLogger {
 	assertLoggerOptions(options);
-	const enabled = options.enabled ?? true;
-	const minimumLevel = enabled ? (options.level ?? "info") : "silent";
+	if (options.enabled === false || options.level === "silent") {
+		return createDisabledLogger();
+	}
+
+	const minimumLevel = options.level ?? "info";
 	const now = options.now ?? (() => new Date());
 	const sink = options.sink ?? writeConsoleLog;
 	const paths: PendingPaths = (options.redact ?? []).map((path) => path.toLowerCase().split("."));
@@ -225,6 +231,30 @@ export function createLogger(options: CreateLoggerOptions = {}): RoutaLogger {
 	}
 
 	return buildLogger({});
+}
+
+/**
+ * The logger for `enabled: false` and level `"silent"`. Its methods return before reading what
+ * they are given, so no getter or proxy trap runs and a child keeps no bindings.
+ */
+function createDisabledLogger(): RoutaLogger {
+	const ignore = (): void => undefined;
+	const methods: Omit<RoutaLogger, typeof createdByCreateLogger> = {
+		log: ignore,
+		trace: ignore,
+		debug: ignore,
+		info: ignore,
+		warn: ignore,
+		error: ignore,
+		fatal: ignore,
+		silent: ignore,
+		child: () => logger,
+		bindings: () => ({}),
+		isLevelEnabled: () => false,
+	};
+	const logger = markCreatedLogger(methods as RoutaLogger);
+
+	return logger;
 }
 
 const optionNames = ["enabled", "level", "sink", "redact", "now"] as const;

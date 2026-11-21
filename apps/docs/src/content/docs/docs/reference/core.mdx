@@ -1272,8 +1272,10 @@ function createLogger(options?: CreateLoggerOptions): RoutaLogger
 Returns a `RoutaLogger`. Every event it or any of its children writes passes through the same
 redaction, escaping, and bounded copying before the sink, as [Sanitization](#sanitization)
 describes.
-`enabled: false` makes every method a no-op, which is how Routa builds the logger for
-`logger: false`. `now` exists so tests can produce deterministic timestamps.
+`enabled: false` or `level: "silent"` makes every method a no-op that reads nothing it
+is given: no getter or proxy trap runs, a child keeps no bindings, and `bindings()` returns
+`{}`. Routa builds the logger for `logger: false` this way. `now` exists so tests can
+produce deterministic timestamps.
 
 | Member                                             | Signature                                                 |
 | -------------------------------------------------- | --------------------------------------------------------- |

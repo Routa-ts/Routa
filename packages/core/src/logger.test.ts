@@ -6,6 +6,7 @@ import { createRoute, createRouta } from "./index.js";
 import {
 	type CreateLoggerOptions,
 	createLogger,
+	type RoutaLogData,
 	type RoutaLogEvent,
 	type RoutaLogger,
 } from "./logger.js";
@@ -98,6 +99,49 @@ describe("createLogger", () => {
 		logger.child({ requestId: "req_1" }).fatal("disabled.child", "Disabled child event.");
 
 		expect(sink).not.toHaveBeenCalled();
+	});
+
+	it("never reads what a disabled or silent logger is given", () => {
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+		const reads = vi.fn();
+		const watched = new Proxy(
+			{},
+			{
+				get: reads,
+				getOwnPropertyDescriptor: reads,
+				ownKeys: () => {
+					reads();
+					return [];
+				},
+				getPrototypeOf: () => {
+					reads();
+					return Object.prototype;
+				},
+			},
+		);
+		const sink = vi.fn<(event: RoutaLogEvent) => void>();
+
+		try {
+			for (const logger of [
+				createLogger({ enabled: false, sink }),
+				createLogger({ level: "silent", sink }),
+			]) {
+				const child = logger.child(watched as RoutaLogData);
+
+				logger.log(watched as RoutaLogEvent);
+				child.log(watched as RoutaLogEvent);
+				child.fatal("disabled", "Disabled.", watched as RoutaLogData);
+				expect(logger.child({ region: "us" }).bindings()).toEqual({});
+				expect(child.bindings()).toEqual({});
+				expect(Object.isFrozen(child)).toBe(true);
+			}
+
+			expect(reads).not.toHaveBeenCalled();
+			expect(sink).not.toHaveBeenCalled();
+			expect(consoleError).not.toHaveBeenCalled();
+		} finally {
+			consoleError.mockRestore();
+		}
 	});
 });
 
