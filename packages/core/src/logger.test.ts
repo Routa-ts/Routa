@@ -690,6 +690,18 @@ describe("createLogger sanitization", () => {
 		expect(events[0]?.data?.["line\\nbreak"]).toBe("new");
 	});
 
+	it("LOG-AC-03 replaces a binding with a late event key that mixes backslashes and escapes", () => {
+		const { events, logger } = capture();
+		const unrelated = Object.fromEntries(
+			Array.from({ length: 101 }, (_, index) => [`field${index}`, index]),
+		);
+		const key = "C:\\new\tstatus";
+
+		logger.child({ [key]: "pending" }).info("late", "Late.", { ...unrelated, [key]: "success" });
+
+		expect(events[0]?.data?.["C:\\new\\tstatus"]).toBe("success");
+	});
+
 	it("LOG-AC-04 copies plain objects and arrays from another realm", () => {
 		const { events, logger } = capture();
 		const foreign = runInNewContext("({ answer: 42, nested: { list: [1, 2] } })") as object;

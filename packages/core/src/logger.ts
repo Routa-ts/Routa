@@ -461,15 +461,6 @@ const unsafeCharacters =
 	/[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g;
 const namedEscapes: Readonly<Record<string, string>> = { "\n": "\\n", "\r": "\\r", "\t": "\\t" };
 
-/** Reverses the escapes `safeText` writes, giving the key a sanitized name may have come from. */
-function unescapeKey(name: string): string {
-	return name.replace(/\\(?:([nrt])|u([0-9a-f]{4}))/g, (_match, named?: string, code?: string) =>
-		named === undefined
-			? String.fromCharCode(Number.parseInt(code ?? "", 16))
-			: (({ n: "\n", r: "\r", t: "\t" } as Record<string, string>)[named] ?? ""),
-	);
-}
-
 /** A string field of the event, escaped; any other value reads as unsupported. */
 function sanitizeText(value: unknown): string {
 	return typeof value === "string" ? safeText(value) : unsupportedMarker;
@@ -782,15 +773,24 @@ function sanitizeMembers(
  *   decision redacted
  * @throws {TypeError} When `added` is not a plain object
  */
+/**
+ * The key each sanitized binding name came from, for bindings `sanitizeMerged` produced. A late
+ * event key replaces a binding when it equals that original key.
+ */
+const bindingKeys = new WeakMap<RoutaLogData, ReadonlyMap<string, string>>();
+
 function sanitizeMerged(base: RoutaLogData, added: unknown, paths: PendingPaths): RoutaLogData {
 	if (!isPlainObject(added)) {
 		throw new TypeError("Log data must be a plain object.");
 	}
 
 	const members = new Map<string, Member>();
+	const baseKeys = bindingKeys.get(base);
+	const originalKeys = new Map<string, string>();
 
 	for (const name of Object.keys(base)) {
 		members.set(name, { key: name, read: () => base[name] });
+		originalKeys.set(name, baseKeys?.get(name) ?? name);
 	}
 
 	// Escaping a key twice changes nothing, so an added key escaped here meets its base key.
@@ -801,24 +801,20 @@ function sanitizeMerged(base: RoutaLogData, added: unknown, paths: PendingPaths)
 		const name = safeText(key);
 		replaced.add(name);
 		members.set(name, { key, read: () => memberValue(added, key) });
+		originalKeys.set(name, key);
 	}
 
 	// An added key past the ones read above still replaces a base key that escapes to the same
 	// name, so how many other fields the data holds never decides which value a binding logs.
-	// Each base name is looked up as written and unescaped, which costs one lookup per binding
+	// Each binding is looked up by the key it came from, which costs one lookup per binding
 	// however many keys the data holds.
 	if (keys.length > maxEntries + 1) {
 		for (const name of Object.keys(base)) {
-			const key = replaced.has(name)
-				? undefined
-				: [name, unescapeKey(name)].find(
-						(candidate) =>
-							Object.prototype.propertyIsEnumerable.call(added, candidate)
-							&& safeText(candidate) === name,
-					);
+			const key = baseKeys?.get(name) ?? name;
 
-			if (key !== undefined) {
+			if (!replaced.has(name) && Object.prototype.propertyIsEnumerable.call(added, key)) {
 				members.set(name, { key, read: () => memberValue(added, key) });
+				originalKeys.set(name, key);
 			}
 		}
 	}
@@ -827,7 +823,9 @@ function sanitizeMerged(base: RoutaLogData, added: unknown, paths: PendingPaths)
 	// to the data still reads as circular, and depth counts from the data.
 	const traversal: Traversal = { ancestors: new Set([added]), remaining: maxValues };
 
-	return sanitizeMembers(members, keys.length > maxEntries + 1, traversal, paths);
+	const merged = sanitizeMembers(members, keys.length > maxEntries + 1, traversal, paths);
+	bindingKeys.set(merged, originalKeys);
+	return merged;
 }
 
 /**
