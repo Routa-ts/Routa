@@ -120,14 +120,15 @@ export async function createApplication(
 	options: CreateApplicationOptions = {},
 ): Promise<RoutaApplication> {
 	const { services: declaration, ...appOptions } = options;
-	if (appOptions.logger !== undefined) {
+	const requestLogger = appOptions.logger;
+	if (requestLogger !== undefined) {
 		assertCreatedLogger(
-			appOptions.logger,
+			requestLogger,
 			"createApplication received",
 			"Omit logger to turn logging off.",
 		);
 	}
-	const logger = appOptions.logger ?? createLogger({ enabled: false });
+	const logger = requestLogger ?? createLogger({ enabled: false });
 	const scope = createCleanupScope();
 	const services =
 		declaration
@@ -141,7 +142,7 @@ export async function createApplication(
 	let app: Hono;
 
 	try {
-		app = honoApp(routes, appOptions, services);
+		app = honoApp(routes, appOptions, services, requestLogger);
 	} catch (error) {
 		await scope.release().catch((cleanupError: unknown) => logCleanupFailure(logger, cleanupError));
 		throw error;
@@ -203,23 +204,27 @@ export function createHonoApp(
 	routes: readonly HonoRoute[],
 	options: CreateHonoAppOptions = {},
 ): Hono {
-	// Read each option once, so the logger checked here is the one every request uses.
-	const { logger, ...rest } = options;
-	if (logger === undefined) {
-		return honoApp(routes, rest, undefined);
+	// Read the logger once, so the logger checked here is the one every request uses.
+	const logger = options.logger;
+	if (logger !== undefined) {
+		assertCreatedLogger(logger, "createHonoApp received", "Omit logger to turn logging off.");
 	}
-	assertCreatedLogger(logger, "createHonoApp received", "Omit logger to turn logging off.");
-	return honoApp(routes, { ...rest, logger }, undefined);
+	return honoApp(routes, options, undefined, logger);
 }
 
+/**
+ * @param options - Read as given, except for its logger
+ * @param requestLogger - The logger already read from the options and checked, so a later change
+ *   to them cannot replace it
+ */
 function honoApp(
 	routes: readonly HonoRoute[],
-	options: CreateHonoAppOptions,
+	options: Omit<CreateHonoAppOptions, "logger">,
 	services: ServiceMapping | undefined,
+	requestLogger: RoutaLogger | undefined,
 ): Hono {
 	const app = new Hono();
 	const methodsByPath = new Map<string, Set<string>>();
-	const requestLogger = options.logger;
 	const routeLogger = requestLogger ?? createLogger({ enabled: false });
 	const validateResponses = shouldValidateResponses(options);
 	const authentication =

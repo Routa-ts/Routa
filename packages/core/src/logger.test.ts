@@ -950,6 +950,37 @@ describe("factory-created loggers", () => {
 		expect(swapped.info).not.toHaveBeenCalled();
 	});
 
+	it("LOG-AC-01 honors createHonoApp options a class defines as getters", async () => {
+		const events: string[] = [];
+		const logger = createLogger({ sink: (event) => events.push(event.event) });
+		class Options {
+			get logger() {
+				return logger;
+			}
+			get lifecycleHeaders() {
+				return true;
+			}
+		}
+		const routes = [
+			{
+				method: "get" as const,
+				path: "/old",
+				contract: createRoute({
+					deprecation: {},
+					responses: { ok: { status: 200, schema: z.object({ ok: z.boolean() }) } },
+					run: () => ({ type: "ok" as const, data: { ok: true } }),
+				}),
+			},
+		];
+
+		for (const options of [new Options(), { logger, lifecycleHeaders: true }]) {
+			const response = await createHonoApp(routes, options).request("/old");
+
+			expect(response.headers.get("deprecation"), options.constructor.name).toBe("true");
+		}
+		expect(events).toEqual(["http.request", "http.request"]);
+	});
+
 	it("LOG-AC-01 refuses an object whose brand is not the factory's own true value", () => {
 		const brand = Symbol.for("@routa-ts/core/createLogger");
 		const getter = vi.fn(() => true);
