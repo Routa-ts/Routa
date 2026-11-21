@@ -715,6 +715,25 @@ describe("createLogger sanitization", () => {
 		]);
 	});
 
+	it("LOG-AC-04 counts each container's truncation marker against the per-event budget", () => {
+		const { events, logger } = capture();
+		const full = Array.from({ length: 101 }, (_, index) => index);
+		const data = Object.fromEntries([
+			...Array.from({ length: 9 }, (_, index) => [`full${index}`, full]),
+			["last", Array.from({ length: 90 }, (_, index) => index)],
+		]);
+
+		logger.info("budget", "Budget.", data);
+		const emitted = events[0]?.data as Record<string, unknown[]>;
+		const last = emitted.last ?? [];
+		const kept = last.filter((item) => item !== "[Truncated]");
+
+		// Ten arrays, nine with 100 items and a marker, spend 919 values, leaving 81 for the last.
+		expect(emitted.full0).toHaveLength(101);
+		expect(kept).toHaveLength(81);
+		expect(last.slice(81)).toEqual(Array.from({ length: 9 }, () => "[Truncated]"));
+	});
+
 	it("LOG-AC-04 counts redacted values against the per-event budget", () => {
 		const { events, logger } = capture({ redact: ["rows.*.*"] });
 		const rows = Array.from({ length: 100 }, () => Array.from({ length: 100 }, () => "secret"));

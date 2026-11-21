@@ -223,7 +223,7 @@ export function createLogger(options: CreateLoggerOptions = {}): RoutaLogger {
 		}
 
 		try {
-			return sanitizeMerged(bindings, added, paths);
+			return sanitizeMerged(bindings, added, paths, true);
 		} catch {
 			return undefined;
 		}
@@ -696,6 +696,7 @@ function sanitizeItems(
 	for (let index = 0; index < length; index += 1) {
 		if (index === maxEntries) {
 			items.push(truncatedMarker);
+			spendMarker(traversal);
 			break;
 		}
 
@@ -758,10 +759,23 @@ function sanitizeMembers(
 
 	if (truncated) {
 		entries.push([truncatedMarker, truncatedMarker]);
+		spendMarker(traversal);
 	}
 
 	return Object.fromEntries(entries);
 }
+
+/** A container's own truncation marker spends one value too, as every other emitted value does. */
+function spendMarker(traversal: Traversal): void {
+	traversal.remaining = Math.max(0, traversal.remaining - 1);
+}
+
+/**
+ * The key a child's sanitized binding name came from, kept only where escaping changed it and the
+ * key fits the string limit, so a logger holds no more than its emitted bindings. A late event key
+ * replaces a binding when it equals that original key.
+ */
+const bindingKeys = new WeakMap<RoutaLogData, ReadonlyMap<string, string>>();
 
 /**
  * Sanitizes `added` merged over `base` as one object, so every limit holds for the result as a
@@ -771,15 +785,16 @@ function sanitizeMembers(
  * @param base - Bindings that were already sanitized, so reading them runs no caller code and
  *   their keys are already escaped; deciding their redaction again reveals nothing the first
  *   decision redacted
+ * @param rememberKeys - Whether the result is a child's bindings, whose changed keys later
+ *   events may override
  * @throws {TypeError} When `added` is not a plain object
  */
-/**
- * The key each sanitized binding name came from, for bindings `sanitizeMerged` produced. A late
- * event key replaces a binding when it equals that original key.
- */
-const bindingKeys = new WeakMap<RoutaLogData, ReadonlyMap<string, string>>();
-
-function sanitizeMerged(base: RoutaLogData, added: unknown, paths: PendingPaths): RoutaLogData {
+function sanitizeMerged(
+	base: RoutaLogData,
+	added: unknown,
+	paths: PendingPaths,
+	rememberKeys = false,
+): RoutaLogData {
 	if (!isPlainObject(added)) {
 		throw new TypeError("Log data must be a plain object.");
 	}
@@ -824,7 +839,18 @@ function sanitizeMerged(base: RoutaLogData, added: unknown, paths: PendingPaths)
 	const traversal: Traversal = { ancestors: new Set([added]), remaining: maxValues };
 
 	const merged = sanitizeMembers(members, keys.length > maxEntries + 1, traversal, paths);
-	bindingKeys.set(merged, originalKeys);
+
+	if (rememberKeys) {
+		const changed = new Map<string, string>();
+		for (const name of Object.keys(merged)) {
+			const key = originalKeys.get(name);
+			if (key !== undefined && key !== name && key.length <= maxStringLength) {
+				changed.set(name, key);
+			}
+		}
+		bindingKeys.set(merged, changed);
+	}
+
 	return merged;
 }
 
