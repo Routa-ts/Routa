@@ -992,6 +992,17 @@ describe("reserved ctx.services (routa check)", () => {
 		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
 	});
 
+	it("does not read an outer const that a callback parameter shadows", () => {
+		const cwd = servicesProject({
+			"src/routes/middleware.ts": middlewareFile(
+				"export const withTenant = createMiddleware({\n\trun: ({ next }) => {\n\t\tconst payload = { services: 'logged', tenant: 'acme' };\n\t\tconst forward = (payload: { tenant: string }) => next(payload as never);\n\t\treturn forward({ tenant: payload.tenant });\n\t},\n});\n",
+			),
+			"src/routes/status/route.ts": statusRoute,
+		});
+
+		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
+	});
+
 	it("does not read a nested function's own next() as the continuation", () => {
 		const cwd = servicesProject({
 			"src/routes/middleware.ts": middlewareFile(

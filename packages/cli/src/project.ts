@@ -3157,6 +3157,19 @@ function payloadObject(
 	// The `const` the call can see: the one declared in the nearest enclosing block within `run`,
 	// so a same-named `const` in another block never stands in for the payload.
 	for (let scope: ts.Node | undefined = payload.parent; scope; scope = scope.parent) {
+		// A function between the call and `run` that binds the name as a parameter shadows any
+		// outer `const`; what that parameter holds is not statically known.
+		if (
+			scope !== run
+			&& (ts.isArrowFunction(scope)
+				|| ts.isFunctionExpression(scope)
+				|| ts.isFunctionDeclaration(scope)
+				|| ts.isMethodDeclaration(scope))
+			&& scope.parameters.some((parameter) => bindsName(parameter.name, payload.text))
+		) {
+			return;
+		}
+
 		if (ts.isBlock(scope)) {
 			for (const statement of scope.statements) {
 				if (
@@ -3178,6 +3191,18 @@ function payloadObject(
 	}
 
 	return;
+}
+
+/** Whether a parameter's binding, destructured or not, declares `name`. */
+function bindsName(binding: ts.BindingName, name: string): boolean {
+	if (ts.isIdentifier(binding)) {
+		return binding.text === name;
+	}
+
+	return binding.elements.some(
+		(element) =>
+			ts.isBindingElement(element) && element.name !== undefined && bindsName(element.name, name),
+	);
 }
 
 function middlewareRejectStatusDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
