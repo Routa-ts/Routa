@@ -232,6 +232,19 @@ export const logger = createLogger({ sink: () => {} });
 			expect(headers["x-trace-ref"], status).toEqual(correlationHeader());
 		}
 
+		// Lifecycle headers are documented through the operation's deprecation metadata, which every
+		// documented response must then carry exactly.
+		expect(operation).toMatchObject({
+			deprecated: true,
+			"x-routa-sunset": "2027-01-01",
+			"x-routa-replacement": "https://api.example.invalid/v2/items",
+		});
+		const lifecycleSent = {
+			deprecation: "true",
+			sunset: operation["x-routa-sunset"],
+			link: `<${operation["x-routa-replacement"]}>; rel="successor-version"`,
+		};
+
 		const app = (await (
 			(await import(pathToFileURL(join(cwd, ".routa/testing.gen.ts")).href)) as {
 				createTestApp: () => Promise<{
@@ -271,15 +284,17 @@ export const logger = createLogger({ sink: () => {} });
 				}
 
 				expect(documentedResponse, label).toBeDefined();
+				expect(
+					Object.fromEntries([...response.headers].filter(([name]) => lifecycle.has(name))),
+					label,
+				).toEqual(lifecycleSent);
 				for (const [name, header] of Object.entries(documentedResponse!.headers ?? {})) {
 					if ((header as { required?: boolean }).required && name !== "Set-Cookie") {
 						expect(response.headers.has(name), `${label} ${name}`).toBe(true);
 					}
 				}
 				for (const [name] of response.headers) {
-					if (lifecycle.has(name)) {
-						expect(operation.deprecated, `${label} ${name}`).toBe(true);
-					} else if (!transport.has(name)) {
+					if (!lifecycle.has(name) && !transport.has(name)) {
 						expect(Object.keys(documentedResponse!.headers ?? {}), `${label} ${name}`).toContain(
 							name,
 						);
@@ -972,6 +987,8 @@ export default createRouteRoot("/status")({
 
 type OpenApiOperation = {
 	deprecated?: boolean;
+	"x-routa-sunset"?: string;
+	"x-routa-replacement"?: string;
 	responses: Record<string, { headers?: Record<string, unknown> }>;
 };
 
