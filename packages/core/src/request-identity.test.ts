@@ -504,8 +504,10 @@ describe("request identity", () => {
 		const passesLogger = createMiddleware({
 			run: ({ next }) => next({ logger: "forged" } as never),
 		});
-		// Passing the whole context on passes its identity and logger too.
+		// Passing the whole context on passes its identity and logger too, which TypeScript rejects
+		// even where no context keys are registered.
 		const passesContext = createMiddleware({
+			// @ts-expect-error ctx holds requestId and logger, which no middleware may pass on.
 			run: ({ ctx, next }) => next(ctx),
 		});
 		const reached: string[] = [];

@@ -495,13 +495,21 @@ type ReservedContextKeys = {
 
 /**
  * Fails a `provides` declaration or `next()` payload that names a key Routa reserves; adds nothing
- * otherwise. A widened record names no key, so Routa rejects it at runtime instead.
+ * otherwise. A widened record names no key, so Routa rejects it at runtime instead, unless it also
+ * declares a reserved key, as `ctx` itself does where no context keys are registered.
  */
 type ReservedContextChecks<TCtx> = string extends keyof TCtx
-	? unknown
+	? [DeclaredReservedKeys<TCtx>] extends [never]
+		? unknown
+		: { readonly [K in DeclaredReservedKeys<TCtx>]: ReservedContextKeys[K] }
 	: [keyof TCtx & keyof ReservedContextKeys] extends [never]
 		? unknown
 		: { readonly [K in keyof TCtx & keyof ReservedContextKeys]: ReservedContextKeys[K] };
+
+/** The reserved keys a type declares as required properties, which an index signature cannot. */
+type DeclaredReservedKeys<TCtx> = {
+	[K in keyof ReservedContextKeys]: TCtx extends { readonly [P in K]: unknown } ? K : never;
+}[keyof ReservedContextKeys];
 
 /**
  * Continues the chain. Middleware without `provides` may pass any object, which Routa ignores,
