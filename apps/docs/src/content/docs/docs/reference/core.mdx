@@ -1389,8 +1389,9 @@ export const logger = createLogger({ sink: pinoSink });
 When the sink throws or its promise rejects, that event is lost and the request continues
 unchanged. Routa handles a returned promise's rejection through the built-in
 `Promise.prototype.then`, so the promise's own `then` never runs. The one rejection it cannot
-handle is from a promise whose `constructor` or `Symbol.species` lookup throws, because the
-built-in `then` reads both before it attaches a handler; that failure is still reported.
+handle is from a promise subclass whose `constructor`, `Symbol.species`, or species constructor
+throws, because the built-in `then` runs them before it attaches a handler; that failure is
+still reported.
 When an event cannot be sanitized, because `data` or the bindings are not a plain
 object, a proxy trap throws, or `now` fails, Routa discards it; a child whose bindings could
 not be sanitized discards every event. Each `createLogger()` call, its children included,
