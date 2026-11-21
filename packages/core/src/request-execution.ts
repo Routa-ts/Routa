@@ -1451,8 +1451,12 @@ class FailureStages {
 	}
 
 	private mark(error: unknown, stage: RequestErrorStage): void {
-		if (!this.stages.has(error)) {
-			this.stages.set(error, stage);
+		// The value application code threw shares the stage of the error Routa wrapped it in, so
+		// middleware that unwraps one from `next()` and rethrows it keeps the original stage.
+		for (const value of [error, thrownValue(error)]) {
+			if (!this.stages.has(value)) {
+				this.stages.set(value, stage);
+			}
 		}
 	}
 }

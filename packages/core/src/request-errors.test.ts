@@ -715,6 +715,47 @@ describe("request error reporting", () => {
 		]);
 	});
 
+	it("LOG-AC-13 keeps the services stage when middleware unwraps a services factory error", async () => {
+		const { calls, onRequestError } = recorder();
+		const database = new Error("connection reset");
+		const unwrap = createMiddleware({
+			run: async ({ next }) => {
+				try {
+					return await next();
+				} catch (error) {
+					throw (error as Error).cause ?? error;
+				}
+			},
+		});
+		const app = createHonoApp(
+			[
+				{
+					...get("/x", () => ({ type: "ok", data: { ok: true } })),
+					contract: createRoute({
+						middleware: [unwrap],
+						responses: { ok: { status: 204 } },
+						run: () => ({ type: "ok" }),
+					}),
+					// Built after the middleware, so the failure passes through its `next()`.
+					services: {
+						method: {
+							...scope(() => {
+								throw database;
+							}),
+							after: 1,
+						},
+					},
+				},
+			],
+			{ onRequestError },
+		);
+
+		expect((await app.request("/x")).status).toBe(500);
+		expect(calls.map((call) => [call.error === database, call.diagnostic.stage])).toEqual([
+			[true, "services"],
+		]);
+	});
+
 	it("LOG-AC-13 keeps the handler stage of an error that middleware wrapped and unwrapped", async () => {
 		const { calls, onRequestError } = recorder();
 		const database = new Error("connection reset");
