@@ -8,6 +8,15 @@ import { run } from "./index.js";
 import { generateOpenApi } from "./openapi.js";
 import { validateProject } from "./project.js";
 
+/** The header Routa documents on every response. */
+const identity = {
+	"x-request-id": {
+		required: true,
+		description: "The request identity Routa generated for this request.",
+		schema: { type: "string", format: "uuid" },
+	},
+};
+
 type Json = Record<string, unknown>;
 
 const session = `export const session = createCookie({
@@ -61,6 +70,7 @@ describe("response cookie OpenAPI", () => {
 					'Routa sends each declared cookie as its own repeated Set-Cookie field, never as one comma-joined value. This response may set or clear: "session" (HttpOnly, Secure, SameSite=Lax, Path=/, Max-Age=3600); "theme" (SameSite=Strict, Domain=example.com, Path=/app, Expires=2030-01-01T00:00:00Z).',
 				schema: { type: "string" },
 			},
+			...identity,
 		});
 		expect(JSON.stringify(document)).not.toMatch(/x-routa/);
 	});
@@ -85,6 +95,7 @@ describe("response cookie OpenAPI", () => {
 				required: true,
 				schema: { type: "string" },
 			},
+			...identity,
 		});
 		expect(JSON.stringify(document)).not.toMatch(/x-routa/);
 	});
@@ -123,7 +134,11 @@ describe("response cookie OpenAPI", () => {
 		const response = responseOf(generateOpenApi(cwd), "/items", "get", 204);
 
 		expect(response.content).toBeUndefined();
-		expect(Object.keys(response.headers as Json).sort()).toEqual(["Set-Cookie", "etag"]);
+		expect(Object.keys(response.headers as Json).sort()).toEqual([
+			"Set-Cookie",
+			"etag",
+			"x-request-id",
+		]);
 	});
 
 	it("never exposes values, examples, or secrets", () => {
@@ -154,7 +169,7 @@ describe("response cookie OpenAPI", () => {
 			"src/routes/items/route.ts": route("/items", "ok: { status: 200 }"),
 		});
 
-		expect(responseOf(generateOpenApi(cwd), "/items", "get", 200)).not.toHaveProperty("headers");
+		expect(responseOf(generateOpenApi(cwd), "/items", "get", 200).headers).toEqual(identity);
 	});
 
 	it("detects drift when a documented cookie is added or removed", async () => {

@@ -119,6 +119,8 @@ export type ContractSchemaOptions = {
 	lifecycleHeaders?: boolean;
 	/** The authentication `src/routa.ts` configures, so every operation can fail it. */
 	authentication?: AuthenticationMetadata;
+	/** The lowercase header `src/routa.ts` reads and echoes correlation in, when it is on. */
+	correlationHeader?: string;
 };
 
 /**
@@ -1320,11 +1322,23 @@ class SchemaProjector {
 					`Response header "${name}" is reserved: Routa owns Set-Cookie`,
 					"Declare response cookies as cookies, not as a header. Routa serializes Set-Cookie itself.",
 				);
+			} else if (lower === "x-request-id") {
+				fail(
+					"ROUTA_RESPONSE_HEADER_RESERVED",
+					`Response header "${name}" is reserved: Routa owns x-request-id`,
+					"Remove x-request-id from headers. Routa sends the request identity it generated on every response; read it as ctx.requestId.",
+				);
 			} else if (reservedHeaderNames.has(lower)) {
 				fail(
 					"ROUTA_RESPONSE_HEADER_RESERVED",
 					`Response header "${name}" is reserved: Routa owns ${lower}`,
 					`Remove ${lower} from headers. Routa sets it from the response body and transport.`,
+				);
+			} else if (lower === this.options.correlationHeader) {
+				fail(
+					"ROUTA_RESPONSE_HEADER_RESERVED",
+					`Response header "${name}" is reserved: Routa echoes the correlation ID in ${lower}`,
+					`Remove ${lower} from headers, or configure correlation with another header. Routa echoes a valid incoming value itself; read it as ctx.correlationId.`,
 				);
 			} else if (lifecycle.owned.has(lower)) {
 				fail(
@@ -3115,6 +3129,7 @@ const reservedHeaderNames = new Set([
 	"transfer-encoding",
 	"connection",
 	"set-cookie",
+	"x-request-id",
 ]);
 
 function placementOf(context: Context): string {

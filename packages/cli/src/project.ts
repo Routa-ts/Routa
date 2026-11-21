@@ -48,6 +48,7 @@ import {
 	variableDeclarations,
 } from "./declarations.js";
 import { operationId, toOpenApiPath } from "./operation-id.js";
+import { applicationCorrelation } from "./request-identity.js";
 import {
 	applicationServices,
 	contractTypeReference,
@@ -133,6 +134,8 @@ export type ProjectValidationResult = {
 	schemas: ContractSchemaProjection;
 	/** The authentication contract `src/routa.ts` declares, when it declares one. */
 	authentication?: AuthenticationMetadata;
+	/** The lowercase header `src/routa.ts` reads correlation from, when correlation is on. */
+	correlationHeader?: string;
 };
 
 const generatedHeader =
@@ -194,11 +197,14 @@ function validateProjectInSession(
 	const write = options.write ?? true;
 	const auth = applicationAuthentication(cwd, parser);
 	const { authentication } = auth;
+	const correlation = applicationCorrelation(cwd, parser);
+	const correlationHeader = correlation.header;
 	const discovery = discoverRoutes(cwd, parser, authentication);
 	const routes = discovery.routes;
 	const schemas = projectContractSchemas(cwd, routes, parser, {
 		lifecycleHeaders: lifecycleHeadersEnabled(cwd, parser),
 		...(authentication && { authentication }),
+		...(correlationHeader && { correlationHeader }),
 	});
 	const services = applicationServices(cwd, parser);
 	const discovered = [
@@ -209,6 +215,7 @@ function validateProjectInSession(
 	const diagnostics = [
 		...projectStructureDiagnostics(cwd),
 		...auth.diagnostics,
+		...correlation.diagnostics,
 		...discovered.filter((item) => item.severity !== "warning"),
 		...services.diagnostics,
 		...runResultShapeDiagnostics(cwd, parser),
@@ -226,15 +233,22 @@ function validateProjectInSession(
 	];
 
 	if (write && diagnostics.length === 0) {
-		writeGeneratedState(cwd, routes, services.services, authentication);
+		writeGeneratedState(cwd, routes, services.services, authentication, correlationHeader);
 	}
 
 	return {
 		routes,
 		diagnostics,
-		warnings: [...auth.warnings, ...services.warnings, ...discoveryWarnings, ...schemas.warnings],
+		warnings: [
+			...auth.warnings,
+			...correlation.warnings,
+			...services.warnings,
+			...discoveryWarnings,
+			...schemas.warnings,
+		],
 		schemas,
 		...(authentication && { authentication }),
+		...(correlationHeader && { correlationHeader }),
 	};
 }
 
@@ -2878,10 +2892,34 @@ function middlewareOrderDiagnostics(routes: RouteMetadata[], authenticated: bool
 	return diagnostics;
 }
 
+/** The context keys Routa reserves, and what for, which no middleware can provide or pass on. */
+const reservedContext: ReadonlyArray<readonly [string, string, string]> = [
+	[
+		"services",
+		"injected services",
+		"Rename the context key. To share an application dependency, declare it as an application service.",
+	],
+	[
+		"requestId",
+		"the request identity it generates",
+		"Rename the context key. Every middleware, services factory, and handler already reads ctx.requestId.",
+	],
+	[
+		"correlationId",
+		"the correlation ID it accepts",
+		"Rename the context key. Configure correlation in createRouta, and read the accepted value as ctx.correlationId.",
+	],
+	[
+		"logger",
+		"the request logger",
+		"Rename the context key. Handlers and services factories receive the request logger as ctx.logger.",
+	],
+];
+
 /**
- * Reports middleware context Routa cannot accept: `ctx.services`, which it reserves for injected
- * services, whether provided or passed to `next()`, `provides` it cannot read from source, and a
- * requirement interface it cannot read.
+ * Reports middleware context Routa cannot accept: `ctx.services`, `ctx.requestId`,
+ * `ctx.correlationId`, and `ctx.logger`, which it reserves, whether provided or passed to
+ * `next()`, `provides` it cannot read from source, and a requirement interface it cannot read.
  *
  * @param routes - Route metadata whose middleware chains are checked, each contract once
  */
@@ -2904,8 +2942,7 @@ function middlewareContextDiagnostics(
 			diagnostics.push(...source.requirementDiagnostics);
 			const report = (code: string, message: string, suggestion: string) =>
 				diagnostics.push({ code, severity: "error", message, file: source.file, suggestion });
-			const reserved =
-				"Rename the context key. To share an application dependency, declare it as an application service.";
+			const passed = nextPayloadKeys(source.contract);
 
 			if (source.providesUnresolved) {
 				report(
@@ -2915,12 +2952,14 @@ function middlewareContextDiagnostics(
 				);
 			}
 
-			if (item.provides.includes("services")) {
-				report(
-					"ROUTA_CONTEXT_RESERVED",
-					`Middleware ${item.name} provides ctx.services, which Routa reserves for injected services.`,
-					reserved,
-				);
+			for (const [key, owner, suggestion] of reservedContext) {
+				if (item.provides.includes(key)) {
+					report(
+						"ROUTA_CONTEXT_RESERVED",
+						`Middleware ${item.name} provides ctx.${key}, which Routa reserves for ${owner}.`,
+						suggestion,
+					);
+				}
 			}
 
 			if (authenticated && item.provides.includes("auth")) {
@@ -2931,12 +2970,14 @@ function middlewareContextDiagnostics(
 				);
 			}
 
-			if (nextPayloadKeys(source.contract).includes("services")) {
-				report(
-					"ROUTA_CONTEXT_RESERVED",
-					`Middleware ${item.name} passes ctx.services to next(), which Routa reserves for injected services.`,
-					reserved,
-				);
+			for (const [key, owner, suggestion] of reservedContext) {
+				if (passed.includes(key)) {
+					report(
+						"ROUTA_CONTEXT_RESERVED",
+						`Middleware ${item.name} passes ctx.${key} to next(), which Routa reserves for ${owner}.`,
+						suggestion,
+					);
+				}
 			}
 		}
 	}
@@ -3472,12 +3513,14 @@ function isExternalApiUrl(value: string): boolean {
  * @param routes - The route metadata to serialize.
  * @param services - The application service contract, when `src/routa.ts` declares one.
  * @param authentication - The authentication contract, when `src/routa.ts` declares one.
+ * @param correlationHeader - The header `src/routa.ts` reads correlation from, when it is on.
  * @returns The generated TypeScript source.
  */
 export function routesMetadataSource(
 	routes: RouteMetadata[],
 	services?: ServiceContractMetadata,
 	authentication?: AuthenticationMetadata,
+	correlationHeader?: string,
 ): string {
 	const orderedRoutes = [...routes].sort(
 		(left, right) => compareText(left.path, right.path) || compareText(left.file, right.file),
@@ -3505,9 +3548,15 @@ export type RoutaAuth = import("@routa-ts/core").AuthContext<RoutaAuthentication
 
 `
 		: "";
+	const correlationSource = correlationHeader
+		? `/** The header \`src/routa.ts\` reads correlation from, which startup checks against it. */
+export const routaCorrelationHeader = ${JSON.stringify(correlationHeader)};
+
+`
+		: "";
 	return `${generatedHeader}export const routaRoutes = ${JSON.stringify(orderedRoutes, null, "\t")} as const;
 
-${servicesSource}${authenticationSource}${routeContextTypes(orderedRoutes, services !== undefined, authentication)}
+${servicesSource}${authenticationSource}${correlationSource}${routeContextTypes(orderedRoutes, services !== undefined, authentication)}
 `;
 }
 
@@ -3524,10 +3573,14 @@ function writeGeneratedState(
 	routes: RouteMetadata[],
 	services: ServiceContractMetadata | undefined,
 	authentication: AuthenticationMetadata | undefined,
+	correlationHeader: string | undefined,
 ): void {
 	const routesFile = join(cwd, ".routa/routes.gen.ts");
 	const previous = existsSync(routesFile) ? readFileSync(routesFile, "utf8") : undefined;
-	writeGeneratedFile(routesFile, routesMetadataSource(routes, services, authentication));
+	writeGeneratedFile(
+		routesFile,
+		routesMetadataSource(routes, services, authentication, correlationHeader),
+	);
 
 	try {
 		writeGeneratedFile(join(cwd, ".routa/testing.gen.ts"), testingModuleSource(routes, services));

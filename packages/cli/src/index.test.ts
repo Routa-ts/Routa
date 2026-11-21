@@ -25,6 +25,15 @@ import {
 import { createProjectApplication } from "./runtime.js";
 import { shouldUseColor } from "./ui.js";
 
+/** The header Routa documents on every response. */
+const identity = {
+	"x-request-id": {
+		required: true,
+		description: "The request identity Routa generated for this request.",
+		schema: { type: "string", format: "uuid" },
+	},
+};
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 describe("routa cli", () => {
@@ -3842,6 +3851,7 @@ export default createRouteRoot("/users/:id")({
 		});
 		expect(operation?.responses?.["200"]).toEqual({
 			description: "Success",
+			headers: identity,
 			content: {
 				"application/json": {
 					schema: {
@@ -3892,16 +3902,17 @@ export default createRouteRoot("/users/:id")({
 		expect(openapi).not.toHaveProperty("x-routa-diagnostics");
 		expect(get?.["200"]).toEqual({
 			description: "Ok",
+			headers: identity,
 			content: {
 				"application/json": {
 					schema: { type: "object", required: ["id"], properties: { id: { type: "string" } } },
 				},
 			},
 		});
-		expect(get?.["304"]).toEqual({ description: "Not modified" });
-		expect(get?.["410"]).toEqual({ description: "The user was removed." });
-		expect(del?.["204"]).toEqual({ description: "The user was deleted." });
-		expect(del?.["205"]).toEqual({ description: "Reset" });
+		expect(get?.["304"]).toEqual({ description: "Not modified", headers: identity });
+		expect(get?.["410"]).toEqual({ description: "The user was removed.", headers: identity });
+		expect(del?.["204"]).toEqual({ description: "The user was deleted.", headers: identity });
+		expect(del?.["205"]).toEqual({ description: "Reset", headers: identity });
 	});
 
 	it("documents schema-less middleware rejects without content", async () => {
@@ -3942,8 +3953,8 @@ export default createRouteRoot("/users")({
 		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
 			'"type": "tooManyRequests"',
 		);
-		expect(responses?.["401"]).toEqual({ description: "Sign in first." });
-		expect(responses?.["429"]).toEqual({ description: "Too many requests" });
+		expect(responses?.["401"]).toEqual({ description: "Sign in first.", headers: identity });
+		expect(responses?.["429"]).toEqual({ description: "Too many requests", headers: identity });
 	});
 
 	it("rejects outcome declarations that HTTP or the method forbids", async () => {

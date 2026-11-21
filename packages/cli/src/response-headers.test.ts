@@ -6,6 +6,15 @@ import { run } from "./index.js";
 import { generateOpenApi } from "./openapi.js";
 import { validateProject } from "./project.js";
 
+/** The header Routa documents on every response. */
+const identity = {
+	"x-request-id": {
+		required: true,
+		description: "The request identity Routa generated for this request.",
+		schema: { type: "string", format: "uuid" },
+	},
+};
+
 type Json = Record<string, unknown>;
 
 describe("response header OpenAPI", () => {
@@ -43,6 +52,7 @@ describe("response header OpenAPI", () => {
 			"x-cached": { schema: { type: "boolean" } },
 			"cache-control": { required: true, schema: { type: "string", const: "no-store" } },
 			"x-mode": { required: true, schema: { type: "string", enum: ["fast", "slow"] } },
+			...identity,
 		});
 	});
 
@@ -61,11 +71,14 @@ describe("response header OpenAPI", () => {
 
 		expect(diagnosticsOf(document)).toEqual([]);
 		expect(created.content).toBeUndefined();
-		expect(created.headers).toEqual({ location: { required: true, schema: { type: "string" } } });
+		expect(created.headers).toEqual({
+			location: { required: true, schema: { type: "string" } },
+			...identity,
+		});
 		expect(responseOf(document, "/items", "get", 304).content).toBeUndefined();
 	});
 
-	it("omits headers when an outcome declares none", () => {
+	it("documents only the request identity when an outcome declares no headers", () => {
 		const cwd = project({
 			"src/routes/items/route.ts": route(
 				"/items",
@@ -73,7 +86,7 @@ describe("response header OpenAPI", () => {
 			),
 		});
 
-		expect(responseOf(generateOpenApi(cwd), "/items", "get", 200)).not.toHaveProperty("headers");
+		expect(responseOf(generateOpenApi(cwd), "/items", "get", 200).headers).toEqual(identity);
 	});
 
 	it("reads header schemas from schemas.ts, keeping component references", () => {
@@ -92,6 +105,7 @@ export const ItemHeaders = z.object({ etag: Etag, "retry-after": z.number().opti
 
 		expect(diagnosticsOf(document)).toEqual([]);
 		expect(responseOf(document, "/items", "get", 200).headers).toEqual({
+			...identity,
 			etag: {
 				required: true,
 				description: "An entity tag.",
@@ -158,6 +172,7 @@ export const ItemHeaders = z.object({ etag: OptionalEtag, "x-revision": FrozenRe
 		expect(responseOf(document, "/items", "get", 200).headers).toEqual({
 			etag: { description: "Entity tag", schema: { $ref: "#/components/schemas/OptionalEtag" } },
 			"x-revision": { required: true, schema: { $ref: "#/components/schemas/FrozenRevision" } },
+			...identity,
 		});
 		expect(document.components?.schemas).toMatchObject({
 			OptionalEtag: { $ref: "#/components/schemas/Etag" },
@@ -187,6 +202,7 @@ export const OptionalEtag = Etag.optional();
 		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
 		expect(responseOf(document, "/items", "get", 200).headers).toEqual({
 			etag: { description: "Entity tag", schema: { $ref: "#/components/schemas/OptionalEtag" } },
+			...identity,
 		});
 	});
 

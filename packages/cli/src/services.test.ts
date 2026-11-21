@@ -1023,7 +1023,7 @@ export default createRouteRoot("/orders")({
 \t\t\tvoid ctx.services.orders;
 \t\t};
 \t\tvoid typeChecks;
-\t\tconst opened = \`\${ctx.requestId}@\${ctx.services.clock.now()}\`;
+\t\tconst opened = \`\${ctx.region}@\${ctx.services.clock.now()}\`;
 \t\treturn { orders: { opened: () => opened, count: () => 2 } };
 \t}),
 \tget: createRoute({
@@ -1073,8 +1073,8 @@ export default createRouta({
 });
 `,
 		"src/routes/middleware.ts": middlewareFile(`export const withRequest = createMiddleware({
-\tprovides: { requestId: z.string() },
-\trun: ({ next }) => next({ requestId: "req-1" }),
+\tprovides: { region: z.string() },
+\trun: ({ next }) => next({ region: "eu-1" }),
 });
 `),
 		"src/orders/services.ts": ordersServices,
@@ -1114,23 +1114,23 @@ describe("request-scoped services", () => {
 		expect(generated).toContain(`export type RoutaFactoryCtxByPath = {
 	"/orders": {
 		routeFile: {
-			"requestId": string;
+			"region": string;
 			readonly "services": Readonly<RoutaApplicationServices>;
 		};
 		post: {
-			"requestId": string;
+			"region": string;
 			"tenant": string;
 			readonly "services": Readonly<RoutaApplicationServices & ${orders}>;
 		};
 	};
 };`);
 		expect(generated).toContain(`		get: {
-			"requestId": string;
+			"region": string;
 			"tenant": string;
 			readonly "services": Readonly<RoutaApplicationServices & ${orders}>;
 		};
 		post: {
-			"requestId": string;
+			"region": string;
 			"tenant": string;
 			readonly "services": Readonly<RoutaApplicationServices & ${orders} & ${checkout}>;
 		};`);
@@ -1142,7 +1142,7 @@ describe("request-scoped services", () => {
 			new Request("http://localhost/orders", { method: "POST" }),
 		);
 
-		expect(await get.json()).toEqual({ opened: "req-1@noon", count: 2 });
+		expect(await get.json()).toEqual({ opened: "eu-1@noon", count: 2 });
 		expect(await post.json()).toEqual({ total: "acme:2", at: "noon" });
 		await application.dispose();
 	}, 30_000);
@@ -1630,7 +1630,7 @@ type RoutaServicesSatisfy<_TPlacement extends string, TAvailable extends TRequir
 		await application.dispose();
 	}, 30_000);
 
-	it("stops a request whose middleware lacks a service at runtime, naming where it runs", async () => {
+	it("stops a request whose middleware lacks a service at runtime", async () => {
 		const events: Array<{ event: string; data?: Record<string, unknown> }> = [];
 		Object.assign(globalThis, { routaRequirementEvents: events });
 		const cwd = requirementsProject({
@@ -1657,11 +1657,12 @@ export default createRouta({
 
 		expect(response.status).toBe(500);
 		expect(JSON.stringify(await response.json())).not.toContain("ledger");
-		expect(events.find((event) => event.event === "http.error")?.data).toMatchObject({
+		// The log carries the request's identity and route, never the error's message.
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual({
+			requestId: response.headers.get("x-request-id"),
 			method: "GET",
-			path: "/ledger",
-			error:
-				'Middleware withTime on GET /ledger requires service "ledger", but ctx.services does not provide it where the middleware runs. Declare "ledger" in a services scope that runs before the middleware.',
+			route: "/ledger",
+			status: 500,
 		});
 		await application.dispose();
 	}, 30_000);

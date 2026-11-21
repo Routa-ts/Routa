@@ -120,8 +120,8 @@ const requestMiddleware = `import { createMiddleware } from "@routa-ts/core";
 import { z } from "zod";
 
 export const withRequest = createMiddleware({
-\tprovides: { requestId: z.string() },
-\trun: ({ next }) => next({ requestId: "req-1" }),
+\tprovides: { tenant: z.string() },
+\trun: ({ next }) => next({ tenant: "acme" }),
 });
 `;
 
@@ -136,7 +136,7 @@ export default createRouteRoot("/orders")({
 \tservices: defineOrdersServices(({ ctx, onCleanup }) => {
 \t\tevents().push("production orders built");
 \t\tonCleanup(() => events().push("production orders released"));
-\t\tconst opened = \`\${ctx.requestId}@\${ctx.services.clock.now()}\`;
+\t\tconst opened = \`\${ctx.tenant}@\${ctx.services.clock.now()}\`;
 \t\treturn { orders: { opened: () => opened } };
 \t}),
 \tget: createRoute({
@@ -179,7 +179,7 @@ export const testAppServices: ServicesFactory<"application"> = ({ onCleanup }) =
 export const testOrdersServices: ServicesFactory<"/orders"> = ({ ctx, onCleanup }) => {
 \tevents().push("test orders built");
 \tonCleanup(() => events().push("test orders released"));
-\treturn { orders: new FakeOrders(\`\${ctx.requestId}@\${ctx.services.clock.now()}\`) };
+\treturn { orders: new FakeOrders(\`\${ctx.tenant}@\${ctx.services.clock.now()}\`) };
 };
 
 export const testCheckoutServices: ServicesFactory<"POST /orders"> = ({ ctx, onCleanup }) => {
@@ -213,7 +213,7 @@ export async function typeChecks() {
 \tconst ordersFactory: ServicesFactory<"/orders"> = ({ ctx }) => {
 \t\t// @ts-expect-error A route-file factory cannot read its own services.
 \t\tvoid ctx.services.orders;
-\t\treturn { orders: { opened: () => ctx.requestId } };
+\t\treturn { orders: { opened: () => ctx.tenant } };
 \t};
 \tvoid ordersFactory;
 \tconst checkoutFactory: ServicesFactory<"POST /orders"> = ({ ctx }) => ({
@@ -306,7 +306,7 @@ describe("generated test applications", () => {
 		});
 		const methodOnlyResponse = await methodOnly.request("/orders", { method: "POST" });
 
-		expect(await methodOnlyResponse.json()).toEqual({ total: "test total for req-1@test noon" });
+		expect(await methodOnlyResponse.json()).toEqual({ total: "test total for acme@test noon" });
 		await methodOnly.dispose();
 		expect(events.splice(0)).toEqual([
 			"test clock built",
@@ -324,7 +324,7 @@ describe("generated test applications", () => {
 		const routeFileResponse = await routeFileOnly.request("/orders", { method: "POST" });
 
 		expect(await routeFileResponse.json()).toEqual({
-			total: "total for fake opened by req-1@production",
+			total: "total for fake opened by acme@production",
 		});
 		await routeFileOnly.dispose();
 		expect(events.splice(0)).toEqual([
@@ -383,7 +383,7 @@ export const defineReportsServices = defineServices<ReportsServices>();
 
 // Declared apart from its route, so it names its scope's factory type.
 export const reportsServices: ServicesFactory<"/reports"> = ({ ctx }) => ({
-\treports: { title: () => \`weekly for \${ctx.requestId} at \${ctx.services.clock.now()}\` },
+\treports: { title: () => \`weekly for \${ctx.tenant} at \${ctx.services.clock.now()}\` },
 });
 `,
 			"src/routes/reports/route.ts": `import { createRoute, createRouteRoot } from "@routa-ts/core";
@@ -404,7 +404,7 @@ export default createRouteRoot("/reports")({
 		const { createTestApp } = await importTesting(cwd);
 		const app = await createTestApp();
 
-		expect(await (await app.request("/reports")).json()).toBe("weekly for req-1 at production");
+		expect(await (await app.request("/reports")).json()).toBe("weekly for acme at production");
 		await app.dispose();
 	}, 30_000);
 

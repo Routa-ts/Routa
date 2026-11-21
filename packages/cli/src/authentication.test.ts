@@ -10,6 +10,15 @@ import { createProjectApplication } from "./runtime.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
+/** The header Routa documents on every response. */
+const identity = {
+	"x-request-id": {
+		required: true,
+		description: "The request identity Routa generated for this request.",
+		schema: { type: "string", format: "uuid" },
+	},
+};
+
 const routaConfig = `import { bearer, createRouta } from "@routa-ts/core";
 import { z } from "zod";
 
@@ -757,7 +766,10 @@ export default createRouteRoot("/files")({
 });
 
 describe("OpenAPI for Bearer authentication", () => {
-	const challenge = { "www-authenticate": { required: true, schema: { type: "string" } } };
+	const challenge = {
+		"www-authenticate": { required: true, schema: { type: "string" } },
+		...identity,
+	};
 	const problem = (slug: string, title: string) => ({
 		type: "object",
 		required: ["type", "title", "status"],
@@ -959,8 +971,9 @@ export default createRouteRoot("/status")({
 			};
 
 			expect(response.status).toBe(401);
-			expect(Object.keys(documented.headers)).toEqual(["www-authenticate"]);
+			expect(Object.keys(documented.headers)).toEqual(["www-authenticate", "x-request-id"]);
 			expect(response.headers.get("www-authenticate")).toBeTruthy();
+			expect(response.headers.get("x-request-id")).toBeTruthy();
 			expect(Object.keys(body).sort()).toEqual([...schema!.required].sort());
 			expect(body).toEqual(
 				Object.fromEntries(
@@ -1253,6 +1266,7 @@ describe("OpenAPI for session-cookie and API-key authentication", () => {
 	const ambiguous = {
 		description:
 			"Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+		headers: identity,
 		content: {
 			"application/json": {
 				schema: { $ref: "#/components/schemas/RoutaAmbiguousCredentials" },
@@ -1307,6 +1321,7 @@ export default createRouteRoot("/files")({
 		expect(operations.post.responses["400"]).toBeUndefined();
 		expect(document.paths["/files"].head.responses["400"]).toEqual({
 			description: ambiguous.description,
+			headers: identity,
 		});
 	});
 });

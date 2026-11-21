@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { operationId, pascalCase } from "./operation-id.js";
+import { identityHeaders } from "./request-identity.js";
 import {
 	type RouteMetadata,
 	type RouteMethodInputMetadata,
@@ -72,7 +73,7 @@ function assembleScaffoldPlan(
 	const files = new Map(input.files);
 	const metadataPath = ".routa/routes.gen.ts";
 	const baselinePath = ".routa/openapi-baseline.json";
-	files.set(baselinePath, `${JSON.stringify(document, null, "\t")}\n`);
+	files.set(baselinePath, `${JSON.stringify(withIdentityHeaders(document), null, "\t")}\n`);
 
 	const manifestGenerated = Array.from(input.generatedPaths)
 		.sort()
@@ -407,6 +408,51 @@ function parseOpenApi(raw: string, extension: string, source: string): OpenApiDo
  * @param document - The parsed document used to suggest a corrected structure.
  * @returns A formatted scaffold error message.
  */
+/**
+ * The baseline a scaffold writes: the source document with the `x-request-id` header Routa sends
+ * on every response added to each operation's responses, so the scaffolded project's generated
+ * OpenAPI starts without drift. A response written as a `$ref` is left as it is.
+ */
+function withIdentityHeaders(document: unknown): unknown {
+	const { paths } = document as OpenApiDocument;
+
+	return {
+		...(document as object),
+		paths: Object.fromEntries(
+			Object.entries(paths ?? {}).map(([path, item]) => [
+				path,
+				isRecord(item)
+					? Object.fromEntries(
+							Object.entries(item).map(([method, operation]) => [
+								method,
+								isRecord(operation) && isRecord(operation.responses)
+									? { ...operation, responses: responsesWithIdentity(operation.responses) }
+									: operation,
+							]),
+						)
+					: item,
+			]),
+		),
+	};
+}
+
+function responsesWithIdentity(responses: Record<string, unknown>): Record<string, unknown> {
+	return Object.fromEntries(
+		Object.entries(responses).map(([status, response]) => [
+			status,
+			isRecord(response) && !("$ref" in response)
+				? {
+						...response,
+						headers: {
+							...(isRecord(response.headers) ? response.headers : {}),
+							...identityHeaders(undefined),
+						},
+					}
+				: response,
+		]),
+	);
+}
+
 function formatMissingPathsError(source: string, document: unknown): string {
 	const keys =
 		document && typeof document === "object" && !Array.isArray(document)
@@ -1874,7 +1920,6 @@ ${Array.from(schemaExports.entries())
 
 	// Shared with `routa check` so the runtime always loads the same metadata shape.
 	generatedContent.set(".routa/routes.gen.ts", routesMetadataSource(metadataRoutes));
-	generatedContent.set(".routa/openapi-baseline.json", `${JSON.stringify(document, null, "\t")}\n`);
 
 	return assembleScaffoldPlan(document, source, {
 		files: generatedContent,

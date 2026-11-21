@@ -6,6 +6,15 @@ import { run } from "./index.js";
 import { generateOpenApi } from "./openapi.js";
 import { validateProject } from "./project.js";
 
+/** The header Routa documents on every response. */
+const identity = {
+	"x-request-id": {
+		required: true,
+		description: "The request identity Routa generated for this request.",
+		schema: { type: "string", format: "uuid" },
+	},
+};
+
 type Json = Record<string, unknown>;
 
 const userSchemas = `import { z } from "zod";
@@ -337,6 +346,7 @@ describe("OpenAPI generated from source", () => {
 							responses: {
 								"200": {
 									description: "OK",
+									headers: identity,
 									content: {
 										"application/json": {
 											schema: {
