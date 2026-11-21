@@ -1046,7 +1046,7 @@ method-and-path pair, a `GET` or `HEAD` contract declaring a body, duplicate rej
 keys within one chain, middleware that provides `services`, `requestId`, `correlationId`, or
 `logger`, an outcome or reject that declares `x-request-id` or the correlation header, and a
 `correlation` option that is malformed or names `x-request-id`, a credential header, or a
-header Routa owns. With `authentication`, it also throws for an invalid configuration,
+header Routa writes itself (see [`correlation`](/docs/reference/configuration/#correlation)). With `authentication`, it also throws for an invalid configuration,
 a route outcome named `authenticationFailed`, one named `authenticationRequired` behind a
 `requireAuth` guard, a route outcome named `ambiguousCredentials` where strict mode can return
 it, and middleware that provides `auth`. Without it, a `requireAuth` guard throws.

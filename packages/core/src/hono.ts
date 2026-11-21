@@ -369,8 +369,8 @@ function honoApp(
 /**
  * Gives every request that reaches the app its identity, before anything else runs: a generated
  * UUID, the caller's correlation ID when the configured header carries a valid one, and a request
- * logger bound to both. Once the response is prepared, it sets `x-request-id` and the correlation
- * header last, over any value something else wrote, and logs `http.response.prepared`.
+ * logger bound to both. Once the response is prepared, it sets `x-request-id` last, over any value
+ * something else wrote, echoes an accepted correlation ID, and logs `http.response.prepared`.
  *
  * The event says the response was prepared, not that it was sent or received: Routa logs it
  * before the body is transmitted. A request whose handling throws past Hono logs nothing.
@@ -407,12 +407,10 @@ function identifyRequests(
 		const { headers, status } = context.res;
 		headers.set(requestIdHeader, requestId);
 
-		if (correlationHeader !== undefined) {
-			if (correlationId === undefined) {
-				headers.delete(correlationHeader);
-			} else {
-				headers.set(correlationHeader, correlationId);
-			}
+		// Only an accepted value is echoed. No header Routa writes can be the correlation header,
+		// so the echo never replaces one, and without a value it leaves the response alone.
+		if (correlationHeader !== undefined && correlationId !== undefined) {
+			headers.set(correlationHeader, correlationId);
 		}
 
 		state.logger.info("http.response.prepared", "Response prepared.", {

@@ -208,6 +208,41 @@ describe("correlation config", () => {
 				"ROUTA_CORRELATION_HEADER_CONFLICT",
 				'The correlation header "content-type" in src/routa.ts names content-type, which is a header Routa owns on every response.',
 			],
+			[
+				'\tcorrelation: { header: "Allow" },',
+				"ROUTA_CORRELATION_HEADER_CONFLICT",
+				'The correlation header "Allow" in src/routa.ts names allow, which is a header Routa sets on automatic OPTIONS and 405 responses.',
+			],
+			[
+				'\tcorrelation: { header: "Vary" },',
+				"ROUTA_CORRELATION_HEADER_CONFLICT",
+				'The correlation header "Vary" in src/routa.ts names vary, which is a header Routa sets on automatic OPTIONS responses.',
+			],
+			[
+				'\tcorrelation: { header: "access-control-allow-methods" },',
+				"ROUTA_CORRELATION_HEADER_CONFLICT",
+				'The correlation header "access-control-allow-methods" in src/routa.ts names access-control-allow-methods, which is a header Routa sets on automatic OPTIONS responses.',
+			],
+			[
+				'\tcorrelation: { header: "Sunset" },',
+				"ROUTA_CORRELATION_HEADER_CONFLICT",
+				'The correlation header "Sunset" in src/routa.ts names sunset, which is a lifecycle header Routa emits.',
+			],
+			[
+				'\tcorrelation: { header: "deprecation" },',
+				"ROUTA_CORRELATION_HEADER_CONFLICT",
+				'The correlation header "deprecation" in src/routa.ts names deprecation, which is a lifecycle header Routa emits.',
+			],
+			[
+				'\tcorrelation: { header: "link" },',
+				"ROUTA_CORRELATION_HEADER_CONFLICT",
+				'The correlation header "link" in src/routa.ts names link, which is a lifecycle header Routa emits.',
+			],
+			[
+				'\tcorrelation: { header: "WWW-Authenticate" },',
+				"ROUTA_CORRELATION_HEADER_CONFLICT",
+				'The correlation header "WWW-Authenticate" in src/routa.ts names www-authenticate, which carries Routa\'s authentication challenges.',
+			],
 		] as const) {
 			expect(diagnostics({ "src/routa.ts": config(members) }), members).toEqual([
 				{ code, message },

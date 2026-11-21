@@ -169,9 +169,13 @@ Generated OpenAPI documents the header, so write the value as a literal: `true`,
 `src/routa.ts` and reports `ROUTA_CORRELATION_CONFIG_UNRESOLVED` for any other value. It also
 rejects a header name that is not a valid name (`ROUTA_CORRELATION_HEADER_INVALID`) or that
 names `x-request-id`, a credential header (`authorization`, `proxy-authorization`, `cookie`,
-`set-cookie`), or another header Routa owns on every response
-(`ROUTA_CORRELATION_HEADER_CONFLICT`). Startup rejects a `src/routa.ts` whose correlation
-differs from what `routa generate` recorded.
+`set-cookie`), or a header Routa writes itself (`ROUTA_CORRELATION_HEADER_CONFLICT`), so the
+echo never replaces one of Routa's headers. Routa writes `content-type`, `content-length`,
+`transfer-encoding`, and `connection` on every response; `allow` on automatic `OPTIONS` and
+`405` responses; `access-control-allow-methods` and `vary` on automatic `OPTIONS` responses;
+the lifecycle headers `deprecation`, `sunset`, and `link`; and `www-authenticate` on
+authentication challenges. Startup rejects the same names, and a `src/routa.ts` whose
+correlation differs from what `routa generate` recorded.
 
 While correlation is on, Routa owns the configured header on every response, and an outcome
 cannot declare it in `headers`.

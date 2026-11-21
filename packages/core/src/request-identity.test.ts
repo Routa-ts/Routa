@@ -580,6 +580,33 @@ describe("correlation identity", () => {
 		}
 	});
 
+	it("LOG-AC-09 rejects every header Routa writes itself as the correlation header", () => {
+		for (const [header, owner] of [
+			["Allow", "Routa sets on automatic OPTIONS and 405 responses"],
+			["access-control-allow-methods", "Routa sets on automatic OPTIONS responses"],
+			["Vary", "Routa sets on automatic OPTIONS responses"],
+			["Deprecation", "Routa's lifecycle headers emit"],
+			["sunset", "Routa's lifecycle headers emit"],
+			["Link", "Routa's lifecycle headers emit"],
+			["WWW-Authenticate", "Routa's authentication challenges use"],
+		] as const) {
+			expect(() => createHonoApp([], { correlation: { header } }), header).toThrow(
+				`The correlation header ${JSON.stringify(header)} names ${header.toLowerCase()}, which ${owner}.`,
+			);
+		}
+	});
+
+	it("LOG-AC-08 echoes only an accepted value and never removes a header something else wrote", async () => {
+		const app = createHonoApp([], { correlation: { header: "x-trace-ref" } });
+		app.get("/raw", () => new Response("ok", { headers: { "x-trace-ref": "written" } }));
+
+		const ignored = await app.request("/raw", { headers: { "x-trace-ref": "has space" } });
+		const accepted = await app.request("/raw", { headers: { "x-trace-ref": "trace-1" } });
+
+		expect(ignored.headers.get("x-trace-ref")).toBe("written");
+		expect(accepted.headers.get("x-trace-ref")).toBe("trace-1");
+	});
+
 	it("LOG-AC-10 owns the correlation header over a declaration or handler that claims it", async () => {
 		const declares = createRoute({
 			responses: { ok: { status: 200, headers: z.object({ "x-trace-ref": z.string() }) } },

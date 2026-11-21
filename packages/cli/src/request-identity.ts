@@ -16,7 +16,11 @@ const defaultCorrelationHeader = "x-correlation-id";
 /** RFC 9110 `token`, the grammar of header names. */
 const headerName = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
-/** Headers a correlation ID cannot use: Routa's own on every response, and credential headers. */
+/**
+ * Headers a correlation ID cannot use: credential headers, and the headers Routa writes itself,
+ * which the echo would replace. Headers that authentication schemes or outcomes declare are
+ * checked with those declarations.
+ */
 const claimedHeaders: ReadonlyMap<string, string> = new Map([
 	[requestIdHeader, "carries the request identity Routa generates"],
 	["authorization", "is a credential header"],
@@ -27,6 +31,13 @@ const claimedHeaders: ReadonlyMap<string, string> = new Map([
 	["content-length", "is a header Routa owns on every response"],
 	["transfer-encoding", "is a header Routa owns on every response"],
 	["connection", "is a header Routa owns on every response"],
+	["allow", "is a header Routa sets on automatic OPTIONS and 405 responses"],
+	["access-control-allow-methods", "is a header Routa sets on automatic OPTIONS responses"],
+	["vary", "is a header Routa sets on automatic OPTIONS responses"],
+	["deprecation", "is a lifecycle header Routa emits"],
+	["sunset", "is a lifecycle header Routa emits"],
+	["link", "is a lifecycle header Routa emits"],
+	["www-authenticate", "carries Routa's authentication challenges"],
 ]);
 
 /**

@@ -362,9 +362,10 @@ name, such as `x-correlation-id`.
 ### `ROUTA_CORRELATION_HEADER_CONFLICT`
 
 The correlation `header` names, in any casing, `x-request-id`, a credential header
-(`authorization`, `proxy-authorization`, `cookie`, or `set-cookie`), or another header Routa
-owns on every response (`content-type`, `content-length`, `transfer-encoding`, or
-`connection`). Startup rejects the same names.
+(`authorization`, `proxy-authorization`, `cookie`, or `set-cookie`), or a header Routa writes
+itself, which the echo would replace: `content-type`, `content-length`, `transfer-encoding`,
+`connection`, `allow`, `access-control-allow-methods`, `vary`, `deprecation`, `sunset`, `link`,
+or `www-authenticate`. Startup rejects the same names.
 
 ```text
 ROUTA_CORRELATION_HEADER_CONFLICT: src/routa.ts: The correlation header "X-Request-ID" in src/routa.ts names x-request-id, which carries the request identity Routa generates.

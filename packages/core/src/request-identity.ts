@@ -35,7 +35,21 @@ const credentialHeaders: ReadonlySet<string> = new Set([
 	"set-cookie",
 ]);
 
-const routaHeaders: ReadonlySet<string> = new Set(reservedHeaders);
+/**
+ * Headers Routa writes itself, and who writes each. The echo would replace one, so none can be
+ * the correlation header. Headers that authentication schemes or outcomes declare are checked
+ * with those declarations.
+ */
+const routaHeaders: ReadonlyMap<string, string> = new Map([
+	...reservedHeaders.map((name) => [name, "Routa owns on every response"] as const),
+	["allow", "Routa sets on automatic OPTIONS and 405 responses"],
+	["access-control-allow-methods", "Routa sets on automatic OPTIONS responses"],
+	["vary", "Routa sets on automatic OPTIONS responses"],
+	["deprecation", "Routa's lifecycle headers emit"],
+	["sunset", "Routa's lifecycle headers emit"],
+	["link", "Routa's lifecycle headers emit"],
+	["www-authenticate", "Routa's authentication challenges use"],
+]);
 
 /**
  * The method a framework event logs: one of the standard methods as the request spelled it, or
@@ -62,7 +76,7 @@ export function loggedMethod(method: string): string {
  * when correlation is off.
  *
  * @throws {TypeError} When the option has the wrong shape, the header name is invalid, or it names
- *   x-request-id, a header Routa owns, or a credential header
+ *   x-request-id, a credential header, or a header Routa writes itself
  */
 export function correlationHeaderOf(option: unknown): string | undefined {
 	if (option === undefined || option === false) {
@@ -115,8 +129,10 @@ export function correlationHeaderProblem(header: string): string | undefined {
 		return `${JSON.stringify(header)} names a credential header. A correlation ID is not a credential, so choose another header, such as x-correlation-id.`;
 	}
 
-	if (routaHeaders.has(name)) {
-		return `${JSON.stringify(header)} names ${name}, which Routa owns on every response. Choose another header, such as x-correlation-id.`;
+	const owner = routaHeaders.get(name);
+
+	if (owner) {
+		return `${JSON.stringify(header)} names ${name}, which ${owner}. Choose another header, such as x-correlation-id.`;
 	}
 
 	return undefined;
