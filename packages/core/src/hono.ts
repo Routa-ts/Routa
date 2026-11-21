@@ -330,10 +330,13 @@ function honoApp(
 				return await next();
 			}
 
-			return executeRoute(
-				context.req.raw,
-				context.req.param(),
-				requests.matched(context, route.path),
+			return requests.prepared(
+				context,
+				await executeRoute(
+					context.req.raw,
+					context.req.param(),
+					requests.matched(context, route.path),
+				),
 			);
 		});
 	}
@@ -350,25 +353,34 @@ function honoApp(
 
 		app.on("OPTIONS", path, (context) => {
 			requests.matched(context, path);
-			return new Response(null, {
-				status: 204,
-				headers: automaticOptionsHeaders(context.req.raw, allow),
-			});
+			return requests.prepared(
+				context,
+				new Response(null, {
+					status: 204,
+					headers: automaticOptionsHeaders(context.req.raw, allow),
+				}),
+			);
 		});
 
 		app.all(path, (context) => {
 			requests.matched(context, path);
-			return new Response("Method Not Allowed", {
-				status: 405,
-				headers: {
-					allow,
-				},
-			});
+			return requests.prepared(
+				context,
+				new Response("Method Not Allowed", {
+					status: 405,
+					headers: {
+						allow,
+					},
+				}),
+			);
 		});
 	}
 
 	return app;
 }
+
+/** A request's state, the route pattern that matched it, and the response Routa prepared for it. */
+type TrackedRequest = RequestState & { route?: string; prepared?: Response };
 
 /**
  * Gives every request that reaches the app its identity, before anything else runs: a generated
@@ -376,18 +388,26 @@ function honoApp(
  * logger bound to both. Once the response is prepared, it sets `x-request-id` last, over any value
  * something else wrote, echoes an accepted correlation ID, and logs `http.response.prepared`.
  *
+ * Routa writes these headers in place only on a response it prepared for this request. Any other
+ * response, such as one a handler added to the returned Hono app reuses across requests, or one
+ * whose headers are immutable, is copied first, so one request's identity never reaches another's.
+ *
  * The event says the response was prepared, not that it was sent or received: Routa logs it
  * before the body is transmitted. A request whose handling throws past Hono logs nothing.
  *
- * @returns Records the route pattern that matched a request and returns the request's state
+ * @returns `matched` records the route pattern that matched a request and returns the request's
+ *   state; `prepared` records a response Routa prepared for the request and returns it
  */
 function identifyRequests(
 	app: Hono,
 	logger: RoutaLogger,
 	correlationHeader: string | undefined,
-): { matched: (context: Context, path: string) => RequestState } {
+): {
+	matched: (context: Context, path: string) => RequestState;
+	prepared: (context: Context, response: Response) => Response;
+} {
 	const deriveLogger = requestLoggers(logger);
-	const requests = new WeakMap<Context, RequestState & { route?: string }>();
+	const requests = new WeakMap<Context, TrackedRequest>();
 
 	app.use("*", async (context, next) => {
 		const startedAt = performance.now();
@@ -400,7 +420,7 @@ function identifyRequests(
 			requestId,
 			...(correlationId !== undefined && { correlationId }),
 		};
-		const state: RequestState & { route?: string } = {
+		const state: TrackedRequest = {
 			...identity,
 			...deriveLogger(identity),
 		};
@@ -408,16 +428,12 @@ function identifyRequests(
 
 		await next();
 
-		let { headers } = context.res;
-		try {
-			headers.set(requestIdHeader, requestId);
-		} catch {
-			// Response.redirect() and fetch() responses have immutable headers, so Routa sets its
-			// headers on a copy of the response.
+		if (context.res !== state.prepared) {
 			context.res = new Response(context.res.body, context.res);
-			({ headers } = context.res);
-			headers.set(requestIdHeader, requestId);
 		}
+
+		const { headers } = context.res;
+		headers.set(requestIdHeader, requestId);
 
 		// Only an accepted value is echoed. No header Routa writes can be the correlation header,
 		// so the echo never replaces one, and without a value it leaves the response alone.
@@ -433,16 +449,25 @@ function identifyRequests(
 		});
 	});
 
+	const stateOf = (context: Context) => {
+		const state = requests.get(context);
+
+		if (!state) {
+			throw new Error("Routa received a request its identity middleware did not see.");
+		}
+
+		return state;
+	};
+
 	return {
 		matched: (context, path) => {
-			const state = requests.get(context);
-
-			if (!state) {
-				throw new Error("Routa received a request its identity middleware did not see.");
-			}
-
+			const state = stateOf(context);
 			state.route = path;
 			return state;
+		},
+		prepared: (context, response) => {
+			stateOf(context).prepared = response;
+			return response;
 		},
 	};
 }

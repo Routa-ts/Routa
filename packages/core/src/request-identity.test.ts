@@ -578,6 +578,36 @@ describe("request identity", () => {
 		]);
 	});
 
+	it("LOG-AC-07 never writes one request's identity on a Response an application reuses", async () => {
+		const cached = new Response(null, { status: 200, headers: { "cache-control": "max-age=60" } });
+		const app = createHonoApp([], { correlation: true });
+		app.get("/cached", () => cached);
+
+		const first = await app.request("/cached", { headers: { "x-correlation-id": "customer-a" } });
+		const second = await app.request("/cached");
+
+		expect(first.headers.get("x-correlation-id")).toBe("customer-a");
+		expect(second.headers.get("x-correlation-id")).toBeNull();
+		expect(second.headers.get("x-request-id")).toMatch(uuid);
+		expect(second.headers.get("x-request-id")).not.toBe(first.headers.get("x-request-id"));
+		expect(second.headers.get("cache-control")).toBe("max-age=60");
+
+		const sent = Array.from({ length: 6 }, (_, index) =>
+			index % 2 === 0 ? { "x-correlation-id": `customer-${index}` } : {},
+		);
+		const concurrent = await Promise.all(
+			sent.map((headers) => app.request("/cached", { headers })),
+		);
+
+		expect(concurrent.map((response) => response.headers.get("x-correlation-id"))).toEqual(
+			sent.map((headers) => headers["x-correlation-id"] ?? null),
+		);
+		expect(new Set(concurrent.map((response) => response.headers.get("x-request-id"))).size).toBe(
+			sent.length,
+		);
+		expect([...cached.headers]).toEqual([["cache-control", "max-age=60"]]);
+	});
+
 	it("LOG-AC-07 keeps identity in context and headers with logging off", async () => {
 		const app = await createApplication([echoRoute]);
 
