@@ -426,6 +426,19 @@ describe("request identity", () => {
 		expect(JSON.stringify(events)).not.toMatch(/PROPFIND|BREW|"patch"/);
 	});
 
+	it("LOG-AC-12 logs no preparation when no response was prepared", async () => {
+		const { events, logger } = capture();
+		const app = createHonoApp([echoRoute], { logger });
+		// A handler added to the returned Hono app that throws a non-Error escapes Hono's error
+		// handler, so no response is ever prepared for the request.
+		app.get("/raw", () => {
+			throw "not an Error";
+		});
+
+		await expect(app.request("/raw")).rejects.toBe("not an Error");
+		expect(events.filter((event) => event.event === "http.response.prepared")).toEqual([]);
+	});
+
 	it("LOG-AC-07 keeps identity in context and headers with logging off", async () => {
 		const app = await createApplication([echoRoute]);
 
