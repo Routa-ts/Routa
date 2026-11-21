@@ -49,7 +49,7 @@ the complete list.
 | OpenAPI out     | Generation from source alone, same-status composition, drift checks, and breaking-change checks                                                                                                                                                          |
 | Generated files | `.routa/routes.gen.ts`, `.routa/testing.gen.ts`, `.routa/manifest.json`, `.routa/openapi-baseline.json`                                                                                                                                                  |
 | CLI             | `create`, `scaffold`, `dev`, `start`, `check`, `generate`, `build`, `routes`, `openapi check`, `openapi breaking`                                                                                                                                        |
-| Logging         | Backend-neutral `RoutaLogger` contract with a built-in console implementation                                                                                                                                                                            |
+| Logging         | [`createLogger`](/docs/guides/logging/) loggers that redact, escape, and bound every event before an application-owned sink; JSON console output by default                                                                                              |
 | Lifecycle       | Route `deprecation` metadata with optional `Deprecation`, `Sunset`, and `Link` headers                                                                                                                                                                   |
 | Query helpers   | `Sort` and `Fields` parsers from `@routa-ts/core/query/helpers`                                                                                                                                                                                          |
 | Testing         | Generated `createTestApp` with in-memory requests, scope service replacement, and disposal                                                                                                                                                               |
@@ -70,6 +70,9 @@ the complete list.
   accept a request carrying a stale session cookie, and authenticators or guards that set or
   clear cookies
 - Response caching, rate limiting, and broad observability features
+- Generated request IDs and correlation headers, and automatic request and error events that
+  omit the request path and error text; `http.request` and `http.error` still record the path,
+  and `http.error` the error message and stack
 - A generated hosted API reference UI
 - Content types other than JSON at the request and response boundary, and streams, files,
   redirects, or raw `Response` objects

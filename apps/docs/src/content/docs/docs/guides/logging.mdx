@@ -1,0 +1,139 @@
+---
+title: Logging
+description: Share one redacting logger across src/routa.ts and your services, and send its events to your backend.
+---
+
+import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
+import PackageManagers from "@components/PackageManagers.astro";
+
+A Routa logger comes from `createLogger`, which redacts, escapes, and bounds every event
+before its sink writes it anywhere. You create one logger, give it to `src/routa.ts`,
+import it wherever else you log, and choose where events go with a sink.
+
+## Before You Start
+
+- A Routa project with `src/routa.ts`, as in
+  [Configuration](/docs/reference/configuration/).
+- For the backend step, a logging library such as Pino. Routa depends on none.
+
+## Steps
+
+<Steps>
+
+1. Create the shared logger in its own module. Add a `redact` path for each field your
+   application considers sensitive beyond Routa's [baseline names](/docs/reference/core/#sanitization).
+
+   ```ts title="src/logger.ts"
+   import { createLogger } from "@routa-ts/core";
+
+   export const logger = createLogger({
+   	level: "info",
+   	redact: ["customer.email"],
+   });
+   ```
+
+2. Configure it in `src/routa.ts`. Routa writes its own events, such as `api.started`,
+   through it, and every handler receives it as `ctx.logger`.
+
+   ```ts title="src/routa.ts"
+   import { createRouta } from "@routa-ts/core";
+   import { logger } from "./logger.js";
+
+   export default createRouta({ logger });
+   ```
+
+3. Import the same logger in a service. A child adds bindings to every event it writes, and
+   those bindings pass through the same redaction as event data.
+
+   ```ts title="src/billing.ts"
+   import { logger } from "./logger.js";
+
+   const log = logger.child({ service: "billing" });
+
+   export function recordCharge(customer: { id: string; email: string }, token: string): void {
+   	log.info("billing.charged", "Customer charged.", { customer, token, tokenCount: 1 });
+   }
+   ```
+
+   The service needs no Routa context or dependency injection. Set `logger: false` in
+   `src/routa.ts` to silence Routa's logging for the application; a module that imports the
+   shared logger keeps writing through it.
+
+4. Send events to your backend with a sink. Install Pino:
+
+   <PackageManagers type="add" args="pino" />
+
+   Then forward each sanitized event at its own level. Pino passes every level through, so
+   the Routa logger's `level` stays the only filter.
+
+   ```ts title="src/logger.ts"
+   import { createLogger, type RoutaLogSink } from "@routa-ts/core";
+   import pino from "pino";
+
+   const output = pino({ level: "trace" });
+
+   const pinoSink: RoutaLogSink = ({ level, event, message, data }) =>
+   	output[level]({ ...data, event }, message);
+
+   export const logger = createLogger({
+   	level: "info",
+   	redact: ["customer.email"],
+   	sink: pinoSink,
+   });
+   ```
+
+   Your application owns the Pino instance: its destination, buffering, flushing, and
+   shutdown. Routa calls the sink and never waits for it.
+
+</Steps>
+
+## Verify
+
+Call `recordCharge({ id: "cus_1", email: "ada@example.com" }, "tok_visa")` with the logger
+from step 1. The default sink writes one JSON line to the console:
+
+```txt
+{"timestamp":"2026-01-01T00:00:00.000Z","level":"info","event":"billing.charged","message":"Customer charged.","data":{"service":"billing","customer":{"id":"cus_1","email":"[Redacted]"},"token":"[Redacted]","tokenCount":1}}
+```
+
+`email` is redacted by your path and `token` by the baseline names. `tokenCount` stays,
+because names match whole, not as substrings. Your `customer` object still holds the
+real email.
+
+## Troubleshooting
+
+| Problem                                                                        | Fix                                                                                                                                                                         |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/routa.ts configures a logger that createLogger did not create.`           | Routa no longer accepts hand-written logger objects or adapters. Wrap the backend in a sink, as in step 4, and configure `createLogger({ sink })`                           |
+| A field you need shows `[Redacted]`                                            | Its name is one of the baseline names, which no option turns off. Log it under a name that describes the value, such as `cardLast4`                                         |
+| A field shows `[Unsupported]`                                                  | Only plain objects, arrays, dates, and primitives are logged. Log the parts you need, such as `{ errorName: error.name }`, instead of the `Error`, `Map`, or class instance |
+| A value ends in `[Truncated]`                                                  | It passed a [traversal limit](/docs/reference/core/#sanitization). Log a smaller, flatter value                                                                             |
+| The console shows `routa.logger.sink_failed` or `routa.logger.event_discarded` | Your sink threw or rejected, or an event could not be sanitized. Each logger reports each kind once; later failures of that kind are silent                                 |
+| Logs still appear with `logger: false`                                         | They come from a module that imports the shared logger. Create it with `enabled: false` to silence it everywhere                                                            |
+
+<Aside type="caution" title="What redaction does not cover">
+	Redaction matches field names and paths. It does not find a secret inside a message string
+	or under a name it does not know, and it cannot see what your sink or a direct backend call
+	adds. Routa does not yet generate request IDs; its automatic `http.request` and `http.error`
+	events still include the request path and, for `http.error`, the error message and stack.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="createLogger reference"
+		href="/docs/reference/core/#createlogger"
+		description="Every option, the sanitization rules and limits, and sink failure handling."
+	/>
+	<LinkCard
+		title="logger configuration"
+		href="/docs/reference/configuration/#logger"
+		description="Defaults, logger: false, and the events Routa writes."
+	/>
+	<LinkCard
+		title="Full API example"
+		href="/docs/examples/full-api/"
+		description="A runnable project that shares a Pino-backed logger."
+	/>
+</CardGrid>

@@ -43,16 +43,16 @@ so a broken contract never reaches the server.
 
 ## Verify
 
-The default logger reports a successful start:
+The default logger writes one JSON line per event and reports a successful start:
 
 ```txt
-[2026-01-01T00:00:00.000Z] INFO api.started Routa API started. {"host":"127.0.0.1","port":3000,"routes":4}
+{"timestamp":"2026-01-01T00:00:00.000Z","level":"info","event":"api.started","message":"Routa API started.","data":{"host":"127.0.0.1","port":3000,"routes":4}}
 ```
 
 Each completed request is logged at `info`, so a `curl` should produce a second line:
 
 ```txt
-[2026-01-01T00:00:00.000Z] INFO http.request Request completed. {"method":"GET","path":"/status","status":200,"durationMs":1.42}
+{"timestamp":"2026-01-01T00:00:00.000Z","level":"info","event":"http.request","message":"Request completed.","data":{"method":"GET","path":"/status","status":200,"durationMs":1.42}}
 ```
 
 ## Development Versus Production
