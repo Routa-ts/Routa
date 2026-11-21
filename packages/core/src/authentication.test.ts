@@ -342,12 +342,15 @@ describe("authenticator failures", () => {
 			principal: { type: "user", id: "user_1" },
 		}));
 
-		const response = await app.request("/whoami", { headers: { authorization: "Bearer abc" } });
+		// The token is not hexadecimal, so no generated request ID can contain it by chance.
+		const response = await app.request("/whoami", {
+			headers: { authorization: "Bearer PrincipalSecret" },
+		});
 
 		expect(response.status).toBe(500);
 		const error = events.find((event) => event.event === "http.error");
 		expect(error?.data).toEqual(failedWhoami);
-		expect(JSON.stringify(events)).not.toContain("abc");
+		expect(JSON.stringify(events)).not.toContain("PrincipalSecret");
 	});
 
 	it("keeps an error thrown while parsing the principal a safe server error", async () => {
