@@ -104,7 +104,11 @@ export async function buildProjectApplication(
 	});
 	const config = ((await load("src/routa.ts")) as { default?: RoutaConfig }).default ?? {};
 	if (config.logger !== undefined && config.logger !== false) {
-		assertCreatedLogger(config.logger, "src/routa.ts configures");
+		assertCreatedLogger(
+			config.logger,
+			"src/routa.ts configures",
+			"Set logger: false to turn logging off.",
+		);
 	}
 	// An omitted logger is the JSON console logger at info; `false` leaves the application's
 	// loggers as no-ops without touching any logger the project shares elsewhere.

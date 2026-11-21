@@ -1404,11 +1404,17 @@ TypeError: createLogger does not accept "transport". It accepts enabled, level, 
 ```
 
 Loading `src/routa.ts`, in `routa dev`, `routa start`, or a test application, throws a
-`TypeError` when its `logger` is an object `createLogger` did not create, and
-`createApplication` and `createHonoApp` throw the same error for their `logger` option:
+`TypeError` when its `logger` is an object `createLogger` did not create:
 
 ```txt
 TypeError: src/routa.ts configures a logger that createLogger did not create. Routa accepts only loggers from createLogger, so redaction runs before any output. Forward events to your backend from a sink instead: logger: createLogger({ sink: (event) => backend.write(event) }). Set logger: false to turn logging off.
+```
+
+`createApplication` and `createHonoApp` throw the same error for their `logger` option. They
+do not accept `logger: false`, so their message ends differently:
+
+```txt
+TypeError: createHonoApp received a logger that createLogger did not create. Routa accepts only loggers from createLogger, so redaction runs before any output. Forward events to your backend from a sink instead: logger: createLogger({ sink: (event) => backend.write(event) }). Omit logger to turn logging off.
 ```
 
 ## `Sort`

@@ -907,7 +907,7 @@ describe("factory-created loggers", () => {
 
 	it("LOG-AC-01 refuses a logger createLogger did not create, with the migration", async () => {
 		const migration =
-			"Routa accepts only loggers from createLogger, so redaction runs before any output. Forward events to your backend from a sink instead: logger: createLogger({ sink: (event) => backend.write(event) }). Set logger: false to turn logging off.";
+			"Routa accepts only loggers from createLogger, so redaction runs before any output. Forward events to your backend from a sink instead: logger: createLogger({ sink: (event) => backend.write(event) }). Omit logger to turn logging off.";
 		const unsafe = customLogger as unknown as RoutaLogger;
 
 		expect(() => createHonoApp([], { logger: unsafe })).toThrow(

@@ -121,7 +121,11 @@ export async function createApplication(
 ): Promise<RoutaApplication> {
 	const { services: declaration, ...appOptions } = options;
 	if (appOptions.logger !== undefined) {
-		assertCreatedLogger(appOptions.logger, "createApplication received");
+		assertCreatedLogger(
+			appOptions.logger,
+			"createApplication received",
+			"Omit logger to turn logging off.",
+		);
 	}
 	const logger = appOptions.logger ?? createLogger({ enabled: false });
 	const scope = createCleanupScope();
@@ -204,7 +208,7 @@ export function createHonoApp(
 	if (logger === undefined) {
 		return honoApp(routes, rest, undefined);
 	}
-	assertCreatedLogger(logger, "createHonoApp received");
+	assertCreatedLogger(logger, "createHonoApp received", "Omit logger to turn logging off.");
 	return honoApp(routes, { ...rest, logger }, undefined);
 }
 
