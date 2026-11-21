@@ -2865,8 +2865,14 @@ function middlewareOrderDiagnostics(routes: RouteMetadata[], authenticated: bool
 				: [route.middleware];
 
 		for (const chain of chains) {
-			// Credential orchestration resolves ctx.auth before the first middleware runs.
-			const provided = new Set<string>(authenticated ? ["auth"] : []);
+			// Credential orchestration resolves ctx.auth before the first middleware runs, and Routa
+			// gives every middleware the request identity and logger.
+			const provided = new Set<string>([
+				...(authenticated ? ["auth"] : []),
+				"requestId",
+				"correlationId",
+				"logger",
+			]);
 
 			for (const middleware of chain) {
 				for (const required of middleware.requires) {
@@ -3172,13 +3178,15 @@ function payloadObject(
 
 		if (ts.isBlock(scope)) {
 			for (const statement of scope.statements) {
-				if (
-					ts.isVariableStatement(statement)
-					&& (statement.declarationList.flags & ts.NodeFlags.Const) !== 0
-				) {
+				if (ts.isVariableStatement(statement)) {
+					const isConst = (statement.declarationList.flags & ts.NodeFlags.Const) !== 0;
+
 					for (const declaration of statement.declarationList.declarations) {
-						if (ts.isIdentifier(declaration.name) && declaration.name.text === payload.text) {
-							return objectLiteral(declaration.initializer);
+						if (bindsName(declaration.name, payload.text)) {
+							// Only a `const` object literal is known; a `let` or `var` may hold anything.
+							return isConst && ts.isIdentifier(declaration.name)
+								? objectLiteral(declaration.initializer)
+								: undefined;
 						}
 					}
 				}

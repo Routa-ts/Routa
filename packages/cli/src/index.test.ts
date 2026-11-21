@@ -305,6 +305,34 @@ export default createRouteRoot("/users")({
 		expect(result.stderr).toContain("requires ctx.db");
 	});
 
+	it("treats the request identity and logger as provided to every middleware", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-middleware-identity-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/middleware.ts"),
+			`import { createMiddleware } from "@routa-ts/core";
+
+export const audit = createMiddleware({
+\trequires: ["requestId", "correlationId", "logger"],
+});
+`,
+		);
+		writeFileSync(
+			join(cwd, "src/routes/status/route.ts"),
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
+
+export default createRouteRoot("/status")({
+\tget: createRoute({ responses: { ok: { status: 204 } }, run: () => ({ type: "ok" }) }),
+});
+`,
+		);
+
+		const result = await run(["check"], { cwd });
+
+		expect(result.stderr).not.toContain("ROUTA_MIDDLEWARE_ORDER");
+	});
+
 	it("reports middleware that cannot be statically resolved", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-middleware-unresolved-"));
 		createTypeScriptProject(cwd);
