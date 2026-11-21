@@ -482,16 +482,31 @@ function followPaths(pending: PendingPaths, key: string): PendingPaths | "redact
 }
 
 /**
- * Sanitizes one value into JSON-compatible data. Plain objects, arrays, and dates are copied;
- * every other object reads as unsupported, so no getter, `toJSON`, or other method runs.
+ * Sanitizes the value under one key or index. Every value it emits, `[Redacted]` and other
+ * markers included, spends one of the traversal's remaining values; once none are left, it
+ * emits `[Truncated]`.
+ *
+ * @param read - Reads the value; never called for a redacted one
  */
-function sanitizeValue(value: unknown, traversal: Traversal, pending: PendingPaths): unknown {
+function sanitizeMember(
+	read: () => unknown,
+	traversal: Traversal,
+	next: PendingPaths | "redact",
+): unknown {
 	if (traversal.remaining <= 0) {
 		return truncatedMarker;
 	}
 
 	traversal.remaining -= 1;
 
+	return next === "redact" ? redactedMarker : sanitizeValue(read(), traversal, next);
+}
+
+/**
+ * Sanitizes one value into JSON-compatible data. Plain objects, arrays, and dates are copied;
+ * every other object reads as unsupported, so no getter, `toJSON`, or other method runs.
+ */
+function sanitizeValue(value: unknown, traversal: Traversal, pending: PendingPaths): unknown {
 	if (value === null) {
 		return null;
 	}
@@ -594,11 +609,8 @@ function sanitizeItems(
 		}
 
 		const key = String(index);
-		const next = followPaths(pending, key);
 		items.push(
-			next === "redact"
-				? redactedMarker
-				: (sanitizeValue(ownValue(value, key), traversal, next) ?? null),
+			sanitizeMember(() => ownValue(value, key), traversal, followPaths(pending, key)) ?? null,
 		);
 	}
 
@@ -615,8 +627,7 @@ function sanitizeEntries(
 
 	for (const key of keys.slice(0, maxEntries)) {
 		const next = isSensitiveName(key) ? "redact" : followPaths(pending, key);
-		const item =
-			next === "redact" ? redactedMarker : sanitizeValue(ownValue(value, key), traversal, next);
+		const item = sanitizeMember(() => ownValue(value, key), traversal, next);
 
 		if (item !== undefined) {
 			entries.push([safeText(key), item]);

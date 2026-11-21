@@ -1336,12 +1336,12 @@ them, and never changes your objects.
   bidirectional formatting characters are escaped as `\n`, `\r`, `\t`, or `\uXXXX` in the
   event name, message, timestamp, keys, and values, so one event is one line.
 
-| Limit                                        | Value | Beyond it                                                     |
-| -------------------------------------------- | ----- | ------------------------------------------------------------- |
-| Nesting below the event data                 | 10    | The deeper object or array becomes `[Truncated]`              |
-| Keys per object, items per array             | 100   | One `[Truncated]` key or item replaces the rest               |
-| Values per event, bindings and data together | 1,000 | Later values become `[Truncated]`                             |
-| Characters per string, after escaping        | 4,096 | The string is cut to 4,096 characters ending in `[Truncated]` |
+| Limit                                        | Value | Beyond it                                                               |
+| -------------------------------------------- | ----- | ----------------------------------------------------------------------- |
+| Nesting below the event data                 | 10    | The deeper object or array becomes `[Truncated]`                        |
+| Keys per object, items per array             | 100   | One `[Truncated]` key or item replaces the rest                         |
+| Values per event, bindings and data together | 1,000 | Later values become `[Truncated]`; `[Redacted]` and other markers count |
+| Characters per string, after escaping        | 4,096 | The string is cut to 4,096 characters ending in `[Truncated]`           |
 
 Redaction matches names and paths only. It does not find a secret inside a message or under
 an unknown name, and it cannot see what a sink or a direct backend call adds.

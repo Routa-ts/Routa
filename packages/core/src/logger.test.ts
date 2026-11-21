@@ -535,6 +535,26 @@ describe("createLogger sanitization", () => {
 		expect(budget?.data?.bindings).toEqual(rows(1));
 		expect(JSON.stringify(budget?.data?.data)).toContain("[Truncated]");
 	});
+
+	it("LOG-AC-04 counts redacted values against the per-event budget", () => {
+		const { events, logger } = capture({ redact: ["rows.*.*"] });
+		const rows = Array.from({ length: 100 }, () => Array.from({ length: 100 }, () => "secret"));
+		const redactedCount = (value: unknown): number =>
+			typeof value === "object" && value !== null
+				? Object.values(value).reduce<number>((total, item) => total + redactedCount(item), 0)
+				: value === "[Redacted]"
+					? 1
+					: 0;
+		const child = logger.child({ rows });
+
+		logger.info("data", "Data.", { rows });
+		child.info("bindings", "Bindings.");
+
+		expect(redactedCount(events[0]?.data)).toBeLessThan(1000);
+		expect(redactedCount(child.bindings())).toBeLessThan(1000);
+		expect(redactedCount(events[1]?.data)).toBeLessThan(1000);
+		expect(JSON.stringify(events)).not.toContain("secret");
+	});
 });
 
 describe("createLogger failure containment", () => {
