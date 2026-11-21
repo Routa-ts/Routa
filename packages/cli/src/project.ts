@@ -197,7 +197,7 @@ function validateProjectInSession(
 	const write = options.write ?? true;
 	const auth = applicationAuthentication(cwd, parser);
 	const { authentication } = auth;
-	const correlation = applicationCorrelation(cwd, parser);
+	const correlation = applicationCorrelation(cwd, parser, authentication);
 	const correlationHeader = correlation.header;
 	const discovery = discoverRoutes(cwd, parser, authentication);
 	const routes = discovery.routes;

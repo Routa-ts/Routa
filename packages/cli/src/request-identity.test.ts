@@ -39,6 +39,51 @@ ${members}
 `;
 }
 
+/**
+ * A config that reads correlation from `header` and declares a credential scheme of each
+ * transport. Every authenticator and extractor writes `sentinel`, so a test can tell whether
+ * generation ran one.
+ */
+function credentialConfig(header: string, sentinel: string): string {
+	const ran = `writeFileSync(${JSON.stringify(sentinel)}, "ran")`;
+	return config(
+		`\tcorrelation: { header: ${JSON.stringify(header)} },
+\tauthentication: {
+\t\tprincipal: z.object({ type: z.literal("service"), id: z.string() }),
+\t\tschemes: {
+\t\t\tuserToken: bearer({ authenticate: () => (${ran}, { type: "rejected" }) }),
+\t\t\tserviceKey: apiKey({
+\t\t\t\theader: "X-Api-Key",
+\t\t\t\tauthenticate: (key) =>
+\t\t\t\t\t(${ran}, key === "service-key" ? { type: "authenticated", principal: { type: "service", id: "svc_key" } } : { type: "rejected" }),
+\t\t\t}),
+\t\t\tclientCert: custom({
+\t\t\t\ttransport: { header: "X-Client-Cert" },
+\t\t\t\topenapi: { type: "mutualTLS" },
+\t\t\t\textract: (value) => (${ran}, { type: "credential", credential: value }),
+\t\t\t\tauthenticate: (value) =>
+\t\t\t\t\t(${ran}, value === "cert-1" ? { type: "authenticated", principal: { type: "service", id: "svc_cert" } } : { type: "rejected" }),
+\t\t\t}),
+\t\t\tbasicUser: custom({
+\t\t\t\ttransport: { header: "authorization", scheme: "Basic" },
+\t\t\t\topenapi: { type: "http", scheme: "basic" },
+\t\t\t\tauthenticate: () => (${ran}, { type: "rejected" }),
+\t\t\t}),
+\t\t\tsession: sessionCookie({ cookie: "session", authenticate: () => (${ran}, { type: "rejected" }) }),
+\t\t\tdevice: custom({
+\t\t\t\ttransport: { cookie: "device" },
+\t\t\t\topenapi: { type: "apiKey", in: "cookie", name: "device" },
+\t\t\t\tauthenticate: () => (${ran}, { type: "rejected" }),
+\t\t\t}),
+\t\t},
+\t},`,
+		`import { writeFileSync } from "node:fs";
+import { apiKey, bearer, custom, sessionCookie } from "@routa-ts/core";
+import { z } from "zod";
+`,
+	);
+}
+
 const requestIdHeader = {
 	required: true,
 	description: "The request identity Routa generated for this request.",
@@ -273,6 +318,56 @@ describe("correlation config", () => {
 				{ code, message },
 			]);
 		}
+	});
+
+	it("LOG-AC-09 rejects a correlation header that a declared credential scheme reads, in any case, without running src/routa.ts", () => {
+		const sentinel = join(mkdtempSync(join(tmpdir(), "routa-credential-sentinel-")), "executed");
+		const cases = [
+			[
+				"x-api-key",
+				'The correlation header "x-api-key" in src/routa.ts names x-api-key, which the apiKey scheme "serviceKey" reads its credential from.',
+			],
+			[
+				"X-API-KEY",
+				'The correlation header "X-API-KEY" in src/routa.ts names x-api-key, which the apiKey scheme "serviceKey" reads its credential from.',
+			],
+			[
+				"x-client-cert",
+				'The correlation header "x-client-cert" in src/routa.ts names x-client-cert, which the custom scheme "clientCert" reads its credential from.',
+			],
+			[
+				"X-Client-CERT",
+				'The correlation header "X-Client-CERT" in src/routa.ts names x-client-cert, which the custom scheme "clientCert" reads its credential from.',
+			],
+			[
+				"AUTHORIZATION",
+				'The correlation header "AUTHORIZATION" in src/routa.ts names authorization, which is a credential header.',
+			],
+			[
+				"Cookie",
+				'The correlation header "Cookie" in src/routa.ts names cookie, which is a credential header.',
+			],
+		] as const;
+
+		for (const [header, message] of cases) {
+			expect(diagnostics({ "src/routa.ts": credentialConfig(header, sentinel) }), header).toEqual([
+				{ code: "ROUTA_CORRELATION_HEADER_CONFLICT", message },
+			]);
+		}
+
+		expect(diagnostics({ "src/routa.ts": credentialConfig("x-trace-ref", sentinel) })).toEqual([]);
+		expect(existsSync(sentinel)).toBe(false);
+	});
+
+	it("LOG-AC-09 leaves a credential header it cannot read to the authentication diagnostic", () => {
+		const routa = credentialConfig("x-api-key", "unused").replace(
+			'header: "X-Api-Key"',
+			"header: process.env.API_KEY_HEADER!",
+		);
+
+		expect(diagnostics({ "src/routa.ts": routa }).map((item) => item.code)).toEqual([
+			"ROUTA_AUTH_CONFIG_UNRESOLVED",
+		]);
 	});
 
 	it("LOG-AC-11 reads correlation behind a named default export and a string-literal computed key", () => {

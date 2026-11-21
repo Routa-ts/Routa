@@ -1,3 +1,4 @@
+import type { RuntimeAuthentication } from "./authentication.js";
 import type { RoutaLogger } from "./logger.js";
 import type { FrameworkEvent } from "./logger-registry.js";
 import { reservedHeaders } from "./response-headers.js";
@@ -78,10 +79,16 @@ export function loggedMethod(method: string): string {
  * Reads the `correlation` option: the lowercase header name Routa reads and echoes, or `undefined`
  * when correlation is off.
  *
+ * @param authentication - The validated authentication config, whose declared transports the
+ *   header cannot name. Only those declarations are read; no extractor or authenticator runs.
  * @throws {TypeError} When the option has the wrong shape, the header name is invalid, or it names
- *   x-request-id, a credential header, or a header Routa writes itself
+ *   x-request-id, a credential header, a header a credential scheme reads, or a header Routa
+ *   writes itself
  */
-export function correlationHeaderOf(option: unknown): string | undefined {
+export function correlationHeaderOf(
+	option: unknown,
+	authentication?: RuntimeAuthentication,
+): string | undefined {
 	if (option === undefined || option === false) {
 		return undefined;
 	}
@@ -110,7 +117,18 @@ export function correlationHeaderOf(option: unknown): string | undefined {
 		throw new TypeError(`The correlation header ${problem}`);
 	}
 
-	return header.toLowerCase();
+	const name = header.toLowerCase();
+	const scheme = authentication?.schemes.find(
+		(item) => "header" in item.transport && item.transport.header === name,
+	);
+
+	if (scheme) {
+		throw new TypeError(
+			`The correlation header ${JSON.stringify(header)} names ${name}, which the ${scheme.kind} scheme ${JSON.stringify(scheme.name)} reads its credential from. Choose another header, such as x-correlation-id.`,
+		);
+	}
+
+	return name;
 }
 
 /**

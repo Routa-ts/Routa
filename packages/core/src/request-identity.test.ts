@@ -7,9 +7,11 @@ import {
 	type HonoRoute,
 } from "./hono.js";
 import {
+	apiKey,
 	bearer,
 	createMiddleware,
 	createRoute,
+	custom,
 	type RequestServicesFactory,
 	requireAuth,
 } from "./index.js";
@@ -1258,6 +1260,114 @@ describe("correlation identity", () => {
 			expect(() => createHonoApp([], { correlation: { header } }), header).toThrow(
 				`The correlation header ${JSON.stringify(header)} names ${header.toLowerCase()}, which ${owner}.`,
 			);
+		}
+	});
+
+	it("LOG-AC-09 rejects a correlation header a declared credential scheme reads, in any case", async () => {
+		const authenticate = vi.fn(() => ({ type: "rejected" }) as const);
+		const extract = vi.fn((value: string) => ({ type: "credential", credential: value }) as const);
+		const authentication = {
+			principal: z.object({ id: z.string(), type: z.literal("service") }),
+			schemes: {
+				serviceKey: apiKey({ header: "X-Api-Key", authenticate }),
+				clientCert: custom({
+					transport: { header: "x-client-cert" },
+					openapi: { type: "mutualTLS" },
+					extract,
+					authenticate,
+				}),
+				basicUser: custom({
+					transport: { header: "Authorization", scheme: "Basic" },
+					openapi: { type: "http", scheme: "basic" },
+					authenticate,
+				}),
+			},
+		};
+
+		for (const [header, message] of [
+			[
+				"x-api-key",
+				'The correlation header "x-api-key" names x-api-key, which the apiKey scheme "serviceKey" reads its credential from. Choose another header, such as x-correlation-id.',
+			],
+			[
+				"X-API-KEY",
+				'The correlation header "X-API-KEY" names x-api-key, which the apiKey scheme "serviceKey" reads its credential from.',
+			],
+			[
+				"X-Client-Cert",
+				'The correlation header "X-Client-Cert" names x-client-cert, which the custom scheme "clientCert" reads its credential from.',
+			],
+			["authorization", 'The correlation header "authorization" names a credential header.'],
+		] as const) {
+			expect(() => createHonoApp([], { authentication, correlation: { header } }), header).toThrow(
+				message,
+			);
+			const factory = vi.fn(() => ({ clock: {} }));
+			await expect(
+				createApplication([], {
+					authentication,
+					correlation: { header },
+					services: { factory, names: ["clock"] },
+				}),
+				header,
+			).rejects.toThrow(message);
+			// Rejected before the services factory runs, so nothing needs releasing.
+			expect(factory).not.toHaveBeenCalled();
+		}
+
+		expect(authenticate).not.toHaveBeenCalled();
+		expect(extract).not.toHaveBeenCalled();
+	});
+
+	it("LOG-AC-17 keeps authentication results with a correlation header of its own", async () => {
+		const principal = z.object({ id: z.string(), type: z.literal("service") });
+		const key = (value: string) =>
+			value === "key-1"
+				? ({ type: "authenticated", principal: { id: "svc_key", type: "service" } } as const)
+				: ({ type: "rejected" } as const);
+		const whoami: HonoRoute = {
+			method: "get",
+			path: "/whoami",
+			contract: createRoute({
+				middleware: [requireAuth()],
+				responses: { ok: { status: 200, schema: z.object({ id: z.string() }) } },
+				// No generated Register types ctx.auth here, so read it as the runtime gives it.
+				run: ({ ctx }) => ({
+					type: "ok",
+					data: {
+						id: (ctx as unknown as { auth: { principal: { id: string } } }).auth.principal.id,
+					},
+				}),
+			}),
+		};
+		const app = createHonoApp([whoami], {
+			correlation: { header: "x-trace-ref" },
+			authentication: {
+				principal,
+				schemes: {
+					serviceKey: apiKey({ header: "x-api-key", authenticate: key }),
+					clientCert: custom({
+						transport: { header: "x-client-cert" },
+						openapi: { type: "mutualTLS" },
+						authenticate: key,
+					}),
+				},
+			},
+		});
+		const request = (headers: Record<string, string>) =>
+			app.request("/whoami", { headers: { "x-trace-ref": "trace-1", ...headers } });
+
+		const byKey = await request({ "X-Api-Key": "key-1" });
+		const byCert = await request({ "x-client-cert": "key-1" });
+		const rejected = await request({ "x-api-key": "wrong" });
+		const missing = await request({});
+
+		expect(await byKey.json()).toEqual({ id: "svc_key" });
+		expect(await byCert.json()).toEqual({ id: "svc_key" });
+		expect([rejected.status, missing.status]).toEqual([401, 401]);
+		for (const response of [byKey, byCert, rejected, missing]) {
+			expect(response.headers.get("x-request-id")).toMatch(uuid);
+			expect(response.headers.get("x-trace-ref")).toBe("trace-1");
 		}
 	});
 
