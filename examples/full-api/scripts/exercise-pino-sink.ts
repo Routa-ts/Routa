@@ -94,6 +94,7 @@ const response = await app.request("/projects", {
 });
 const requestId = response.headers.get("x-request-id");
 const logged = Object.fromEntries(served.lines.map((entry) => [entry.event, entry.data]));
+const shared = served.lines.find((entry) => entry.event === "projects.shared");
 
 assert.equal(response.status, 201);
 assert.notEqual(
@@ -107,7 +108,8 @@ assert.deepEqual(
 	{ requestId, correlationId: "checkout-42", projectId: "project_new" },
 	"the service given ctx.logger logs with the request's identity",
 );
-assert.equal(logged["projects.shared"], undefined, "the shared logger has no request identity");
+assert.ok(shared, "the shared logger's event reaches the sink");
+assert.equal(shared.data, undefined, "the shared logger has no request identity");
 assert.deepEqual(logged["http.response.prepared"], {
 	requestId,
 	correlationId: "checkout-42",
