@@ -710,6 +710,24 @@ describe("factory-created loggers", () => {
 		expect(() => createHonoApp([], { logger: createLogger({ enabled: false }) })).not.toThrow();
 	});
 
+	it("LOG-AC-01 refuses an object whose brand is not the factory's own true value", () => {
+		const brand = Symbol.for("@routa-ts/core/createLogger");
+		const getter = vi.fn(() => true);
+		const forged = [
+			{ ...customLogger, [brand]: false },
+			{ ...customLogger, [brand]: "true" },
+			Object.defineProperty({ ...customLogger }, brand, { get: getter }),
+			Object.create({ [brand]: true }),
+		];
+
+		for (const logger of forged) {
+			expect(() => createHonoApp([], { logger: logger as RoutaLogger })).toThrow(
+				"createHonoApp received a logger that createLogger did not create.",
+			);
+		}
+		expect(getter).not.toHaveBeenCalled();
+	});
+
 	it("LOG-AC-05 keeps request results when a configured sink throws, rejects, or data is unsafe", async () => {
 		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
 		const unhandled = vi.fn<(reason: unknown) => void>();

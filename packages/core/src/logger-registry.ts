@@ -13,11 +13,20 @@ export function markCreatedLogger<TLogger extends object>(logger: TLogger): TLog
 }
 
 /**
+ * Accepts only the own data property `createLogger` defines, holding `true`; no getter runs. An
+ * object can still copy that key and value deliberately: the registered symbol keeps loggers from
+ * another copy of the package acceptable, so it cannot also be a secret.
+ *
  * @param where - What received the logger, which starts the error message
  * @throws {TypeError} When `logger` is not a logger `createLogger` returned
  */
 export function assertCreatedLogger(logger: unknown, where: string): void {
-	if (typeof logger === "object" && logger !== null && Object.hasOwn(logger, createdKey)) {
+	const brand =
+		typeof logger === "object" && logger !== null
+			? Object.getOwnPropertyDescriptor(logger, createdKey)
+			: undefined;
+
+	if (brand && "value" in brand && brand.value === true) {
 		return;
 	}
 
