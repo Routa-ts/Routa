@@ -1290,6 +1290,9 @@ Every event carries `timestamp`, `level`, `event`, `message`, and optional `data
 reads only those five fields of the object it receives. A child sanitizes its bindings once,
 when you call `child`, so later changes to the object you passed do not appear. Each event
 merges the bindings with its `data`, and a `data` key replaces a binding of the same name.
+The [limits](#sanitization) apply to that merged `data` as one object, bindings first, so
+a child whose bindings fill 100 keys leaves an event's own keys as one `[Truncated]` key.
+A child's bindings are merged and limited the same way over its parent's.
 No method throws, and loggers are frozen.
 
 Only `createLogger` creates a `RoutaLogger`. TypeScript rejects a hand-written object of the
@@ -1332,12 +1335,12 @@ them, and never changes your objects.
   bidirectional formatting characters are escaped as `\n`, `\r`, `\t`, or `\uXXXX` in the
   event name, message, timestamp, keys, and values, so one event is one line.
 
-| Limit                                            | Value | Beyond it                                                     |
-| ------------------------------------------------ | ----- | ------------------------------------------------------------- |
-| Nesting below the event data                     | 10    | The deeper object or array becomes `[Truncated]`              |
-| Keys per object, items per array                 | 100   | One `[Truncated]` key or item replaces the rest               |
-| Values per event's data, or per child's bindings | 1,000 | Later values become `[Truncated]`                             |
-| Characters per string, after escaping            | 4,096 | The string is cut to 4,096 characters ending in `[Truncated]` |
+| Limit                                        | Value | Beyond it                                                     |
+| -------------------------------------------- | ----- | ------------------------------------------------------------- |
+| Nesting below the event data                 | 10    | The deeper object or array becomes `[Truncated]`              |
+| Keys per object, items per array             | 100   | One `[Truncated]` key or item replaces the rest               |
+| Values per event, bindings and data together | 1,000 | Later values become `[Truncated]`                             |
+| Characters per string, after escaping        | 4,096 | The string is cut to 4,096 characters ending in `[Truncated]` |
 
 Redaction matches names and paths only. It does not find a secret inside a message or under
 an unknown name, and it cannot see what a sink or a direct backend call adds.

@@ -484,6 +484,39 @@ describe("createLogger sanitization", () => {
 		expect(values.filter((value) => value === "1").length).toBeLessThan(1000);
 		expect(JSON.stringify(budget?.data)).toContain("[Truncated]");
 	});
+
+	it("LOG-AC-04 holds the limits for each event's bindings and data together", () => {
+		const { events, logger } = capture();
+		const keys = (prefix: string) =>
+			Object.fromEntries(Array.from({ length: 100 }, (_, index) => [`${prefix}${index}`, index]));
+		const rows = (value: number) =>
+			Array.from({ length: 9 }, () => Array.from({ length: 99 }, () => value));
+		/** Every value in the event's data except truncation markers, nested containers included. */
+		const countValues = (value: unknown): number =>
+			typeof value === "object" && value !== null
+				? Object.values(value).reduce<number>(
+						(total, item) => total + (item === "[Truncated]" ? 0 : 1) + countValues(item),
+						0,
+					)
+				: 0;
+
+		let chained = logger;
+		for (let child = 0; child < 15; child += 1) {
+			chained = chained.child(keys(`c${child}_`));
+		}
+		chained.info("chained", "Chained.", keys("d"));
+		logger.child({ bindings: rows(1) }).info("budget", "Budget.", { data: rows(2) });
+		const [wide, budget] = events;
+
+		expect(Object.keys(chained.bindings())).toHaveLength(101);
+		expect(Object.keys(wide?.data as object)).toHaveLength(101);
+		expect(wide?.data).toMatchObject({ c0_0: 0, c0_99: 99, "[Truncated]": "[Truncated]" });
+		expect(wide?.data).not.toHaveProperty("c1_0");
+		expect(wide?.data).not.toHaveProperty("d0");
+		expect(countValues(budget?.data)).toBeLessThanOrEqual(1000);
+		expect(budget?.data?.bindings).toEqual(rows(1));
+		expect(JSON.stringify(budget?.data?.data)).toContain("[Truncated]");
+	});
 });
 
 describe("createLogger failure containment", () => {

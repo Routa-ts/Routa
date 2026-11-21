@@ -43,7 +43,7 @@ import it wherever else you log, and choose where events go with a sink.
    ```
 
 3. Import the same logger in a service. A child adds bindings to every event it writes, and
-   those bindings pass through the same redaction as event data.
+   those bindings pass through the same redaction and limits as event data.
 
    ```ts title="src/billing.ts"
    import { logger } from "./logger.js";

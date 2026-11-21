@@ -149,10 +149,7 @@ export function createLogger(options: CreateLoggerOptions = {}): RoutaLogger {
 					throw new TypeError("The logger's bindings could not be sanitized.");
 				}
 
-				const fields = {
-					...structuredClone(bindings),
-					...(raw.data == null ? {} : sanitizeData(raw.data, paths)),
-				};
+				const fields = sanitizeMerged(bindings, raw.data ?? {}, paths);
 				event = {
 					timestamp: sanitizeText(raw.timestamp),
 					level: raw.level,
@@ -224,7 +221,7 @@ export function createLogger(options: CreateLoggerOptions = {}): RoutaLogger {
 		}
 
 		try {
-			return { ...bindings, ...sanitizeData(added, paths) };
+			return sanitizeMerged(bindings, added, paths);
 		} catch {
 			return undefined;
 		}
@@ -364,7 +361,10 @@ const unsupportedMarker = "[Unsupported]";
 const maxDepth = 10;
 /** Each object keeps this many keys and each array this many items, then one truncation marker. */
 const maxEntries = 100;
-/** Values sanitized for one event's data or one child's bindings; later values read as truncated. */
+/**
+ * Values sanitized for one event's data, its bindings included, or for one child's bindings;
+ * later values read as truncated.
+ */
 const maxValues = 1000;
 /** Escaped strings longer than this are cut so that, with the marker, they have this length. */
 const maxStringLength = 4096;
@@ -628,16 +628,33 @@ function sanitizeEntries(
 }
 
 /**
- * Sanitizes event data or child bindings.
+ * Sanitizes `added` merged over `base` as one object, so every limit holds for the result as a
+ * whole: an event's data with its bindings, or a child's bindings with its parent's. `base` keys
+ * come first, and an `added` key replaces a `base` key of the same name in place.
  *
- * @throws {TypeError} When `data` is not a plain object
+ * @param base - Bindings that were already sanitized, so copying them runs no caller code
+ * @throws {TypeError} When `added` is not a plain object
  */
-function sanitizeData(data: unknown, paths: PendingPaths): RoutaLogData {
-	if (!isPlainObject(data)) {
+function sanitizeMerged(base: RoutaLogData, added: unknown, paths: PendingPaths): RoutaLogData {
+	if (!isPlainObject(added)) {
 		throw new TypeError("Log data must be a plain object.");
 	}
 
-	return sanitizeValue(data, { ancestors: new Set(), remaining: maxValues }, paths) as RoutaLogData;
+	const merged: Record<string, unknown> = { ...base };
+
+	// Copying descriptors, not values, keeps an accessor unread so it still reads as unsupported.
+	// One key past the limit is enough to mark the merged object as truncated.
+	for (const key of Object.keys(added).slice(0, maxEntries + 1)) {
+		const descriptor = Object.getOwnPropertyDescriptor(added, key);
+
+		if (descriptor) {
+			Object.defineProperty(merged, key, { ...descriptor, configurable: true, enumerable: true });
+		}
+	}
+
+	// No caller can reach `merged`, so `added` stands in for it as the root: a reference back to
+	// the data still reads as circular, and depth counts from the data.
+	return sanitizeEntries(merged, { ancestors: new Set([added]), remaining: maxValues }, paths);
 }
 
 /**
