@@ -288,18 +288,11 @@ type ValueChangeMessage<TKey extends string> = {
 /** Header names Routa owns on every response. */
 type ReservedHeaderName = (typeof reservedHeaders)[number];
 
-/** The correlation header the generated `.routa/routes.gen.ts` registers, when correlation is on. */
-type RegisteredCorrelationHeader = Register extends { correlationHeader: infer THeader }
-	? THeader
-	: never;
-
 type HeaderNameProblem<TName extends string> = TName extends ReservedHeaderName
 	? `Header "${TName}" is reserved: Routa owns it, so an outcome cannot declare it.`
-	: TName extends RegisteredCorrelationHeader
-		? `Header "${TName}" is reserved: Routa echoes the correlation ID in it, so an outcome cannot declare it.`
-		: TName extends Lowercase<TName>
-			? never
-			: `Header "${TName}" must be declared in lowercase ("${Lowercase<TName>}").`;
+	: TName extends Lowercase<TName>
+		? never
+		: `Header "${TName}" must be declared in lowercase ("${Lowercase<TName>}").`;
 
 type HeaderValueProblem<TName extends string, TSchema> = TSchema extends z.ZodTypeAny
 	? [Exclude<z.output<TSchema>, undefined>] extends [string | number | boolean]

@@ -220,7 +220,6 @@ export const logger = createLogger({ sink: () => {} });
 		expect(generatedFiles()).toEqual(before);
 		expect(JSON.stringify(generateOpenApi(cwd))).toBe(openapi);
 		expect(existsSync(sentinel)).toBe(false);
-		expect(before[0]).toContain("correlationHeader: typeof routaCorrelationHeader;");
 
 		const operation = (JSON.parse(openapi) as OpenApi).paths["/items"]!.get as OpenApiOperation;
 		const documented = Object.keys(operation.responses).sort();
@@ -356,52 +355,50 @@ describe("generated test applications", () => {
 		await app.dispose();
 	}, 30_000);
 
-	it("LOG-AC-10 reject the configured correlation header in outcome and reject headers in TypeScript", async () => {
-		const declarations = (expectError: boolean) => {
-			const mark = expectError
-				? "\t\t\t// @ts-expect-error Routa echoes the correlation ID in it.\n"
-				: "";
-			return `import { createMiddleware, createRoute } from "@routa-ts/core";
+	it("LOG-AC-10 leave the configured correlation header to routa check and registration, not TypeScript", async () => {
+		// Code outside the route tree, such as a standalone createHonoApp with correlation off, may
+		// declare the header; only x-request-id is reserved in the types.
+		const declarations = `import { createMiddleware, createRoute } from "@routa-ts/core";
 import { z } from "zod";
 
 export const route = createRoute({
 \tresponses: {
-\t\tok: {
-\t\t\tstatus: 200,
-${mark}\t\t\theaders: z.object({ "x-trace-ref": z.string() }),
-\t\t},
+\t\tok: { status: 200, headers: z.object({ "x-trace-ref": z.string() }) },
 \t},
-\trun: () => ({ type: "ok", headers: { "x-trace-ref": "x" } }) as never,
+\trun: () => ({ type: "ok", headers: { "x-trace-ref": "x" } }),
 });
 
 export const gate = createMiddleware({
 \trejects: {
-\t\tdenied: {
-\t\t\tstatus: 403,
-${mark}\t\t\theaders: z.object({ "x-trace-ref": z.string() }),
-\t\t},
+\t\tdenied: { status: 403, headers: z.object({ "x-trace-ref": z.string() }) },
 \t},
 \trun: ({ next }) => next(),
 });
-`;
-		};
-		const check = async (members: string, expectError: boolean) => {
-			const cwd = project({
-				"src/routa.ts": config(members),
-				"src/routes/status/route.ts": statusRoute,
-				// Outside the route tree, so only TypeScript checks these declarations.
-				"src/declarations.ts": declarations(expectError),
-			});
-			const result = await run(["check"], { cwd });
-			return `${result.stdout ?? ""}${result.stderr ?? ""}`.includes("TS2578")
-				? "unused @ts-expect-error"
-				: result.code;
-		};
 
-		expect(await check('\tcorrelation: { header: "X-Trace-Ref" },', true)).toBe(0);
-		expect(await check("\tcorrelation: true,", false)).toBe(0);
-		expect(await check("", false)).toBe(0);
-		expect(await check("\tcorrelation: true,", true)).toBe("unused @ts-expect-error");
+export const owned = createRoute({
+\tresponses: {
+\t\tok: {
+\t\t\tstatus: 200,
+\t\t\t// @ts-expect-error Routa owns x-request-id on every response.
+\t\t\theaders: z.object({ "x-request-id": z.string() }),
+\t\t},
+\t},
+\trun: () => ({ type: "ok" }) as never,
+});
+`;
+		const cwd = project({
+			"src/routa.ts": config('\tcorrelation: { header: "X-Trace-Ref" },'),
+			"src/routes/status/route.ts": statusRoute,
+			"src/declarations.ts": declarations,
+		});
+		expect(await run(["generate"], { cwd })).toMatchObject({ code: 0 });
+		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).not.toContain(
+			"correlationHeader:",
+		);
+
+		const result = await run(["check"], { cwd });
+		expect(`${result.stdout ?? ""}${result.stderr ?? ""}`).not.toMatch(/TS\d{4}/);
+		expect(result.code).toBe(0);
 	}, 60_000);
 
 	it("LOG-AC-11 refuse to start when src/routa.ts changed correlation after generation", async () => {

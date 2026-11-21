@@ -3638,7 +3638,7 @@ export const routaCorrelationHeader = ${JSON.stringify(correlationHeader)};
 		: "";
 	return `${generatedHeader}export const routaRoutes = ${JSON.stringify(orderedRoutes, null, "\t")} as const;
 
-${servicesSource}${authenticationSource}${correlationSource}${routeContextTypes(orderedRoutes, services !== undefined, authentication, correlationHeader !== undefined)}
+${servicesSource}${authenticationSource}${correlationSource}${routeContextTypes(orderedRoutes, services !== undefined, authentication)}
 `;
 }
 
@@ -3696,7 +3696,6 @@ function routeContextTypes(
 	routes: RouteMetadata[],
 	application: boolean,
 	authentication: AuthenticationMetadata | undefined,
-	correlation: boolean,
 ): string {
 	const ctxTypes = routes
 		.map((route) => {
@@ -3735,7 +3734,7 @@ function routeContextTypes(
 		authentication
 			? "\t\tauthentication: { schemes: RoutaAuthenticationScheme; principal: RoutaPrincipal };\n"
 			: ""
-	}${correlation ? "\t\tcorrelationHeader: typeof routaCorrelationHeader;\n" : ""}`;
+	}`;
 
 	return `${ctxTypes}\n\n${ctxMap}${factoryCtx}${requirementChecks}\n\n${ctxByKey}\n\ndeclare module "@routa-ts/core" {\n\texport interface Register {\n\t\trouteCtxByPath: RoutaRouteCtxByPath;\n\t\tctxByKey: RoutaCtxByKey;\n${servicesRegistration}\t}\n}`;
 }

@@ -207,9 +207,10 @@ runs, and startup rejects a `src/routa.ts` whose correlation differs from what
 
 While correlation is on, Routa owns the configured header on every response: it echoes an
 accepted value, removes any value a handler wrote when it accepted none, and rejects an outcome
-or middleware reject that declares the header in `headers`. TypeScript reports the declaration
-once `routa generate` has recorded the header in `.routa/routes.gen.ts`; `routa check` and
-startup report it either way.
+or middleware reject that declares the header in `headers`. `routa check`
+(`ROUTA_RESPONSE_HEADER_RESERVED`) and route registration report that declaration. TypeScript
+does not, because the types cover every contract in the program, including one registered with
+a separate `createHonoApp` that leaves correlation off; it reports only `x-request-id`.
 
 ## `onRequestError`
 
