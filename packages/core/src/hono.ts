@@ -391,6 +391,8 @@ type TrackedRequest = RequestState & { route?: string; prepared?: Response };
  * Routa writes these headers in place only on a response it prepared for this request. Any other
  * response, such as one a handler added to the returned Hono app reuses across requests, or one
  * whose headers are immutable, is copied first, so one request's identity never reaches another's.
+ * A response the runtime cannot copy, such as a `101` upgrade response, is returned as it is,
+ * without identity headers, and its event still logs its status.
  *
  * The event says the response was prepared, not that it was sent or received: Routa logs it
  * before the body is transmitted. A request whose handling throws past Hono logs nothing.
@@ -427,17 +429,15 @@ function identifyRequests(
 
 		await next();
 
-		if (context.res !== state.prepared) {
-			context.res = new Response(context.res.body, context.res);
-		}
+		if (context.res === state.prepared || adoptResponse(context)) {
+			const { headers } = context.res;
+			headers.set(requestIdHeader, requestId);
 
-		const { headers } = context.res;
-		headers.set(requestIdHeader, requestId);
-
-		// Only an accepted value is echoed. No header Routa writes can be the correlation header,
-		// so the echo never replaces one, and without a value it leaves the response alone.
-		if (correlationHeader !== undefined && correlationId !== undefined) {
-			headers.set(correlationHeader, correlationId);
+			// Only an accepted value is echoed. No header Routa writes can be the correlation header,
+			// so the echo never replaces one, and without a value it leaves the response alone.
+			if (correlationHeader !== undefined && correlationId !== undefined) {
+				headers.set(correlationHeader, correlationId);
+			}
 		}
 
 		state.event("info", "http.response.prepared", "Response prepared.", {
@@ -469,6 +469,26 @@ function identifyRequests(
 			return response;
 		},
 	};
+}
+
+/**
+ * Replaces a response Routa did not prepare with a copy whose headers Routa may write.
+ *
+ * @returns `false`, leaving the response as it is, when the runtime cannot copy it: the
+ *   `Response` constructor accepts only statuses 200 to 599, so a `101` upgrade response a
+ *   runtime built itself has no copy
+ */
+function adoptResponse(context: Context): boolean {
+	let copy: Response;
+
+	try {
+		copy = new Response(context.res.body, context.res);
+	} catch {
+		return false;
+	}
+
+	context.res = copy;
+	return true;
 }
 
 /**

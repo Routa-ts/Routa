@@ -735,6 +735,41 @@ describe("request identity", () => {
 		expect([...cached.headers]).toEqual([["cache-control", "max-age=60"]]);
 	});
 
+	it("LOG-AC-12 returns a response it cannot copy, such as a 101 upgrade, as it is", async () => {
+		const { events, logger } = capture();
+		const app = createHonoApp([], { logger, correlation: true });
+		// Node's Response constructor rejects 101, so this stands in for the upgrade response a
+		// runtime builds itself, such as the one Deno.upgradeWebSocket() returns.
+		const upgrade = new Response(null, {
+			headers: { upgrade: "websocket", connection: "Upgrade" },
+		});
+		Object.defineProperty(upgrade, "status", { value: 101 });
+		app.get("/socket", () => upgrade);
+
+		const response = await app.request("/socket", {
+			headers: { upgrade: "websocket", "x-correlation-id": "trace-1" },
+		});
+
+		expect(response).toBe(upgrade);
+		expect([...upgrade.headers]).toEqual([
+			["connection", "Upgrade"],
+			["upgrade", "websocket"],
+		]);
+		expect(events.map((event) => [event.event, event.data])).toEqual([
+			[
+				"http.response.prepared",
+				{
+					requestId: expect.stringMatching(uuid),
+					correlationId: "trace-1",
+					method: "GET",
+					route: "[Unmatched]",
+					status: 101,
+					durationMs: expect.any(Number),
+				},
+			],
+		]);
+	});
+
 	it("LOG-AC-07 keeps identity in context and headers with logging off", async () => {
 		const app = await createApplication([echoRoute]);
 

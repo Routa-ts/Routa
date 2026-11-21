@@ -86,6 +86,14 @@ Routa owns these values:
   The logger you configured, and any module that imports it, stays without request identity,
   so concurrent requests never share it.
 
+A handler you add to the Hono app `createHonoApp` returns can return any `Response`. Routa
+writes its headers on a copy of a response it did not prepare, so a response your code reuses
+or one with immutable headers never carries another request's identity. A response the runtime
+cannot copy is the exception: the `Response` constructor accepts only statuses `200` to `599`,
+so a `101 Switching Protocols` upgrade response, such as the one `Deno.upgradeWebSocket()`
+returns, goes back unchanged, without `x-request-id` or the correlation echo.
+`http.response.prepared` still records it with status `101`.
+
 ## Status Codes Routa Produces
 
 | Status | Cause                                                                                 |
