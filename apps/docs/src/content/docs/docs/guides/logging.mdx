@@ -103,6 +103,13 @@ from step 1. The default sink writes one JSON line to the console:
 because names match whole, not as substrings. Your `customer` object still holds the
 real email.
 
+With the Pino sink from step 4, Pino writes the same sanitized event in its own format, with
+the data under `data` and the message as `msg`:
+
+```txt
+{"level":30,"time":1767225600000,"pid":4242,"hostname":"api-1","event":"billing.charged","data":{"service":"billing","customer":{"id":"cus_1","email":"[Redacted]"},"token":"[Redacted]","tokenCount":1},"msg":"Customer charged."}
+```
+
 ## Troubleshooting
 
 | Problem                                                                        | Fix                                                                                                                                                                                |

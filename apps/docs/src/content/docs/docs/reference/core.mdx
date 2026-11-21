@@ -1352,6 +1352,11 @@ them, and never changes your objects.
 | Values per event, bindings and data together | 1,000 | Later values become `[Truncated]`; `[Redacted]` and other markers count |
 | Characters per string, after escaping        | 4,096 | The string is cut to 4,096 characters ending in `[Truncated]`           |
 
+The limits bound what reaches the sink, not the work of reading your data: JavaScript lists every
+own key of an object before Routa keeps the first 100, so logging an object with a very large
+number of keys still takes time in proportion to its size. Log the fields you need from such a
+record instead of the whole record.
+
 Redaction matches names and paths only. It does not find a secret inside a message or under
 an unknown name, and it cannot see what a sink or a direct backend call adds.
 
