@@ -212,6 +212,8 @@ describe("response header declarations (types)", () => {
 				d: { status: 200, headers: z.object({ connection: z.string() }) },
 				// @ts-expect-error Routa owns set-cookie.
 				e: { status: 200, headers: z.object({ "set-cookie": z.string() }) },
+				// @ts-expect-error Routa owns x-request-id.
+				f: { status: 200, headers: z.object({ "x-request-id": z.string() }) },
 			},
 			run: () => ({ type: "a", headers: {} }) as never,
 		});
@@ -559,7 +561,7 @@ describe("response header ownership (runtime)", () => {
 		}
 	});
 
-	it("names the offending header in the logged failure, never its value", async () => {
+	it("logs the header failure without the header's name or value", async () => {
 		const events: RoutaLogEvent[] = [];
 
 		await appFor(
@@ -572,7 +574,8 @@ describe("response header ownership (runtime)", () => {
 		).request("/item");
 
 		const logged = JSON.stringify(events);
-		expect(logged).toContain("x-extra");
+		expect(events.find((event) => event.event === "http.error")?.data?.status).toBe(500);
+		expect(logged).not.toContain("x-extra");
 		expect(logged).not.toContain("secret-value");
 		expect(logged).not.toContain("secret-too");
 	});
@@ -752,6 +755,7 @@ describe("response header declarations at registration", () => {
 			"transfer-encoding",
 			"connection",
 			"set-cookie",
+			"x-request-id",
 		]) {
 			expect(register(z.object({ [name]: z.string() })), name).toThrow(
 				new RegExp(`"${name}".*owns`),

@@ -1,4 +1,4 @@
-import { markCreatedLogger } from "./logger-registry.js";
+import { markCreatedLogger, type RequestIdentityFields } from "./logger-registry.js";
 
 /** Routa's standard log levels, ordered from least to most severe. */
 export type RoutaLogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
@@ -131,8 +131,10 @@ export function createLogger(input: CreateLoggerOptions = {}): RoutaLogger {
 	/**
 	 * @param bindings - Sanitized bindings, which no caller can reach or change, or `undefined`
 	 *   when they could not be sanitized and every event must be discarded.
+	 * @param identity - The sanitized request identity fields among the bindings, which every
+	 *   event and child keeps whatever data or bindings it adds
 	 */
-	function buildLogger(bindings: RoutaLogData | undefined): RoutaLogger {
+	function buildLogger(bindings: RoutaLogData | undefined, identity: RoutaLogData): RoutaLogger {
 		/**
 		 * The one path every event takes to the sink, whichever method produced it. Nothing it
 		 * calls can throw to the caller, and it never waits for the sink.
@@ -153,7 +155,7 @@ export function createLogger(input: CreateLoggerOptions = {}): RoutaLogger {
 					throw new TypeError("The logger's bindings could not be sanitized.");
 				}
 
-				const fields = sanitizeMerged(bindings, raw.data ?? {}, paths);
+				const fields = keepIdentity(sanitizeMerged(bindings, raw.data ?? {}, paths), identity);
 				event = {
 					timestamp: sanitizeText(raw.timestamp),
 					level: raw.level,
@@ -211,12 +213,37 @@ export function createLogger(input: CreateLoggerOptions = {}): RoutaLogger {
 			error: (event, message, data) => emit("error", event, message, data),
 			fatal: (event, message, data) => emit("fatal", event, message, data),
 			silent: () => undefined,
-			child: (childBindings) => buildLogger(childOf(bindings, childBindings)),
+			child: (childBindings) =>
+				buildLogger(keepIdentity(childOf(bindings, childBindings), identity), identity),
 			bindings: () => (bindings ? structuredClone(bindings) : {}),
 			isLevelEnabled,
 		};
 
-		return markCreatedLogger(logger as RoutaLogger);
+		return markCreatedLogger(logger as RoutaLogger, (fields) =>
+			requestLogger(bindings, identity, fields),
+		);
+	}
+
+	/**
+	 * A child bound to request identity fields. Identity this logger already binds stays, so a
+	 * request logger's identity is never replaced.
+	 */
+	function requestLogger(
+		bindings: RoutaLogData | undefined,
+		identity: RoutaLogData,
+		fields: RequestIdentityFields,
+	): RoutaLogger {
+		const merged = childOf(bindings, fields);
+		const added = merged
+			? Object.fromEntries(
+					Object.keys(fields).flatMap((key) =>
+						Object.hasOwn(merged, key) ? [[key, merged[key]]] : [],
+					),
+				)
+			: {};
+		const kept = { ...added, ...identity };
+
+		return buildLogger(keepIdentity(merged, kept), kept);
 	}
 
 	function childOf(bindings: RoutaLogData | undefined, added: unknown): RoutaLogData | undefined {
@@ -231,7 +258,25 @@ export function createLogger(input: CreateLoggerOptions = {}): RoutaLogger {
 		}
 	}
 
-	return buildLogger({});
+	return buildLogger({}, {});
+}
+
+/**
+ * Writes the identity fields back over sanitized data, in place, so an event or child that names
+ * one of them never replaces its value. In place keeps each field where it was and keeps the
+ * binding keys a child remembers for the object.
+ */
+function keepIdentity<TFields extends RoutaLogData | undefined>(
+	fields: TFields,
+	identity: RoutaLogData,
+): TFields {
+	if (fields) {
+		for (const [key, value] of Object.entries(identity)) {
+			fields[key] = value;
+		}
+	}
+
+	return fields;
 }
 
 /**
@@ -253,7 +298,7 @@ function createDisabledLogger(): RoutaLogger {
 		bindings: () => ({}),
 		isLevelEnabled: () => false,
 	};
-	const logger = markCreatedLogger(methods as RoutaLogger);
+	const logger: RoutaLogger = markCreatedLogger(methods as RoutaLogger, () => logger);
 
 	return logger;
 }

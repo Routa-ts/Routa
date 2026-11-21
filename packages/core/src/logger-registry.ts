@@ -6,10 +6,51 @@
  */
 const createdKey = Symbol.for("@routa-ts/core/createLogger");
 
-/** Marks a logger as created by `createLogger` and freezes it, so its methods cannot be replaced. */
-export function markCreatedLogger<TLogger extends object>(logger: TLogger): TLogger {
+/**
+ * Where a created logger keeps the function that derives its request logger. A registered symbol,
+ * for the same reason as the brand: the CLI's copy of `@routa-ts/core` binds request identity to a
+ * logger the application's copy created.
+ */
+const requestLoggerKey = Symbol.for("@routa-ts/core/requestLogger");
+
+/** Request identity fields, which a request logger binds so no event or child can replace them. */
+export type RequestIdentityFields = Readonly<Record<string, string>>;
+
+/**
+ * Marks a logger as created by `createLogger` and freezes it, so its methods cannot be replaced.
+ *
+ * @param requestLogger - Derives the logger's request logger: a child whose identity fields no
+ *   event data or later child binding replaces
+ */
+export function markCreatedLogger<TLogger extends object>(
+	logger: TLogger,
+	requestLogger: (identity: RequestIdentityFields) => TLogger,
+): TLogger {
 	Object.defineProperty(logger, createdKey, { value: true });
+	Object.defineProperty(logger, requestLoggerKey, { value: requestLogger });
 	return Object.freeze(logger);
+}
+
+/**
+ * Derives request loggers from a logger `createLogger` created: each a child bound to one
+ * request's identity fields, which its events and later children cannot replace. A disabled
+ * logger's request logger is itself.
+ *
+ * @throws {TypeError} When the logger comes from a copy of `@routa-ts/core` that cannot bind request
+ *   identity
+ */
+export function requestLoggers<TLogger extends object>(
+	logger: TLogger,
+): (identity: RequestIdentityFields) => TLogger {
+	const derive = Object.getOwnPropertyDescriptor(logger, requestLoggerKey);
+
+	if (!derive || !("value" in derive) || typeof derive.value !== "function") {
+		throw new TypeError(
+			"The configured logger comes from a copy of @routa-ts/core that cannot bind request identity. Install one version of @routa-ts/core for the application and the routa CLI.",
+		);
+	}
+
+	return derive.value as (identity: RequestIdentityFields) => TLogger;
 }
 
 /**

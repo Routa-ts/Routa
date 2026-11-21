@@ -3,6 +3,7 @@ import type { CreateApplicationOptions, HonoRoute, RoutaApplication } from "./ho
 import type { RoutaConfig } from "./index.js";
 import { createLogger, type RoutaLogger } from "./logger.js";
 import { assertCreatedLogger } from "./logger-registry.js";
+import { correlationHeaderOf } from "./request-identity.js";
 import type { ApplicationServicesDeclaration } from "./services.js";
 
 /**
@@ -71,6 +72,8 @@ type MetadataModule = {
 	routaApplicationServices?: readonly string[];
 	routaAuthenticationSchemes?: readonly string[];
 	routaMultipleCredentials?: string;
+	/** The lowercase correlation header, generated only when `src/routa.ts` turns correlation on. */
+	routaCorrelationHeader?: string;
 };
 
 type Middleware = NonNullable<HonoRoute["contract"]["middleware"]>[number];
@@ -122,9 +125,13 @@ export async function buildProjectApplication(
 		replacement: replacements.services,
 	});
 	assertAuthenticationMetadata(config.authentication, metadata);
+	// Read once, so the correlation checked here is the one the application uses.
+	const correlation = config.correlation;
+	assertCorrelationMetadata(correlation, metadata);
 	const application = await createApplication(routes, {
 		runtimeMode: options.runtimeMode,
 		...(config.authentication && { authentication: config.authentication }),
+		...(correlation !== undefined && { correlation }),
 		...(logger && { logger }),
 		...(config.lifecycleHeaders !== undefined && { lifecycleHeaders: config.lifecycleHeaders }),
 		...(config.responseValidation && { responseValidation: config.responseValidation }),
@@ -179,6 +186,36 @@ function assertAuthenticationMetadata(
 			`src/routa.ts configures multipleCredentials ${JSON.stringify(runtime.multipleCredentials)}, but .routa/routes.gen.ts declares ${JSON.stringify(metadata.routaMultipleCredentials)}. Run routa generate.`,
 		);
 	}
+}
+
+/**
+ * Checks that `src/routa.ts` reads correlation from the header `routa generate` read, so generated
+ * OpenAPI documents the header the running application echoes.
+ *
+ * @throws When the correlation config is invalid, or it and the generated metadata disagree
+ */
+function assertCorrelationMetadata(
+	correlation: RoutaConfig["correlation"],
+	metadata: MetadataModule,
+): void {
+	const configured = correlationHeaderOf(correlation);
+	const generated = metadata.routaCorrelationHeader;
+
+	if (configured === generated) {
+		return;
+	}
+
+	if (configured === undefined) {
+		throw new Error(
+			`.routa/routes.gen.ts declares correlation header ${generated}, but src/routa.ts configures no correlation. Run routa generate.`,
+		);
+	}
+
+	throw new Error(
+		generated === undefined
+			? `src/routa.ts reads correlation from ${configured}, but .routa/routes.gen.ts declares no correlation header. Write correlation as a literal in the createRouta object, then run routa generate.`
+			: `src/routa.ts reads correlation from ${configured}, but .routa/routes.gen.ts declares ${generated}. Run routa generate.`,
+	);
 }
 
 /**

@@ -480,9 +480,54 @@ describe("reserved ctx.services (types)", () => {
 					next({ user: "u1", services: { db: "fake" } }),
 			});
 
+			for (const reserved of [
+				createMiddleware({
+					provides: {
+						// @ts-expect-error ctx.requestId is reserved for the request identity.
+						requestId: z.string(),
+					},
+				}),
+				createMiddleware({
+					provides: {
+						// @ts-expect-error ctx.correlationId is reserved for the correlation ID.
+						correlationId: z.string(),
+					},
+				}),
+				createMiddleware({
+					provides: {
+						// @ts-expect-error ctx.logger is reserved for the request logger.
+						logger: z.string(),
+					},
+				}),
+				createMiddleware({
+					run: ({ next }) =>
+						// @ts-expect-error A next() payload cannot claim the request identity.
+						next({ requestId: "r1" }),
+				}),
+				createMiddleware({
+					provides: { user: z.string() },
+					run: ({ next }) =>
+						// @ts-expect-error Nor beside provided context.
+						next({ user: "u1", correlationId: "c1" }),
+				}),
+			]) {
+				void reserved;
+			}
+
+			// Middleware reads the identity without requiring it, and cannot assign it.
+			createMiddleware({
+				run: ({ ctx, next }) => {
+					expectType<string>(ctx.requestId);
+					expectType<string | undefined>(ctx.correlationId);
+					// @ts-expect-error The request identity is readonly.
+					ctx.requestId = "forged";
+					return next();
+				},
+			});
+
 			// Ordinary middleware keeps its inference.
 			createMiddleware({ run: ({ next }) => next() });
-			createMiddleware({ run: ({ next }) => next({ requestId: "r1" }) });
+			createMiddleware({ run: ({ next }) => next({ locale: "en" }) });
 			createMiddleware({
 				provides: { user: z.string() },
 				run: ({ next }) => next({ user: "u1" }),
@@ -530,7 +575,7 @@ describe("middleware service requirements (types)", () => {
 				run: ({ ctx, next }) => {
 					void ctx.tenant;
 					// @ts-expect-error Only the required context is visible, as with the direct form.
-					void ctx.requestId;
+					void ctx.locale;
 					return next();
 				},
 			});
@@ -539,7 +584,7 @@ describe("middleware service requirements (types)", () => {
 				run: ({ ctx, next }) => {
 					void ctx.tenant;
 					// @ts-expect-error Only the required context is visible.
-					void ctx.requestId;
+					void ctx.locale;
 					return next();
 				},
 			});
@@ -649,7 +694,7 @@ describe("reserved ctx.services (runtime)", () => {
 					method: "get",
 					path: "/",
 					contract: ok([]),
-					createContext: () => Object.freeze({ requestId: "req-1" }),
+					createContext: () => Object.freeze({ tenant: "acme" }),
 				},
 			],
 			withServices,

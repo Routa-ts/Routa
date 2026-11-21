@@ -74,6 +74,14 @@ const passThrough = (hooks: { before?: () => void; after?: () => void }) => {
 	return middleware as AnyMiddlewareContract;
 };
 
+/** What `http.error` logs for a failed GET /orders: its identity and route, never the error. */
+const failedOrders = {
+	requestId: expect.any(String),
+	method: "GET",
+	route: "/orders",
+	status: 500,
+};
+
 const request = (app: { fetch: (request: Request) => Promise<Response> }, method = "GET") =>
 	app.fetch(new Request("http://localhost/orders", { method }));
 
@@ -345,9 +353,8 @@ describe("request-scoped service failures and cleanup", () => {
 		expect(response.status).toBe(500);
 		expect(body).not.toContain("database unavailable");
 		expect(ran).toEqual(["route-file middleware", "release partial", "release route file"]);
-		expect(events.find((event) => event.event === "http.error")?.data).toMatchObject({
-			error: "database unavailable",
-		});
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedOrders);
+		expect(JSON.stringify(events)).not.toContain("database unavailable");
 
 		// No retry: the next request runs the factory again from scratch.
 		await request(app);
@@ -380,10 +387,8 @@ describe("request-scoped service failures and cleanup", () => {
 		expect(response.status).toBe(500);
 		expect(body).not.toContain("secret config missing");
 		expect(JSON.parse(body)).toMatchObject({ title: "Internal Server Error" });
-		const logged = events.find((event) => event.event === "http.error")?.data;
-		expect(logged).toMatchObject({ status: 500, name: "ZodError" });
-		expect(logged?.error).toContain("secret config missing");
-		expect(logged?.stack).toEqual(expect.any(String));
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedOrders);
+		expect(JSON.stringify(events)).not.toContain("secret config missing");
 		await app.dispose();
 	});
 
@@ -481,10 +486,7 @@ describe("request-scoped service failures and cleanup", () => {
 
 		expect((await request(app)).status).toBe(500);
 		expect(cleaned).toBe(1);
-		expect(events.find((event) => event.event === "http.error")?.data).toMatchObject({
-			error:
-				'The method services factory for GET /orders must return exactly the declared services ("unit"): unexpected "extra".',
-		});
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedOrders);
 		await app.dispose();
 	});
 
@@ -510,9 +512,8 @@ describe("request-scoped service failures and cleanup", () => {
 		);
 
 		expect((await request(app)).status).toBe(500);
-		expect(events.map((event) => [event.event, event.data?.error])).toEqual(
-			expect.arrayContaining([["http.error", "construction failed"]]),
-		);
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedOrders);
+		expect(JSON.stringify(events)).not.toContain("construction failed");
 		expect(events.find((event) => event.event === "services.cleanup_failed")?.data).toMatchObject({
 			failures: [{ error: "cleanup failed" }],
 		});
@@ -701,13 +702,7 @@ describe("middleware service requirements (runtime)", () => {
 		expect(counter.runs).toBe(0);
 		// The failure skips the later middleware, the later factory, and the handler.
 		expect(ran).toEqual(["earlier"]);
-		expect(events.find((event) => event.event === "http.error")?.data).toMatchObject({
-			method: "GET",
-			path: "/orders",
-			status: 500,
-			error:
-				'Middleware withCache on GET /orders requires service "cache", but ctx.services does not provide it where the middleware runs. Declare "cache" in a services scope that runs before the middleware.',
-		});
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedOrders);
 		await app.dispose();
 	});
 
@@ -736,9 +731,10 @@ describe("middleware service requirements (runtime)", () => {
 
 		expect(response.status).toBe(500);
 		expect(runs).toBe(0);
-		expect(events.find((event) => event.event === "http.error")?.data?.error).toMatch(
-			/^Middleware middleware\[0\] on POST \/orders requires service "cache"/,
-		);
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual({
+			...failedOrders,
+			method: "POST",
+		});
 	});
 });
 

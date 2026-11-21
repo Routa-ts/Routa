@@ -1,0 +1,133 @@
+import type { RoutaLogger } from "./logger.js";
+import { reservedHeaders } from "./response-headers.js";
+
+/** The response header that carries Routa's generated request identity. */
+export const requestIdHeader = "x-request-id";
+
+/** The correlation header `correlation: true` reads and echoes. */
+export const defaultCorrelationHeader = "x-correlation-id";
+
+/** The `route` that framework events log for a request no route path matched. */
+export const unmatchedRoute = "[Unmatched]";
+
+/** One request's identity: the ID Routa generated, and the caller's correlation ID if accepted. */
+export type RequestIdentity = {
+	readonly requestId: string;
+	readonly correlationId?: string;
+};
+
+/** What Routa keeps for one request: its identity and its request logger. */
+export type RequestState = RequestIdentity & {
+	/** The configured logger's child, bound to the identity so no event or child replaces it. */
+	readonly logger: RoutaLogger;
+};
+
+/** One value of 1 to 128 ASCII letters, digits, dots, underscores, and hyphens. */
+const correlationValue = /^[A-Za-z0-9._-]{1,128}$/;
+
+/** RFC 9110 `token`, the grammar of header names. */
+const headerName = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+
+const credentialHeaders: ReadonlySet<string> = new Set([
+	"authorization",
+	"proxy-authorization",
+	"cookie",
+	"set-cookie",
+]);
+
+const routaHeaders: ReadonlySet<string> = new Set(reservedHeaders);
+
+/**
+ * The method a framework event logs: one of the standard methods as the request spelled it, or
+ * `_OTHER`, so a client cannot fill logs with arbitrary method names.
+ */
+const loggedMethods: ReadonlySet<string> = new Set([
+	"GET",
+	"HEAD",
+	"POST",
+	"PUT",
+	"PATCH",
+	"DELETE",
+	"OPTIONS",
+	"CONNECT",
+	"TRACE",
+]);
+
+export function loggedMethod(method: string): string {
+	return loggedMethods.has(method) ? method : "_OTHER";
+}
+
+/**
+ * Reads the `correlation` option: the lowercase header name Routa reads and echoes, or `undefined`
+ * when correlation is off.
+ *
+ * @throws {TypeError} When the option has the wrong shape, the header name is invalid, or it names
+ *   x-request-id, a header Routa owns, or a credential header
+ */
+export function correlationHeaderOf(option: unknown): string | undefined {
+	if (option === undefined || option === false) {
+		return undefined;
+	}
+
+	if (option === true) {
+		return defaultCorrelationHeader;
+	}
+
+	const header =
+		typeof option === "object"
+		&& option !== null
+		&& !Array.isArray(option)
+		&& Object.keys(option).every((key) => key === "header")
+			? (option as { header?: unknown }).header
+			: undefined;
+
+	if (typeof header !== "string") {
+		throw new TypeError(
+			'correlation must be true, false, or { header: "x-correlation-id" } with the header Routa reads and echoes.',
+		);
+	}
+
+	const problem = correlationHeaderProblem(header);
+
+	if (problem) {
+		throw new TypeError(`The correlation header ${problem}`);
+	}
+
+	return header.toLowerCase();
+}
+
+/**
+ * Why a correlation header name cannot be used, or `undefined` when it can. Names compare
+ * case-insensitively.
+ */
+export function correlationHeaderProblem(header: string): string | undefined {
+	const name = header.toLowerCase();
+
+	if (!headerName.test(header)) {
+		return `${JSON.stringify(header)} is not a valid header name. Use letters, digits, and ! # $ % & ' * + - . ^ _ \` | ~.`;
+	}
+
+	if (name === requestIdHeader) {
+		return `${JSON.stringify(header)} names x-request-id, which carries the request identity Routa generates. Choose another header, such as x-correlation-id.`;
+	}
+
+	if (credentialHeaders.has(name)) {
+		return `${JSON.stringify(header)} names a credential header. A correlation ID is not a credential, so choose another header, such as x-correlation-id.`;
+	}
+
+	if (routaHeaders.has(name)) {
+		return `${JSON.stringify(header)} names ${name}, which Routa owns on every response. Choose another header, such as x-correlation-id.`;
+	}
+
+	return undefined;
+}
+
+/**
+ * The caller's correlation ID: the header's one value when it matches the grammar. An absent,
+ * empty, repeated, or otherwise invalid value is ignored; repeated fields arrive joined by a comma,
+ * which the grammar excludes.
+ */
+export function acceptedCorrelation(headers: Headers, header: string): string | undefined {
+	const value = headers.get(header);
+	return value !== null && correlationValue.test(value) ? value : undefined;
+}

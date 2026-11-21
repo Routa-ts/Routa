@@ -1,8 +1,6 @@
 import { ZodError, type z } from "zod";
 import {
-	AuthenticationContractError,
 	type AuthContext,
-	AuthenticatorError,
 	authenticationFailure,
 	resolveAuthentication,
 	type RouteAuthentication,
@@ -10,6 +8,7 @@ import {
 import type { AnyRouteContract, MiddlewareContract, RouteInput } from "./index.js";
 import { type HandlerOutputIssue, InvalidHandlerOutputError } from "./handler-output-error.js";
 import type { RoutaLogger } from "./logger.js";
+import { loggedMethod, type RequestIdentity, type RequestState } from "./request-identity.js";
 import {
 	type CookieEntry,
 	planCookies,
@@ -81,10 +80,8 @@ type RuntimeMiddlewareContract = Omit<MiddlewareContract, "requiresServices"> & 
 };
 
 type RequestExecutorOptions = {
-	logger: RoutaLogger;
 	validateResponses: boolean;
 	lifecycleHeaders?: boolean | undefined;
-	requestLogger?: RoutaLogger | undefined;
 	createContext?: (() => unknown | Promise<unknown>) | undefined;
 	/** The application instance's services, exposed as `ctx.services`. */
 	services?: ServiceMapping | undefined;
@@ -99,6 +96,8 @@ type RequestExecutorOptions = {
 	requestServices?: readonly RequestScope[] | undefined;
 	/** Names the route in messages, such as `GET /orders`. */
 	route?: string | undefined;
+	/** The route's path pattern, which framework events log instead of the request's path. */
+	path?: string | undefined;
 	/** Names each middleware in messages, such as `withCache`, in chain order. */
 	middlewareNames?: readonly string[] | undefined;
 };
@@ -115,16 +114,23 @@ type Stage = {
 	readonly services: ServiceMapping | undefined;
 	/** The request's `ctx.auth`, the same in every stage; absent without authentication. */
 	readonly auth?: AuthContext | undefined;
+	/** The request's identity, the same in every stage. */
+	readonly identity: RequestIdentity;
 };
 
-type RequestExecutor = (request: Request, params: Record<string, string>) => Promise<Response>;
+type RequestExecutor = (
+	request: Request,
+	params: Record<string, string>,
+	state: RequestState,
+) => Promise<Response>;
 
 /**
  * Prepares a route's execution pipeline independently of Hono registration.
  *
  * Request-scoped services are released after the response is prepared and the chain has unwound:
  * method services first, then route-file services, each in reverse registration order. Cleanup
- * failures are logged and never replace the response.
+ * failures are logged and never replace the response. Everything the request logs, its handler's
+ * and services' events included, goes through the request logger, which carries its identity.
  */
 export function createRequestExecutor(
 	contract: RuntimeRouteContract,
@@ -133,6 +139,7 @@ export function createRequestExecutor(
 	const execute = async (
 		request: Request,
 		params: Record<string, string>,
+		state: RequestState,
 		constructed: CleanupScope[],
 	): Promise<Response> => {
 		const lifecycle = lifecycleHeaders(contract.deprecation, options.lifecycleHeaders);
@@ -143,7 +150,7 @@ export function createRequestExecutor(
 		const resolved =
 			options.authentication
 			&& (await resolveAuthentication(options.authentication, request, {
-				logger: options.logger,
+				logger: state.logger,
 				services: options.services,
 			}));
 
@@ -167,7 +174,12 @@ export function createRequestExecutor(
 		assertNoServices(context, "createContext() returned");
 		// A copy, so `ctx.services` can be defined even when createContext returns a frozen object.
 		const ctx = { ...context };
-		const first: Stage = { ctx, services: options.services, auth: resolved?.auth };
+		const first: Stage = {
+			ctx,
+			services: options.services,
+			auth: resolved?.auth,
+			identity: identityOf(state),
+		};
 
 		exposeFramework(ctx, first);
 
@@ -176,7 +188,7 @@ export function createRequestExecutor(
 			input,
 			first,
 			inputReader,
-			options.logger,
+			state.logger,
 			{ scopes: options.requestServices ?? [], constructed },
 			(index) =>
 				`${options.middlewareNames?.[index] || `middleware[${index}]`}${options.route ? ` on ${options.route}` : ""}`,
@@ -184,17 +196,17 @@ export function createRequestExecutor(
 		);
 	};
 
-	return async (request, params) => {
+	return async (request, params, state) => {
 		const constructed: CleanupScope[] = [];
 		let response: Response;
 
 		try {
-			response = await execute(request, params, constructed);
+			response = await execute(request, params, state, constructed);
 		} catch (error) {
 			response = errorResponse(error);
 
 			try {
-				logRequestError(options.requestLogger, request, error, response);
+				logRequestError(state.logger, request, options.path, error, response);
 			} catch {
 				// A failing logger must not skip request cleanup or replace the error response.
 			}
@@ -203,7 +215,7 @@ export function createRequestExecutor(
 		for (const scope of constructed.reverse()) {
 			await scope
 				.release()
-				.catch((cleanupError: unknown) => logCleanupFailure(options.logger, cleanupError));
+				.catch((cleanupError: unknown) => logCleanupFailure(state.logger, cleanupError));
 		}
 
 		return response;
@@ -254,7 +266,7 @@ async function runWithMiddleware(
 	async function startStage(scope: RequestScope, stage: Stage): Promise<Stage> {
 		assertServicesKept(stage);
 		const earlier = withoutFramework(stage);
-		const factoryCtx = { ...earlier, logger };
+		const factoryCtx: Record<string, unknown> = { ...earlier, logger };
 		exposeFramework(factoryCtx, stage);
 		Object.freeze(factoryCtx);
 
@@ -264,14 +276,18 @@ async function runWithMiddleware(
 		requestServices.constructed.push(cleanup);
 		let mapping: ServiceMapping;
 		try {
-			const value = await scope.factory({ ctx: factoryCtx, onCleanup: cleanup.onCleanup });
+			const value = await scope.factory({
+				// exposeFramework added the identity the context type requires.
+				ctx: factoryCtx as Parameters<RequestScope["factory"]>[0]["ctx"],
+				onCleanup: cleanup.onCleanup,
+			});
 			mapping = exactServices(value, scope.names, scope.label);
 		} catch (error) {
 			throw new RequestServicesError(error);
 		}
 
 		const services = Object.freeze({ ...stage.services, ...mapping });
-		const next: Stage = { ctx: earlier, services, auth: stage.auth };
+		const next: Stage = { ctx: earlier, services, auth: stage.auth, identity: stage.identity };
 		exposeFramework(earlier, next);
 		return next;
 	}
@@ -342,7 +358,7 @@ async function runWithMiddleware(
 				}
 
 				nextCalled = true;
-				assertNoServices(providedCtx, "Middleware passed next()");
+				assertNoReservedContext(providedCtx, "Middleware passed next()");
 				const provided = parseMiddlewareProvides(item.provides, providedCtx);
 				for (const stage of stages) {
 					Object.assign(stage.ctx, provided);
@@ -383,20 +399,25 @@ async function runWithMiddleware(
  * Fails when middleware wrote `ctx.services`. Without services the key has no guard, so a write
  * that bypassed the types, before or after `next()`, is caught here.
  */
-function assertServicesKept(stage: Stage): void {
+function assertServicesKept(stage: Pick<Stage, "ctx" | "services">): void {
 	if (servicesChanged(stage.ctx, stage.services)) {
 		assertNoServices(stage.ctx, "Middleware wrote");
 	}
 }
 
 /**
- * Copies a stage's context without `services`, and without `auth` when Routa owns it, which each
- * stage exposes for itself. Without authentication, `auth` is ordinary middleware context.
+ * Copies a stage's context without the values each stage exposes for itself: `services`, the
+ * request identity, and `auth` when Routa owns it. Without authentication, `auth` is ordinary
+ * middleware context.
  */
 function withoutFramework(stage: Stage): Record<string, unknown> {
 	return Object.fromEntries(
 		Object.entries(stage.ctx).filter(
-			([key]) => key !== "services" && (key !== "auth" || stage.auth === undefined),
+			([key]) =>
+				key !== "services"
+				&& key !== "requestId"
+				&& key !== "correlationId"
+				&& (key !== "auth" || stage.auth === undefined),
 		),
 	);
 }
@@ -544,10 +565,34 @@ function assertMiddlewareServices(
 	}
 }
 
+/** What Routa reserves each context key for, which middleware cannot pass to `next()`. */
+const reservedContext: Readonly<Record<string, string>> = {
+	services: "injected services",
+	requestId: "request identity",
+	correlationId: "request identity",
+	logger: "the request logger",
+};
+
+/**
+ * Fails when a `next()` payload claims a context key Routa reserves.
+ *
+ * @param value - The `next()` payload
+ * @param source - Who supplied the value, for the message
+ */
+function assertNoReservedContext(value: unknown, source: string): void {
+	for (const [key, owner] of Object.entries(reservedContext)) {
+		if (typeof value === "object" && value !== null && Object.hasOwn(value, key)) {
+			throw new InvalidHandlerOutputError(
+				`${source} ctx.${key}, which Routa reserves for ${owner}. Rename the context key.`,
+			);
+		}
+	}
+}
+
 /**
  * Fails when a context value claims `services`, which Routa reserves for injected services.
  *
- * @param value - The context object, or a `next()` payload
+ * @param value - The context object
  * @param source - Who supplied the value, for the message
  */
 function assertNoServices(value: unknown, source: string): void {
@@ -559,16 +604,19 @@ function assertNoServices(value: unknown, source: string): void {
 }
 
 /**
- * Exposes a stage's services and the request's authentication as readonly `ctx.services` and
- * `ctx.auth`, which cannot be reassigned or deleted. Without them the keys stay absent.
+ * Exposes a stage's services, the request's authentication, and its identity as readonly
+ * `ctx.services`, `ctx.auth`, `ctx.requestId`, and `ctx.correlationId`, which cannot be reassigned
+ * or deleted. Without a value the key stays absent.
  */
 function exposeFramework(
 	ctx: Record<string, unknown>,
-	stage: Pick<Stage, "services" | "auth">,
+	stage: Pick<Stage, "services" | "auth" | "identity">,
 ): void {
 	for (const [key, value] of [
 		["services", stage.services],
 		["auth", stage.auth],
+		["requestId", stage.identity.requestId],
+		["correlationId", stage.identity.correlationId],
 	] as const) {
 		if (value) {
 			Object.defineProperty(ctx, key, {
@@ -1150,71 +1198,31 @@ function errorResponse(error: unknown): Response {
 }
 
 /**
- * Logs failed server requests.
+ * Logs a failed server request through its request logger, so the event carries the request's
+ * identity. It holds the method, the route pattern, the status, and for invalid handler output the
+ * issue codes and paths Routa found. It never holds the request's path or any error's message,
+ * name, or stack, which may carry credentials or personal data.
  *
- * @param request - The incoming request.
- * @param error - The error associated with the failure.
- * @param response - The response returned for the request.
+ * @param path - The route's path pattern, when the executor knows it
+ * @param response - The response prepared for the request
  */
 function logRequestError(
-	logger: RoutaLogger | undefined,
+	logger: RoutaLogger,
 	request: Request,
+	path: string | undefined,
 	error: unknown,
 	response: Response,
 ): void {
-	if (!logger || response.status < 500) {
+	if (response.status < 500) {
 		return;
 	}
 
-	const url = new URL(request.url);
-	const data = {
-		method: request.method,
-		path: url.pathname,
+	logger.error("http.error", "Request failed.", {
+		method: loggedMethod(request.method),
+		...(path !== undefined && { route: path }),
 		status: response.status,
-		...errorLogData(error),
-	};
-
-	logger.error("http.error", "Request failed.", data);
-}
-
-/**
- * Builds structured log data for an error value.
- *
- * @param error - The error value to describe
- * @returns An object containing error details, or a stringified error value for non-`Error` inputs
- */
-function errorLogData(error: unknown): Record<string, unknown> {
-	if (error instanceof RequestServicesError) {
-		return errorLogData(error.cause);
-	}
-
-	// Never the thrown value's message or stack: a provider error may carry the credential.
-	if (error instanceof AuthenticatorError) {
-		return { error: error.message, name: error.name, scheme: error.scheme };
-	}
-
-	if (error instanceof AuthenticationContractError) {
-		return {
-			error: error.message,
-			name: error.name,
-			...(error.issues && { issues: error.issues }),
-		};
-	}
-
-	if (error instanceof Error) {
-		return {
-			error: error.message,
-			name: error.name,
-			stack: error.stack,
-			...(error instanceof InvalidHandlerOutputError && error.issues
-				? { issues: error.issues }
-				: {}),
-		};
-	}
-
-	return {
-		error: String(error),
-	};
+		...(error instanceof InvalidHandlerOutputError && error.issues && { issues: error.issues }),
+	});
 }
 
 class InvalidJsonBodyError extends Error {}
@@ -1224,10 +1232,17 @@ class UnsupportedMediaTypeError extends Error {}
 /**
  * A request services factory failed. `errorResponse` maps it to the generic `500` problem whatever
  * the factory threw, so a `ZodError` or similar never reads as a client error or reaches the client.
- * The original error is logged.
  */
 class RequestServicesError extends Error {
 	constructor(cause: unknown) {
 		super("Request services construction failed.", { cause });
 	}
+}
+
+/** The identity fields of a request's state, without its logger. */
+function identityOf(state: RequestState): RequestIdentity {
+	return {
+		requestId: state.requestId,
+		...(state.correlationId !== undefined && { correlationId: state.correlationId }),
+	};
 }

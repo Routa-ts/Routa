@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import {
 	isAuthenticationGuard,
 	rejectsAmbiguousCredentials,
@@ -9,11 +9,12 @@ import {
 import type {
 	AnyRouteContract,
 	AuthenticationConfig,
+	CorrelationConfig,
 	HttpMethod,
 	ResponseValidation,
 } from "./index.js";
 import { createLogger, type RoutaLogger } from "./logger.js";
-import { assertCreatedLogger } from "./logger-registry.js";
+import { assertCreatedLogger, requestLoggers } from "./logger-registry.js";
 import {
 	createRequestExecutor,
 	isBodylessStatus,
@@ -26,8 +27,20 @@ import {
 	type ProjectApplication,
 	type ProjectModuleLoader,
 } from "./project.js";
+import {
+	acceptedCorrelation,
+	correlationHeaderOf,
+	loggedMethod,
+	requestIdHeader,
+	type RequestState,
+	unmatchedRoute,
+} from "./request-identity.js";
 import { cookieDeclarationProblem, cookieScopeWarnings } from "./response-cookies.js";
-import { headerDeclarationProblem, lifecycleOwnedHeaders } from "./response-headers.js";
+import {
+	headerDeclarationProblem,
+	lifecycleOwnedHeaders,
+	type OwnedHeaders,
+} from "./response-headers.js";
 import {
 	type ApplicationServicesDeclaration,
 	constructServices,
@@ -83,6 +96,8 @@ export type CreateHonoAppOptions = {
 	 * credential before negotiation, input, and middleware, and `requireAuth` guards enforce it.
 	 */
 	authentication?: AuthenticationConfig;
+	/** The `correlation` from `createRouta`: which request header carries a correlation ID. */
+	correlation?: CorrelationConfig;
 };
 
 export type CreateApplicationOptions = CreateHonoAppOptions & {
@@ -227,26 +242,12 @@ function honoApp(
 	const methodsByPath = new Map<string, Set<string>>();
 	const routeLogger = requestLogger ?? createLogger({ enabled: false });
 	const validateResponses = shouldValidateResponses(options);
+	const correlationHeader = correlationHeaderOf(options.correlation);
 	const authentication =
 		options.authentication === undefined
 			? undefined
 			: runtimeAuthentication(options.authentication);
-
-	if (requestLogger) {
-		app.use("*", async (context, next) => {
-			const startedAt = performance.now();
-
-			await next();
-
-			const url = new URL(context.req.raw.url);
-			requestLogger.info("http.request", "Request completed.", {
-				method: context.req.raw.method,
-				path: url.pathname,
-				status: context.res.status,
-				durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
-			});
-		});
-	}
+	const requests = identifyRequests(app, routeLogger, correlationHeader);
 
 	const registeredRoutes = new Set<string>();
 
@@ -295,6 +296,7 @@ function honoApp(
 			route.path,
 			route.method,
 			options.lifecycleHeaders,
+			correlationHeader,
 			routeLogger,
 		);
 		assertUniqueOutcomeNames(contract, route.path, method, prepared.authentication);
@@ -307,16 +309,15 @@ function honoApp(
 
 		const honoMethod = route.method === "head" ? "GET" : method;
 		const executeRoute = createRequestExecutor(contract, {
-			logger: routeLogger,
 			validateResponses,
 			lifecycleHeaders: options.lifecycleHeaders,
-			requestLogger,
 			createContext: route.createContext,
 			services,
 			authentication: prepared.authentication,
 			head: method === "HEAD",
 			requestServices: requestScopes(route.services, routeKey),
 			route: routeKey,
+			path: route.path,
 			middlewareNames: route.middlewareNames,
 		});
 
@@ -325,7 +326,11 @@ function honoApp(
 				return await next();
 			}
 
-			return executeRoute(context.req.raw, context.req.param());
+			return executeRoute(
+				context.req.raw,
+				context.req.param(),
+				requests.matched(context, route.path),
+			);
 		});
 	}
 
@@ -340,13 +345,15 @@ function honoApp(
 		const allow = Array.from(allowedMethods).sort().join(", ");
 
 		app.on("OPTIONS", path, (context) => {
+			requests.matched(context, path);
 			return new Response(null, {
 				status: 204,
 				headers: automaticOptionsHeaders(context.req.raw, allow),
 			});
 		});
 
-		app.all(path, () => {
+		app.all(path, (context) => {
+			requests.matched(context, path);
 			return new Response("Method Not Allowed", {
 				status: 405,
 				headers: {
@@ -357,6 +364,77 @@ function honoApp(
 	}
 
 	return app;
+}
+
+/**
+ * Gives every request that reaches the app its identity, before anything else runs: a generated
+ * UUID, the caller's correlation ID when the configured header carries a valid one, and a request
+ * logger bound to both. Once the response is prepared, it sets `x-request-id` and the correlation
+ * header last, over any value something else wrote, and logs `http.response.prepared`.
+ *
+ * The event says the response was prepared, not that it was sent or received: Routa logs it
+ * before the body is transmitted. A request whose handling throws past Hono logs nothing.
+ *
+ * @returns Records the route pattern that matched a request and returns the request's state
+ */
+function identifyRequests(
+	app: Hono,
+	logger: RoutaLogger,
+	correlationHeader: string | undefined,
+): { matched: (context: Context, path: string) => RequestState } {
+	const deriveLogger = requestLoggers(logger);
+	const requests = new WeakMap<Context, RequestState & { route?: string }>();
+
+	app.use("*", async (context, next) => {
+		const startedAt = performance.now();
+		const requestId = crypto.randomUUID();
+		const correlationId =
+			correlationHeader === undefined
+				? undefined
+				: acceptedCorrelation(context.req.raw.headers, correlationHeader);
+		const identity = {
+			requestId,
+			...(correlationId !== undefined && { correlationId }),
+		};
+		const state: RequestState & { route?: string } = {
+			...identity,
+			logger: deriveLogger(identity),
+		};
+		requests.set(context, state);
+
+		await next();
+
+		const { headers, status } = context.res;
+		headers.set(requestIdHeader, requestId);
+
+		if (correlationHeader !== undefined) {
+			if (correlationId === undefined) {
+				headers.delete(correlationHeader);
+			} else {
+				headers.set(correlationHeader, correlationId);
+			}
+		}
+
+		state.logger.info("http.response.prepared", "Response prepared.", {
+			method: loggedMethod(context.req.raw.method),
+			route: state.route ?? unmatchedRoute,
+			status,
+			durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
+		});
+	});
+
+	return {
+		matched: (context, path) => {
+			const state = requests.get(context);
+
+			if (!state) {
+				throw new Error("Routa received a request its identity middleware did not see.");
+			}
+
+			state.route = path;
+			return state;
+		},
+	};
 }
 
 /**
@@ -396,13 +474,17 @@ function assertOutcomeDeclarations(
 	path: string,
 	method: HttpMethod,
 	lifecycleHeaders: boolean | undefined,
+	correlationHeader: string | undefined,
 	logger: RoutaLogger,
 ): void {
 	const label = `${method.toUpperCase()} ${path}`;
-	const lifecycleOwned = lifecycleOwnedHeaders(contract.deprecation, lifecycleHeaders);
+	const owned = {
+		lifecycle: lifecycleOwnedHeaders(contract.deprecation, lifecycleHeaders),
+		correlation: correlationHeader,
+	};
 
 	for (const [name, outcome] of Object.entries(contract.responses)) {
-		const problem = outcomeProblem(outcome, method, lifecycleOwned);
+		const problem = outcomeProblem(outcome, method, owned);
 
 		if (problem) {
 			throw new Error(`Outcome "${name}" on ${label} ${problem}`);
@@ -415,7 +497,7 @@ function assertOutcomeDeclarations(
 		for (const [name, outcome] of Object.entries(item.rejects ?? {}) as Array<
 			[string, { status: number; schema?: unknown; headers?: unknown; cookies?: unknown }]
 		>) {
-			const problem = outcomeProblem(outcome, method, lifecycleOwned);
+			const problem = outcomeProblem(outcome, method, owned);
 
 			if (problem) {
 				throw new Error(`Middleware reject "${name}" on ${label} ${problem}`);
@@ -440,7 +522,7 @@ function warnCookieScopes(
 function outcomeProblem(
 	outcome: { status: number; schema?: unknown; headers?: unknown; cookies?: unknown },
 	method: HttpMethod | undefined,
-	lifecycleOwned: ReadonlySet<string>,
+	owned: OwnedHeaders,
 ): string | undefined {
 	const { status } = outcome;
 
@@ -461,7 +543,7 @@ function outcomeProblem(
 	}
 
 	if (outcome.headers !== undefined) {
-		const problem = headerDeclarationProblem(outcome.headers, lifecycleOwned);
+		const problem = headerDeclarationProblem(outcome.headers, owned);
 
 		if (problem) {
 			return problem;
@@ -475,10 +557,18 @@ function outcomeProblem(
 	return undefined;
 }
 
+/** What Routa reserves each context key for, which no middleware can provide. */
+const reservedProvides: Readonly<Record<string, string>> = {
+	services: "injected services",
+	requestId: "request identity",
+	correlationId: "request identity",
+	logger: "the request logger",
+};
+
 /**
- * Rejects middleware that provides `ctx.services`, which Routa reserves for injected services, or
- * `ctx.auth` when authentication is configured. TypeScript and `routa check` report the same
- * rules; this covers contracts typed through `any`.
+ * Rejects middleware that provides `ctx.services`, `ctx.requestId`, `ctx.correlationId`, or
+ * `ctx.logger`, which Routa reserves, or `ctx.auth` when authentication is configured. TypeScript
+ * and `routa check` report the same rules; this covers contracts typed through `any`.
  */
 function assertReservedContext(
 	contract: RuntimeRouteContract,
@@ -486,10 +576,12 @@ function assertReservedContext(
 	authenticated: boolean,
 ): void {
 	for (const [index, item] of (contract.middleware ?? []).entries()) {
-		if (item.provides && Object.hasOwn(item.provides, "services")) {
-			throw new Error(
-				`middleware[${index}] on ${label} provides ctx.services, which Routa reserves for injected services. Rename the provided key.`,
-			);
+		for (const [key, owner] of Object.entries(reservedProvides)) {
+			if (item.provides && Object.hasOwn(item.provides, key)) {
+				throw new Error(
+					`middleware[${index}] on ${label} provides ctx.${key}, which Routa reserves for ${owner}. Rename the provided key.`,
+				);
+			}
 		}
 
 		if (authenticated && item.provides && Object.hasOwn(item.provides, "auth")) {

@@ -713,14 +713,13 @@ describe("required response cookies at runtime", () => {
 		}
 	});
 
-	it("names the missing cookie without a value in the logged failure", async () => {
+	it("logs the missing-cookie failure as a server error without its message", async () => {
 		const events: RoutaLogEvent[] = [];
 		await appFor(routeFor([]), modes[0]!, events).request("/a");
 
 		const failure = events.find((event) => event.event === "http.error");
-		expect(failure?.data?.error).toBe(
-			'Response type "ok" requires cookie "session" (Path=/), but returned no effect for it. Set or clear it.',
-		);
+		expect(failure?.data).toMatchObject({ method: "GET", route: "/a", status: 500 });
+		expect(JSON.stringify(events)).not.toContain("session");
 	});
 
 	it("accepts a set or a clear as the required effect, in every mode", async () => {

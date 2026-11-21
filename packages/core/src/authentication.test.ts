@@ -55,6 +55,14 @@ async function foreignCore(): Promise<typeof AuthenticationModule> {
 /** The registry symbol every copy of `@routa-ts/core` marks a `requireAuth` contract with. */
 const requirementKey = Symbol.for("@routa-ts/core/requireAuth");
 
+/** What `http.error` logs for a failed GET /whoami: its identity and route, never the error. */
+const failedWhoami = {
+	requestId: expect.any(String),
+	method: "GET",
+	route: "/whoami",
+	status: 500,
+};
+
 const whoami: HonoRoute = {
 	method: "get",
 	path: "/whoami",
@@ -307,7 +315,7 @@ describe("authenticator failures", () => {
 			status: 500,
 		});
 		const logged = JSON.stringify(events);
-		expect(logged).toContain('Authenticator for scheme \\"userToken\\" threw.');
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedWhoami);
 		expect(logged).not.toContain("secret-token-value");
 		expect(logged).not.toContain("provider said");
 	});
@@ -324,10 +332,7 @@ describe("authenticator failures", () => {
 		});
 
 		expect(response.status).toBe(500);
-		expect(events.find((event) => event.event === "http.error")?.data).toMatchObject({
-			name: "AuthenticatorError",
-			scheme: "userToken",
-		});
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedWhoami);
 		expect(JSON.stringify(events)).not.toContain("SecretToken123");
 	});
 
@@ -341,11 +346,7 @@ describe("authenticator failures", () => {
 
 		expect(response.status).toBe(500);
 		const error = events.find((event) => event.event === "http.error");
-		expect(error?.data).toMatchObject({
-			error:
-				'Authenticator for scheme "userToken" returned a principal that does not match the principal schema.',
-			name: "AuthenticationContractError",
-		});
+		expect(error?.data).toEqual(failedWhoami);
 		expect(JSON.stringify(events)).not.toContain("abc");
 	});
 
@@ -371,9 +372,7 @@ describe("authenticator failures", () => {
 
 		expect(response.status).toBe(500);
 		expect(await response.text()).not.toContain("secret-tenant-detail");
-		expect(events.find((event) => event.event === "http.error")?.data).toMatchObject({
-			name: "AuthenticationContractError",
-		});
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedWhoami);
 		expect(JSON.stringify(events)).not.toContain("secret-tenant-detail");
 	});
 
@@ -401,9 +400,7 @@ describe("authenticator failures", () => {
 
 		expect(response.status).toBe(500);
 		expect(await response.text()).not.toContain("secret-getter-detail");
-		expect(events.find((event) => event.event === "http.error")?.data).toMatchObject({
-			name: "AuthenticationContractError",
-		});
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedWhoami);
 		expect(JSON.stringify(events)).not.toContain("secret-getter-detail");
 	});
 
@@ -413,9 +410,7 @@ describe("authenticator failures", () => {
 		const response = await app.request("/whoami", { headers: { authorization: "Bearer abc" } });
 
 		expect(response.status).toBe(500);
-		expect(events.find((event) => event.event === "http.error")?.data).toMatchObject({
-			name: "AuthenticationContractError",
-		});
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedWhoami);
 	});
 
 	it("keeps an error thrown while reading the result type a safe server error", async () => {
@@ -434,9 +429,7 @@ describe("authenticator failures", () => {
 
 		expect(response.status).toBe(500);
 		expect(await response.text()).not.toContain("provider said");
-		expect(events.find((event) => event.event === "http.error")?.data).toMatchObject({
-			name: "AuthenticationContractError",
-		});
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedWhoami);
 		expect(JSON.stringify(events)).not.toContain("secret-token-value");
 	});
 
@@ -457,11 +450,7 @@ describe("authenticator failures", () => {
 		const response = await app.request("/whoami", { headers: { authorization: "Bearer abc" } });
 
 		expect(response.status).toBe(500);
-		expect(events.find((event) => event.event === "http.error")?.data).toMatchObject({
-			error:
-				'The principal schema parsed the principal from scheme "userToken" to a value without string id and type fields.',
-			name: "AuthenticationContractError",
-		});
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedWhoami);
 	});
 });
 

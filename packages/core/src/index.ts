@@ -475,34 +475,59 @@ declare class SelectedOutcome {
 export type MiddlewareContinuation = SelectedOutcome;
 
 /**
- * The type of a `services` context key, which Routa reserves for injected services; see
+ * The context keys Routa reserves, each typed so the property name carries the message; see
  * {@link ForbiddenData}.
  */
-type ReservedServicesKey = {
-	readonly "ctx.services is reserved for injected services. Rename this context key.": never;
+type ReservedContextKeys = {
+	readonly services: {
+		readonly "ctx.services is reserved for injected services. Rename this context key.": never;
+	};
+	readonly requestId: {
+		readonly "ctx.requestId is reserved for the request identity Routa generates. Rename this context key.": never;
+	};
+	readonly correlationId: {
+		readonly "ctx.correlationId is reserved for the correlation ID Routa accepts. Rename this context key.": never;
+	};
+	readonly logger: {
+		readonly "ctx.logger is reserved for the request logger. Rename this context key.": never;
+	};
 };
 
 /**
- * Fails a `provides` declaration or `next()` payload that names `services`; adds nothing otherwise.
- * A widened record names no key, so Routa rejects it at runtime instead.
+ * Fails a `provides` declaration or `next()` payload that names a key Routa reserves; adds nothing
+ * otherwise. A widened record names no key, so Routa rejects it at runtime instead.
  */
 type ReservedContextChecks<TCtx> = string extends keyof TCtx
 	? unknown
-	: "services" extends keyof TCtx
-		? { readonly services: ReservedServicesKey }
-		: unknown;
+	: [keyof TCtx & keyof ReservedContextKeys] extends [never]
+		? unknown
+		: { readonly [K in keyof TCtx & keyof ReservedContextKeys]: ReservedContextKeys[K] };
 
 /**
  * Continues the chain. Middleware without `provides` may pass any object, which Routa ignores,
- * except one claiming `services`.
+ * except one claiming a key Routa reserves.
  */
 export type MiddlewareNext<TProvides extends MiddlewareProvidesSpec> = keyof TProvides extends never
 	? <TCtx extends object = {}>(
 			ctx?: TCtx & ReservedContextChecks<TCtx>,
 		) => Promise<MiddlewareContinuation>
 	: (
-			ctx: MiddlewareProvidedCtx<TProvides> & { readonly services?: ReservedServicesKey },
+			ctx: MiddlewareProvidedCtx<TProvides> & {
+				readonly [K in keyof ReservedContextKeys]?: ReservedContextKeys[K];
+			},
 		) => Promise<MiddlewareContinuation>;
+
+/**
+ * The request's identity, which middleware, services factories, and handlers all receive.
+ *
+ * `requestId` is the UUID Routa generated for this request and sends in `x-request-id`; an
+ * incoming header never replaces it. `correlationId` is the caller's correlation ID, present only
+ * when `correlation` is configured and the request sent one valid value. It is not authentication.
+ */
+export type RequestIdentityContext = {
+	readonly requestId: string;
+	readonly correlationId?: string;
+};
 
 export type MiddlewareRunArgs<
 	TRequires extends readonly RegisteredCtxKey[],
@@ -511,7 +536,7 @@ export type MiddlewareRunArgs<
 	TServices extends object | undefined = undefined,
 > = {
 	input: InferInput<TInput>;
-	ctx: RequiredMiddlewareCtx<TRequires> & MiddlewareServicesCtx<TServices>;
+	ctx: RequiredMiddlewareCtx<TRequires> & MiddlewareServicesCtx<TServices> & RequestIdentityContext;
 	next: MiddlewareNext<TProvides>;
 };
 
@@ -609,14 +634,17 @@ export type InferResponse<TResponses extends RouteResponses> = RouteRunResult<TR
 /**
  * Framework-owned values available to every route handler.
  *
- * `logger` is always present. When logging is disabled in Routa configuration,
- * it is a no-op logger so handlers do not need configuration-dependent guards.
+ * `logger` is always present: the configured logger's request logger, whose events carry
+ * `requestId` and `correlationId`. When logging is disabled in Routa configuration, it is a no-op
+ * logger so handlers do not need configuration-dependent guards. `requestId` and `correlationId`
+ * are described by {@link RequestIdentityContext}.
  * `services` exists only when `src/routa.ts` configures application services. Its type is the
  * service contract `routa generate` read from source, not the factory's implementations.
  */
-export type RoutaRouteContext = Register extends { applicationServices: infer TServices }
-	? { readonly logger: RoutaLogger; readonly services: Readonly<TServices> }
-	: { readonly logger: RoutaLogger };
+export type RoutaRouteContext = RequestIdentityContext
+	& (Register extends { applicationServices: infer TServices }
+		? { readonly logger: RoutaLogger; readonly services: Readonly<TServices> }
+		: { readonly logger: RoutaLogger });
 
 /**
  * The framework-owned values a handler receives. A route whose generated context declares
@@ -624,7 +652,7 @@ export type RoutaRouteContext = Register extends { applicationServices: infer TS
  * declaration replaces the application-only mapping.
  */
 type HandlerFrameworkContext<TCtx> = TCtx extends { readonly services: infer TServices }
-	? { readonly logger: RoutaLogger; readonly services: TServices }
+	? RequestIdentityContext & { readonly logger: RoutaLogger; readonly services: TServices }
 	: RoutaRouteContext;
 
 export type RouteHandlerArgs<
@@ -779,11 +807,12 @@ export type ApplicationServicesFactory<TServices extends object = object> = (
 
 /**
  * What a route-file or method services factory receives. `ctx` holds the context the middleware
- * before the factory provided, the services of earlier scopes, and the request logger. It carries
- * no request or handler input.
+ * before the factory provided, the services of earlier scopes, the request identity, and the
+ * request logger. It carries no request or handler input.
  */
 export type RequestServicesContext<TCtx = Record<string, unknown>> = {
-	readonly ctx: Readonly<Omit<TCtx, "logger">> & { readonly logger: RoutaLogger };
+	readonly ctx: Readonly<Omit<TCtx, "logger" | keyof RequestIdentityContext>>
+		& RequestIdentityContext & { readonly logger: RoutaLogger };
 	readonly onCleanup: OnCleanup;
 };
 
@@ -815,10 +844,21 @@ type ServiceContractRules<TServices> = string extends keyof TServices
 			]: `Service "${K & string}" is optional. A service contract lists required services only.`;
 		};
 
+/**
+ * Whether Routa reads a caller's correlation ID, and from which request header. `true` reads
+ * `x-correlation-id`; `{ header }` names another header, compared case-insensitively. Routa accepts
+ * one value of 1 to 128 ASCII letters, digits, `.`, `_`, or `-`, exposes it as `ctx.correlationId`
+ * and in request logs, and echoes it in the same response header. It ignores any other value
+ * without rejecting the request. Write it as a literal: generated OpenAPI documents the header.
+ */
+export type CorrelationConfig = boolean | { readonly header: string };
+
 export type RoutaConfig = {
 	host?: string;
 	port?: number;
 	logger?: RoutaLogger | false;
+	/** Off unless set. See {@link CorrelationConfig}. */
+	correlation?: CorrelationConfig;
 	lifecycleHeaders?: boolean;
 	/** Defaults to `"development"`, which skips response schema parsing during `routa start`. */
 	responseValidation?: ResponseValidation;

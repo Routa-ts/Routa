@@ -986,16 +986,12 @@ describe("createHonoApp", () => {
 			title: "Invalid handler output",
 			status: 500,
 		});
-		expect(events).toEqual(
-			expect.arrayContaining([
-				expect.objectContaining({
-					level: "error",
-					data: expect.objectContaining({
-						error: "createContext() must return a plain object, received null.",
-					}),
-				}),
-			]),
-		);
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual({
+			requestId: response.headers.get("x-request-id"),
+			method: "GET",
+			route: "/status",
+			status: 500,
+		});
 	});
 
 	it("returns problem details when response JSON serialization fails", async () => {
@@ -1177,16 +1173,12 @@ describe("createHonoApp", () => {
 			title: "Internal Server Error",
 			status: 500,
 		});
-		expect(events).toEqual(
-			expect.arrayContaining([
-				expect.objectContaining({
-					level: "error",
-					data: expect.objectContaining({
-						error: "Middleware requires ctx.user, but it was not provided.",
-					}),
-				}),
-			]),
-		);
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual({
+			requestId: response.headers.get("x-request-id"),
+			method: "GET",
+			route: "/secure",
+			status: 500,
+		});
 	});
 
 	it("projects middleware context through declared schemas", async () => {
@@ -1468,7 +1460,7 @@ describe("createHonoApp", () => {
 		).toThrow("OPTIONS /status cannot be declared explicitly");
 	});
 
-	it("logs request completion when a logger is configured", async () => {
+	it("logs one response-preparation event when a logger is configured", async () => {
 		const events: RoutaLogEvent[] = [];
 		const app = createHonoApp(
 			[
@@ -1499,18 +1491,19 @@ describe("createHonoApp", () => {
 		expect(events).toHaveLength(1);
 		expect(events[0]).toMatchObject({
 			level: "info",
-			event: "http.request",
-			message: "Request completed.",
+			event: "http.response.prepared",
+			message: "Response prepared.",
 			data: {
+				requestId: response.headers.get("x-request-id"),
 				method: "GET",
-				path: "/status",
+				route: "/status",
 				status: 200,
 			},
 		});
 		expect(events[0]?.data?.durationMs).toEqual(expect.any(Number));
 	});
 
-	it("provides the configured logger to route handlers", async () => {
+	it("provides the configured logger's request logger to route handlers", async () => {
 		const events: RoutaLogEvent[] = [];
 		let handlerLogger: unknown;
 		const logger = createLogger({
@@ -1543,13 +1536,14 @@ describe("createHonoApp", () => {
 		const response = await app.request("/status");
 
 		expect(response.status).toBe(200);
-		expect(handlerLogger).toBe(logger);
+		expect(handlerLogger).not.toBe(logger);
 		expect(events).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({
 					level: "info",
 					event: "status.checked",
 					message: "Status checked from a handler.",
+					data: { requestId: response.headers.get("x-request-id") },
 				}),
 			]),
 		);
@@ -1616,12 +1610,12 @@ describe("createHonoApp", () => {
 					level: "error",
 					event: "http.error",
 					message: "Request failed.",
-					data: expect.objectContaining({
+					data: {
+						requestId: response.headers.get("x-request-id"),
 						method: "GET",
-						path: "/boom",
+						route: "/boom",
 						status: 500,
-						error: "boom",
-					}),
+					},
 				}),
 			]),
 		);
