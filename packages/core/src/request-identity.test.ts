@@ -13,7 +13,7 @@ import {
 	type RequestServicesFactory,
 	requireAuth,
 } from "./index.js";
-import { createLogger, type RoutaLogEvent } from "./logger.js";
+import { createLogger, type RoutaLogEvent, type RoutaLogger } from "./logger.js";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -1351,6 +1351,36 @@ describe("correlation identity", () => {
 	});
 });
 
+describe("request identity in middleware logs", () => {
+	it("LOG-AC-07 gives middleware the request logger bound to the request identity", async () => {
+		const events: RoutaLogEvent[] = [];
+		const admit = createMiddleware({
+			run: ({ ctx, next }) => {
+				ctx.logger.info("admission.accepted", "Request admitted.");
+				return next();
+			},
+		});
+		const route: HonoRoute = {
+			method: "get",
+			path: "/",
+			contract: createRoute({
+				middleware: [admit],
+				responses: { ok: { status: 204 } },
+				run: () => ({ type: "ok" }),
+			}),
+		};
+		const app = createHonoApp([route], {
+			logger: createLogger({ sink: (event) => events.push(event) }),
+		});
+
+		const response = await app.request("/");
+		const admitted = events.find((event) => event.event === "admission.accepted");
+
+		expect(response.status).toBe(204);
+		expect(admitted?.data?.requestId).toBe(response.headers.get("x-request-id"));
+	});
+});
+
 describe("request identity (types)", () => {
 	it("LOG-AC-10 types the identity readonly in handlers and services factories", () => {
 		typesOnly(() => {
@@ -1364,6 +1394,17 @@ describe("request identity (types)", () => {
 					// @ts-expect-error So is the correlation ID.
 					ctx.correlationId = "forged";
 					return { type: "ok" };
+				},
+			});
+
+			createMiddleware({
+				run: ({ ctx, next }) => {
+					expectType<string>(ctx.requestId);
+					expectType<RoutaLogger>(ctx.logger);
+					ctx.logger.info("admission.accepted", "Request admitted.");
+					// @ts-expect-error The request logger is readonly.
+					ctx.logger = createLogger({ enabled: false });
+					return next();
 				},
 			});
 

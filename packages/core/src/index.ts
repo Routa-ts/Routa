@@ -537,7 +537,9 @@ export type MiddlewareRunArgs<
 	TServices extends object | undefined = undefined,
 > = {
 	input: InferInput<TInput>;
-	ctx: RequiredMiddlewareCtx<TRequires> & MiddlewareServicesCtx<TServices> & RequestIdentityContext;
+	ctx: RequiredMiddlewareCtx<TRequires>
+		& MiddlewareServicesCtx<TServices>
+		& RequestIdentityContext & { readonly logger: RoutaLogger };
 	next: MiddlewareNext<TProvides>;
 };
 
