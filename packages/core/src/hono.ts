@@ -414,13 +414,18 @@ type TrackedRequest = {
 	prepared?: Response;
 };
 
+const identityKey = Symbol.for("@routa-ts/core/request-identity");
+
 /**
  * The identity of each request a Routa app is handling, by its Hono context. When one Routa app
  * is mounted in another with `route()`, Hono passes one context through both, so the first Routa
  * app identifies the request and the app it mounts reuses that identity, when both apps have the
- * same correlation setting.
+ * same correlation setting. The map is registered globally, like the created-logger brand, so a
+ * mounted app that loaded another copy of `@routa-ts/core` still finds the identity.
  */
-const identified = new WeakMap<Context, TrackedRequest>();
+const identified: WeakMap<Context, TrackedRequest> = ((
+	globalThis as { [identityKey]?: WeakMap<Context, TrackedRequest> }
+)[identityKey] ??= new WeakMap());
 
 /** What Hono's error says when nothing on the app returned a response or called `next()`. */
 const unansweredMessage =

@@ -16,6 +16,7 @@ import {
 	type RequestServicesFactory,
 	requireAuth,
 } from "./index.js";
+import type * as HonoModule from "./hono.js";
 import { createLogger, type RoutaLogEvent, type RoutaLogger } from "./logger.js";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -1226,6 +1227,39 @@ describe("request identity", () => {
 		}
 
 		expect(authenticate).not.toHaveBeenCalled();
+	});
+
+	it("LOG-AC-09 shares identity with a mounted app built by another copy of @routa-ts/core", async () => {
+		const outer = capture();
+		vi.resetModules();
+		const copy = (await import("./hono.js")) as typeof HonoModule;
+		const route: HonoRoute = {
+			method: "get",
+			path: "/who",
+			contract: createRoute({
+				responses: { ok: { status: 200, schema: z.object({ requestId: z.string() }) } },
+				run: ({ ctx }) => ({ type: "ok", data: { requestId: ctx.requestId } }),
+			}),
+		};
+		const matching = createHonoApp([], { logger: outer.logger });
+		matching.route("/", copy.createHonoApp([route]));
+		const mismatched = createHonoApp([], {
+			logger: outer.logger,
+			correlation: { header: "x-trace-ref" },
+		});
+		mismatched.route("/", copy.createHonoApp([route]));
+
+		const shared = await matching.request("/who");
+		const refused = await mismatched.request("/who", { headers: { "x-trace-ref": "trace-1" } });
+
+		expect(((await shared.json()) as { requestId: string }).requestId).toBe(
+			shared.headers.get("x-request-id"),
+		);
+		expect(refused.status).toBe(500);
+		expect(refused.headers.has("x-trace-ref")).toBe(false);
+		expect(outer.events.filter((event) => event.event === "http.response.prepared")).toHaveLength(
+			2,
+		);
 	});
 
 	it("LOG-AC-09 refuses a mismatched mounted app's request after outer middleware set a response", async () => {
