@@ -368,6 +368,64 @@ describe("request identity", () => {
 		expect(response.headers.get("x-request-id")).toMatch(uuid);
 	});
 
+	it("LOG-AC-06 gives a services factory the identity and request logger its handler gets", async () => {
+		const { events, logger } = capture();
+		const seen: unknown[] = [];
+		const route: HonoRoute = {
+			method: "get",
+			path: "/scoped",
+			contract: createRoute({
+				responses: { ok: { status: 200, schema: z.object({ requestId: z.string() }) } },
+				run: ({ ctx }) => ({ type: "ok", data: { requestId: ctx.requestId } }),
+			}),
+			services: {
+				method: {
+					names: ["audit"],
+					after: 0,
+					factory: ({ ctx, onCleanup }) => {
+						seen.push(ctx.requestId, ctx.correlationId);
+						onCleanup(() => ctx.logger.info("audit.flushed", "Audit flushed."));
+						return { audit: {} };
+					},
+				},
+			},
+		};
+		const app = createHonoApp([route], { logger, correlation: true });
+
+		const response = await app.request("/scoped", { headers: { "x-correlation-id": "c-1" } });
+		const requestId = response.headers.get("x-request-id");
+
+		expect(await response.json()).toEqual({ requestId });
+		expect(seen).toEqual([requestId, "c-1"]);
+		expect(events.find((event) => event.event === "audit.flushed")?.data).toEqual({
+			requestId,
+			correlationId: "c-1",
+		});
+	});
+
+	it("LOG-AC-12 logs a method outside the standard set as _OTHER", async () => {
+		const { events, logger } = capture();
+		const app = createHonoApp([echoRoute], { logger });
+
+		const responses = [
+			await app.request("/echo", { method: "PROPFIND" }),
+			await app.request("/echo", { method: "patch" }),
+			await app.request("/nowhere", { method: "BREW" }),
+		];
+
+		expect(responses.map((response) => response.status)).toEqual([405, 405, 404]);
+		expect(
+			events
+				.filter((event) => event.event === "http.response.prepared")
+				.map((event) => [event.data?.method, event.data?.route]),
+		).toEqual([
+			["_OTHER", "/echo"],
+			["_OTHER", "/echo"],
+			["_OTHER", "[Unmatched]"],
+		]);
+		expect(JSON.stringify(events)).not.toMatch(/PROPFIND|BREW|"patch"/);
+	});
+
 	it("LOG-AC-07 keeps identity in context and headers with logging off", async () => {
 		const app = await createApplication([echoRoute]);
 
