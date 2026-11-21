@@ -495,7 +495,12 @@ function identifyRequests(
 			const owner = identified.get(context);
 
 			if (owner) {
-				if (owner.correlationHeader !== correlationHeader) {
+				// Only an owner that correlates can echo or log a value under this app's credential or
+				// declared headers; an owner with correlation off shares identity without correlation.
+				if (
+					owner.correlationHeader !== undefined
+					&& owner.correlationHeader !== correlationHeader
+				) {
 					// Refuse every request that reaches this app, whatever would answer it: a Routa
 					// route, a Hono handler added to this app, or no handler at all.
 					const state = stateFor({ requestId: owner.requestId });

@@ -1176,20 +1176,6 @@ describe("request identity", () => {
 				header: "x-trace-ref",
 				value: "trace-2",
 			},
-			{
-				// The mounted app correlates, and the app that identifies the request does not.
-				app: mount(
-					{},
-					createHonoApp([plain], {
-						logger: inner.logger,
-						onRequestError,
-						correlation: { header: "x-trace-ref" },
-					}),
-				),
-				path: "/plain",
-				header: "x-trace-ref",
-				value: "trace-3",
-			},
 		];
 
 		for (const { app, path, header, value } of cases) {
@@ -1227,6 +1213,27 @@ describe("request identity", () => {
 		}
 
 		expect(authenticate).not.toHaveBeenCalled();
+	});
+
+	it("LOG-AC-06 shares identity without correlation when the owner does not correlate", async () => {
+		const outer = capture();
+		const route: HonoRoute = {
+			method: "get",
+			path: "/ping",
+			contract: createRoute({
+				responses: { done: { status: 204 } },
+				run: () => ({ type: "done" }),
+			}),
+		};
+		const app = createHonoApp([], { logger: outer.logger });
+		app.route("/api", createHonoApp([route], { correlation: { header: "x-trace-ref" } }));
+
+		const response = await app.request("/api/ping", { headers: { "x-trace-ref": "trace-3" } });
+
+		expect(response.status).toBe(204);
+		expect(response.headers.get("x-request-id")).toMatch(uuid);
+		expect(response.headers.has("x-trace-ref")).toBe(false);
+		expect(JSON.stringify(outer.events)).not.toContain("trace-3");
 	});
 
 	it("LOG-AC-09 shares identity with a mounted app built by another copy of @routa-ts/core", async () => {
