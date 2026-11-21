@@ -1002,7 +1002,7 @@ describe("request identity", () => {
 				return context.text("fallback", 202);
 			}
 		});
-		const mounted = createHonoApp([], { logger: inner.logger });
+		const mounted = createHonoApp([], { logger: inner.logger, correlation: true });
 		// Sets a header, then neither returns a response nor calls next().
 		mounted.use("/quiet", (context) => {
 			context.header("x-written", "kept");
@@ -1071,7 +1071,7 @@ describe("request identity", () => {
 		expect(inner.events).toEqual([]);
 	});
 
-	it("LOG-AC-09 LOG-AC-17 fails a request a mounted Routa app answers with another correlation setting", async () => {
+	it("LOG-AC-09 LOG-AC-17 fails every request a mounted Routa app with another correlation setting receives", async () => {
 		const outer = capture();
 		const inner = capture();
 		const reports: Array<{ error: unknown; diagnostic: RequestErrorDiagnostic }> = [];
@@ -1114,7 +1114,30 @@ describe("request identity", () => {
 			app.route("/", mounted);
 			return app;
 		};
+		const withNative = createHonoApp([keys], {
+			logger: inner.logger,
+			onRequestError,
+			authentication: {
+				principal: z.object({ id: z.string(), type: z.literal("service") }),
+				schemes: { serviceKey: apiKey({ header: "x-service-key", authenticate }) },
+			},
+		});
+		withNative.get("/health", (context) => context.text("ok"));
 		const cases = [
+			{
+				// A Hono handler added to the mounted app answers.
+				app: mount({ correlation: { header: "X-Service-Key" } }, withNative),
+				path: "/health",
+				header: "x-service-key",
+				value: "secret-key-native",
+			},
+			{
+				// Nothing in the mounted app answers.
+				app: mount({ correlation: { header: "X-Service-Key" } }, withNative),
+				path: "/typo",
+				header: "x-service-key",
+				value: "secret-key-typo",
+			},
 			{
 				// The mounted app reads its API key from the header the outer app correlates on.
 				app: mount(
@@ -1174,7 +1197,8 @@ describe("request identity", () => {
 			reports.length = 0;
 			const response = await app.request(path, { headers: { [header]: value } });
 			const requestId = response.headers.get("x-request-id");
-			const data = { requestId, method: "GET", route: path, status: 500 };
+			// The app refuses the request before any route matches it.
+			const data = { requestId, method: "GET", route: "[Unmatched]", status: 500 };
 
 			expect(response.status, value).toBe(500);
 			expect(await response.json(), value).toEqual({

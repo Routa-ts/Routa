@@ -476,8 +476,6 @@ function identifyRequests(
 	const states = new WeakMap<Context, RequestState>();
 	// The requests whose identity this app owns.
 	const owned = new WeakSet<Context>();
-	// The requests an app with another correlation setting identified, which this app refuses.
-	const refused = new WeakSet<Context>();
 	const stateFor = ({ requestId, correlationId }: RequestIdentity): RequestState => ({
 		requestId,
 		...(correlationId !== undefined && { correlationId }),
@@ -492,13 +490,15 @@ function identifyRequests(
 			const owner = identified.get(context);
 
 			if (owner) {
-				if (owner.correlationHeader === correlationHeader) {
-					states.set(context, stateFor(owner));
-				} else {
-					refused.add(context);
-					states.set(context, stateFor({ requestId: owner.requestId }));
+				if (owner.correlationHeader !== correlationHeader) {
+					// Refuse every request that reaches this app, whatever would answer it: a Routa
+					// route, a Hono handler added to this app, or no handler at all.
+					const state = stateFor({ requestId: owner.requestId });
+					states.set(context, state);
+					return refuse(context, owner, state);
 				}
 
+				states.set(context, stateFor(owner));
 				await next();
 				return;
 			}
@@ -597,9 +597,7 @@ function identifyRequests(
 		answer: async (context, path, respond) => {
 			const { request, state } = tracked(context);
 			request.route = path;
-			const response = refused.has(context)
-				? refuse(context, request, state)
-				: await respond(state);
+			const response = await respond(state);
 			request.prepared = response;
 			return response;
 		},

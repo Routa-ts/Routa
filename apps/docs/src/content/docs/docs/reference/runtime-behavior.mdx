@@ -138,8 +138,9 @@ Routa then identifies and logs with that status. Answer every request inside an 
 Give a mounted Routa app the same `correlation` setting as the app you mount it in: both off,
 or the same header name in any casing. Each app checks its correlation header only against its
 own credential schemes and declared response headers, so only the same setting lets those checks
-cover the mounted app. When the settings differ, the mounted app answers each request it matches
-with Routa's internal `500` problem. The response keeps its `x-request-id`, and the outer app
+cover the mounted app. When the settings differ, the mounted app answers every request that
+reaches it, whether a Routa route, a Hono handler you added to it, or nothing would answer it,
+with Routa's internal `500` problem, logged with the `[Unmatched]` route. The response keeps its `x-request-id`, and the outer app
 neither echoes nor logs a correlation ID for it, so a credential the mounted app reads from that
 header never reaches the response or the logs. The mounted app logs `http.error` and calls its `onRequestError` with
 `code` `configuration_error` and `stage` `identity`. The error it passes names both settings and
