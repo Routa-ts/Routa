@@ -579,7 +579,10 @@ function parseSchema(schema: z.ZodTypeAny, value: unknown): unknown {
  * Parses a value application code produced, such as a response body or provided context.
  *
  * @throws {ZodError} When the value does not match the schema
- * @throws {OutputCodeError} When the schema's own code, such as a refinement, threw instead
+ * @throws {OutputCodeError} When the schema's own code, such as a refinement, threw a `ZodError`,
+ *   which Routa answers as invalid output, as it always has, while reporting the thrown error
+ * @throws What the schema's own code threw, when it is anything else, answered as any unexpected
+ *   error is
  */
 function parseOutput(schema: z.ZodTypeAny, value: unknown): unknown {
 	let parsed: ReturnType<z.ZodTypeAny["safeParse"]>;
@@ -587,7 +590,9 @@ function parseOutput(schema: z.ZodTypeAny, value: unknown): unknown {
 	try {
 		parsed = schema.safeParse(value);
 	} catch (error) {
-		throw new OutputCodeError("Validating the output threw.", error);
+		throw error instanceof ZodError
+			? new OutputCodeError("Validating the output threw.", error)
+			: error;
 	}
 
 	if (!parsed.success) {

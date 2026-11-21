@@ -464,58 +464,66 @@ describe("request error reporting", () => {
 	});
 
 	it("LOG-AC-13 passes what a schema refinement throws while Routa checks output", async () => {
-		const inner = z.object({ id: z.string() });
-		const throwing = () => {
+		const zodError = (() => {
 			try {
-				inner.parse({});
+				z.object({ id: z.string() }).parse({});
 			} catch (error) {
 				return error;
 			}
-			throw new Error("inner.parse should have thrown");
-		};
-		const thrown = throwing();
-		const refuses = <T extends z.ZodTypeAny>(schema: T) =>
-			schema.refine(() => {
-				throw thrown;
+			throw new Error("parse should have thrown");
+		})();
+		// A thrown ZodError keeps answering as invalid output, and anything else as an internal
+		// error, as each did before onRequestError existed.
+		const cases = [
+			["zod error", zodError, "Invalid handler output"],
+			["type error", new TypeError("secret"), "Internal Server Error"],
+		] as const;
+
+		for (const [name, thrown, title] of cases) {
+			const refuses = <T extends z.ZodTypeAny>(schema: T) =>
+				schema.refine(() => {
+					throw thrown;
+				});
+			const gate = createMiddleware({
+				provides: { tenant: refuses(z.string()) },
+				run: ({ next }) => next({ tenant: "acme" }),
 			});
-		const gate = createMiddleware({
-			provides: { tenant: refuses(z.string()) },
-			run: ({ next }) => next({ tenant: "acme" }),
-		});
-		const routes: HonoRoute[] = [
-			{
-				method: "get",
-				path: "/body",
-				contract: createRoute({
-					responses: { ok: { status: 200, schema: refuses(z.object({ ok: z.boolean() })) } },
-					run: () => ({ type: "ok", data: { ok: true } }),
-				}),
-			},
-			{
-				method: "get",
-				path: "/context",
-				contract: createRoute({
-					middleware: [gate],
-					responses: { ok: { status: 204 } },
-					run: () => ({ type: "ok" }),
-				}),
-			},
-		];
+			const routes: HonoRoute[] = [
+				{
+					method: "get",
+					path: "/body",
+					contract: createRoute({
+						responses: { ok: { status: 200, schema: refuses(z.object({ ok: z.boolean() })) } },
+						run: () => ({ type: "ok", data: { ok: true } }),
+					}),
+				},
+				{
+					method: "get",
+					path: "/context",
+					contract: createRoute({
+						middleware: [gate],
+						responses: { ok: { status: 204 } },
+						run: () => ({ type: "ok" }),
+					}),
+				},
+			];
 
-		for (const [path, stage] of [
-			["/body", "response"],
-			["/context", "middleware"],
-		] as const) {
-			const { calls, onRequestError } = recorder();
-			const app = createHonoApp(routes, { onRequestError, responseValidation: "always" });
+			for (const [path, stage] of [
+				["/body", "response"],
+				["/context", "middleware"],
+			] as const) {
+				const { calls, onRequestError } = recorder();
+				const app = createHonoApp(routes, { onRequestError, responseValidation: "always" });
 
-			const response = await app.request(path);
+				const response = await app.request(path);
 
-			expect(response.status, path).toBe(500);
-			expect(
-				calls.map((call) => [call.error === thrown, call.diagnostic.code, call.diagnostic.stage]),
-				path,
-			).toEqual([[true, "unexpected_failure", stage]]);
+				expect(response.status, `${name} ${path}`).toBe(500);
+				expect(await response.json(), `${name} ${path}`).toMatchObject({ title });
+				expect(
+					calls.map((call) => [call.error === thrown, call.diagnostic.code, call.diagnostic.stage]),
+					`${name} ${path}`,
+				).toEqual([[true, "unexpected_failure", stage]]);
+			}
 		}
 	});
 
