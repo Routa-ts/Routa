@@ -417,6 +417,48 @@ describe("request identity", () => {
 		expect(reached).toEqual([]);
 	});
 
+	it("LOG-AC-07 fails middleware that assigns or deletes ctx.logger, keeping the request logger", async () => {
+		const { events, logger } = capture();
+		const appLogger = createLogger({ sink: () => undefined });
+		const writes = createMiddleware({
+			run: ({ ctx, next }) => {
+				(ctx as { logger?: unknown }).logger = appLogger;
+				return next();
+			},
+		});
+		const deletes = createMiddleware({
+			run: ({ ctx, next }) => {
+				delete (ctx as { logger?: unknown }).logger;
+				return next();
+			},
+		});
+		const reached: string[] = [];
+		const route = (path: string, middleware: typeof writes): HonoRoute => ({
+			method: "get",
+			path,
+			contract: createRoute({
+				middleware: [middleware],
+				responses: { ok: { status: 200 } },
+				run: ({ ctx }) => {
+					reached.push(path);
+					return { type: "ok" };
+				},
+			}),
+		});
+		const app = createHonoApp([route("/writes", writes), route("/deletes", deletes)], { logger });
+
+		for (const path of ["/writes", "/deletes"]) {
+			const response = await app.request(path);
+			expect(response.status, path).toBe(500);
+			expect(
+				events.find((event) => event.event === "http.error" && event.data?.route === path)?.data
+					?.requestId,
+				path,
+			).toBe(response.headers.get("x-request-id"));
+		}
+		expect(reached).toEqual([]);
+	});
+
 	it("LOG-AC-07 rejects middleware that provides a reserved context key through a compiler bypass", () => {
 		for (const key of ["requestId", "correlationId", "logger"]) {
 			const provides = createMiddleware({

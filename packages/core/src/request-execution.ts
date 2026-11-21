@@ -117,6 +117,8 @@ type Stage = {
 	readonly auth?: AuthContext | undefined;
 	/** The request's identity, the same in every stage. */
 	readonly identity: RequestIdentity;
+	/** The request logger, bound to the identity, the same in every stage. */
+	readonly logger: RoutaLogger;
 };
 
 type RequestExecutor = (
@@ -180,6 +182,7 @@ export function createRequestExecutor(
 			services: options.services,
 			auth: resolved?.auth,
 			identity: identityOf(state),
+			logger: state.logger,
 		};
 
 		exposeFramework(ctx, first);
@@ -189,7 +192,6 @@ export function createRequestExecutor(
 			input,
 			first,
 			inputReader,
-			state.logger,
 			{ scopes: options.requestServices ?? [], constructed },
 			(index) =>
 				`${options.middlewareNames?.[index] || `middleware[${index}]`}${options.route ? ` on ${options.route}` : ""}`,
@@ -245,7 +247,7 @@ export function createRequestExecutor(
  *
  * @param contract - The route contract to execute
  * @param routeInput - Parsed input passed to the final handler
- * @param first - The context and services the first middleware sees
+ * @param first - The context, services, and request logger the first middleware sees
  * @param inputReader - Reader used to parse middleware-specific input
  * @param requestServices - The request-scoped factories, and the cleanup scopes of those started
  * @param label - Names the middleware at an index, and its route, in messages
@@ -257,7 +259,6 @@ async function runWithMiddleware(
 	routeInput: Record<string, unknown>,
 	first: Stage,
 	inputReader: RequestInputReader,
-	logger: RoutaLogger,
 	requestServices: { scopes: readonly RequestScope[]; constructed: CleanupScope[] },
 	label: (index: number) => string,
 	select: (produced: ProducedResult) => Response,
@@ -267,7 +268,7 @@ async function runWithMiddleware(
 	async function startStage(scope: RequestScope, stage: Stage): Promise<Stage> {
 		assertServicesKept(stage);
 		const earlier = withoutFramework(stage);
-		const factoryCtx: Record<string, unknown> = { ...earlier, logger };
+		const factoryCtx: Record<string, unknown> = { ...earlier };
 		exposeFramework(factoryCtx, stage);
 		Object.freeze(factoryCtx);
 
@@ -288,7 +289,7 @@ async function runWithMiddleware(
 		}
 
 		const services = Object.freeze({ ...stage.services, ...mapping });
-		const next: Stage = { ctx: earlier, services, auth: stage.auth, identity: stage.identity };
+		const next: Stage = { ...stage, ctx: earlier, services };
 		exposeFramework(earlier, next);
 		return next;
 	}
@@ -312,7 +313,7 @@ async function runWithMiddleware(
 				response[type] = (...args) => buildResult(type, outcome, args);
 			}
 			assertServicesKept({ ctx, services });
-			const handlerCtx = { ...ctx, logger };
+			const handlerCtx = { ...ctx };
 			exposeFramework(handlerCtx, stage);
 			const result = await contract.run({
 				input: routeInput,
@@ -408,8 +409,8 @@ function assertServicesKept(stage: Pick<Stage, "ctx" | "services">): void {
 
 /**
  * Copies a stage's context without the values each stage exposes for itself: `services`, the
- * request identity, and `auth` when Routa owns it. Without authentication, `auth` is ordinary
- * middleware context.
+ * request identity and logger, and `auth` when Routa owns it. Without authentication, `auth` is
+ * ordinary middleware context.
  */
 function withoutFramework(stage: Stage): Record<string, unknown> {
 	return Object.fromEntries(
@@ -418,6 +419,7 @@ function withoutFramework(stage: Stage): Record<string, unknown> {
 				key !== "services"
 				&& key !== "requestId"
 				&& key !== "correlationId"
+				&& key !== "logger"
 				&& (key !== "auth" || stage.auth === undefined),
 		),
 	);
@@ -605,15 +607,17 @@ function assertNoServices(value: unknown, source: string): void {
 }
 
 /**
- * Exposes a stage's services, the request's authentication, and its identity as readonly
- * `ctx.services`, `ctx.auth`, `ctx.requestId`, and `ctx.correlationId`, which cannot be reassigned
- * or deleted. Without services or authentication those keys stay absent. The identity keys are
- * always defined, `correlationId` as `undefined` when Routa accepted none, so no code can assign
- * one Routa did not accept.
+ * Exposes a stage's services, the request's authentication, its identity, and its request logger
+ * as readonly `ctx.services`, `ctx.auth`, `ctx.requestId`, `ctx.correlationId`, and `ctx.logger`,
+ * which cannot be reassigned or deleted. Without services or authentication those keys stay
+ * absent. The identity keys are always defined, `correlationId` as `undefined` when Routa accepted
+ * none, so no code can assign one Routa did not accept. Middleware types do not offer
+ * `ctx.logger`, but it is defined there too, so an assignment fails instead of reaching later
+ * middleware.
  */
 function exposeFramework(
 	ctx: Record<string, unknown>,
-	stage: Pick<Stage, "services" | "auth" | "identity">,
+	stage: Pick<Stage, "services" | "auth" | "identity" | "logger">,
 ): void {
 	const define = (key: string, value: unknown) =>
 		Object.defineProperty(ctx, key, {
@@ -634,6 +638,7 @@ function exposeFramework(
 
 	define("requestId", stage.identity.requestId);
 	define("correlationId", stage.identity.correlationId);
+	define("logger", stage.logger);
 }
 
 /**
