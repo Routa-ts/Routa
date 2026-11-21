@@ -492,6 +492,34 @@ describe("request error reporting", () => {
 		}
 	});
 
+	it("LOG-AC-13 names the context stage when a getter on the created context throws", async () => {
+		const thrown = new Error("secret");
+		const run = vi.fn(() => ({ type: "ok", data: { ok: true } }));
+		const { calls, onRequestError } = recorder();
+		const { events, logger } = capture();
+		const app = createHonoApp(
+			[
+				get("/x", run, {
+					createContext: () => ({
+						get tenant(): string {
+							throw thrown;
+						},
+					}),
+				}),
+			],
+			{ logger, onRequestError },
+		);
+
+		const response = await app.request("/x");
+
+		expect(response.status).toBe(500);
+		expect(run).not.toHaveBeenCalled();
+		expect(
+			calls.map(({ error, diagnostic }) => [error === thrown, diagnostic.code, diagnostic.stage]),
+		).toEqual([[true, "unexpected_failure", "context"]]);
+		expect(events.find((event) => event.event === "http.error")?.data?.stage).toBe("context");
+	});
+
 	it("LOG-AC-13 reports one failure once, with the error middleware lets escape", async () => {
 		const thrown = new Error("handler");
 		const replaced = new Error("middleware");

@@ -247,7 +247,7 @@ The diagnostic holds the same facts as the request's `http.error` event:
 | `stage`          | Where the failure happened                                                               |
 | ---------------- | ---------------------------------------------------------------------------------------- |
 | `authentication` | Resolving credentials: an authenticator or extractor threw or returned an invalid result |
-| `context`        | Building a low-level `createContext` value                                               |
+| `context`        | Building a low-level `createContext` value, including reading the object it returns      |
 | `input`          | Reading input, such as a schema refinement that throws instead of reporting an issue     |
 | `services`       | A route-file or method services factory                                                  |
 | `middleware`     | A middleware callback, including what it passes to `next()` and what it returns          |

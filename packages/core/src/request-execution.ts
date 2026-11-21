@@ -189,13 +189,13 @@ export function createRequestExecutor(
 
 		const inputReader = new RequestInputReader(request, params);
 		const input = await failures.at("input", () => inputReader.parse(contract.input));
-		const context = await failures.at("context", async () => {
+		const ctx = await failures.at("context", async () => {
 			const value = toRecord(options.createContext ? await options.createContext() : {});
 			assertNoServices(value, "createContext() returned");
-			return value;
+			// A copy, so `ctx.services` can be defined even when createContext returns a frozen
+			// object. Copying reads its getters, so a getter that throws fails this stage.
+			return { ...value };
 		});
-		// A copy, so `ctx.services` can be defined even when createContext returns a frozen object.
-		const ctx = { ...context };
 		const first: Stage = {
 			ctx,
 			services: options.services,
