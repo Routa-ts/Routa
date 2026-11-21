@@ -485,6 +485,24 @@ describe("createLogger sanitization", () => {
 		expect(JSON.stringify(budget?.data)).toContain("[Truncated]");
 	});
 
+	it("LOG-AC-04 bounds strings and bigints before escaping or emitting them", () => {
+		const { events, logger } = capture();
+		// Escaped whole, each character becomes six, past the engine's longest string.
+		const controls = "\u0001".repeat(90_000_000);
+
+		logger.info("hostile", controls, { huge: 10n ** 4096n, small: 12n, [controls]: true });
+		const [event] = events;
+
+		expect(event?.message).toHaveLength(4096);
+		expect(event?.message.startsWith("\\u0001\\u0001")).toBe(true);
+		expect(event?.message.endsWith("[Truncated]")).toBe(true);
+		expect(event?.data).toEqual({
+			huge: `1${"0".repeat(4084)}[Truncated]`,
+			small: "12",
+			[event?.message as string]: true,
+		});
+	});
+
 	it("LOG-AC-04 holds the limits for each event's bindings and data together", () => {
 		const { events, logger } = capture();
 		const keys = (prefix: string) =>

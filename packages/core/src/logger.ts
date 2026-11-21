@@ -418,16 +418,19 @@ function sanitizeText(value: unknown): string {
 
 /**
  * Escapes characters that could forge or hide log lines, so every emitted string is one line, then
- * bounds its length.
+ * bounds its length. Escaping only lengthens text, so it runs on at most the first
+ * `maxStringLength` characters, whatever the input's length.
  */
 function safeText(value: string): string {
-	const escaped = value.replace(
-		unsafeCharacters,
-		(character) =>
-			namedEscapes[character] ?? `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
-	);
+	const escaped = value
+		.slice(0, maxStringLength)
+		.replace(
+			unsafeCharacters,
+			(character) =>
+				namedEscapes[character] ?? `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+		);
 
-	if (escaped.length <= maxStringLength) {
+	if (value.length <= maxStringLength && escaped.length <= maxStringLength) {
 		return escaped;
 	}
 
@@ -501,7 +504,7 @@ function sanitizeValue(value: unknown, traversal: Traversal, pending: PendingPat
 		case "number":
 			return Number.isFinite(value) ? value : null;
 		case "bigint":
-			return value.toString();
+			return safeText(value.toString());
 		case "undefined":
 			return undefined;
 		case "object":
