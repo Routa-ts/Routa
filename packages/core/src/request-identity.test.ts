@@ -779,8 +779,9 @@ describe("request identity", () => {
 		const { events, logger } = capture();
 		const app = createHonoApp([], { logger, correlation: true });
 		// Sets a header, then neither returns a response nor calls next().
-		app.use("/silent", async (context) => {
+		app.use("/silent", (context) => {
 			context.header("x-written", "kept");
+			return Promise.resolve();
 		});
 		const errors = vi.spyOn(console, "error").mockImplementation(() => {});
 
