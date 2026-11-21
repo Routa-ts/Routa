@@ -140,6 +140,163 @@ export const logger = createLogger({
 	});
 });
 
+describe("composed identity contract", () => {
+	const composedRoute = `import { createCookie, createMiddleware, createRoute, createRouteRoot, requireAuth } from "@routa-ts/core";
+import { z } from "zod";
+
+const seen = createCookie({ name: "seen", schema: z.literal("yes"), httpOnly: true, secure: true, sameSite: "lax", path: "/" });
+
+const gate = createMiddleware({
+\trequires: ["auth"],
+\trejects: {
+\t\tclosed: { status: 403, headers: z.object({ "x-reason": z.string() }), schema: z.object({ message: z.string() }) },
+\t},
+\trun: ({ ctx, next }) =>
+\t\tctx.auth.status === "authenticated" && ctx.auth.principal.id === "svc_closed"
+\t\t\t? { type: "closed", headers: { "x-reason": "closed" }, data: { message: "Closed" } }
+\t\t\t: next(),
+});
+
+export default createRouteRoot("/items")({
+\tget: createRoute({
+\t\tdeprecation: { sunset: "2027-01-01", replacement: "https://api.example.invalid/v2/items" },
+\t\tmiddleware: [requireAuth(), gate],
+\t\tinput: { query: z.object({ limit: z.coerce.number().int().min(1).optional() }) },
+\t\tresponses: {
+\t\t\tok: {
+\t\t\t\tstatus: 200,
+\t\t\t\theaders: z.object({ etag: z.string() }),
+\t\t\t\tcookies: [{ handle: seen, required: true }],
+\t\t\t\tschema: z.object({ id: z.string() }),
+\t\t\t},
+\t\t\tgone: { status: 410, headers: z.object({ "x-gone-since": z.string().optional() }) },
+\t\t},
+\t\trun: ({ ctx, input }) =>
+\t\t\tinput.query.limit === 9
+\t\t\t\t? { type: "gone" }
+\t\t\t\t: {
+\t\t\t\t\t\ttype: "ok",
+\t\t\t\t\t\theaders: { etag: '"v1"' },
+\t\t\t\t\t\tcookies: [seen.set("yes")],
+\t\t\t\t\t\tdata: { id: ctx.auth.status === "authenticated" ? ctx.auth.principal.id : "anonymous" },
+\t\t\t\t\t},
+\t}),
+});
+`;
+
+	/** Headers HTTP or the operation's deprecation metadata describe, rather than Header Objects. */
+	const transport = new Set(["content-type", "content-length", "set-cookie"]);
+	const lifecycle = new Set(["deprecation", "sunset", "link"]);
+
+	it("LOG-AC-17 sends the identity headers OpenAPI documents on every response of a composed operation, and generates it deterministically", async () => {
+		const sentinel = join(mkdtempSync(join(tmpdir(), "routa-composed-sentinel-")), "executed");
+		const cwd = project({
+			"src/logger.ts": `import { writeFileSync } from "node:fs";
+import { createLogger } from "@routa-ts/core";
+
+writeFileSync(${JSON.stringify(sentinel)}, "logger module");
+export const logger = createLogger({ sink: () => {} });
+`,
+			"src/routa.ts": credentialConfig("X-Trace-Ref", sentinel)
+				.replace("\tcorrelation:", "\tlogger,\n\tlifecycleHeaders: true,\n\tcorrelation:")
+				.replace(
+					"import { z }",
+					`import { logger } from "./logger.js";\nwriteFileSync(${JSON.stringify(sentinel)}, "routa module");\nimport { z }`,
+				)
+				// The service key authenticates, and the route's own gate then rejects it.
+				.replace('"svc_key"', '"svc_closed"'),
+			"src/routes/items/route.ts": composedRoute,
+		});
+		const generatedFiles = () =>
+			[".routa/routes.gen.ts", ".routa/testing.gen.ts"].map((file) =>
+				readFileSync(join(cwd, file), "utf8"),
+			);
+
+		const first = await run(["generate"], { cwd });
+		expect(first.stderr ?? "", first.stdout).toBe("");
+		const before = generatedFiles();
+		const openapi = JSON.stringify(generateOpenApi(cwd));
+		expect((await run(["generate"], { cwd })).code).toBe(0);
+		expect(generatedFiles()).toEqual(before);
+		expect(JSON.stringify(generateOpenApi(cwd))).toBe(openapi);
+		expect(existsSync(sentinel)).toBe(false);
+		expect(before[0]).toContain("correlationHeader: typeof routaCorrelationHeader;");
+
+		const operation = (JSON.parse(openapi) as OpenApi).paths["/items"]!.get as OpenApiOperation;
+		const documented = Object.keys(operation.responses).sort();
+		// Generated OpenAPI documents outcomes, authentication, and rejects. It does not document
+		// framework validation failures, so the 400 below is checked for identity alone.
+		expect(documented).toEqual(["200", "401", "403", "410"]);
+		for (const status of documented) {
+			const headers = operation.responses[status]!.headers!;
+			expect(headers["x-request-id"], status).toEqual(requestIdHeader);
+			expect(headers["x-trace-ref"], status).toEqual(correlationHeader());
+		}
+
+		const app = (await (
+			(await import(pathToFileURL(join(cwd, ".routa/testing.gen.ts")).href)) as {
+				createTestApp: () => Promise<{
+					request: (path: string, init?: RequestInit) => Promise<Response>;
+					dispose(): Promise<void>;
+				}>;
+			}
+		).createTestApp())!;
+		const requests: Array<[string, Record<string, string>, number]> = [
+			["/items", { "x-client-cert": "cert-1" }, 200],
+			["/items?limit=9", { "x-client-cert": "cert-1" }, 410],
+			["/items?limit=0", { "x-client-cert": "cert-1" }, 400],
+			["/items", {}, 401],
+			["/items", { "x-api-key": "wrong" }, 401],
+			["/items", { "X-Api-Key": "service-key" }, 403],
+		];
+
+		for (const [path, headers, status] of requests) {
+			for (const correlation of ["trace-1", "not valid"]) {
+				const label = `${path} ${JSON.stringify(headers)} ${correlation}`;
+				const response = await app.request(path, {
+					headers: { ...headers, "x-trace-ref": correlation },
+				});
+				const documentedResponse = operation.responses[String(response.status)];
+
+				expect(response.status, label).toBe(status);
+				expect(response.headers.get("x-request-id"), label).toMatch(
+					/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+				);
+				expect(response.headers.get("x-trace-ref"), label).toBe(
+					correlation === "trace-1" ? "trace-1" : null,
+				);
+
+				if (status === 400) {
+					expect(documentedResponse, label).toBeUndefined();
+					continue;
+				}
+
+				expect(documentedResponse, label).toBeDefined();
+				for (const [name, header] of Object.entries(documentedResponse!.headers ?? {})) {
+					if ((header as { required?: boolean }).required && name !== "Set-Cookie") {
+						expect(response.headers.has(name), `${label} ${name}`).toBe(true);
+					}
+				}
+				for (const [name] of response.headers) {
+					if (lifecycle.has(name)) {
+						expect(operation.deprecated, `${label} ${name}`).toBe(true);
+					} else if (!transport.has(name)) {
+						expect(Object.keys(documentedResponse!.headers ?? {}), `${label} ${name}`).toContain(
+							name,
+						);
+					}
+				}
+				if (status === 200) {
+					expect(response.headers.get("set-cookie"), label).toContain("seen=yes");
+					expect(Object.keys(documentedResponse!.headers!), label).toContain("Set-Cookie");
+				}
+			}
+		}
+
+		await app.dispose();
+	}, 60_000);
+});
+
 describe("generated test applications", () => {
 	type TestApp = {
 		request: (path: string, init?: RequestInit) => Promise<Response>;
@@ -815,6 +972,11 @@ export default createRouteRoot("/status")({
 		expect(diagnostics({ "src/routes/status/route.ts": route("x-trace-ref") })).toEqual([]);
 	});
 });
+
+type OpenApiOperation = {
+	deprecated?: boolean;
+	responses: Record<string, { headers?: Record<string, unknown> }>;
+};
 
 type OpenApi = {
 	paths: Record<
