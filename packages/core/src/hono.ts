@@ -113,6 +113,7 @@ export type RoutaApplication = {
  *
  * @param routes - Route definitions to register
  * @returns The application instance, once its services are constructed
+ * @throws {TypeError} When `options.logger` is not a logger `createLogger` created
  */
 export async function createApplication(
 	routes: readonly HonoRoute[],
@@ -192,6 +193,7 @@ export function createProjectApplication(
  *
  * @param routes - Route definitions to register
  * @returns The configured Hono app
+ * @throws {TypeError} When `options.logger` is not a logger `createLogger` created
  */
 export function createHonoApp(
 	routes: readonly HonoRoute[],

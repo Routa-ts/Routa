@@ -1,0 +1,15 @@
+---
+"@routa-ts/core": minor
+---
+
+Make `createLogger` sanitize every event before its sink, and accept only `createLogger` loggers in Routa configuration.
+
+- Level methods, `log(event)`, and child bindings go through one pipeline. Keys matching the baseline sensitive names (`authorization`, `cookie`, `set-cookie`, `password`, `passphrase`, `secret`, `token`, API-key variants, and the other names the core reference lists) become `[Redacted]` at any depth, compared case-insensitively with `-` and `_` removed, never as substrings, so `tokenCount` is kept. The new `redact` option adds dot-separated field paths from the event data root, with `*` for any key or array index, such as `"orders.*.card"`. No option turns the baseline off.
+- Data is copied as JSON values without running getters or `toJSON`. Plain objects, arrays, dates, and primitives are kept; class instances, `Error`, `Map`, `Set`, functions, symbols, and accessor properties become `[Unsupported]`, and cycles become `[Circular]`. Nesting beyond 10 levels, more than 100 keys or items per container, more than 1,000 values per event, and strings past 4,096 characters become `[Truncated]`. Control, line-separator, and bidirectional characters in event names, messages, timestamps, keys, and values are escaped, so one event is one line. Your objects are never changed, and a child snapshots its bindings when you call `child`.
+- Logging never throws and never waits for the sink. An event that cannot be sanitized is discarded, and a sink that throws or rejects loses only that event; neither changes a request's result or causes an unhandled rejection. Each logger reports each kind of failure once on `console.error` as `routa.logger.event_discarded` or `routa.logger.sink_failed`, without the event or error.
+- The default sink writes one JSON line per event, `{"timestamp","level","event","message","data"}`, instead of a text line. A `src/routa.ts` without `logger` still logs at `info`.
+- `createLogger` throws a `TypeError` for an unknown option or an invalid `level`, `enabled`, `sink`, `now`, or `redact`.
+- `RoutaLogger` is created only by `createLogger`. TypeScript rejects a hand-written object of the same shape, and loading a `src/routa.ts`, `createApplication`, and `createHonoApp` reject one at runtime with a `TypeError` that names the migration. Loggers are frozen. A logger created by another copy of `@routa-ts/core` is accepted.
+- New type `RoutaLogSink` for sinks. `logger: false` still gives handlers a no-op `ctx.logger` and changes no shared logger instance.
+
+Migration: replace a custom `RoutaLogger` implementation or adapter with `createLogger({ sink })`, and forward events from the sink, for example `sink: ({ level, event, message, data }) => pino[level]({ ...data, event }, message)`. Your application keeps owning the backend's buffering, flushing, and shutdown. Rename fields whose names now match a baseline sensitive name if you need their values in logs, and log explicit fields such as `error.name` instead of `Error` or class instances. Update log collectors that parsed the old text console format.
