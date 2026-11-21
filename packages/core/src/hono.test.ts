@@ -303,7 +303,8 @@ describe("createHonoApp", () => {
 				expect.objectContaining({
 					event: "http.error",
 					data: expect.objectContaining({
-						issues: [{ code: "invalid_type", path: ["profile", "id"] }],
+						issueCount: 1,
+						issueCodes: ["invalid_type"],
 					}),
 				}),
 			]),
@@ -398,7 +399,8 @@ describe("createHonoApp", () => {
 				expect.objectContaining({
 					event: "http.error",
 					data: expect.objectContaining({
-						issues: [{ code: "response_value_changed", path: ["name"] }],
+						issueCount: 1,
+						issueCodes: ["response_value_changed"],
 					}),
 				}),
 			]),
@@ -1322,7 +1324,8 @@ describe("createHonoApp", () => {
 				expect.objectContaining({
 					event: "http.error",
 					data: expect.objectContaining({
-						issues: [{ code: "invalid_type", path: ["user", "id"] }],
+						issueCount: 1,
+						issueCodes: ["invalid_type"],
 					}),
 				}),
 			]),

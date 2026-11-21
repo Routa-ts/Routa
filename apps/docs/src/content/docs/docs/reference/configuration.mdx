@@ -99,12 +99,12 @@ Routa enables logging when a logger is configured. Set `logger: false` to disabl
 runtime emits two startup lifecycle events and two request events. Request events go through
 the request logger, so their data starts with `requestId`, then `correlationId` when present:
 
-| Event                    | Level   | Data                                                             |
-| ------------------------ | ------- | ---------------------------------------------------------------- |
-| `api.started`            | `info`  | `host`, `port`, `routes`                                         |
-| `api.start_failed`       | `error` | `error`, `host`, `port`                                          |
-| `http.response.prepared` | `info`  | `requestId`, `method`, `route`, `status`, `durationMs`           |
-| `http.error`             | `error` | `requestId`, `method`, `route`, `status`, and sometimes `issues` |
+| Event                    | Level   | Data                                                                               |
+| ------------------------ | ------- | ---------------------------------------------------------------------------------- |
+| `api.started`            | `info`  | `host`, `port`, `routes`                                                           |
+| `api.start_failed`       | `error` | `error`, `host`, `port`                                                            |
+| `http.response.prepared` | `info`  | `requestId`, `method`, `route`, `status`, `durationMs`                             |
+| `http.error`             | `error` | `requestId`, `method`, `route`, `status`, and sometimes `issueCount`, `issueCodes` |
 
 `http.response.prepared` is written once for every response Routa prepares, including
 unmatched requests, validation failures, middleware rejects, automatic `OPTIONS`, `405`, and
@@ -123,8 +123,10 @@ Neither request event includes the request's path, query, raw headers, body, cre
 principal, or any error's message, name, or stack.
 
 `http.error` is emitted only for responses with a status of 500 or above. When response
-or middleware context validation fails, `issues` contains only Zod `code` and `path`
-fields. Routa never logs the rejected response or context values.
+or middleware context validation fails, `issueCount` is the number of issues Routa found and
+`issueCodes` lists their distinct codes, sorted, such as `["invalid_type"]`. Routa never logs
+an issue's path, which can hold request data such as a record key, or the rejected response
+or context values.
 
 With [application services](/docs/concepts/services/), Routa also logs
 `services.cleanup_failed` at `error` level, with a `failures` list, when a cleanup callback

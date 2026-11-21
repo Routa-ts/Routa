@@ -460,6 +460,30 @@ describe("request identity", () => {
 		expect(JSON.stringify(events)).not.toMatch(/PROPFIND|BREW|"patch"/);
 	});
 
+	it("LOG-AC-12 logs invalid handler output without the request data its issue paths hold", async () => {
+		const { events, logger } = capture();
+		const totals = createRoute({
+			input: { query: z.object({ key: z.string() }) },
+			responses: { ok: { status: 200, schema: z.record(z.string(), z.number()) } },
+			run: ({ input }) =>
+				({ type: "ok", data: { [input.query.key]: "one", other: "two" } }) as never,
+		});
+		const app = createHonoApp([{ method: "get", path: "/totals", contract: totals }], { logger });
+
+		const response = await app.request("/totals?key=alice@example.com");
+
+		expect(response.status).toBe(500);
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual({
+			requestId: response.headers.get("x-request-id"),
+			method: "GET",
+			route: "/totals",
+			status: 500,
+			issueCount: 2,
+			issueCodes: ["invalid_type"],
+		});
+		expect(JSON.stringify(events)).not.toContain("alice");
+	});
+
 	it("LOG-AC-12 logs no preparation when no response was prepared", async () => {
 		const { events, logger } = capture();
 		const app = createHonoApp([echoRoute], { logger });
@@ -682,7 +706,12 @@ describe("correlation identity", () => {
 				routaCorrelationHeader: "x-trace-ref",
 				routaApplicationServices: ["clock"],
 				routaRoutes: [
-					{ file: "src/routes/echo/route.ts", path: "/echo", methods: ["GET"], middlewareFiles: [] },
+					{
+						file: "src/routes/echo/route.ts",
+						path: "/echo",
+						methods: ["GET"],
+						middlewareFiles: [],
+					},
 				],
 			},
 			"src/routa.ts": {

@@ -324,8 +324,8 @@ for every response it prepares, with `requestId`, `method`, `route`, `status`, a
 `durationMs`, and `http.error` at `error` for responses of 500 or above with `requestId`,
 `method`, `route`, and `status`. The
 [events table](/docs/reference/configuration/#events-routa-writes) defines each field. Response
-and middleware context schema failures also include structured `issues` containing only
-each Zod issue's `code` and `path`; rejected values are never logged.
+and middleware context schema failures also include `issueCount` and the distinct, sorted
+`issueCodes`; issue paths and rejected values are never logged.
 
 Request events never carry the request's path, query, body, raw headers, cookies, credentials,
 principal, or any error's message, name, or stack. A thrown authenticator, an invalid principal,

@@ -1205,9 +1205,10 @@ function errorResponse(error: unknown): Response {
 
 /**
  * Logs a failed server request through its request logger, so the event carries the request's
- * identity. It holds the method, the route pattern, the status, and for invalid handler output the
- * issue codes and paths Routa found. It never holds the request's path or any error's message,
- * name, or stack, which may carry credentials or personal data.
+ * identity. It holds the method, the route pattern, the status, and for invalid handler output how
+ * many issues Routa found and their distinct codes. It never holds the request's path, an issue's
+ * path, which can hold request data such as a record key, or any error's message, name, or stack,
+ * which may carry credentials or personal data.
  *
  * @param path - The route's path pattern, when the executor knows it
  * @param response - The response prepared for the request
@@ -1227,7 +1228,11 @@ function logRequestError(
 		method: loggedMethod(request.method),
 		...(path !== undefined && { route: path }),
 		status: response.status,
-		...(error instanceof InvalidHandlerOutputError && error.issues && { issues: error.issues }),
+		...(error instanceof InvalidHandlerOutputError
+			&& error.issues && {
+				issueCount: error.issues.length,
+				issueCodes: [...new Set(error.issues.map((issue) => issue.code))].sort(),
+			}),
 	});
 }
 
