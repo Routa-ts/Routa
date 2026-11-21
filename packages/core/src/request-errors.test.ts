@@ -527,6 +527,57 @@ describe("request error reporting", () => {
 		}
 	});
 
+	it("LOG-AC-13 shows middleware the same invalid output a thrown refinement ZodError gave before", async () => {
+		const { events, logger } = capture();
+		const { calls, onRequestError } = recorder();
+		let caught: unknown;
+		const watch = createMiddleware({
+			run: async ({ next }) => {
+				try {
+					return await next();
+				} catch (error) {
+					caught = error;
+					throw error;
+				}
+			},
+		});
+		const app = createHonoApp(
+			[
+				{
+					method: "get",
+					path: "/x",
+					contract: createRoute({
+						middleware: [watch],
+						responses: {
+							ok: {
+								status: 200,
+								schema: z.object({ ok: z.boolean() }).refine(() => z.string().parse(7)),
+							},
+						},
+						run: () => ({ type: "ok", data: { ok: true } }),
+					}),
+				},
+			],
+			{ logger, onRequestError, responseValidation: "always" },
+		);
+
+		const response = await app.request("/x");
+
+		expect(response.status).toBe(500);
+		expect(await response.json()).toMatchObject({ title: "Invalid handler output" });
+		expect(caught).toBeInstanceOf(InvalidHandlerOutputError);
+		expect((caught as InvalidHandlerOutputError).issues).toEqual([
+			{ code: "invalid_type", path: [] },
+		]);
+		expect(calls.map((call) => [call.error instanceof z.ZodError, call.diagnostic.code])).toEqual([
+			[true, "unexpected_failure"],
+		]);
+		expect(events.find((event) => event.event === "http.error")?.data).toMatchObject({
+			issueCount: 1,
+			issueCodes: ["invalid_type"],
+		});
+	});
+
 	it("LOG-AC-13 reports a body JSON cannot represent as Routa's contract violation", async () => {
 		const circular: Record<string, unknown> = { ok: true };
 		circular.self = circular;

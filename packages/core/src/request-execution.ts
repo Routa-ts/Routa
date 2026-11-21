@@ -575,12 +575,31 @@ function parseSchema(schema: z.ZodTypeAny, value: unknown): unknown {
 	return schema.parse(value);
 }
 
+/** `ZodError`s a schema's own code threw, rather than ones describing a value that failed it. */
+const thrownBySchemaCode = new WeakSet<ZodError>();
+
+/**
+ * The invalid-output error Routa answers a failed output check with: the same message and issues
+ * whether the value failed the schema or a refinement threw a `ZodError`, so middleware that
+ * catches `next()` sees what it always has. A thrown one also carries the original, which
+ * `onRequestError` receives.
+ */
+function outputSchemaError(
+	message: string,
+	error: ZodError,
+	path: readonly PropertyKey[] = [],
+): InvalidHandlerOutputError {
+	const issues = handlerOutputIssues(error, path);
+	return thrownBySchemaCode.has(error)
+		? new OutputCodeError(message, error, issues)
+		: new InvalidHandlerOutputError(message, issues);
+}
+
 /**
  * Parses a value application code produced, such as a response body or provided context.
  *
- * @throws {ZodError} When the value does not match the schema
- * @throws {OutputCodeError} When the schema's own code, such as a refinement, threw a `ZodError`,
- *   which Routa answers as invalid output, as it always has, while reporting the thrown error
+ * @throws {ZodError} When the value does not match the schema, or the schema's own code, such as a
+ *   refinement, threw one; {@link outputSchemaError} tells the two apart
  * @throws What the schema's own code threw, when it is anything else, answered as any unexpected
  *   error is
  */
@@ -590,9 +609,11 @@ function parseOutput(schema: z.ZodTypeAny, value: unknown): unknown {
 	try {
 		parsed = schema.safeParse(value);
 	} catch (error) {
-		throw error instanceof ZodError
-			? new OutputCodeError("Validating the output threw.", error)
-			: error;
+		if (error instanceof ZodError) {
+			thrownBySchemaCode.add(error);
+		}
+
+		throw error;
 	}
 
 	if (!parsed.success) {
@@ -744,10 +765,9 @@ function parseMiddlewareProvides(
 			validated[key] = parseOutput(schema, providedCtx[key]);
 		} catch (error) {
 			if (error instanceof ZodError) {
-				throw new InvalidHandlerOutputError(
-					"Middleware provided context that does not match schema.",
-					handlerOutputIssues(error, [key]),
-				);
+				throw outputSchemaError("Middleware provided context that does not match schema.", error, [
+					key,
+				]);
 			}
 
 			throw error;
@@ -967,9 +987,9 @@ function validateResult(produced: ProducedResult, validateResponse: boolean): Va
 			assertUnchanged(result.data, snapshot);
 		} catch (error) {
 			if (error instanceof ZodError) {
-				throw new InvalidHandlerOutputError(
+				throw outputSchemaError(
 					"Handler returned response data that does not match schema.",
-					handlerOutputIssues(error),
+					error,
 				);
 			}
 
@@ -999,9 +1019,10 @@ function validatedHeaders(
 			assertUnchanged(parseOutput(outcome.headers, values), { ...values }, ["headers"]);
 		} catch (error) {
 			if (error instanceof ZodError) {
-				throw new InvalidHandlerOutputError(
+				throw outputSchemaError(
 					"Handler returned response headers that do not match schema.",
-					handlerOutputIssues(error, ["headers"]),
+					error,
+					["headers"],
 				);
 			}
 
@@ -1036,9 +1057,10 @@ function validatedCookies(
 				]);
 			} catch (error) {
 				if (error instanceof ZodError) {
-					throw new InvalidHandlerOutputError(
+					throw outputSchemaError(
 						"Handler returned a cookie value that does not match schema.",
-						handlerOutputIssues(error, ["cookies", effect.cookie.name]),
+						error,
+						["cookies", effect.cookie.name],
 					);
 				}
 
@@ -1389,8 +1411,8 @@ class RequestServicesError extends Error {
  * `onRequestError` receives the thrown value, as `cause`.
  */
 class OutputCodeError extends InvalidHandlerOutputError {
-	constructor(message: string, cause: unknown) {
-		super(message);
+	constructor(message: string, cause: unknown, issues?: readonly HandlerOutputIssue[]) {
+		super(message, issues);
 		this.cause = cause;
 	}
 }
