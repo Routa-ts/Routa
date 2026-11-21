@@ -300,6 +300,21 @@ export const logger = createLogger({ sink: () => {} });
 						);
 					}
 				}
+				if (status === 403) {
+					// The reject's declared header and body match what OpenAPI documents for them.
+					expect(documentedResponse!.headers?.["x-reason"], label).toMatchObject({
+						required: true,
+						schema: { type: "string" },
+					});
+					expect(response.headers.get("x-reason"), label).toBe("closed");
+					expect(
+						(documentedResponse as { content?: Record<string, { schema?: unknown }> }).content?.[
+							"application/json"
+						]?.schema,
+						label,
+					).toMatchObject({ type: "object", properties: { message: { type: "string" } } });
+					expect(await response.json(), label).toEqual({ message: "Closed" });
+				}
 				if (status === 200) {
 					expect(response.headers.get("set-cookie"), label).toContain("seen=yes");
 					expect(Object.keys(documentedResponse!.headers!), label).toContain("Set-Cookie");
