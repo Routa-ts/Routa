@@ -959,6 +959,78 @@ describe("request identity", () => {
 		expect(inner.events).toEqual([]);
 	});
 
+	it("LOG-AC-07 binds each request's identity when a request logger configures another app", async () => {
+		const child = capture();
+		const childRoute: HonoRoute = {
+			method: "get",
+			path: "/child",
+			contract: createRoute({
+				responses: {
+					ok: {
+						status: 200,
+						schema: z.object({ requestId: z.string(), correlationId: z.string().nullable() }),
+					},
+				},
+				run: ({ ctx }) => {
+					ctx.logger.info("child.read", "Read the identity.");
+					return {
+						type: "ok",
+						data: { requestId: ctx.requestId, correlationId: ctx.correlationId ?? null },
+					};
+				},
+			}),
+		};
+		// The child app is created lazily, configured with the first request's ctx.logger.
+		let childApp: ReturnType<typeof createHonoApp> | undefined;
+		const parentRoute: HonoRoute = {
+			method: "get",
+			path: "/parent",
+			contract: createRoute({
+				responses: { ok: { status: 200, schema: z.object({ requestId: z.string() }) } },
+				run: ({ ctx }) => {
+					childApp ??= createHonoApp([childRoute], { logger: ctx.logger, correlation: true });
+					return { type: "ok", data: { requestId: ctx.requestId } };
+				},
+			}),
+		};
+		const parent = createHonoApp([parentRoute], { logger: child.logger, correlation: true });
+		const first = await parent.request("/parent", { headers: { "x-correlation-id": "first" } });
+		const firstId = ((await first.json()) as { requestId: string }).requestId;
+		child.events.length = 0;
+
+		for (const correlation of ["second", undefined]) {
+			const response = await childApp!.request("/child", {
+				headers: correlation === undefined ? {} : { "x-correlation-id": correlation },
+			});
+			const body = (await response.json()) as { requestId: string; correlationId: string | null };
+			const identity = {
+				requestId: body.requestId,
+				...(correlation !== undefined && { correlationId: correlation }),
+			};
+
+			expect(body.requestId, correlation).not.toBe(firstId);
+			expect(body.correlationId, correlation).toBe(correlation ?? null);
+			expect(response.headers.get("x-request-id"), correlation).toBe(body.requestId);
+			expect(
+				child.events.map((event) => [event.event, event.data]),
+				correlation,
+			).toEqual([
+				["child.read", identity],
+				[
+					"http.response.prepared",
+					{
+						...identity,
+						method: "GET",
+						route: "/child",
+						status: 200,
+						durationMs: expect.any(Number),
+					},
+				],
+			]);
+			child.events.length = 0;
+		}
+	});
+
 	it("LOG-AC-07 keeps identity in context and headers with logging off", async () => {
 		const app = await createApplication([echoRoute]);
 

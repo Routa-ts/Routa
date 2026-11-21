@@ -88,7 +88,9 @@ Routa owns these values:
   bindings name them. When Routa accepted no correlation ID, its events and bindings have no
   `correlationId` at all, even if the configured logger's bindings or the event data name one.
   The logger you configured, and any module that imports it, stays without request identity,
-  so concurrent requests never share it.
+  so concurrent requests never share it. When you configure a request logger, such as
+  `ctx.logger`, as another app's logger, that app's events carry the identity of the request
+  it is handling, not the identity the logger was bound to.
 
 A handler you add to the Hono app `createHonoApp` returns can return any `Response`. Routa
 writes its headers on a copy of a response it did not prepare, so a response your code reuses

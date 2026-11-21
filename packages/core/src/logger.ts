@@ -252,15 +252,16 @@ export function createLogger(input: CreateLoggerOptions = {}): RoutaLogger {
 	/**
 	 * A child bound to request identity fields, which come first in its bindings and every event.
 	 * A field without a value, such as `correlationId` when none was accepted, appears in neither,
-	 * whatever the bindings or event data hold. Identity this logger already binds stays, so a
-	 * request logger's identity is never replaced.
+	 * whatever the bindings or event data hold. The fields replace any identity this logger
+	 * already binds, so a request logger configured as another app's logger logs each request
+	 * that app handles with that request's identity, not its own.
 	 */
 	function requestLogger(
 		bindings: RoutaLogData | undefined,
 		identity: RoutaLogData,
 		fields: RequestIdentityFields,
 	): RequestLogging<RoutaLogger> {
-		const kept = { ...fields, ...identity };
+		const kept = { ...identity, ...fields };
 		return buildLogger(childOf(bindings, {}, kept), kept);
 	}
 
