@@ -51,6 +51,30 @@ describe("createRequestExecutor", () => {
 		expect(events).toEqual(["middleware:before", "handler"]);
 	});
 
+	it("calls a middleware's run method with its contract as this", async () => {
+		let declared: unknown;
+		const gate = createMiddleware({
+			run({ next }) {
+				declared = this;
+				return next();
+			},
+		});
+		const contract = createRoute({
+			middleware: [gate],
+			responses: { ok: { status: 204 } },
+			run: () => ({ type: "ok" }),
+		});
+		const execute = createRequestExecutor(
+			contract as unknown as RuntimeRouteContract,
+			executionOptions,
+		);
+
+		const response = await execute(new Request("http://local/"), {}, state);
+
+		expect(response.status).toBe(204);
+		expect(declared).toBe(gate);
+	});
+
 	it.each([true, false])(
 		"selects declared statuses and bodies with validation=%s",
 		async (validateResponses) => {

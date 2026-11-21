@@ -403,7 +403,8 @@ async function runWithMiddleware(
 		// read or mutate the outcome; returning the token is how it continues.
 		const continuation = Object.freeze(Object.create(null) as object);
 		const input = await failures.at("input", () => inputReader.parse(item.input));
-		const result = await run({
+		// Called as a method of its contract, so a `run() {}` method can read `this`.
+		const result = await run.call(item, {
 			input,
 			ctx,
 			/**
