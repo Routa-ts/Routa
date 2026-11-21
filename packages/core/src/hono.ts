@@ -416,13 +416,12 @@ function identifyRequests(
 			correlationHeader === undefined
 				? undefined
 				: acceptedCorrelation(context.req.raw.headers, correlationHeader);
-		const identity = {
+		const state: TrackedRequest = {
 			requestId,
 			...(correlationId !== undefined && { correlationId }),
-		};
-		const state: TrackedRequest = {
-			...identity,
-			...deriveLogger(identity),
+			// Both names are bound on every request, `correlationId` without a value when none was
+			// accepted, so no binding of the configured logger and no event data can supply either.
+			...deriveLogger({ requestId, correlationId }),
 		};
 		requests.set(context, state);
 

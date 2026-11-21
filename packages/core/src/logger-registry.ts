@@ -15,8 +15,12 @@ const createdKey = Symbol.for("@routa-ts/core/createLogger");
  */
 const requestLoggerKey = Symbol.for("@routa-ts/core/requestLogger");
 
-/** Request identity fields, which a request logger binds so no event or child can replace them. */
-export type RequestIdentityFields = Readonly<Record<string, string>>;
+/**
+ * Request identity fields, which a request logger binds so no event or child can replace them. A
+ * field set to `undefined` is reserved without a value: no event or binding of the request logger
+ * carries it.
+ */
+export type RequestIdentityFields = Readonly<Record<string, string | undefined>>;
 
 /**
  * Writes one of Routa's own events about a request. Its data comes right after the identity, so

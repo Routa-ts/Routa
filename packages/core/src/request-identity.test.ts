@@ -254,8 +254,91 @@ describe("request identity", () => {
 			["grandchild", requestId],
 			["http.response.prepared", requestId],
 		]);
-		// Correlation is off, so the data's own correlationId field is ordinary data.
-		expect(events[0]?.data?.correlationId).toBe("forged");
+		// No correlation ID was accepted, so the request's events carry none at all.
+		expect(events.map((event) => event.data?.correlationId)).toEqual(events.map(() => undefined));
+	});
+
+	it("LOG-AC-07 logs only the accepted correlation ID, whatever the configured logger or the event binds", async () => {
+		const { events, logger } = capture();
+		const route: HonoRoute = {
+			method: "get",
+			path: "/bound",
+			contract: createRoute({
+				responses: { ok: { status: 200 } },
+				run: ({ ctx }) => {
+					ctx.logger.info("data.override", "Data names the correlation.", {
+						correlationId: "forged",
+					});
+					ctx.logger.log({
+						level: "info",
+						event: "log.override",
+						message: "A whole event names the correlation.",
+						timestamp: new Date(0).toISOString(),
+						data: { correlationId: "forged" },
+					});
+					const child = ctx.logger.child({ correlationId: "forged", step: "child" });
+					child.info("child.override", "A child names the correlation.");
+					expect(child.bindings()).toEqual({
+						requestId: ctx.requestId,
+						...(ctx.correlationId !== undefined && { correlationId: ctx.correlationId }),
+						service: "orders",
+						step: "child",
+					});
+					return { type: "ok" };
+				},
+			}),
+		};
+		const failing: HonoRoute = {
+			method: "get",
+			path: "/boom",
+			contract: createRoute({
+				responses: { ok: { status: 200 } },
+				run: () => {
+					throw new Error("boom");
+				},
+			}),
+		};
+		const configured = logger.child({
+			requestId: "process-level",
+			correlationId: "process-level",
+			service: "orders",
+		});
+
+		for (const correlation of [false, true]) {
+			for (const headers of [{}, { "x-correlation-id": "trace-1" }]) {
+				events.length = 0;
+				const app = createHonoApp([route, failing], { logger: configured, correlation });
+				const ok = await app.request("/bound", { headers });
+				const failed = await app.request("/boom", { headers });
+				const accepted = correlation ? headers["x-correlation-id"] : undefined;
+				const label = JSON.stringify({ correlation, headers });
+
+				expect(ok.status, label).toBe(200);
+				expect(
+					events.map((event) => [
+						event.event,
+						event.data?.requestId,
+						event.data?.correlationId,
+						Object.hasOwn(event.data ?? {}, "correlationId"),
+					]),
+					label,
+				).toEqual(
+					[
+						["data.override", ok],
+						["log.override", ok],
+						["child.override", ok],
+						["http.response.prepared", ok],
+						["http.error", failed],
+						["http.response.prepared", failed],
+					].map(([name, response]) => [
+						name,
+						(response as Response).headers.get("x-request-id"),
+						accepted,
+						accepted !== undefined,
+					]),
+				);
+			}
+		}
 	});
 
 	it("LOG-AC-07 keeps identity and Routa's event fields when the configured logger is full of bindings", async () => {

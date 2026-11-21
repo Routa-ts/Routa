@@ -251,7 +251,9 @@ export function createLogger(input: CreateLoggerOptions = {}): RoutaLogger {
 
 	/**
 	 * A child bound to request identity fields, which come first in its bindings and every event.
-	 * Identity this logger already binds stays, so a request logger's identity is never replaced.
+	 * A field without a value, such as `correlationId` when none was accepted, appears in neither,
+	 * whatever the bindings or event data hold. Identity this logger already binds stays, so a
+	 * request logger's identity is never replaced.
 	 */
 	function requestLogger(
 		bindings: RoutaLogData | undefined,
@@ -875,14 +877,16 @@ const bindingKeys = new WeakMap<RoutaLogData, ReadonlyMap<string, string>>();
  * whole: an event's data with its bindings, or a child's bindings with its parent's. `kept` keys
  * come first, then `base` keys, and an `added` key replaces a `base` key in place when both escape
  * to the same name. No `base` or `added` key replaces a `kept` one, and coming first, `kept`
- * fields are never the ones the limits leave out.
+ * fields are never the ones the limits leave out. A `kept` key whose value is `undefined` is
+ * written nowhere, so neither `base` nor `added` can supply it.
  *
  * @param base - Bindings that were already sanitized, so reading them runs no caller code and
  *   their keys are already escaped; deciding their redaction again reveals nothing the first
  *   decision redacted
  * @param rememberKeys - Whether the result is a child's bindings, whose changed keys later
  *   events may override
- * @param kept - Fields Routa owns, such as request identity, whose keys need no escaping
+ * @param kept - Fields Routa owns, such as request identity, whose keys need no escaping, and
+ *   names it reserves without a value
  * @throws {TypeError} When `added` is not a plain object
  */
 function sanitizeMerged(
@@ -901,8 +905,11 @@ function sanitizeMerged(
 	const originalKeys = new Map<string, string>();
 	const isKept = (name: string) => Object.hasOwn(kept, name);
 
+	// A kept name without a value is reserved: no field of that name is written at all.
 	for (const name of Object.keys(kept)) {
-		members.set(name, { key: name, read: () => kept[name] });
+		if (kept[name] !== undefined) {
+			members.set(name, { key: name, read: () => kept[name] });
+		}
 	}
 
 	for (const name of Object.keys(base)) {
