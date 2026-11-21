@@ -8,6 +8,7 @@ import {
 import type { AnyRouteContract, MiddlewareContract, RouteInput } from "./index.js";
 import { type HandlerOutputIssue, InvalidHandlerOutputError } from "./handler-output-error.js";
 import type { RoutaLogger } from "./logger.js";
+import type { FrameworkEvent } from "./logger-registry.js";
 import { loggedMethod, type RequestIdentity, type RequestState } from "./request-identity.js";
 import {
 	type CookieEntry,
@@ -206,7 +207,7 @@ export function createRequestExecutor(
 			response = errorResponse(error);
 
 			try {
-				logRequestError(state.logger, request, options.path, error, response);
+				logRequestError(state.event, request, options.path, error, response);
 			} catch {
 				// A failing logger must not skip request cleanup or replace the error response.
 			}
@@ -1214,7 +1215,7 @@ function errorResponse(error: unknown): Response {
  * @param response - The response prepared for the request
  */
 function logRequestError(
-	logger: RoutaLogger,
+	event: FrameworkEvent,
 	request: Request,
 	path: string | undefined,
 	error: unknown,
@@ -1224,7 +1225,7 @@ function logRequestError(
 		return;
 	}
 
-	logger.error("http.error", "Request failed.", {
+	event("error", "http.error", "Request failed.", {
 		method: loggedMethod(request.method),
 		...(path !== undefined && { route: path }),
 		status: response.status,

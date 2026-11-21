@@ -402,7 +402,7 @@ function identifyRequests(
 		};
 		const state: RequestState & { route?: string } = {
 			...identity,
-			logger: deriveLogger(identity),
+			...deriveLogger(identity),
 		};
 		requests.set(context, state);
 
@@ -425,7 +425,7 @@ function identifyRequests(
 			headers.set(correlationHeader, correlationId);
 		}
 
-		state.logger.info("http.response.prepared", "Response prepared.", {
+		state.event("info", "http.response.prepared", "Response prepared.", {
 			method: loggedMethod(context.req.raw.method),
 			route: state.route ?? unmatchedRoute,
 			status: context.res.status,

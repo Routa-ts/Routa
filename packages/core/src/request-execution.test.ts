@@ -8,6 +8,7 @@ const executionOptions = { validateResponses: true };
 const state = {
 	requestId: "00000000-0000-4000-8000-000000000000",
 	logger: createLogger({ enabled: false }),
+	event: () => undefined,
 };
 
 describe("createRequestExecutor", () => {

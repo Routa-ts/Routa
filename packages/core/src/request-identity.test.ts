@@ -258,6 +258,63 @@ describe("request identity", () => {
 		expect(events[0]?.data?.correlationId).toBe("forged");
 	});
 
+	it("LOG-AC-07 keeps identity and Routa's event fields when the configured logger is full of bindings", async () => {
+		const { events, logger } = capture();
+		const bindings = Object.fromEntries(
+			Array.from({ length: 100 }, (_, index) => [`b${index}`, index]),
+		);
+		const boom: HonoRoute = {
+			method: "get",
+			path: "/boom",
+			contract: createRoute({
+				responses: { ok: { status: 200 } },
+				run: () => {
+					throw new Error("boom");
+				},
+			}),
+		};
+		const app = createHonoApp([echoRoute, boom], {
+			logger: logger.child(bindings),
+			correlation: true,
+		});
+
+		const ok = await app.request("/echo", { headers: { "x-correlation-id": "trace-1" } });
+		const failed = await app.request("/boom", { headers: { "x-correlation-id": "trace-2" } });
+		const data = (name: string, response: Response) =>
+			events.find(
+				(event) =>
+					event.event === name && event.data?.requestId === response.headers.get("x-request-id"),
+			)?.data;
+		const identity = (response: Response, correlationId: string) => ({
+			requestId: response.headers.get("x-request-id"),
+			correlationId,
+		});
+
+		expect(data("echo.read", ok)).toMatchObject(identity(ok, "trace-1"));
+		expect(data("http.response.prepared", ok)).toMatchObject({
+			...identity(ok, "trace-1"),
+			method: "GET",
+			route: "/echo",
+			status: 200,
+			durationMs: expect.any(Number),
+		});
+		expect(data("http.error", failed)).toMatchObject({
+			...identity(failed, "trace-2"),
+			method: "GET",
+			route: "/boom",
+			status: 500,
+		});
+		expect(data("http.response.prepared", failed)).toMatchObject({
+			...identity(failed, "trace-2"),
+			status: 500,
+		});
+		// The limits still hold: the application's bindings are the fields left out.
+		for (const event of events) {
+			expect(Object.keys(event.data ?? {}).length, event.event).toBe(101);
+			expect(event.data?.["[Truncated]"], event.event).toBe("[Truncated]");
+		}
+	});
+
 	it("LOG-AC-07 leaves a shared logger without request identity, and requests apart", async () => {
 		const { events, logger } = capture();
 		const route: HonoRoute = {

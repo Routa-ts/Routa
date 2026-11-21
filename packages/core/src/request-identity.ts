@@ -1,4 +1,5 @@
 import type { RoutaLogger } from "./logger.js";
+import type { FrameworkEvent } from "./logger-registry.js";
 import { reservedHeaders } from "./response-headers.js";
 
 /** The response header that carries Routa's generated request identity. */
@@ -20,6 +21,8 @@ export type RequestIdentity = {
 export type RequestState = RequestIdentity & {
 	/** The configured logger's child, bound to the identity so no event or child replaces it. */
 	readonly logger: RoutaLogger;
+	/** Writes Routa's own events through `logger`, so no application binding crowds out their fields. */
+	readonly event: FrameworkEvent;
 };
 
 /** One value of 1 to 128 ASCII letters, digits, dots, underscores, and hyphens. */

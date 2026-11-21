@@ -1379,6 +1379,13 @@ own key of an object before Routa keeps the first 100, so logging an object with
 number of keys still takes time in proportion to its size. Log the fields you need from such a
 record instead of the whole record.
 
+Request identity counts toward these limits but always comes first: a request logger's
+bindings and events start with `requestId`, then `correlationId` when Routa accepted one, so
+no application binding or data crowds them out. Routa's own request events,
+`http.response.prepared` and `http.error`, put their fields right after the identity, so a
+configured logger whose bindings fill 100 keys still logs every one of them; its bindings are
+the keys the limit leaves out.
+
 Redaction matches names and paths only. It does not find a secret inside a message or under
 an unknown name, and it cannot see what a sink or a direct backend call adds.
 
