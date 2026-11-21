@@ -72,7 +72,8 @@ typed.
 The project catalog in `src/services.ts` logs through the shared logger it imports, so its
 events carry no request identity. The projects `POST` gives `ProjectAudit.flush` its
 `ctx.logger`, so `projects.created` carries the request's `requestId` and `correlationId`.
-`vp run --filter full-api pino:exercise` asserts both paths through the Pino sink.
+`vp run --filter full-api pino:exercise` starts the application through its generated
+`createTestApp`, creates one project, and asserts both events as Pino writes them.
 
 `(private)` is a route group: it shapes the middleware tree without appearing in any URL.
 `/admin/audit-events` is the real path, not `/private/admin/audit-events`.
