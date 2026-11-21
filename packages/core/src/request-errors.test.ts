@@ -786,6 +786,39 @@ describe("request error reporter configuration", () => {
 		await project.application.dispose();
 	});
 
+	it("LOG-AC-14 reads the project's onRequestError once at startup", async () => {
+		const { calls, onRequestError } = recorder();
+		const read = vi.fn(() => onRequestError);
+		const config = { logger: false };
+		Object.defineProperty(config, "onRequestError", { enumerable: true, get: read });
+		const project = await createProjectApplication(
+			async (file) =>
+				({
+					".routa/routes.gen.ts": {
+						routaRoutes: [
+							{
+								file: "src/routes/boom/route.ts",
+								path: "/boom",
+								methods: ["GET"],
+								middlewareFiles: [],
+							},
+						],
+					},
+					"src/routa.ts": { default: config },
+					"src/routes/boom/route.ts": { default: { get: boom.contract } },
+				})[file],
+			{ runtimeMode: "start" },
+		);
+
+		expect(read).toHaveBeenCalledTimes(1);
+		expect((await project.application.fetch(new Request("http://localhost/boom"))).status).toBe(
+			500,
+		);
+		expect(read).toHaveBeenCalledTimes(1);
+		expect(calls).toHaveLength(1);
+		await project.application.dispose();
+	});
+
 	it("LOG-AC-14 rejects a reporter that is not a function at startup", async () => {
 		const message =
 			"onRequestError must be a function that receives the original error and its diagnostic. Omit it to report nothing.";

@@ -129,13 +129,15 @@ export async function buildProjectApplication(
 	// whatever code changes the config later.
 	const correlationHeader = correlationHeaderOf(config.correlation);
 	assertCorrelationMetadata(correlationHeader, metadata);
+	// Read once, so the value createApplication checks is the one requests report to.
+	const { onRequestError } = config;
 	const application = await createApplication(routes, {
 		runtimeMode: options.runtimeMode,
 		...(config.authentication && { authentication: config.authentication }),
 		...(correlationHeader !== undefined && { correlation: { header: correlationHeader } }),
 		...(logger && { logger }),
 		// Passed whatever the logger is, so `logger: false` keeps it. createApplication checks it.
-		...(config.onRequestError !== undefined && { onRequestError: config.onRequestError }),
+		...(onRequestError !== undefined && { onRequestError }),
 		...(config.lifecycleHeaders !== undefined && { lifecycleHeaders: config.lifecycleHeaders }),
 		...(config.responseValidation && { responseValidation: config.responseValidation }),
 		...(services && { services: services as ApplicationServicesDeclaration }),
