@@ -102,6 +102,12 @@ returns, goes back unchanged, without `x-request-id` or the correlation echo, an
 correlation header it already carries. `http.response.prepared` still records it with status
 `101`.
 
+An error thrown by a handler you add to that Hono app goes to Hono's error handler, because the
+handler is your Hono code rather than a Routa route. Hono's default handler prints the error,
+including its message and stack, to the console and answers `500 Internal Server Error`. That
+response carries `x-request-id` and is logged once as `http.response.prepared`, without an
+`http.error` event. Set `app.onError()` to decide what such failures print and return.
+
 A handler or middleware you add that neither returns a response nor calls `next()` leaves the
 request unanswered. Hono fails such a request through its error handler only after the whole
 chain returns, where Routa cannot reach the response. Routa raises the same error, `Context is
