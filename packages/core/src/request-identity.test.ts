@@ -1228,6 +1228,31 @@ describe("request identity", () => {
 		expect(authenticate).not.toHaveBeenCalled();
 	});
 
+	it("LOG-AC-09 refuses a mismatched mounted app's request after outer middleware set a response", async () => {
+		const outer = capture();
+		const inner = capture();
+		const app = createHonoApp([], {
+			logger: outer.logger,
+			correlation: { header: "x-trace-ref" },
+		});
+		app.use("*", async (context, next) => {
+			context.res = new Response("maintenance", { status: 503 });
+			await next();
+		});
+		const mounted = createHonoApp([], { logger: inner.logger });
+		mounted.get("/health", (context) => context.text("ok"));
+		app.route("/", mounted);
+
+		const response = await app.request("/health", { headers: { "x-trace-ref": "trace-1" } });
+
+		expect(response.status).toBe(500);
+		expect(response.headers.has("x-trace-ref")).toBe(false);
+		expect(outer.events.map((event) => event.data?.status)).toEqual([500]);
+		expect(inner.events.map((event) => [event.event, event.data?.status])).toEqual([
+			["http.error", 500],
+		]);
+	});
+
 	it("LOG-AC-07 binds each request's identity when a request logger configures another app", async () => {
 		const child = capture();
 		const childRoute: HonoRoute = {

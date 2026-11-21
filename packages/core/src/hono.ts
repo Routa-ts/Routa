@@ -495,7 +495,10 @@ function identifyRequests(
 					// route, a Hono handler added to this app, or no handler at all.
 					const state = stateFor({ requestId: owner.requestId });
 					states.set(context, state);
-					return refuse(context, owner, state);
+					// Assigned rather than returned, so the refusal replaces a response outer
+					// middleware already set before calling `next()`.
+					context.res = refuse(context, owner, state);
+					return;
 				}
 
 				states.set(context, stateFor(owner));
