@@ -73,7 +73,9 @@ export type CreateLoggerOptions = {
 	/**
 	 * Field paths to redact in addition to the baseline sensitive names, which always apply.
 	 * Segments are separated by `.` and matched case-insensitively from the root of the event data;
-	 * `*` matches any key or array index, such as `"orders.*.card"`.
+	 * `*` matches any key or array index, such as `"orders.*.card"`. No path redacts the
+	 * `requestId` and `correlationId` a request logger binds at the root, so request events log
+	 * the identity the response headers carry.
 	 */
 	redact?: readonly string[];
 	/** The clock for event timestamps. Defaults to `() => new Date()`. */
@@ -166,7 +168,14 @@ export function createLogger(input: CreateLoggerOptions = {}): RoutaLogger {
 					throw new TypeError("The logger's bindings could not be sanitized.");
 				}
 
-				const fields = sanitizeMerged(bindings, raw.data ?? {}, paths, false, raw.kept ?? identity);
+				const fields = sanitizeMerged(
+					bindings,
+					raw.data ?? {},
+					paths,
+					false,
+					raw.kept ?? identity,
+					identity,
+				);
 				event = {
 					timestamp: sanitizeText(raw.timestamp),
 					level: raw.level,
@@ -276,7 +285,7 @@ export function createLogger(input: CreateLoggerOptions = {}): RoutaLogger {
 		}
 
 		try {
-			return sanitizeMerged(bindings, added, paths, true, kept);
+			return sanitizeMerged(bindings, added, paths, true, kept, kept);
 		} catch {
 			return undefined;
 		}
@@ -805,8 +814,14 @@ function sanitizeItems(
 	return items;
 }
 
-/** An object member to sanitize: the key its redaction is decided on, and how to read its value. */
-type Member = { readonly key: string; readonly read: () => unknown };
+/**
+ * An object member to sanitize: the key its redaction is decided on, how to read its value, and
+ * whether it is request identity Routa binds, which no `redact` path names.
+ */
+type Member = { readonly key: string; readonly read: () => unknown; readonly identity?: true };
+
+/** What a member that is never redacted continues with: no path. */
+const noPaths: PendingPaths = [];
 
 function sanitizeEntries(
 	value: object,
@@ -839,14 +854,14 @@ function sanitizeMembers(
 	const entries: Array<[string, unknown]> = [];
 	let visited = 0;
 
-	for (const [name, { key, read }] of members) {
+	for (const [name, { key, read, identity }] of members) {
 		if (visited === maxEntries) {
 			truncated = true;
 			break;
 		}
 
 		visited += 1;
-		const item = sanitizeMember(read, traversal, redactionOf(key, pending));
+		const item = sanitizeMember(read, traversal, identity ? noPaths : redactionOf(key, pending));
 
 		if (item !== undefined) {
 			entries.push([name, item]);
@@ -888,6 +903,10 @@ const bindingKeys = new WeakMap<RoutaLogData, ReadonlyMap<string, string>>();
  *   events may override
  * @param kept - Fields Routa owns, such as request identity, whose keys need no escaping, and
  *   names it reserves without a value
+ * @param identity - The request identity Routa binds, among `kept`. Its fields are never
+ *   redacted, so they log the values the response headers carry: no baseline name is an
+ *   identity name, and `redact` paths do not apply to them. A path still applies to a field of
+ *   the same name deeper in the data.
  * @throws {TypeError} When `added` is not a plain object
  */
 function sanitizeMerged(
@@ -896,6 +915,7 @@ function sanitizeMerged(
 	paths: PendingPaths,
 	rememberKeys = false,
 	kept: RoutaLogData = {},
+	identity: RoutaLogData = {},
 ): RoutaLogData {
 	if (!isPlainObject(added)) {
 		throw new TypeError("Log data must be a plain object.");
@@ -909,7 +929,11 @@ function sanitizeMerged(
 	// A kept name without a value is reserved: no field of that name is written at all.
 	for (const name of Object.keys(kept)) {
 		if (kept[name] !== undefined) {
-			members.set(name, { key: name, read: () => kept[name] });
+			members.set(name, {
+				key: name,
+				read: () => kept[name],
+				...(Object.hasOwn(identity, name) && { identity: true as const }),
+			});
 		}
 	}
 

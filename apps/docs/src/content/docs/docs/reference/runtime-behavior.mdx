@@ -85,7 +85,8 @@ Routa owns these values:
 - An outcome or reject cannot declare `x-request-id`, or the configured correlation header, in
   `headers` (`ROUTA_RESPONSE_HEADER_RESERVED`).
 - The request logger keeps `requestId` and `correlationId` whatever event data or `child()`
-  bindings name them. When Routa accepted no correlation ID, its events and bindings have no
+  bindings name them, and never redacts them, even when the configured logger's `redact` paths
+  name them, so logs and response headers carry the same identity. When Routa accepted no correlation ID, its events and bindings have no
   `correlationId` at all, even if the configured logger's bindings or the event data name one.
   The logger you configured, and any module that imports it, stays without request identity,
   so concurrent requests never share it. When you configure a request logger, such as

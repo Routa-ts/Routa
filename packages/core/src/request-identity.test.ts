@@ -258,6 +258,64 @@ describe("request identity", () => {
 		expect(events.map((event) => event.data?.correlationId)).toEqual(events.map(() => undefined));
 	});
 
+	it("LOG-AC-06 never redacts the identity Routa binds, so logs and headers agree", async () => {
+		const events: RoutaLogEvent[] = [];
+		const logger = createLogger({
+			level: "trace",
+			sink: (event) => events.push(event),
+			redact: ["requestId", "correlationId", "order.requestId", "*.correlationId"],
+		});
+		const route: HonoRoute = {
+			method: "get",
+			path: "/orders",
+			contract: createRoute({
+				responses: { ok: { status: 200 } },
+				run: ({ ctx }) => {
+					ctx.logger.info("order.read", "Read an order an upstream service identified.", {
+						order: { requestId: "upstream-1", correlationId: "upstream-2" },
+					});
+					expect(ctx.logger.child({ step: "child" }).bindings()).toEqual({
+						requestId: ctx.requestId,
+						correlationId: "trace-1",
+						step: "child",
+					});
+					return { type: "ok" };
+				},
+			}),
+		};
+		const app = createHonoApp([route], { logger, correlation: true });
+
+		const response = await app.request("/orders", { headers: { "x-correlation-id": "trace-1" } });
+		const identity = {
+			requestId: response.headers.get("x-request-id"),
+			correlationId: response.headers.get("x-correlation-id"),
+		};
+
+		expect(identity).toEqual({ requestId: expect.stringMatching(uuid), correlationId: "trace-1" });
+		// The paths still redact fields of those names that the event data holds below its root.
+		expect(events.map((event) => [event.event, event.data])).toEqual([
+			[
+				"order.read",
+				{ ...identity, order: { requestId: "[Redacted]", correlationId: "[Redacted]" } },
+			],
+			[
+				"http.response.prepared",
+				{
+					...identity,
+					method: "GET",
+					route: "/orders",
+					status: 200,
+					durationMs: expect.any(Number),
+				},
+			],
+		]);
+
+		// Outside a request the names are application data, which the paths redact at the root too.
+		events.length = 0;
+		logger.info("job.ran", "A job logged a field of the same name.", { requestId: "job-1" });
+		expect(events.map((event) => event.data)).toEqual([{ requestId: "[Redacted]" }]);
+	});
+
 	it("LOG-AC-07 logs only the accepted correlation ID, whatever the configured logger or the event binds", async () => {
 		const { events, logger } = capture();
 		const route: HonoRoute = {

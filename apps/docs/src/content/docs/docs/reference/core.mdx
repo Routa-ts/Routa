@@ -1346,6 +1346,11 @@ them, and never changes your objects.
   segments separated by `.`. Segments match keys case-insensitively, and `*` matches any key
   or array index: `"user.email"`, `"orders.*.card"`, `"matrix.0.1"`. A path applies to
   bindings and data alike. `createLogger` throws for a path with an empty segment.
+- **Request identity.** Routa never redacts the `requestId` and `correlationId` that a request
+  logger, such as `ctx.logger`, binds at the root of its events, so they always match the
+  response headers. A path such as `"requestId"` leaves them as they are, and no baseline name
+  matches them. A path still redacts a field of that name deeper in the data, such as
+  `"order.requestId"`, and at the root of events from a logger no request is bound to.
 - **Whole keys.** Routa decides redaction on the whole key, before escaping or the string
   limit changes it, and compares a key with a path segment in one form: escaped, then
   lowercased. A key with a control character, such as `"tab\tkey"`, matches a segment
