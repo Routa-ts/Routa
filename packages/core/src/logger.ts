@@ -370,6 +370,12 @@ const maxEntries = 100;
 const maxValues = 1000;
 /** Escaped strings longer than this are cut so that, with the marker, they have this length. */
 const maxStringLength = 4096;
+/**
+ * A bigint's decimal string fits `maxStringLength` exactly when the bigint lies strictly between
+ * these, so comparing finds an oversized one without the conversion, which can take seconds.
+ */
+const bigintAbove = -(10n ** BigInt(maxStringLength - 1));
+const bigintBelow = 10n ** BigInt(maxStringLength);
 
 /**
  * Field names redacted at any depth in every logger. A key matches when, lowercased with `-` and
@@ -522,7 +528,8 @@ function sanitizeValue(value: unknown, traversal: Traversal, pending: PendingPat
 		case "number":
 			return Number.isFinite(value) ? value : null;
 		case "bigint":
-			return safeText(value.toString());
+			// Never cut: a shortened number reads as a different one.
+			return value > bigintAbove && value < bigintBelow ? value.toString() : truncatedMarker;
 		case "undefined":
 			return undefined;
 		case "object":

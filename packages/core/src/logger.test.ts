@@ -545,14 +545,29 @@ describe("createLogger sanitization", () => {
 		// Escaped whole, each character becomes six, past the engine's longest string.
 		const controls = "\u0001".repeat(90_000_000);
 
-		logger.info("hostile", controls, { huge: 10n ** 4096n, small: 12n, [controls]: true });
+		logger.info("hostile", controls, {
+			// Converting either to decimal would take seconds.
+			huge: 1n << 50_000_000n,
+			negativeHuge: -(1n << 50_000_000n),
+			widest: 10n ** 4096n - 1n,
+			tooWide: 10n ** 4096n,
+			widestNegative: 1n - 10n ** 4095n,
+			tooWideNegative: -(10n ** 4095n),
+			small: 12n,
+			[controls]: true,
+		});
 		const [event] = events;
 
 		expect(event?.message).toHaveLength(4096);
 		expect(event?.message.startsWith("\\u0001\\u0001")).toBe(true);
 		expect(event?.message.endsWith("[Truncated]")).toBe(true);
 		expect(event?.data).toEqual({
-			huge: `1${"0".repeat(4084)}[Truncated]`,
+			huge: "[Truncated]",
+			negativeHuge: "[Truncated]",
+			widest: "9".repeat(4096),
+			tooWide: "[Truncated]",
+			widestNegative: `-${"9".repeat(4095)}`,
+			tooWideNegative: "[Truncated]",
 			small: "12",
 			[event?.message as string]: true,
 		});
