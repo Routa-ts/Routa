@@ -606,27 +606,33 @@ function assertNoServices(value: unknown, source: string): void {
 /**
  * Exposes a stage's services, the request's authentication, and its identity as readonly
  * `ctx.services`, `ctx.auth`, `ctx.requestId`, and `ctx.correlationId`, which cannot be reassigned
- * or deleted. Without a value the key stays absent.
+ * or deleted. Without services or authentication those keys stay absent. The identity keys are
+ * always defined, `correlationId` as `undefined` when Routa accepted none, so no code can assign
+ * one Routa did not accept.
  */
 function exposeFramework(
 	ctx: Record<string, unknown>,
 	stage: Pick<Stage, "services" | "auth" | "identity">,
 ): void {
+	const define = (key: string, value: unknown) =>
+		Object.defineProperty(ctx, key, {
+			value,
+			enumerable: true,
+			writable: false,
+			configurable: false,
+		});
+
 	for (const [key, value] of [
 		["services", stage.services],
 		["auth", stage.auth],
-		["requestId", stage.identity.requestId],
-		["correlationId", stage.identity.correlationId],
 	] as const) {
 		if (value) {
-			Object.defineProperty(ctx, key, {
-				value,
-				enumerable: true,
-				writable: false,
-				configurable: false,
-			});
+			define(key, value);
 		}
 	}
+
+	define("requestId", stage.identity.requestId);
+	define("correlationId", stage.identity.correlationId);
 }
 
 /**

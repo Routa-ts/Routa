@@ -331,6 +331,35 @@ describe("request identity", () => {
 		expect(reached).toEqual([]);
 	});
 
+	it("LOG-AC-07 fails middleware that assigns ctx.correlationId when no correlation ID was accepted", async () => {
+		const writes = createMiddleware({
+			run: ({ ctx, next }) => {
+				(ctx as { correlationId?: string }).correlationId = "forged";
+				return next();
+			},
+		});
+		const reached: unknown[] = [];
+		const route: HonoRoute = {
+			method: "get",
+			path: "/",
+			contract: createRoute({
+				middleware: [writes],
+				responses: { ok: { status: 200 } },
+				run: ({ ctx }) => {
+					reached.push(ctx.correlationId);
+					return { type: "ok" };
+				},
+			}),
+		};
+
+		for (const options of [{}, { correlation: true }] as const) {
+			const response = await createHonoApp([route], options).request("/");
+			expect(response.status, JSON.stringify(options)).toBe(500);
+			expect(response.headers.get("x-correlation-id")).toBeNull();
+		}
+		expect(reached).toEqual([]);
+	});
+
 	it("LOG-AC-07 rejects middleware that provides a reserved context key through a compiler bypass", () => {
 		for (const key of ["requestId", "correlationId", "logger"]) {
 			const provides = createMiddleware({
@@ -487,14 +516,18 @@ const correlationRoute: HonoRoute = {
 		responses: {
 			ok: {
 				status: 200,
-				schema: z.object({ correlationId: z.string().nullable(), present: z.boolean() }),
+				schema: z.object({ correlationId: z.string().nullable(), readonly: z.boolean() }),
 			},
 		},
 		run: ({ ctx }) => {
 			ctx.logger.info("correlate.read", "Read the correlation.", { correlationId: "forged" });
 			return {
 				type: "ok",
-				data: { correlationId: ctx.correlationId ?? null, present: "correlationId" in ctx },
+				data: {
+					correlationId: ctx.correlationId ?? null,
+					// Defined in every case, `undefined` when none was accepted, so nothing can assign it.
+					readonly: Object.getOwnPropertyDescriptor(ctx, "correlationId")?.writable === false,
+				},
 			};
 		},
 	}),
@@ -503,13 +536,13 @@ const correlationRoute: HonoRoute = {
 async function correlate(
 	options: Parameters<typeof createHonoApp>[1],
 	headers: HeadersInit,
-): Promise<{ correlationId: string | null; present: boolean; echoed: Headers; logged: string }> {
+): Promise<{ correlationId: string | null; readonly: boolean; echoed: Headers; logged: string }> {
 	const { events, logger } = capture();
 	const response = await createHonoApp([correlationRoute], { ...options, logger }).request(
 		"/correlate",
 		{ headers },
 	);
-	const body = (await response.json()) as { correlationId: string | null; present: boolean };
+	const body = (await response.json()) as { correlationId: string | null; readonly: boolean };
 	return { ...body, echoed: response.headers, logged: JSON.stringify(events) };
 }
 
@@ -518,7 +551,7 @@ describe("correlation identity", () => {
 		for (const correlation of [undefined, false]) {
 			const result = await correlate({ correlation }, { "x-correlation-id": "abc-123" });
 
-			expect(result).toMatchObject({ correlationId: null, present: false });
+			expect(result).toMatchObject({ correlationId: null, readonly: true });
 			expect(result.echoed.has("x-correlation-id")).toBe(false);
 			expect(result.logged).not.toContain("abc-123");
 		}
@@ -530,7 +563,7 @@ describe("correlation identity", () => {
 			{ "X-Correlation-ID": "Order_42.retry-1" },
 		);
 
-		expect(result).toMatchObject({ correlationId: "Order_42.retry-1", present: true });
+		expect(result).toMatchObject({ correlationId: "Order_42.retry-1", readonly: true });
 		expect(result.echoed.get("x-correlation-id")).toBe("Order_42.retry-1");
 		const events = JSON.parse(result.logged) as RoutaLogEvent[];
 		expect(events.map((event) => event.data?.correlationId)).toEqual([
@@ -546,7 +579,7 @@ describe("correlation identity", () => {
 			{ "x-TRACE-ref": "trace-1", "x-correlation-id": "ignored" },
 		);
 
-		expect(result).toMatchObject({ correlationId: "trace-1", present: true });
+		expect(result).toMatchObject({ correlationId: "trace-1", readonly: true });
 		expect(result.echoed.get("x-trace-ref")).toBe("trace-1");
 		expect(result.echoed.has("x-correlation-id")).toBe(false);
 		expect(result.logged).not.toContain("ignored");
@@ -578,7 +611,7 @@ describe("correlation identity", () => {
 		for (const headers of ignored) {
 			const sent = new Headers(headers).get("x-correlation-id") ?? "";
 			const result = await correlate({ correlation: true }, headers);
-			expect(result, sent).toMatchObject({ correlationId: null, present: false });
+			expect(result, sent).toMatchObject({ correlationId: null, readonly: true });
 			expect(result.echoed.has("x-correlation-id"), sent).toBe(false);
 			if (sent) {
 				expect(result.logged, sent).not.toContain(JSON.stringify(sent).slice(1, -1));

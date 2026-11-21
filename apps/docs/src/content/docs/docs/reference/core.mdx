@@ -1539,8 +1539,9 @@ type RequestIdentityContext = {
 ```
 
 The request identity every middleware, services factory, and handler receives in `ctx`, next
-to the request logger `ctx.logger`. Both fields are readonly, and no middleware can provide or
-pass them on.
+to the request logger `ctx.logger`. Both fields are readonly, and no middleware can provide,
+assign, or pass them on. `ctx.correlationId` is `undefined` when Routa accepted no correlation
+ID, and stays readonly then too.
 
 | Field           | Type                  | Value                                                                                               |
 | --------------- | --------------------- | --------------------------------------------------------------------------------------------------- |

@@ -144,9 +144,9 @@ factory runs, so later changes to the config object have no effect.
 Routa accepts the header's value when it is one value of 1 to 128 ASCII letters, digits, `.`,
 `_`, or `-`. It then exposes the value as `ctx.correlationId`, binds it to the request logger,
 and echoes it in the same response header. An absent, empty, repeated, or otherwise invalid
-value is ignored: the request continues, `ctx.correlationId` is absent, and nothing is echoed
-or logged. A correlation ID is not authentication and never replaces the request identity
-Routa generates.
+value is ignored: the request continues, `ctx.correlationId` is `undefined`, and nothing is
+echoed or logged. A correlation ID is not authentication and never replaces the request
+identity Routa generates.
 
 ```ts title="src/routa.ts"
 import { createRouta } from "@routa-ts/core";
