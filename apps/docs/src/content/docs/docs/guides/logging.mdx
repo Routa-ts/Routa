@@ -218,6 +218,7 @@ as the response's `x-request-id`, and Routa follows it with its own
 | A field shows `[Unsupported]`                                                  | Only plain objects, arrays, dates, and primitives are logged. Log the parts you need, such as `{ errorName: error.name }`, instead of the `Error`, `Map`, or class instance        |
 | A value ends in `[Truncated]`                                                  | It passed a [traversal limit](/docs/reference/core/#sanitization). Log a smaller, flatter value                                                                                    |
 | The console shows `routa.logger.sink_failed` or `routa.logger.event_discarded` | Your sink threw or rejected, or an event could not be sanitized. Each `createLogger()` call, its children included, reports each kind once; later failures of that kind are silent |
+| The console shows `routa.on_request_error.failed`                              | Your `onRequestError` callback threw or rejected. The response was unaffected. Each application reports it once; later failures are silent. Catch errors inside the callback       |
 | Logs still appear with `logger: false`                                         | They come from a module that imports the shared logger. Create it with `enabled: false` to silence it everywhere                                                                   |
 | A service's events have no `requestId`                                         | The service writes through the shared logger. Pass it `ctx.logger` from the handler, as in step 4                                                                                  |
 
@@ -225,8 +226,10 @@ as the response's `x-request-id`, and Routa follows it with its own
 	Redaction matches field names and paths. It does not find a secret inside a message string
 	or under a name it does not know, and it cannot see what your sink or a direct backend call
 	adds. Routa's own request events leave out the request's path, query, body, credentials, and
-	error text. `http.error` names no error yet; an error reporter that receives the original
-	error is not shipped.
+	error text. `http.error` records a failure's code and stage, not the error. To send the
+	original error to an error tracker, configure
+	[`onRequestError`](/docs/reference/configuration/#onrequesterror) rather than logging the
+	error yourself.
 </Aside>
 
 ## Next Steps

@@ -36,6 +36,7 @@ the default export of `src/routa.ts`, which the runtime imports at boot.
 | `port`               | `number`                     | `3000`                        |
 | `logger`             | `RoutaLogger \| false`       | JSON console logger at `info` |
 | `correlation`        | `CorrelationConfig`          | Off                           |
+| `onRequestError`     | `RequestErrorReporter`       | None                          |
 | `lifecycleHeaders`   | `boolean`                    | `false`                       |
 | `responseValidation` | `"development" \| "always"`  | `"development"`               |
 | `services`           | `ApplicationServicesFactory` | None                          |
@@ -1037,6 +1038,7 @@ app's identity.
 | `routes[].middlewareNames`   | `readonly string[]`         | Names each middleware of the chain in messages                                     |
 | `options.logger`             | `RoutaLogger`               | A `createLogger` logger; enables `http.response.prepared` and `http.error` logging |
 | `options.correlation`        | `CorrelationConfig`         | Accepts and echoes a caller's correlation ID; off when omitted                     |
+| `options.onRequestError`     | `RequestErrorReporter`      | Receives the original error of each unexpected failure, with or without a logger   |
 | `options.lifecycleHeaders`   | `boolean`                   | Emit `Deprecation`, `Sunset`, and `Link`                                           |
 | `options.responseValidation` | `"development" \| "always"` | Response schema policy; defaults to `"development"`                                |
 | `options.runtimeMode`        | `"dev" \| "start"`          | Explicit mode; defaults to `"dev"` for direct use                                  |
@@ -1047,7 +1049,7 @@ method-and-path pair, a `GET` or `HEAD` contract declaring a body, duplicate rej
 keys within one chain, middleware that provides `services`, `requestId`, `correlationId`, or
 `logger`, an outcome or reject that declares `x-request-id` or the correlation header, and a
 `correlation` option that is malformed or names `x-request-id`, a credential header, or a
-header Routa writes itself (see [`correlation`](/docs/reference/configuration/#correlation)). With `authentication`, it also throws for an invalid configuration,
+header Routa writes itself (see [`correlation`](/docs/reference/configuration/#correlation)), and an `onRequestError` that is not a function. With `authentication`, it also throws for an invalid configuration,
 a route outcome named `authenticationFailed`, one named `authenticationRequired` behind a
 `requireAuth` guard, a route outcome named `ambiguousCredentials` where strict mode can return
 it, and middleware that provides `auth`. Without it, a `requireAuth` guard throws.
@@ -1606,6 +1608,56 @@ export default createRouta({ correlation: { header: "x-trace-ref" } });
 shape, a header that is not a valid name, or one that names `x-request-id`, a credential
 header, or a header Routa owns on every response.
 
+## `RequestErrorReporter`
+
+```ts
+type RequestErrorReporter = (
+	error: unknown,
+	diagnostic: RequestErrorDiagnostic,
+) => void | Promise<void>
+
+type RequestErrorDiagnostic = Readonly<{
+	code: RequestErrorCode
+	stage: RequestErrorStage
+	requestId: string
+	correlationId?: string
+	method: string
+	route: string
+	status: number
+}>
+
+type RequestErrorCode = "unexpected_failure" | "contract_violation"
+
+type RequestErrorStage =
+	| "authentication"
+	| "context"
+	| "input"
+	| "services"
+	| "middleware"
+	| "handler"
+	| "response"
+```
+
+The `onRequestError` option of `createRouta`, `createHonoApp`, and `createApplication`. Routa
+calls it once for each request that fails unexpectedly or breaks its response contract, with
+the value that was thrown and a frozen diagnostic. It has already chosen the response and does
+not wait for the callback.
+[Configuration](/docs/reference/configuration/#onrequesterror) lists what each code and stage
+means, which failures are not reported, and what happens when the callback fails.
+
+```ts title="src/routa.ts"
+import { createRouta, type RequestErrorReporter } from "@routa-ts/core";
+
+const onRequestError: RequestErrorReporter = (error, diagnostic) => {
+	console.error(diagnostic.requestId, diagnostic.stage, error);
+};
+
+export default createRouta({ onRequestError });
+```
+
+**Errors:** `createHonoApp`, `createApplication`, and startup throw a `TypeError` when the
+option is present and not a function.
+
 ## `RouteRootConfigForCtx`
 
 ```ts
@@ -1899,7 +1951,8 @@ export function findItem(id: string): ItemResult {
 `HttpMethod`, `RouteInput`, `RouteOutcome`, `RouteResponses`, `OutcomeResult`, `ResponseChecks`, `RouteContract`, `AnyRouteContract`,
 `RouteRun`, `RouteHandlerArgs`, `ResponseBuilders`, `RoutaResult`, `RouteRunResult`, `InferInput`,
 `InferResponse`, `SchemaInput`, `SchemaOutput`, `RoutaRouteContext`, `RequestIdentityContext`,
-`RoutaConfig`, `CorrelationConfig`,
+`RoutaConfig`, `CorrelationConfig`, `RequestErrorReporter`, `RequestErrorDiagnostic`,
+`RequestErrorCode`, `RequestErrorStage`,
 `ResponseValidation`, `ApplicationServicesFactory`, `ApplicationServicesContext`, `OnCleanup`,
 `RequestServicesFactory`, `RequestServicesContext`, `ServicesHelper`, `MiddlewareHelper`,
 `RouteDeprecation`, `RouteDeprecationReplacement`, `RegisteredRoutePath`,
