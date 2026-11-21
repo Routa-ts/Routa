@@ -330,7 +330,8 @@ export default createRouteRoot("/status")({
 
 		const result = await run(["check"], { cwd });
 
-		expect(result.stderr).not.toContain("ROUTA_MIDDLEWARE_ORDER");
+		expect(result.stderr ?? "").toBe("");
+		expect(result.code).toBe(0);
 	});
 
 	it("reports middleware that cannot be statically resolved", async () => {

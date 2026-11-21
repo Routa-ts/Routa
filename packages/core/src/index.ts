@@ -618,10 +618,21 @@ type RegisteredCtxByKey = Register extends {
 		: Record<string, unknown>
 	: Record<string, unknown>;
 
-type RegisteredCtxKey = keyof RegisteredCtxByKey & string;
+/** Context Routa gives every middleware, which `requires` may name without a provider. */
+type FrameworkCtxByKey = {
+	readonly requestId: string;
+	readonly correlationId: string | undefined;
+	readonly logger: RoutaLogger;
+};
+
+type RegisteredCtxKey = (keyof RegisteredCtxByKey & string) | keyof FrameworkCtxByKey;
 
 type RequiredMiddlewareCtx<TRequires extends readonly string[]> = {
-	[K in TRequires[number]]: K extends keyof RegisteredCtxByKey ? RegisteredCtxByKey[K] : unknown;
+	[K in TRequires[number]]: K extends keyof FrameworkCtxByKey
+		? FrameworkCtxByKey[K]
+		: K extends keyof RegisteredCtxByKey
+			? RegisteredCtxByKey[K]
+			: unknown;
 };
 
 export type MiddlewareProvides<TMiddleware extends readonly AnyMiddlewareContract[]> =
