@@ -12,6 +12,12 @@
  * that `projects.created`, which the projects route logs by passing `ctx.logger` to
  * `ProjectAudit.flush`, carries the request and correlation IDs.
  *
+ * The child then fails one request on purpose, with a services factory that throws, and reports
+ * what the application's error tracker in `src/error-tracker.ts` captured through `onRequestError`.
+ * The parent asserts that the tracker received the thrown error itself, tagged with the same
+ * request ID, code, and stage as Routa's `http.error` line, and that no line Pino wrote holds the
+ * error's text.
+ *
  * Usage: pnpm pino:exercise
  */
 import assert from "node:assert/strict";
@@ -25,7 +31,15 @@ const sessionSecret = "exercise-only-secret";
 /** What the child reports about the response, on a line of its own beside Pino's lines. */
 type Served = {
 	exercise: { status: number; requestId: string | null; correlationId: string | null };
+	failure: {
+		status: number;
+		requestId: string | null;
+		captured: Array<{ sameError: boolean; tags: Record<string, unknown> }>;
+	};
 };
+
+/** What the deliberately failing services factory throws. */
+const failureText = "database unavailable for tenant acme";
 
 if (process.argv[2] === "serve") {
 	await serve();
@@ -95,11 +109,25 @@ function exerciseSink(): void {
  */
 async function serve(): Promise<void> {
 	const { createTestApp } = await import("../.routa/testing.gen.js");
+	const { errorTracker } = await import("../src/error-tracker.js");
 	const app = await createTestApp();
+	const thrown = new Error(failureText);
+	const failing = await createTestApp({
+		routes: {
+			"/tenants/:tenantId/projects": {
+				methods: {
+					post: {
+						services: () => {
+							throw thrown;
+						},
+					},
+				},
+			},
+		},
+	});
 	const signature = createHmac("sha256", sessionSecret).update("acme:writer").digest("base64url");
-
-	try {
-		const response = await app.request("/tenants/acme/projects", {
+	const create = (target: typeof app) =>
+		target.request("/tenants/acme/projects", {
 			method: "POST",
 			headers: {
 				cookie: `session=demo-user:acme:writer.${signature}`,
@@ -109,16 +137,29 @@ async function serve(): Promise<void> {
 			},
 			body: JSON.stringify({ name: "Atlas" }),
 		});
+
+	try {
+		const response = await create(app);
+		const failed = await create(failing);
 		const served: Served = {
 			exercise: {
 				status: response.status,
 				requestId: response.headers.get("x-request-id"),
 				correlationId: response.headers.get("x-correlation-id"),
 			},
+			failure: {
+				status: failed.status,
+				requestId: failed.headers.get("x-request-id"),
+				captured: errorTracker.captured.map(({ error, tags }) => ({
+					sameError: error === thrown,
+					tags: { ...tags },
+				})),
+			},
 		};
 		process.stdout.write(`${JSON.stringify(served)}\n`);
 	} finally {
 		await app.dispose();
+		await failing.dispose();
 	}
 }
 
@@ -148,7 +189,8 @@ function exerciseApplication(): void {
 		.split("\n")
 		.filter((line) => line.trim() !== "")
 		.map((line) => JSON.parse(line) as Record<string, unknown>);
-	const served = lines.find((line): line is Served => "exercise" in line)?.exercise;
+	const report = lines.find((line): line is Served => "exercise" in line);
+	const served = report?.exercise;
 	const written = lines.filter((line) => line.name === "full-api");
 	const find = (event: string) => written.find((line) => line.event === event);
 
@@ -187,7 +229,45 @@ function exerciseApplication(): void {
 	});
 	assert.doesNotMatch(child.stdout, /spoofed|demo-user/, "no spoofed ID or credential is logged");
 
+	const failure = report?.failure;
+	assert.ok(failure, "the child reports the failed request");
+	assert.equal(failure.status, 500);
+	const tags = {
+		code: "unexpected_failure",
+		stage: "services",
+		requestId: failure.requestId,
+		correlationId: "checkout-42",
+		method: "POST",
+		route: "/tenants/:tenantId/projects",
+		status: 500,
+	};
+	assert.deepEqual(
+		failure.captured,
+		[{ sameError: true, tags }],
+		"onRequestError hands the tracker the thrown error itself, once, with Routa's diagnostic",
+	);
+	const logged = written.find((line) => line.event === "http.error");
+	assert.ok(logged, "Routa's http.error line reaches Pino");
+	assert.equal(logged.level, 50);
+	assert.deepEqual(
+		logged.data,
+		{
+			requestId: tags.requestId,
+			correlationId: tags.correlationId,
+			method: tags.method,
+			route: tags.route,
+			status: tags.status,
+			code: tags.code,
+			stage: tags.stage,
+		},
+		"http.error carries the same identity, code, and stage as the tracker's tags",
+	);
+	assert.ok(!child.stdout.includes(failureText), "no line Pino wrote holds the error's text");
+
 	console.log(
 		`Pino wrote the real application's events: ${JSON.stringify({ catalog: catalog.data, created: created.data })}`,
+	);
+	console.log(
+		`The error tracker received the thrown error with ${JSON.stringify(tags)}, and Pino wrote http.error without its text: ${JSON.stringify(logged.data)}`,
 	);
 }
