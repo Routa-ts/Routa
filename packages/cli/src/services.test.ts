@@ -1830,6 +1830,8 @@ export default createRouta({
 			method: "GET",
 			route: "/ledger",
 			status: 500,
+			code: "unexpected_failure",
+			stage: "middleware",
 		});
 		await application.dispose();
 	}, 30_000);
