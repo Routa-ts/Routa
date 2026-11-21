@@ -322,10 +322,20 @@ export const logger = createLogger({ sink: () => {} });
 						schema: { type: "string" },
 					});
 					expect(response.headers.get("etag"), label).toBe('"v1"');
-					// The declared cookie keeps every attribute its handle declares.
+					// The declared cookie keeps every attribute its handle declares, and OpenAPI documents
+					// the same attributes and that this response always sets it.
 					expect(response.headers.get("set-cookie"), label).toBe(
 						"seen=yes; Path=/; HttpOnly; Secure; SameSite=Lax",
 					);
+					const setCookie = documentedResponse!.headers?.["Set-Cookie"] as {
+						required?: boolean;
+						description?: string;
+					};
+					expect(setCookie.required, label).toBe(true);
+					expect(setCookie.description, label).toContain(
+						'"seen" (HttpOnly, Secure, SameSite=Lax, Path=/)',
+					);
+					expect(setCookie.description, label).toContain('It always sets or clears: "seen".');
 					expect(Object.keys(documentedResponse!.headers!), label).toContain("Set-Cookie");
 				}
 			}
