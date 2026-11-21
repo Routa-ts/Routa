@@ -1029,7 +1029,8 @@ describe("factory-created loggers", () => {
 				"http.request",
 			]);
 			expect(unhandled).not.toHaveBeenCalled();
-			// Each logger reports each kind of failure once; a rejection reports after the request.
+			// Each createLogger call, its children included, reports each kind of failure once; a
+			// rejection reports after the request.
 			expect(
 				consoleError.mock.calls
 					.map(([line]) => String(JSON.parse(String(line)).event))

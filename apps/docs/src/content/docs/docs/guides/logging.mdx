@@ -105,14 +105,14 @@ real email.
 
 ## Troubleshooting
 
-| Problem                                                                        | Fix                                                                                                                                                                         |
-| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/routa.ts configures a logger that createLogger did not create.`           | Routa no longer accepts hand-written logger objects or adapters. Wrap the backend in a sink, as in step 4, and configure `createLogger({ sink })`                           |
-| A field you need shows `[Redacted]`                                            | Its name is one of the baseline names, which no option turns off. Log it under a name that describes the value, such as `cardLast4`                                         |
-| A field shows `[Unsupported]`                                                  | Only plain objects, arrays, dates, and primitives are logged. Log the parts you need, such as `{ errorName: error.name }`, instead of the `Error`, `Map`, or class instance |
-| A value ends in `[Truncated]`                                                  | It passed a [traversal limit](/docs/reference/core/#sanitization). Log a smaller, flatter value                                                                             |
-| The console shows `routa.logger.sink_failed` or `routa.logger.event_discarded` | Your sink threw or rejected, or an event could not be sanitized. Each logger reports each kind once; later failures of that kind are silent                                 |
-| Logs still appear with `logger: false`                                         | They come from a module that imports the shared logger. Create it with `enabled: false` to silence it everywhere                                                            |
+| Problem                                                                        | Fix                                                                                                                                                                                |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/routa.ts configures a logger that createLogger did not create.`           | Routa no longer accepts hand-written logger objects or adapters. Wrap the backend in a sink, as in step 4, and configure `createLogger({ sink })`                                  |
+| A field you need shows `[Redacted]`                                            | Its name is one of the baseline names, which no option turns off. Log it under a name that describes the value, such as `cardLast4`                                                |
+| A field shows `[Unsupported]`                                                  | Only plain objects, arrays, dates, and primitives are logged. Log the parts you need, such as `{ errorName: error.name }`, instead of the `Error`, `Map`, or class instance        |
+| A value ends in `[Truncated]`                                                  | It passed a [traversal limit](/docs/reference/core/#sanitization). Log a smaller, flatter value                                                                                    |
+| The console shows `routa.logger.sink_failed` or `routa.logger.event_discarded` | Your sink threw or rejected, or an event could not be sanitized. Each `createLogger()` call, its children included, reports each kind once; later failures of that kind are silent |
+| Logs still appear with `logger: false`                                         | They come from a module that imports the shared logger. Create it with `enabled: false` to silence it everywhere                                                                   |
 
 <Aside type="caution" title="What redaction does not cover">
 	Redaction matches field names and paths. It does not find a secret inside a message string

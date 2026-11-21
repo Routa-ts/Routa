@@ -1382,8 +1382,9 @@ export const logger = createLogger({ sink: pinoSink });
 When the sink throws or its promise rejects, that event is lost and the request continues
 unchanged. When an event cannot be sanitized, because `data` or the bindings are not a plain
 object, a proxy trap throws, or `now` fails, Routa discards it; a child whose bindings could
-not be sanitized discards every event. Each logger reports each kind of failure once, as a
-fixed line on `console.error` that never includes the event or the error:
+not be sanitized discards every event. Each `createLogger()` call, its children included,
+reports each kind of failure once, as a fixed line on `console.error` that never includes the
+event or the error:
 
 | `event`                        | Written when                                    |
 | ------------------------------ | ----------------------------------------------- |
