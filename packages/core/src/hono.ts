@@ -412,9 +412,10 @@ const unansweredMessage =
  * without identity headers, and its event still logs its status.
  *
  * When nothing on the app answers a request, Hono fails it only after the whole chain returns,
- * where Routa cannot identify the response. Routa raises the same error inside the chain instead,
- * so Hono's error handler, or one the application set with `onError`, answers it there and the
- * answer carries the identity.
+ * where Routa cannot identify the response. The owner raises the same error inside the chain
+ * instead, once every middleware on it, including any app mounted in it, has had its chance to
+ * answer, so Hono's error handler, or one the application set with `onError`, answers it there
+ * and the answer carries the identity. A mounted Routa app leaves this to the owner.
  *
  * The event says the response was prepared, not that it was sent or received: Routa logs it
  * before the body is transmitted. A request whose handling throws past Hono logs nothing.
@@ -433,6 +434,8 @@ function identifyRequests(
 	const deriveLogger = requestLoggers(logger);
 	// This app's view of each request: its identity, and this app's request logger.
 	const states = new WeakMap<Context, RequestState>();
+	// The requests whose identity this app owns.
+	const owned = new WeakSet<Context>();
 	const stateFor = ({ requestId, correlationId }: RequestIdentity): RequestState => ({
 		requestId,
 		...(correlationId !== undefined && { correlationId }),
@@ -465,6 +468,7 @@ function identifyRequests(
 			const state = stateFor(request);
 			identified.set(context, request);
 			states.set(context, state);
+			owned.add(context);
 
 			await next();
 
@@ -495,7 +499,7 @@ function identifyRequests(
 			await next();
 
 			// Reading `context.res` here would make Hono create a placeholder 200 response.
-			if (!context.finalized) {
+			if (owned.has(context) && !context.finalized) {
 				throw new Error(unansweredMessage);
 			}
 		},

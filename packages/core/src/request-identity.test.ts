@@ -914,6 +914,51 @@ describe("request identity", () => {
 		expect(uncorrelated.headers.has("x-correlation-id")).toBe(false);
 	});
 
+	it("LOG-AC-06 lets the outer app's middleware answer what a mounted Routa app left unanswered", async () => {
+		const outer = capture();
+		const inner = capture();
+		const app = createHonoApp([], { logger: outer.logger, correlation: true });
+		// Supplies its own response when nothing after it answered the request.
+		app.use("*", async (context, next) => {
+			await next();
+
+			if (!context.finalized) {
+				return context.text("fallback", 202);
+			}
+		});
+		const mounted = createHonoApp([], { logger: inner.logger });
+		// Sets a header, then neither returns a response nor calls next().
+		mounted.use("/quiet", (context) => {
+			context.header("x-written", "kept");
+			return Promise.resolve();
+		});
+		app.route("/api", mounted);
+
+		const response = await app.request("/api/quiet", {
+			headers: { "x-correlation-id": "trace-1" },
+		});
+
+		expect(response.status).toBe(202);
+		expect(await response.text()).toBe("fallback");
+		expect(response.headers.get("x-written")).toBe("kept");
+		expect(response.headers.get("x-request-id")).toMatch(uuid);
+		expect(response.headers.get("x-correlation-id")).toBe("trace-1");
+		expect(outer.events.map((event) => [event.event, event.data])).toEqual([
+			[
+				"http.response.prepared",
+				{
+					requestId: response.headers.get("x-request-id"),
+					correlationId: "trace-1",
+					method: "GET",
+					route: "[Unmatched]",
+					status: 202,
+					durationMs: expect.any(Number),
+				},
+			],
+		]);
+		expect(inner.events).toEqual([]);
+	});
+
 	it("LOG-AC-07 keeps identity in context and headers with logging off", async () => {
 		const app = await createApplication([echoRoute]);
 

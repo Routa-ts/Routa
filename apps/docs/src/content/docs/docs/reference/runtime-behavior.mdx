@@ -104,7 +104,9 @@ request unanswered. Hono fails such a request through its error handler only aft
 chain returns, where Routa cannot reach the response. Routa raises the same error, `Context is
 not finalized`, inside the chain instead, so Hono's default `500 Internal Server Error`, or the
 response of a handler you set with `app.onError()`, carries `x-request-id` and is logged once
-with its status.
+with its status. Routa raises it only after every middleware you added has returned, so a
+middleware that answers after `await next()` still supplies the response, and that response
+carries the identity.
 
 When you mount one Routa app in another with `outer.route("/api", inner)`, both built by
 `createHonoApp`, the request is identified once, by the outer app. Handlers in the inner app
@@ -112,7 +114,9 @@ see the same `ctx.requestId` and `ctx.correlationId`, and the outer app's `corre
 decides whether a correlation ID is accepted. Only the outer app sets the identity headers and
 logs `http.response.prepared`, through its logger, with the route pattern the inner app
 declares, such as `/whoami`, without the mount prefix. The inner app's request logger still
-writes to the inner app's logger, bound to the same identity.
+writes to the inner app's logger, bound to the same identity. Only the outer app fails an
+unanswered request, so outer middleware that answers after `await next()` can answer for the
+inner app.
 
 ## Status Codes Routa Produces
 
