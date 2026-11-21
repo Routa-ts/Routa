@@ -575,6 +575,22 @@ function parseSchema(schema: z.ZodTypeAny, value: unknown): unknown {
 	return schema.parse(value);
 }
 
+/**
+ * Reads one value a middleware passed to `next()`. A getter that throws a `ZodError` is the
+ * application's own code failing, like a throwing refinement, not a value that failed `provides`.
+ */
+function providedValue(providedCtx: Record<string, unknown>, key: string): unknown {
+	try {
+		return providedCtx[key];
+	} catch (error) {
+		if (error instanceof ZodError) {
+			thrownBySchemaCode.add(error);
+		}
+
+		throw error;
+	}
+}
+
 /** `ZodError`s a schema's own code threw, rather than ones describing a value that failed it. */
 const thrownBySchemaCode = new WeakSet<ZodError>();
 
@@ -762,7 +778,7 @@ function parseMiddlewareProvides(
 
 	for (const [key, schema] of Object.entries(provides ?? {})) {
 		try {
-			validated[key] = parseOutput(schema, providedCtx[key]);
+			validated[key] = parseOutput(schema, providedValue(providedCtx, key));
 		} catch (error) {
 			if (error instanceof ZodError) {
 				throw outputSchemaError("Middleware provided context that does not match schema.", error, [
@@ -1374,13 +1390,13 @@ class OutputCodeError extends InvalidHandlerOutputError {
 
 /**
  * Records where a request failed. Each part of the chain marks a failure that passes through it,
- * and the first mark wins, so a handler's error that middleware rethrows keeps the handler's
- * stage. A different value that middleware throws instead is marked as its own. Errors are never
+ * and each value keeps its first mark, so a handler's error that middleware rethrows keeps the
+ * handler's stage, even after middleware wrapped it and an outer middleware rethrew the original.
+ * A different value that middleware throws instead is marked as its own. Errors are never
  * wrapped, so middleware that catches `next()` still sees what was thrown.
  */
 class FailureStages {
-	private error: unknown;
-	private stage: RequestErrorStage | undefined;
+	private readonly stages = new Map<unknown, RequestErrorStage>();
 
 	/** Runs `step`, marking a failure it throws or rejects with as happening in `stage`. */
 	async at<T>(stage: RequestErrorStage, step: () => T | Promise<T>): Promise<T> {
@@ -1404,13 +1420,12 @@ class FailureStages {
 
 	/** The stage where `error` was first seen, if it was. */
 	of(error: unknown): RequestErrorStage | undefined {
-		return this.stage !== undefined && Object.is(this.error, error) ? this.stage : undefined;
+		return this.stages.get(error);
 	}
 
 	private mark(error: unknown, stage: RequestErrorStage): void {
-		if (this.of(error) === undefined) {
-			this.error = error;
-			this.stage = stage;
+		if (!this.stages.has(error)) {
+			this.stages.set(error, stage);
 		}
 	}
 }

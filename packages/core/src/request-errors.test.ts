@@ -577,6 +577,91 @@ describe("request error reporting", () => {
 		});
 	});
 
+	it("LOG-AC-13 keeps the handler stage of an error that middleware wrapped and unwrapped", async () => {
+		const { calls, onRequestError } = recorder();
+		const database = new Error("connection reset");
+		const wrap = createMiddleware({
+			run: async ({ next }) => {
+				try {
+					return await next();
+				} catch (error) {
+					throw new Error("Query failed.", { cause: error });
+				}
+			},
+		});
+		const unwrap = createMiddleware({
+			run: async ({ next }) => {
+				try {
+					return await next();
+				} catch (error) {
+					throw (error as Error).cause;
+				}
+			},
+		});
+		const app = createHonoApp(
+			[
+				{
+					method: "get",
+					path: "/x",
+					contract: createRoute({
+						middleware: [unwrap, wrap],
+						responses: { ok: { status: 204 } },
+						run: () => {
+							throw database;
+						},
+					}),
+				},
+			],
+			{ onRequestError },
+		);
+
+		expect((await app.request("/x")).status).toBe(500);
+		expect(calls.map((call) => [call.error === database, call.diagnostic.stage])).toEqual([
+			[true, "handler"],
+		]);
+	});
+
+	it("LOG-AC-13 passes what a getter in a next() payload throws", async () => {
+		const { calls, onRequestError } = recorder();
+		let thrown: unknown;
+		const tenant = createMiddleware({
+			provides: { tenant: z.string() },
+			run: ({ next }) =>
+				next({
+					get tenant(): string {
+						try {
+							return z.string().parse(7);
+						} catch (error) {
+							thrown = error;
+							throw error;
+						}
+					},
+				}),
+		});
+		const app = createHonoApp(
+			[
+				{
+					method: "get",
+					path: "/x",
+					contract: createRoute({
+						middleware: [tenant],
+						responses: { ok: { status: 204 } },
+						run: () => ({ type: "ok" }),
+					}),
+				},
+			],
+			{ onRequestError },
+		);
+
+		const response = await app.request("/x");
+
+		expect(response.status).toBe(500);
+		expect(await response.json()).toMatchObject({ title: "Invalid handler output" });
+		expect(
+			calls.map((call) => [call.error === thrown, call.diagnostic.code, call.diagnostic.stage]),
+		).toEqual([[true, "unexpected_failure", "middleware"]]);
+	});
+
 	it("LOG-AC-13 reports what JSON.stringify throws, and a body JSON has no text for", async () => {
 		const circular: Record<string, unknown> = { ok: true };
 		circular.self = circular;
