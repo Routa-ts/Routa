@@ -191,10 +191,12 @@ which are rejected anyway. `routa check` compares the scheme declarations it rea
 source and never runs an authenticator or extractor. With an `apiKey({ header: "x-api-key" })`
 scheme named `serviceKey`, `correlation: { header: "X-API-Key" }` reports:
 
-````txt
+```txt
 ROUTA_CORRELATION_HEADER_CONFLICT: src/routa.ts: The correlation header "X-API-Key" in src/routa.ts names x-api-key, which the apiKey scheme "serviceKey" reads its credential from.
 Suggestion: Choose a header of its own for correlation, such as x-correlation-id. A correlation ID is not a credential and never replaces x-request-id.
-``` Routa writes `content-type`, `content-length`,
+```
+
+Routa writes `content-type`, `content-length`,
 `transfer-encoding`, and `connection` on every response; `allow` on automatic `OPTIONS` and
 `405` responses; `access-control-allow-methods` and `vary` on automatic `OPTIONS` responses;
 the lifecycle headers `deprecation`, `sunset`, and `link`; and `www-authenticate` on
@@ -213,7 +215,7 @@ startup report it either way.
 
 ```ts
 onRequestError?: (error: unknown, diagnostic: RequestErrorDiagnostic) => void | Promise<void>
-````
+```
 
 Receives each request that fails unexpectedly or breaks its response contract: the value that
 was thrown, unchanged, and frozen metadata about the request. Use it to send the error to an
