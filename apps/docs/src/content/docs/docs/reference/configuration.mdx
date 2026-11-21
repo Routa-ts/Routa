@@ -269,8 +269,10 @@ not reported, and a request body that cannot be read or parsed, including a body
 errors, such as when the client aborts, answers `400` as invalid JSON and is not reported.
 Changing those classifications belongs to the future configurable error policy.
 
-Routa chooses the response before it calls the callback and does not wait for it, so the
-callback's return value, a throw, or a rejection never changes the response or delays it. When
+Routa chooses the response before it calls the callback and does not await a promise it
+returns, so the callback's return value, a throw, or a rejection never changes the response.
+Routa calls the callback synchronously, so its synchronous work runs before the response is
+returned; do slow work, such as sending to an error tracker, asynchronously. When
 the callback throws or rejects, Routa writes one fixed line to `console.error`, once per
 application, without either error's text, and never calls the callback for its own failure.
 Routa handles a returned promise's rejection the way it handles a logger sink's: through the
