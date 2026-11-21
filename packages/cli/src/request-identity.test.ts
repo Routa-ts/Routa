@@ -173,7 +173,7 @@ export default createRouteRoot("/items")({
 \t\t},
 \t\trun: ({ ctx, input }) =>
 \t\t\tinput.query.limit === 9
-\t\t\t\t? { type: "gone" }
+\t\t\t\t? { type: "gone", headers: { "x-gone-since": "2026-01-01" } }
 \t\t\t\t: {
 \t\t\t\t\t\ttype: "ok",
 \t\t\t\t\t\theaders: { etag: '"v1"' },
@@ -327,7 +327,16 @@ export const logger = createLogger({ sink: () => {} });
 					).toMatchObject({ type: "object", properties: { message: { type: "string" } } });
 					expect(await response.json(), label).toEqual({ message: "Closed" });
 				}
+				if (status === 410) {
+					// The optional declared header is sent and documented.
+					expect(documentedResponse!.headers?.["x-gone-since"], label).toMatchObject({
+						schema: { type: "string" },
+					});
+					expect(response.headers.get("x-gone-since"), label).toBe("2026-01-01");
+				}
 				if (status === 200) {
+					// The authenticated principal reaches the handler, and the body matches its schema.
+					expect(await response.json(), label).toEqual({ id: "svc_cert" });
 					// The outcome's declared header matches what OpenAPI documents for it.
 					expect(documentedResponse!.headers?.["etag"], label).toMatchObject({
 						required: true,
