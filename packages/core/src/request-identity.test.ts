@@ -305,7 +305,9 @@ describe("request identity", () => {
 		});
 
 		for (const correlation of [false, true]) {
-			for (const headers of [{}, { "x-correlation-id": "trace-1" }]) {
+			for (const headers of [{}, { "x-correlation-id": "trace-1" }] as Array<
+				Record<string, string>
+			>) {
 				events.length = 0;
 				const app = createHonoApp([route, failing], { logger: configured, correlation });
 				const ok = await app.request("/bound", { headers });
@@ -522,7 +524,7 @@ describe("request identity", () => {
 			contract: createRoute({
 				middleware: [middleware],
 				responses: { ok: { status: 200 } },
-				run: ({ ctx }) => {
+				run: () => {
 					reached.push(path);
 					return { type: "ok" };
 				},
@@ -717,7 +719,7 @@ describe("request identity", () => {
 		expect(second.headers.get("x-request-id")).not.toBe(first.headers.get("x-request-id"));
 		expect(second.headers.get("cache-control")).toBe("max-age=60");
 
-		const sent = Array.from({ length: 6 }, (_, index) =>
+		const sent = Array.from({ length: 6 }, (_, index): Record<string, string> =>
 			index % 2 === 0 ? { "x-correlation-id": `customer-${index}` } : {},
 		);
 		const concurrent = await Promise.all(
