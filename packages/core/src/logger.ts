@@ -461,6 +461,15 @@ const unsafeCharacters =
 	/[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g;
 const namedEscapes: Readonly<Record<string, string>> = { "\n": "\\n", "\r": "\\r", "\t": "\\t" };
 
+/** Reverses the escapes `safeText` writes, giving the key a sanitized name may have come from. */
+function unescapeKey(name: string): string {
+	return name.replace(/\\(?:([nrt])|u([0-9a-f]{4}))/g, (_match, named?: string, code?: string) =>
+		named === undefined
+			? String.fromCharCode(Number.parseInt(code ?? "", 16))
+			: (({ n: "\n", r: "\r", t: "\t" } as Record<string, string>)[named] ?? ""),
+	);
+}
+
 /** A string field of the event, escaped; any other value reads as unsupported. */
 function sanitizeText(value: unknown): string {
 	return typeof value === "string" ? safeText(value) : unsupportedMarker;
@@ -787,17 +796,28 @@ function sanitizeMerged(base: RoutaLogData, added: unknown, paths: PendingPaths)
 	// Escaping a key twice changes nothing, so an added key escaped here meets its base key.
 	// One key past the limit is enough to mark the merged object as truncated.
 	const keys = Object.keys(added);
+	const replaced = new Set<string>();
 	for (const key of keys.slice(0, maxEntries + 1)) {
-		members.set(safeText(key), { key, read: () => memberValue(added, key) });
+		const name = safeText(key);
+		replaced.add(name);
+		members.set(name, { key, read: () => memberValue(added, key) });
 	}
 
 	// An added key past the ones read above still replaces a base key that escapes to the same
 	// name, so how many other fields the data holds never decides which value a binding logs.
-	if (Object.keys(base).length > 0) {
-		for (const key of keys.slice(maxEntries + 1)) {
-			const name = safeText(key);
+	// Each base name is looked up as written and unescaped, which costs one lookup per binding
+	// however many keys the data holds.
+	if (keys.length > maxEntries + 1) {
+		for (const name of Object.keys(base)) {
+			const key = replaced.has(name)
+				? undefined
+				: [name, unescapeKey(name)].find(
+						(candidate) =>
+							Object.prototype.propertyIsEnumerable.call(added, candidate)
+							&& safeText(candidate) === name,
+					);
 
-			if (Object.hasOwn(base, name)) {
+			if (key !== undefined) {
 				members.set(name, { key, read: () => memberValue(added, key) });
 			}
 		}
