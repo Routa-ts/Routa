@@ -526,7 +526,8 @@ export type MiddlewareNext<TProvides extends MiddlewareProvidesSpec> = keyof TPr
  */
 export type RequestIdentityContext = {
 	readonly requestId: string;
-	readonly correlationId?: string;
+	// Always present at runtime, as `undefined` when no correlation ID was accepted.
+	readonly correlationId?: string | undefined;
 };
 
 export type MiddlewareRunArgs<

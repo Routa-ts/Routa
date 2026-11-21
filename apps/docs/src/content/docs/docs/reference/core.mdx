@@ -1547,7 +1547,7 @@ const query = z.object({ fields: Fields(["id", "name", "email"]).optional() });
 ```ts
 type RequestIdentityContext = {
 	readonly requestId: string
-	readonly correlationId?: string
+	readonly correlationId?: string | undefined
 }
 ```
 
