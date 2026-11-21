@@ -480,8 +480,9 @@ Cleanup runs once per application instance:
   settles keeps it pending.
 
 A cleanup failure never replaces a startup error. Routa logs it as
-`services.cleanup_failed`. `dispose()` rejects with an `AggregateError` of the failures
-after every callback has been attempted.
+`services.cleanup_failed`, with how many callbacks failed and none of their error text.
+`dispose()` rejects with an `AggregateError` of the failures after every callback has been
+attempted.
 
 ### Request Cleanup
 
@@ -495,8 +496,9 @@ after the response is ready:
    registration order.
 4. Routa returns the prepared response.
 
-A request cleanup failure is logged as `services.cleanup_failed` and never changes the
-response. Application services stay available throughout, and `dispose()` waits for active
+A request cleanup failure is logged as `services.cleanup_failed`, with the request's
+identity and how many callbacks failed, and never changes the response. The event holds no
+error text, so a callback that needs its error logged catches it and logs what is safe. Application services stay available throughout, and `dispose()` waits for active
 requests to finish their cleanup before releasing application services.
 
 When a request factory throws or returns the wrong names, Routa skips every later factory,

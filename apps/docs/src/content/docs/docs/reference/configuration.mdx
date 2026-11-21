@@ -129,8 +129,11 @@ an issue's path, which can hold request data such as a record key, or the reject
 or context values.
 
 With [application services](/docs/concepts/services/), Routa also logs
-`services.cleanup_failed` at `error` level, with a `failures` list, when a cleanup callback
-throws or rejects.
+`services.cleanup_failed` at `error` level when a cleanup callback throws or rejects. Its
+`failureCount` is how many callbacks failed. Like the request events, it holds no error's
+message, name, or stack. For a request's services it goes through the request logger, so it
+starts with `requestId`, then `correlationId` when present. `dispose()` still rejects with an
+`AggregateError` of the original errors.
 
 ## `correlation`
 

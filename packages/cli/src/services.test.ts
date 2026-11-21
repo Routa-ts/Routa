@@ -799,6 +799,42 @@ export default createRouta({
 		});
 		expect(record.events).toEqual(["clock released", "services.cleanup_failed"]);
 	});
+
+	it("logs how many cleanup callbacks failed at startup, without their errors", async () => {
+		const key = `routa-cleanup-data-${Math.random()}`;
+		const cwd = servicesProject({
+			"src/services.ts": clockContract,
+			"src/routa.ts": `import { createLogger, createRouta } from "@routa-ts/core";
+import { defineAppServices } from "./services.js";
+
+const observed = (globalThis as any)[${JSON.stringify(key)}];
+
+export default createRouta({
+\tport: -1,
+\tlogger: createLogger({
+\t\tsink: (event) => {
+\t\t\tif (event.event === "services.cleanup_failed") observed.events.push(JSON.stringify(event));
+\t\t},
+\t}),
+\tservices: defineAppServices(({ onCleanup }) => {
+\t\tonCleanup(() => {
+\t\t\tthrow new Error("release failed with secret detail");
+\t\t});
+\t\treturn { clock: { now: () => "" } };
+\t}),
+});
+`,
+			"src/routes/status/route.ts": statusRoute,
+		});
+		const record = observed(key);
+
+		expect((await run(["generate"], { cwd })).code).toBe(0);
+		await expect(startRuntime(cwd, cwd, "start")).rejects.toMatchObject({
+			code: "ERR_SOCKET_BAD_PORT",
+		});
+		expect(record.events.map((line) => JSON.parse(line).data)).toEqual([{ failureCount: 1 }]);
+		expect(record.events.join("\n")).not.toMatch(/secret detail|Error|at /);
+	});
 });
 
 const statusRoute = `import { createRoute, createRouteRoot } from "@routa-ts/core";

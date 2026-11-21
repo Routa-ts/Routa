@@ -231,13 +231,12 @@ describe("application service cleanup", () => {
 
 		await expect(failure).rejects.toBe(primary);
 		expect(released).toEqual(["pool", "db"]);
+		// How many callbacks failed, and no error's message, name, or stack.
 		expect(events).toMatchObject([
-			{
-				event: "services.cleanup_failed",
-				level: "error",
-				data: { failures: [{ error: "db close failed" }] },
-			},
+			{ event: "services.cleanup_failed", level: "error", data: { failureCount: 1 } },
 		]);
+		expect(events[0]?.data).toEqual({ failureCount: 1 });
+		expect(JSON.stringify(events)).not.toMatch(/db close failed|Error|at /);
 	});
 
 	it("keeps the factory error primary when logging the cleanup failure throws", async () => {

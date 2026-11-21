@@ -316,9 +316,12 @@ describe("request-scoped service failures and cleanup", () => {
 		expect(response.status).toBe(200);
 		expect(await response.json()).toBe(3);
 		expect(released).toEqual(["first", "route file"]);
-		expect(events.find((event) => event.event === "services.cleanup_failed")?.data).toMatchObject({
-			failures: [{ error: "close failed" }],
+		// The request's identity and how many callbacks failed, and no error's message, name, or stack.
+		expect(events.find((event) => event.event === "services.cleanup_failed")?.data).toEqual({
+			requestId: response.headers.get("x-request-id"),
+			failureCount: 1,
 		});
+		expect(JSON.stringify(events)).not.toMatch(/close failed|Error|at /);
 		await app.dispose();
 	});
 
@@ -514,8 +517,9 @@ describe("request-scoped service failures and cleanup", () => {
 		expect((await request(app)).status).toBe(500);
 		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedOrders);
 		expect(JSON.stringify(events)).not.toContain("construction failed");
-		expect(events.find((event) => event.event === "services.cleanup_failed")?.data).toMatchObject({
-			failures: [{ error: "cleanup failed" }],
+		expect(events.find((event) => event.event === "services.cleanup_failed")?.data).toEqual({
+			requestId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+			failureCount: 1,
 		});
 		await app.dispose();
 	});
