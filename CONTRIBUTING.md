@@ -109,6 +109,10 @@ against the isolated baseline and environment adjustments recorded there.
 vp run changeset
 ```
 
+Merging to `main` does not update [routa-ts.dev](https://routa-ts.dev). The docs site deploys
+when the release workflow publishes packages, so its pages always describe the published
+version.
+
 ## Feature Proposals
 
 Open an issue or discussion before large changes. Include:
