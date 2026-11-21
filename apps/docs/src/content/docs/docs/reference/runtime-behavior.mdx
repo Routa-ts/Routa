@@ -305,8 +305,9 @@ operation every authentication outcome keeps its status and challenge without a 
 | A custom `extract` throws, or returns neither `credential` nor `malformed`, such as a promise         | `500` `…/problems/internal`; no authenticator runs  |
 
 An invalid result is an application contract violation, not a client error. When an
-authenticator or extractor throws, the log names only the scheme, never the thrown value,
-which may carry the credential. A thrown error
+authenticator or extractor throws, `http.error` carries only the request identity, method,
+route, and status: never the scheme or the thrown value, which may carry the credential. A
+thrown error
 stays a server error so an outage at a provider never reads as a bad credential.
 
 ## Methods
