@@ -371,8 +371,10 @@ handled as an internal error. Both produce a generic `500` problem response.
 
 When a logger is configured, `createHonoApp` records `http.response.prepared` at `info` once
 for every response it prepares, with `requestId`, `method`, `route`, `status`, and
-`durationMs`, and `http.error` at `error` for responses of 500 or above with `requestId`,
-`method`, `route`, and `status`. The
+`durationMs`. It records `http.error` at `error` when a Routa route fails unexpectedly and Routa
+answers with a 500 or above, with `requestId`, `method`, `route`, and `status`. A declared
+outcome with a 5xx status, such as a `503` your handler returns, is an application decision and
+logs only `http.response.prepared`. The
 [events table](/docs/reference/configuration/#events-routa-writes) defines each field. Response
 and middleware context schema failures also include `issueCount` and the distinct, sorted
 `issueCodes`; issue paths and rejected values are never logged.

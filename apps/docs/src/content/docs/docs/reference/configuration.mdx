@@ -122,7 +122,9 @@ no such event. Its fields:
 Neither request event includes the request's path, query, raw headers, body, credentials,
 principal, or any error's message, name, or stack.
 
-`http.error` is emitted only for responses with a status of 500 or above. When response
+`http.error` is emitted only when a Routa route fails unexpectedly and Routa answers with a
+status of 500 or above; a declared outcome with a 5xx status logs only `http.response.prepared`.
+When response
 or middleware context validation fails, `issueCount` is the number of issues Routa found and
 `issueCodes` lists their distinct codes, sorted, such as `["invalid_type"]`. Routa never logs
 an issue's path, which can hold request data such as a record key, or the rejected response
