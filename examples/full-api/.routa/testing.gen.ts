@@ -51,7 +51,6 @@ const modules: ProjectModules = {
 	"src/routes/legacy.$id.ts": () => import("../src/routes/legacy.$id.js"),
 	"src/routes/legacy.ts": () => import("../src/routes/legacy.js"),
 	"src/routes/logger-showcase/route.ts": () => import("../src/routes/logger-showcase/route.js"),
-	"src/routes/middleware.ts": () => import("../src/routes/middleware.js"),
 	"src/routes/showcase/$itemId/route.ts": () => import("../src/routes/showcase/$itemId/route.js"),
 	"src/routes/status/route.ts": () => import("../src/routes/status/route.js"),
 	"src/routes/whoami/route.ts": () => import("../src/routes/whoami/route.js"),

@@ -38,6 +38,25 @@
 				"responses": {
 					"200": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -48,6 +67,25 @@
 					},
 					"400": {
 						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -63,6 +101,23 @@
 								"required": true,
 								"schema": {
 									"type": "string"
+								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
 								}
 							}
 						},
@@ -90,6 +145,25 @@
 					},
 					"403": {
 						"description": "Forbidden",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -123,6 +197,25 @@
 				"responses": {
 					"200": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -152,6 +245,23 @@
 								"schema": {
 									"type": "string"
 								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
 							}
 						},
 						"content": {
@@ -178,6 +288,25 @@
 					},
 					"403": {
 						"description": "Forbidden",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -229,6 +358,25 @@
 				"responses": {
 					"200": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -239,6 +387,25 @@
 					},
 					"400": {
 						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -254,6 +421,23 @@
 								"required": true,
 								"schema": {
 									"type": "string"
+								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
 								}
 							}
 						},
@@ -325,6 +509,25 @@
 				"responses": {
 					"200": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -335,6 +538,25 @@
 					},
 					"400": {
 						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -350,6 +572,23 @@
 								"required": true,
 								"schema": {
 									"type": "string"
+								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
 								}
 							}
 						},
@@ -377,6 +616,25 @@
 					},
 					"403": {
 						"description": "Forbidden",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -428,10 +686,48 @@
 				],
 				"responses": {
 					"204": {
-						"description": "Success"
+						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						}
 					},
 					"400": {
 						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -447,6 +743,23 @@
 								"required": true,
 								"schema": {
 									"type": "string"
+								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
 								}
 							}
 						},
@@ -474,6 +787,25 @@
 					},
 					"403": {
 						"description": "Forbidden",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -553,6 +885,25 @@
 				"responses": {
 					"200": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -563,6 +914,25 @@
 					},
 					"400": {
 						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -578,6 +948,23 @@
 								"required": true,
 								"schema": {
 									"type": "string"
+								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
 								}
 							}
 						},
@@ -641,6 +1028,25 @@
 				"responses": {
 					"201": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -651,6 +1057,25 @@
 					},
 					"400": {
 						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -666,6 +1091,23 @@
 								"required": true,
 								"schema": {
 									"type": "string"
+								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
 								}
 							}
 						},
@@ -693,6 +1135,25 @@
 					},
 					"403": {
 						"description": "Forbidden",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -750,6 +1211,23 @@
 								"schema": {
 									"type": "string"
 								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
 							}
 						},
 						"content": {
@@ -762,6 +1240,25 @@
 					},
 					"400": {
 						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -776,6 +1273,23 @@
 							"www-authenticate": {
 								"schema": {
 									"type": "string"
+								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
 								}
 							}
 						},
@@ -830,11 +1344,47 @@
 								"schema": {
 									"type": "string"
 								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
 							}
 						}
 					},
 					"400": {
 						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -850,6 +1400,23 @@
 								"required": true,
 								"schema": {
 									"type": "string"
+								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
 								}
 							}
 						},
@@ -885,6 +1452,25 @@
 				"responses": {
 					"200": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -908,6 +1494,25 @@
 					},
 					"400": {
 						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -923,6 +1528,23 @@
 								"required": true,
 								"schema": {
 									"type": "string"
+								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
 								}
 							}
 						},
@@ -971,6 +1593,25 @@
 				"responses": {
 					"200": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -994,6 +1635,25 @@
 					},
 					"400": {
 						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -1009,6 +1669,23 @@
 								"required": true,
 								"schema": {
 									"type": "string"
+								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
 								}
 							}
 						},
@@ -1047,6 +1724,25 @@
 				"responses": {
 					"200": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -1065,6 +1761,25 @@
 					},
 					"400": {
 						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -1080,6 +1795,23 @@
 								"required": true,
 								"schema": {
 									"type": "string"
+								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
 								}
 							}
 						},
@@ -1125,6 +1857,25 @@
 				"responses": {
 					"200": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -1135,6 +1886,25 @@
 					},
 					"400": {
 						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -1151,6 +1921,23 @@
 								"schema": {
 									"type": "string"
 								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
 							}
 						},
 						"content": {
@@ -1163,6 +1950,25 @@
 					},
 					"403": {
 						"description": "Disabled",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -1213,6 +2019,25 @@
 				"responses": {
 					"200": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -1223,6 +2048,25 @@
 					},
 					"400": {
 						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -1239,6 +2083,23 @@
 								"schema": {
 									"type": "string"
 								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
 							}
 						},
 						"content": {
@@ -1251,6 +2112,25 @@
 					},
 					"404": {
 						"description": "Not found",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -1301,6 +2181,25 @@
 				"responses": {
 					"200": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -1311,6 +2210,25 @@
 					},
 					"400": {
 						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -1326,6 +2244,23 @@
 								"required": true,
 								"schema": {
 									"type": "string"
+								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
 								}
 							}
 						},
@@ -1368,10 +2303,48 @@
 				],
 				"responses": {
 					"204": {
-						"description": "Success"
+						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						}
 					},
 					"400": {
-						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts."
+						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						}
 					},
 					"401": {
 						"description": "Authentication failed: the request presented a credential that is malformed, unsupported, or rejected.",
@@ -1380,6 +2353,23 @@
 								"required": true,
 								"schema": {
 									"type": "string"
+								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
 								}
 							}
 						}
@@ -1408,6 +2398,25 @@
 				"responses": {
 					"200": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -1418,6 +2427,25 @@
 					},
 					"400": {
 						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -1433,6 +2461,23 @@
 								"required": true,
 								"schema": {
 									"type": "string"
+								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
 								}
 							}
 						},
@@ -1468,6 +2513,25 @@
 				"responses": {
 					"200": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -1478,6 +2542,25 @@
 					},
 					"400": {
 						"description": "Ambiguous credentials: the request presented credentials of more than one scheme the operation accepts.",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -1493,6 +2576,23 @@
 								"required": true,
 								"schema": {
 									"type": "string"
+								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							},
+							"x-correlation-id": {
+								"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+								"schema": {
+									"type": "string",
+									"minLength": 1,
+									"maxLength": 128,
+									"pattern": "^[A-Za-z0-9._-]+$"
 								}
 							}
 						},

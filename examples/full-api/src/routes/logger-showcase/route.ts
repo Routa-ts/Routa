@@ -35,10 +35,8 @@ export default route({
 				};
 			}
 
-			const child = ctx.logger.child({
-				showcase: "logger",
-				requestId: ctx.requestId,
-			});
+			// ctx.logger already binds requestId, and correlationId when the caller sent one.
+			const child = ctx.logger.child({ showcase: "logger" });
 			const bindings = child.bindings();
 			const checkedLevelEnabled = child.isLevelEnabled(input.body.level);
 			const operationLevel = levelForOperation(input.body.operation);
