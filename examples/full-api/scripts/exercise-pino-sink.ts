@@ -20,11 +20,15 @@ function capture(environment: LoggerEnvironment) {
 }
 
 const traced = capture({ LOG_LEVEL: "trace" });
+traced.logger.trace("order.inspected", "Order inspected.");
 traced.logger.debug("order.checked", "Order checked.");
 assert.deepEqual(
-	traced.lines.map((line) => line.event),
-	["order.checked"],
-	"LOG_LEVEL=trace writes a debug event, so Pino's own level filters nothing",
+	traced.lines.map((line) => [line.event, line.level]),
+	[
+		["order.inspected", 10],
+		["order.checked", 20],
+	],
+	"LOG_LEVEL=trace writes trace and debug events, so Pino's own level filters nothing",
 );
 
 const byDefault = capture({});
@@ -54,5 +58,5 @@ assert.deepEqual(line.data, data);
 
 const { level, msg, event } = line;
 console.log(
-	`Pino wrote debug only at LOG_LEVEL=trace and kept event data under data: ${JSON.stringify({ level, msg, event, data: line.data })}`,
+	`Pino wrote trace and debug only at LOG_LEVEL=trace and kept event data under data: ${JSON.stringify({ level, msg, event, data: line.data })}`,
 );
