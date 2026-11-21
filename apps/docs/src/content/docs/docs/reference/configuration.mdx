@@ -172,7 +172,8 @@ x-trace-ref: checkout-42
 
 Generated OpenAPI documents the header, so write the value as a literal: `true`, `false`, or
 `{ header: "..." }` with a string literal. `routa check` reads it without running
-`src/routa.ts` and reports `ROUTA_CORRELATION_CONFIG_UNRESOLVED` for any other value. It also
+`src/routa.ts` and reports `ROUTA_CORRELATION_CONFIG_UNRESOLVED` for any other value, and for
+a spread, config argument, or computed key whose type may hold `correlation`. It also
 rejects a header name that is not a valid name (`ROUTA_CORRELATION_HEADER_INVALID`) or that
 names `x-request-id`, a credential header (`authorization`, `proxy-authorization`, `cookie`,
 `set-cookie`), or a header Routa writes itself (`ROUTA_CORRELATION_HEADER_CONFLICT`), so the

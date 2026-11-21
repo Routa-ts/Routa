@@ -103,18 +103,19 @@ export function applicationAuthentication(
 	const { declaration, hidden } = routaConfigMember(cwd, parser, "authentication");
 	// Like services: a config Routa cannot read may only hold tuning values, so this is no error.
 	// Startup still rejects authentication that routa generate could not read.
-	const warnings: Diagnostic[] = hidden
-		? [
-				{
-					code: "ROUTA_AUTH_SPREAD_UNRESOLVED",
-					severity: "warning",
-					message: `The createRouta config in ${configFile} has a spread, computed key, or config argument that cannot be statically read, so authentication inside it cannot be read.`,
-					file: configFile,
-					suggestion:
-						"Declare authentication as a visible member of the createRouta object, after any spread, or spread a const object literal. Startup rejects authentication that routa generate could not read.",
-				},
-			]
-		: [];
+	const warnings: Diagnostic[] =
+		hidden.length > 0
+			? [
+					{
+						code: "ROUTA_AUTH_SPREAD_UNRESOLVED",
+						severity: "warning",
+						message: `The createRouta config in ${configFile} has a spread, computed key, or config argument that cannot be statically read, so authentication inside it cannot be read.`,
+						file: configFile,
+						suggestion:
+							"Declare authentication as a visible member of the createRouta object, after any spread, or spread a const object literal. Startup rejects authentication that routa generate could not read.",
+					},
+				]
+			: [];
 
 	if (!declaration) {
 		return { diagnostics: [], warnings };

@@ -279,24 +279,72 @@ describe("correlation config", () => {
 		]);
 	});
 
-	it("LOG-AC-09 warns when a spread or default export it cannot read may hold correlation", () => {
+	it("LOG-AC-11 rejects a spread, key, argument, or export whose type may hold correlation", () => {
+		const unresolved = {
+			code: "ROUTA_CORRELATION_CONFIG_UNRESOLVED",
+			message:
+				"The createRouta config in src/routa.ts has a spread, computed key, config argument, or default export whose type may hold correlation, so routa generate cannot read the correlation header.",
+		};
+
 		for (const routa of [
-			config("\t...settings(),", "const settings = () => ({});\n"),
+			// The visible member comes first, so the spread decides correlation at runtime.
+			config(
+				"\tcorrelation: true,\n\t...deploymentOverrides(),",
+				"const deploymentOverrides = (): { port?: number; correlation?: boolean } => ({});\n",
+			),
+			config(
+				"\tcorrelation: true,\n\t...overrides,",
+				"declare const overrides: { correlation: false };\n",
+			),
+			config("\t...settings,", "declare const settings: any;\n"),
+			config("\t...settings,", "declare const settings: Record<string, unknown>;\n"),
+			config(
+				"\t...(settings as object | { correlation: true }),",
+				"declare const settings: object;\n",
+			),
+			config("\t[key]: true,", "declare const key: string;\n"),
+			`import { createRouta, type RoutaConfig } from "@routa-ts/core";\ndeclare const settings: RoutaConfig;\nexport default createRouta(settings);\n`,
 			'export { default } from "./config.js";\n',
 		]) {
+			expect(
+				diagnostics({ "src/routa.ts": routa, "src/config.ts": config("\tcorrelation: true,") }),
+				routa,
+			).toEqual([unresolved]);
+		}
+	});
+
+	it("LOG-AC-11 reads correlation past a spread or key whose type has no correlation", () => {
+		for (const [routa, header] of [
+			[
+				config(
+					"\tcorrelation: true,\n\t...deployment(),",
+					'const deployment = () => ({ host: process.env.HOST ?? "127.0.0.1", port: 3000 });\n',
+				),
+				"x-correlation-id",
+			],
+			[config("\t...settings(),", "const settings = () => ({});\n"), undefined],
+			[
+				config(
+					'\tcorrelation: { header: "x-trace-ref" },\n\t[key]: 4000,',
+					'const key: "port" = "port";\n',
+				),
+				"x-trace-ref",
+			],
+			[
+				`import { createRouta } from "@routa-ts/core";\nconst listen = (): { port: number } => ({ port: 3000 });\nexport default createRouta(listen());\n`,
+				undefined,
+			],
+		] as const) {
 			const result = validateProject(
-				project({
-					"src/routa.ts": routa,
-					"src/config.ts": config("\tcorrelation: true,"),
-					"src/routes/status/route.ts": statusRoute,
-				}),
+				project({ "src/routa.ts": routa, "src/routes/status/route.ts": statusRoute }),
 				{ write: false },
 			);
-
+			expect(result.diagnostics, routa).toEqual([]);
 			expect(
-				result.warnings.map((warning) => warning.code),
+				result.warnings.filter((warning) => warning.code.startsWith("ROUTA_CORRELATION")),
 				routa,
-			).toContain("ROUTA_CORRELATION_SPREAD_UNRESOLVED");
+			).toEqual([]);
+			expect(result.correlationHeader, routa).toBe(header);
 		}
 	});
 });

@@ -345,8 +345,33 @@ OpenAPI document, so Routa reads them without running `src/routa.ts`.
 ROUTA_CORRELATION_CONFIG_UNRESOLVED: src/routa.ts: The correlation config in src/routa.ts cannot be statically read.
 ```
 
+It also fails when a part of the `createRouta` config Routa cannot read may set
+`correlation`: a spread, a config argument, or a default export whose TypeScript type has a
+`correlation` member, even an optional one, a string index signature, or is `any` or
+`unknown`; a computed key whose type may be `"correlation"`, such as `string`; or a default
+re-exported from another module. Routa asks the type checker, so it still runs no module. A
+part whose type has no `correlation` member, such as a spread of
+`{ host: string; port: number }`, is ignored.
+
+```ts title="src/routa.ts"
+import { createRouta } from "@routa-ts/core";
+import { deploymentOverrides } from "./deployment.js";
+
+export default createRouta({
+	correlation: true,
+	// Its return type is { port?: number; correlation?: boolean }.
+	...deploymentOverrides(),
+});
+```
+
+```text
+ROUTA_CORRELATION_CONFIG_UNRESOLVED: src/routa.ts: The createRouta config in src/routa.ts has a spread, computed key, config argument, or default export whose type may hold correlation, so routa generate cannot read the correlation header.
+```
+
 **Fix:** write `correlation: true`, `correlation: false`, or
-`correlation: { header: "x-correlation-id" }`.
+`correlation: { header: "x-correlation-id" }` as a member of the `createRouta` call in
+`src/routa.ts`, after every spread, and spread only values whose type has no `correlation`
+member.
 
 ### `ROUTA_CORRELATION_HEADER_INVALID`
 
@@ -373,18 +398,6 @@ ROUTA_CORRELATION_HEADER_CONFLICT: src/routa.ts: The correlation header "X-Reque
 
 **Fix:** choose a header of its own, such as `x-correlation-id`. A correlation ID is not a
 credential and never replaces `x-request-id`.
-
-### `ROUTA_CORRELATION_SPREAD_UNRESOLVED`
-
-Warning. The default-exported `createRouta` config in `src/routa.ts` has a spread, computed
-key, or config argument that Routa cannot read, and no visible `correlation` member after it,
-or `src/routa.ts` re-exports its default from another module. Routa follows
-`export default createRouta(...)` and `export { config as default }` for a local `const`.
-Correlation inside it never reaches generated metadata or OpenAPI. If the unread part does turn
-correlation on, `routa dev` and `routa start` refuse to start.
-
-**Fix:** declare `correlation` as a member of the `createRouta` object after any spread, or
-spread a `const` object literal Routa can follow.
 
 ## Authentication
 

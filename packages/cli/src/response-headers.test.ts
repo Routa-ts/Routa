@@ -553,8 +553,11 @@ describe("response header declaration checks", () => {
 					),
 				});
 
+				// The config may also hold correlation, which request-identity.test.ts covers.
 				expect(
-					codes(cwd).map(([code]) => code),
+					codes(cwd)
+						.map(([code]) => code)
+						.filter((code) => code.startsWith("ROUTA_RESPONSE_HEADER")),
 					config,
 				).toEqual(["ROUTA_RESPONSE_HEADER_LIFECYCLE"]);
 			}

@@ -61,18 +61,19 @@ export function applicationServices(
 
 	const { declaration, hidden } = routaConfigMember(cwd, parser, "services");
 	// Tuning values may be runtime expressions, so a config Routa cannot read is not an error.
-	const warnings: Diagnostic[] = hidden
-		? [
-				{
-					code: "ROUTA_SERVICES_SPREAD_UNRESOLVED",
-					severity: "warning",
-					message: `The createRouta config in ${configFile} has a spread, computed key, or config argument that cannot be statically read, so application services inside it cannot be read.`,
-					file: configFile,
-					suggestion:
-						"Declare application services as a visible services member of the createRouta object, after any spread, or spread a const object literal. Startup rejects services that routa generate could not read.",
-				},
-			]
-		: [];
+	const warnings: Diagnostic[] =
+		hidden.length > 0
+			? [
+					{
+						code: "ROUTA_SERVICES_SPREAD_UNRESOLVED",
+						severity: "warning",
+						message: `The createRouta config in ${configFile} has a spread, computed key, or config argument that cannot be statically read, so application services inside it cannot be read.`,
+						file: configFile,
+						suggestion:
+							"Declare application services as a visible services member of the createRouta object, after any spread, or spread a const object literal. Startup rejects services that routa generate could not read.",
+					},
+				]
+			: [];
 
 	if (!declaration) {
 		return { diagnostics: [], warnings };
@@ -181,11 +182,20 @@ function declaredContract(
 	});
 }
 
+/**
+ * A part of the `createRouta` config Routa cannot read, which may hold a member: a spread or a
+ * config argument whose `value` it cannot follow, a computed `key` it cannot read, or a default
+ * export re-exported from another module.
+ */
+export type HiddenPart =
+	| { readonly kind: "value" | "key"; readonly file: string; readonly node: ts.Node }
+	| { readonly kind: "export" };
+
 type ConfigMember = {
 	/** The member's value, and the module it is written in. */
 	declaration?: { file: string; node: ts.Node } | undefined;
-	/** Whether a spread, computed key, or argument Routa cannot read may hold the member, after any visible member. */
-	hidden: boolean;
+	/** The parts Routa cannot read that may hold the member, after any visible member. */
+	hidden: readonly HiddenPart[];
 };
 
 /**
@@ -204,7 +214,14 @@ export function routaConfigMember(
 	const call = exported && exported !== "unreadable" && createRoutaCall(sourceFile, exported);
 
 	if (!call) {
-		return { hidden: exported !== undefined };
+		return {
+			hidden:
+				exported === undefined
+					? []
+					: exported === "unreadable"
+						? [{ kind: "export" }]
+						: [{ kind: "value", file: configFile, node: exported }],
+		};
 	}
 
 	// The config argument is read like a spread: an object literal or a `const` binding to one.
@@ -213,7 +230,7 @@ export function routaConfigMember(
 
 	return config
 		? objectMember(cwd, config.file, config.object, parser, 1, member)
-		: { hidden: argument !== undefined };
+		: { hidden: argument ? [{ kind: "value", file: configFile, node: argument }] : [] };
 }
 
 /**
@@ -287,25 +304,28 @@ function objectMember(
 	depth: number,
 	name: string,
 ): ConfigMember {
-	let found: ConfigMember = { hidden: false };
+	let found: ConfigMember = { hidden: [] };
 
 	for (const property of object.properties) {
 		if (ts.isSpreadAssignment(property)) {
 			const spread = spreadObject(cwd, file, property.expression, parser, depth);
-			const member = spread
+			const member: ConfigMember = spread
 				? objectMember(cwd, spread.file, spread.object, parser, depth + 1, name)
-				: { hidden: true };
+				: { hidden: [{ kind: "value", file, node: property.expression }] };
 			found = member.declaration
 				? member
-				: { declaration: found.declaration, hidden: found.hidden || member.hidden };
+				: { declaration: found.declaration, hidden: [...found.hidden, ...member.hidden] };
 		} else {
 			const key = memberKey(property.name);
 
 			if (key === undefined) {
-				found = { ...found, hidden: true };
+				const hiddenKey = ts.isComputedPropertyName(property.name)
+					? property.name.expression
+					: property.name;
+				found = { ...found, hidden: [...found.hidden, { kind: "key", file, node: hiddenKey }] };
 			} else if (key === name) {
 				// A visible member replaces whatever an earlier unreadable part held.
-				found = { declaration: { file, node: memberValue(property) }, hidden: false };
+				found = { declaration: { file, node: memberValue(property) }, hidden: [] };
 			}
 		}
 	}
