@@ -936,15 +936,44 @@ describe("correlation identity", () => {
 		}
 	});
 
-	it("LOG-AC-08 echoes only an accepted value and never removes a header something else wrote", async () => {
+	it("LOG-AC-10 owns the configured correlation header on every response, and no other header", async () => {
 		const app = createHonoApp([], { correlation: { header: "x-trace-ref" } });
-		app.get("/raw", () => new Response("ok", { headers: { "x-trace-ref": "written" } }));
+		// Forwards the headers an upstream service sent, as a proxy route might.
+		app.get(
+			"/raw",
+			() =>
+				new Response("ok", {
+					headers: {
+						"X-Trace-Ref": "stale-upstream-123",
+						"x-correlation-id": "upstream",
+						"x-other": "kept",
+					},
+				}),
+		);
 
-		const ignored = await app.request("/raw", { headers: { "x-trace-ref": "has space" } });
-		const accepted = await app.request("/raw", { headers: { "x-trace-ref": "trace-1" } });
+		const responses = {
+			absent: await app.request("/raw"),
+			ignored: await app.request("/raw", { headers: { "x-trace-ref": "has space" } }),
+			accepted: await app.request("/raw", { headers: { "x-trace-ref": "trace-1" } }),
+		};
 
-		expect(ignored.headers.get("x-trace-ref")).toBe("written");
-		expect(accepted.headers.get("x-trace-ref")).toBe("trace-1");
+		expect(
+			Object.fromEntries(
+				Object.entries(responses).map(([name, response]) => [
+					name,
+					response.headers.get("x-trace-ref"),
+				]),
+			),
+		).toEqual({ absent: null, ignored: null, accepted: "trace-1" });
+		for (const [name, response] of Object.entries(responses)) {
+			expect(response.headers.get("x-correlation-id"), name).toBe("upstream");
+			expect(response.headers.get("x-other"), name).toBe("kept");
+		}
+
+		// With correlation off, Routa owns no correlation header.
+		const off = createHonoApp([]);
+		off.get("/raw", () => new Response("ok", { headers: { "x-correlation-id": "upstream" } }));
+		expect((await off.request("/raw")).headers.get("x-correlation-id")).toBe("upstream");
 	});
 
 	it("LOG-AC-08 echoes the header startup checked, whatever the services factory changes later", async () => {

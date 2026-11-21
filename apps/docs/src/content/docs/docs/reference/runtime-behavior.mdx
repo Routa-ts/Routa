@@ -47,8 +47,9 @@ matched route, in order:
    repeated `Set-Cookie` fields, and, when enabled, lifecycle headers. A bodyless outcome gets
    no content headers. The selected response is then fixed: changes that code makes later to
    the objects the result was built from do not reach the client.
-9. **Identity headers.** Once any response is prepared, Routa sets `x-request-id` and, when it
-   accepted one, the correlation header, over anything else that wrote them, and logs
+9. **Identity headers.** Once any response is prepared, Routa sets `x-request-id` over
+   anything else that wrote it. With correlation on, it sets the configured correlation header
+   to the accepted correlation ID, or removes that header when it accepted none. Then it logs
    `http.response.prepared`.
 
 ## Request Identity
@@ -70,8 +71,10 @@ x-request-id: 3c9e1f7a-2b4d-4e8f-a6c5-9d0b1e2f3a4b
 With [`correlation`](/docs/reference/configuration/#correlation) on, Routa also accepts one
 valid correlation ID from the configured header, exposes it as `ctx.correlationId`, binds it to
 the request logger, and echoes it. Without a valid value the header is absent from the
-response. A correlation ID associates requests across systems; it is not authentication and
-not tracing identity.
+response, even when a handler wrote one, such as a value forwarded from an upstream service.
+Routa owns only that header and `x-request-id`; it leaves every other header a handler writes
+alone. A correlation ID associates requests across systems; it is not authentication and not
+tracing identity.
 
 Routa owns these values:
 
@@ -92,8 +95,9 @@ writes its headers on a copy of a response it did not prepare, so a response you
 or one with immutable headers never carries another request's identity. A response the runtime
 cannot copy is the exception: the `Response` constructor accepts only statuses `200` to `599`,
 so a `101 Switching Protocols` upgrade response, such as the one `Deno.upgradeWebSocket()`
-returns, goes back unchanged, without `x-request-id` or the correlation echo.
-`http.response.prepared` still records it with status `101`.
+returns, goes back unchanged, without `x-request-id` or the correlation echo, and with any
+correlation header it already carries. `http.response.prepared` still records it with status
+`101`.
 
 ## Status Codes Routa Produces
 

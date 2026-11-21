@@ -386,7 +386,8 @@ type TrackedRequest = RequestState & { route?: string; prepared?: Response };
  * Gives every request that reaches the app its identity, before anything else runs: a generated
  * UUID, the caller's correlation ID when the configured header carries a valid one, and a request
  * logger bound to both. Once the response is prepared, it sets `x-request-id` last, over any value
- * something else wrote, echoes an accepted correlation ID, and logs `http.response.prepared`.
+ * something else wrote, echoes an accepted correlation ID or removes the correlation header when
+ * it accepted none, and logs `http.response.prepared`.
  *
  * Routa writes these headers in place only on a response it prepared for this request. Any other
  * response, such as one a handler added to the returned Hono app reuses across requests, or one
@@ -433,10 +434,15 @@ function identifyRequests(
 			const { headers } = context.res;
 			headers.set(requestIdHeader, requestId);
 
-			// Only an accepted value is echoed. No header Routa writes can be the correlation header,
-			// so the echo never replaces one, and without a value it leaves the response alone.
-			if (correlationHeader !== undefined && correlationId !== undefined) {
-				headers.set(correlationHeader, correlationId);
+			// Routa owns the configured correlation header, so a response never presents a value
+			// Routa did not accept, such as one a handler forwarded from upstream. No other header
+			// Routa writes can be the correlation header, and no other header is touched.
+			if (correlationHeader !== undefined) {
+				if (correlationId === undefined) {
+					headers.delete(correlationHeader);
+				} else {
+					headers.set(correlationHeader, correlationId);
+				}
 			}
 		}
 

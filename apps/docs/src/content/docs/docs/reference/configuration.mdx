@@ -187,8 +187,9 @@ the lifecycle headers `deprecation`, `sunset`, and `link`; and `www-authenticate
 authentication challenges. Startup rejects the same names, and a `src/routa.ts` whose
 correlation differs from what `routa generate` recorded.
 
-While correlation is on, Routa owns the configured header on every response, and an outcome
-cannot declare it in `headers`.
+While correlation is on, Routa owns the configured header on every response: it echoes an
+accepted value, removes any value a handler wrote when it accepted none, and rejects an outcome
+that declares the header in `headers`.
 
 ## `lifecycleHeaders`
 
