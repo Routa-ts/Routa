@@ -79,16 +79,10 @@ export function loggedMethod(method: string): string {
  * Reads the `correlation` option: the lowercase header name Routa reads and echoes, or `undefined`
  * when correlation is off.
  *
- * @param authentication - The validated authentication config, whose declared transports the
- *   header cannot name. Only those declarations are read; no extractor or authenticator runs.
  * @throws {TypeError} When the option has the wrong shape, the header name is invalid, or it names
- *   x-request-id, a credential header, a header a credential scheme reads, or a header Routa
- *   writes itself
+ *   x-request-id, a credential header, or a header Routa writes itself
  */
-export function correlationHeaderOf(
-	option: unknown,
-	authentication?: RuntimeAuthentication,
-): string | undefined {
+export function correlationHeaderOf(option: unknown): string | undefined {
 	if (option === undefined || option === false) {
 		return undefined;
 	}
@@ -117,18 +111,33 @@ export function correlationHeaderOf(
 		throw new TypeError(`The correlation header ${problem}`);
 	}
 
-	const name = header.toLowerCase();
-	const scheme = authentication?.schemes.find(
-		(item) => "header" in item.transport && item.transport.header === name,
-	);
+	return header.toLowerCase();
+}
+
+/**
+ * Rejects a correlation header that a declared credential scheme reads, so a credential never
+ * lands in correlation. Only the declared transports are read; no extractor or authenticator runs.
+ *
+ * @param header - The lowercase header {@link correlationHeaderOf} returned
+ * @param authentication - The validated authentication config
+ * @throws {TypeError} When an `apiKey` or `custom` scheme reads its credential from the header
+ */
+export function assertCorrelationReadsNoCredential(
+	header: string | undefined,
+	authentication: RuntimeAuthentication | undefined,
+): void {
+	const scheme =
+		header === undefined
+			? undefined
+			: authentication?.schemes.find(
+					(item) => "header" in item.transport && item.transport.header === header,
+				);
 
 	if (scheme) {
 		throw new TypeError(
-			`The correlation header ${JSON.stringify(header)} names ${name}, which the ${scheme.kind} scheme ${JSON.stringify(scheme.name)} reads its credential from. Choose another header, such as x-correlation-id.`,
+			`The correlation header ${JSON.stringify(header)} is the header the ${scheme.kind} scheme ${JSON.stringify(scheme.name)} reads its credential from. Choose another header, such as x-correlation-id.`,
 		);
 	}
-
-	return name;
 }
 
 /**

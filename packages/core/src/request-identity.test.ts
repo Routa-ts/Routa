@@ -1287,22 +1287,27 @@ describe("correlation identity", () => {
 		for (const [header, message] of [
 			[
 				"x-api-key",
-				'The correlation header "x-api-key" names x-api-key, which the apiKey scheme "serviceKey" reads its credential from. Choose another header, such as x-correlation-id.',
+				'The correlation header "x-api-key" is the header the apiKey scheme "serviceKey" reads its credential from. Choose another header, such as x-correlation-id.',
 			],
 			[
 				"X-API-KEY",
-				'The correlation header "X-API-KEY" names x-api-key, which the apiKey scheme "serviceKey" reads its credential from.',
+				'The correlation header "x-api-key" is the header the apiKey scheme "serviceKey" reads its credential from.',
 			],
 			[
 				"X-Client-Cert",
-				'The correlation header "X-Client-Cert" names x-client-cert, which the custom scheme "clientCert" reads its credential from.',
+				'The correlation header "x-client-cert" is the header the custom scheme "clientCert" reads its credential from.',
 			],
-			["authorization", 'The correlation header "authorization" names a credential header.'],
 		] as const) {
 			expect(() => createHonoApp([], { authentication, correlation: { header } }), header).toThrow(
 				message,
 			);
-			const factory = vi.fn(() => ({ clock: {} }));
+			// Routa reads the schemes once the services factory has run, so a conflict releases the
+			// services it constructed.
+			const cleanup = vi.fn();
+			const factory = vi.fn(({ onCleanup }: { onCleanup: (release: () => void) => void }) => {
+				onCleanup(cleanup);
+				return { clock: {} };
+			});
 			await expect(
 				createApplication([], {
 					authentication,
@@ -1311,12 +1316,65 @@ describe("correlation identity", () => {
 				}),
 				header,
 			).rejects.toThrow(message);
-			// Rejected before the services factory runs, so nothing needs releasing.
-			expect(factory).not.toHaveBeenCalled();
+			expect([factory.mock.calls.length, cleanup.mock.calls.length], header).toEqual([1, 1]);
 		}
+
+		// A fixed credential header is rejected before the services factory runs.
+		const factory = vi.fn(() => ({ clock: {} }));
+		await expect(
+			createApplication([], {
+				authentication,
+				correlation: { header: "Authorization" },
+				services: { factory, names: ["clock"] },
+			}),
+		).rejects.toThrow('The correlation header "Authorization" names a credential header.');
+		expect(factory).not.toHaveBeenCalled();
 
 		expect(authenticate).not.toHaveBeenCalled();
 		expect(extract).not.toHaveBeenCalled();
+	});
+
+	it("LOG-AC-17 reads authentication schemes after the services factory, with correlation on or off", async () => {
+		const principal = z.object({ id: z.string(), type: z.literal("service") });
+		const whoami: HonoRoute = {
+			method: "get",
+			path: "/whoami",
+			contract: createRoute({
+				middleware: [requireAuth()],
+				responses: { ok: { status: 200, schema: z.object({ ok: z.boolean() }) } },
+				run: () => ({ type: "ok", data: { ok: true } }),
+			}),
+		};
+
+		for (const correlation of [undefined, { header: "x-trace-ref" }]) {
+			// The scheme is resolved when Routa reads it: rejecting until the factory has run.
+			let ready = false;
+			const app = await createApplication([whoami], {
+				correlation,
+				authentication: {
+					principal,
+					get schemes() {
+						const result = ready
+							? ({ type: "authenticated", principal: { id: "svc", type: "service" } } as const)
+							: ({ type: "rejected" } as const);
+						return { serviceKey: apiKey({ header: "x-api-key", authenticate: () => result }) };
+					},
+				},
+				services: {
+					factory: () => {
+						ready = true;
+						return { clock: {} };
+					},
+					names: ["clock"],
+				},
+			});
+
+			const response = await app.fetch(
+				new Request("http://localhost/whoami", { headers: { "x-api-key": "key" } }),
+			);
+			expect(response.status, JSON.stringify(correlation)).toBe(200);
+			await app.dispose();
+		}
 	});
 
 	it("LOG-AC-17 keeps authentication results with a correlation header of its own", async () => {

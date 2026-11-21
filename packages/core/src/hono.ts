@@ -4,7 +4,6 @@ import {
 	rejectsAmbiguousCredentials,
 	type RouteAuthentication,
 	routeAuthentication,
-	type RuntimeAuthentication,
 	runtimeAuthentication,
 } from "./authentication.js";
 import type {
@@ -32,6 +31,7 @@ import {
 import { type ReportRequestError, requestErrorReporterOf } from "./request-errors.js";
 import {
 	acceptedCorrelation,
+	assertCorrelationReadsNoCredential,
 	correlationHeaderOf,
 	loggedMethod,
 	type RequestIdentity,
@@ -152,9 +152,10 @@ export async function createApplication(
 			"Omit logger to turn logging off.",
 		);
 	}
-	// Read before the services factory runs, so the factory cannot change the schemes or header
-	// requests use, or the reporter.
-	const checked = checkedOptions(appOptions, requestLogger);
+	// Read before the services factory runs, so the factory cannot change the header requests use,
+	// or the reporter.
+	const correlationHeader = correlationHeaderOf(appOptions.correlation);
+	const report = requestErrorReporterOf(appOptions.onRequestError);
 	const logger = requestLogger ?? createLogger({ enabled: false });
 	const scope = createCleanupScope();
 	const services =
@@ -169,7 +170,7 @@ export async function createApplication(
 	let app: Hono;
 
 	try {
-		app = honoApp(routes, appOptions, services, checked);
+		app = honoApp(routes, appOptions, services, { requestLogger, correlationHeader, report });
 	} catch (error) {
 		await scope.release().catch((cleanupError: unknown) => logCleanupFailure(logger, cleanupError));
 		throw error;
@@ -236,60 +237,41 @@ export function createHonoApp(
 	if (logger !== undefined) {
 		assertCreatedLogger(logger, "createHonoApp received", "Omit logger to turn logging off.");
 	}
-	return honoApp(routes, options, undefined, checkedOptions(options, logger));
+	return honoApp(routes, options, undefined, {
+		requestLogger: logger,
+		correlationHeader: correlationHeaderOf(options.correlation),
+		report: requestErrorReporterOf(options.onRequestError),
+	});
 }
 
 /**
  * The options read once and checked at startup, so a later change to the options cannot replace
- * them: the logger, the authentication schemes, the correlation header, and the contained
- * `onRequestError`.
+ * them: the logger, the correlation header, and the contained `onRequestError`.
  */
 type CheckedOptions = {
 	readonly requestLogger: RoutaLogger | undefined;
-	readonly authentication: RuntimeAuthentication | undefined;
 	readonly correlationHeader: string | undefined;
 	readonly report: ReportRequestError | undefined;
 };
-
-/**
- * Reads and checks the options {@link CheckedOptions} holds. The correlation header is checked
- * against the declared credential transports, so it never names a header a scheme reads.
- *
- * @throws {TypeError} When the authentication config, the correlation option, or `onRequestError`
- *   is invalid
- */
-function checkedOptions(
-	options: CreateHonoAppOptions,
-	requestLogger: RoutaLogger | undefined,
-): CheckedOptions {
-	const authentication =
-		options.authentication === undefined
-			? undefined
-			: runtimeAuthentication(options.authentication);
-	return {
-		requestLogger,
-		authentication,
-		correlationHeader: correlationHeaderOf(options.correlation, authentication),
-		report: requestErrorReporterOf(options.onRequestError),
-	};
-}
 
 /**
  * @param options - Read as given, except for the options `checked` holds
  */
 function honoApp(
 	routes: readonly HonoRoute[],
-	options: Omit<
-		CreateHonoAppOptions,
-		"logger" | "authentication" | "correlation" | "onRequestError"
-	>,
+	options: Omit<CreateHonoAppOptions, "logger" | "correlation" | "onRequestError">,
 	services: ServiceMapping | undefined,
-	{ requestLogger, authentication, correlationHeader, report }: CheckedOptions,
+	{ requestLogger, correlationHeader, report }: CheckedOptions,
 ): Hono {
 	const app = new Hono();
 	const methodsByPath = new Map<string, Set<string>>();
 	const routeLogger = requestLogger ?? createLogger({ enabled: false });
 	const validateResponses = shouldValidateResponses(options);
+	const authentication =
+		options.authentication === undefined
+			? undefined
+			: runtimeAuthentication(options.authentication);
+	assertCorrelationReadsNoCredential(correlationHeader, authentication);
 	const requests = identifyRequests(app, routeLogger, correlationHeader);
 
 	const registeredRoutes = new Set<string>();

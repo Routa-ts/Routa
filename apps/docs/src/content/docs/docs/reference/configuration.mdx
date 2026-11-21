@@ -201,9 +201,10 @@ Routa writes `content-type`, `content-length`,
 `405` responses; `access-control-allow-methods` and `vary` on automatic `OPTIONS` responses;
 the lifecycle headers `deprecation`, `sunset`, and `link`; and `www-authenticate` on
 authentication challenges. Startup, `createApplication`, and `createHonoApp` reject the same
-names, comparing them with the validated authentication schemes before the services factory
-runs, and startup rejects a `src/routa.ts` whose correlation differs from what
-`routa generate` recorded.
+names before they serve a request. `createApplication` checks the fixed names before the services
+factory runs and compares the header with the authentication schemes when it reads them, after
+the factory, so a conflict there releases the services the factory constructed. Startup also
+rejects a `src/routa.ts` whose correlation differs from what `routa generate` recorded.
 
 While correlation is on, Routa owns the configured header on every response: it echoes an
 accepted value, removes any value a handler wrote when it accepted none, and rejects an outcome
