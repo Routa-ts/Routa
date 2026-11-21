@@ -1410,6 +1410,16 @@ describe("request identity (types)", () => {
 				},
 			});
 
+			// A payload whose type promises a reserved key is absent claims nothing.
+			const sourceOf = (): { source: string; requestId?: never } => ({ source: "worker" });
+			createMiddleware({
+				run: ({ next }) => next(sourceOf()),
+			});
+			createMiddleware({
+				// @ts-expect-error A payload that can supply requestId is rejected.
+				run: ({ next }) => next({ source: "worker" } as { source: string; requestId?: string }),
+			});
+
 			const factory: RequestServicesFactory<{ audit: string }> = ({ ctx }) => {
 				expectType<string>(ctx.requestId);
 				expectType<string | undefined>(ctx.correlationId);

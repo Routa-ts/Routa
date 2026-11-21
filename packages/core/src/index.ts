@@ -502,11 +502,23 @@ type ReservedContextChecks<TCtx> = string extends keyof TCtx
 	? [DeclaredReservedKeys<TCtx>] extends [never]
 		? unknown
 		: { readonly [K in DeclaredReservedKeys<TCtx>]: ReservedContextKeys[K] }
-	: [keyof TCtx & keyof ReservedContextKeys] extends [never]
+	: [SuppliedReservedKeys<TCtx>] extends [never]
 		? unknown
-		: { readonly [K in keyof TCtx & keyof ReservedContextKeys]: ReservedContextKeys[K] };
+		: { readonly [K in SuppliedReservedKeys<TCtx>]: ReservedContextKeys[K] };
 
-/** The reserved keys a type declares as required properties, which an index signature cannot. */
+/**
+ * The reserved keys a type can supply. A key typed `never` or `undefined`, such as
+ * `requestId?: never`, promises the key is absent, so it is no claim.
+ */
+type SuppliedReservedKeys<TCtx> = {
+	[K in keyof TCtx & keyof ReservedContextKeys]: [NonNullable<TCtx[K]>] extends [never] ? never : K;
+}[keyof TCtx & keyof ReservedContextKeys];
+
+/**
+ * The reserved keys a type declares as required properties, which an index signature cannot. An
+ * optional reserved key next to an index signature cannot be told apart from the signature, so
+ * Routa rejects it at runtime instead.
+ */
 type DeclaredReservedKeys<TCtx> = {
 	[K in keyof ReservedContextKeys]: TCtx extends { readonly [P in K]: unknown } ? K : never;
 }[keyof ReservedContextKeys];
