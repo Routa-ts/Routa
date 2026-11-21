@@ -1,7 +1,7 @@
 import { AuthenticationContractError } from "./authentication.js";
 import { InvalidHandlerOutputError } from "./handler-output-error.js";
 import type { RequestErrorCode, RequestErrorDiagnostic, RequestErrorReporter } from "./index.js";
-import { observeRejection, writeFallbackLine } from "./logger.js";
+import { observeRejection, writeFallbackLine } from "./fallback.js";
 
 /** Calls the application's reporter for one failed request. It never throws and never waits. */
 export type ReportRequestError = (error: unknown, diagnostic: RequestErrorDiagnostic) => void;
