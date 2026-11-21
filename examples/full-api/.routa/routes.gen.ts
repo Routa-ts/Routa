@@ -1992,5 +1992,6 @@ declare module "@routa-ts/core" {
 		applicationServices: RoutaApplicationServices;
 		factoryCtxByPath: RoutaFactoryCtxByPath;
 		authentication: { schemes: RoutaAuthenticationScheme; principal: RoutaPrincipal };
+		correlationHeader: typeof routaCorrelationHeader;
 	}
 }

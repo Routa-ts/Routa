@@ -199,6 +199,54 @@ describe("generated test applications", () => {
 		await app.dispose();
 	}, 30_000);
 
+	it("LOG-AC-10 reject the configured correlation header in outcome and reject headers in TypeScript", async () => {
+		const declarations = (expectError: boolean) => {
+			const mark = expectError
+				? "\t\t\t// @ts-expect-error Routa echoes the correlation ID in it.\n"
+				: "";
+			return `import { createMiddleware, createRoute } from "@routa-ts/core";
+import { z } from "zod";
+
+export const route = createRoute({
+\tresponses: {
+\t\tok: {
+\t\t\tstatus: 200,
+${mark}\t\t\theaders: z.object({ "x-trace-ref": z.string() }),
+\t\t},
+\t},
+\trun: () => ({ type: "ok", headers: { "x-trace-ref": "x" } }) as never,
+});
+
+export const gate = createMiddleware({
+\trejects: {
+\t\tdenied: {
+\t\t\tstatus: 403,
+${mark}\t\t\theaders: z.object({ "x-trace-ref": z.string() }),
+\t\t},
+\t},
+\trun: ({ next }) => next(),
+});
+`;
+		};
+		const check = async (members: string, expectError: boolean) => {
+			const cwd = project({
+				"src/routa.ts": config(members),
+				"src/routes/status/route.ts": statusRoute,
+				// Outside the route tree, so only TypeScript checks these declarations.
+				"src/declarations.ts": declarations(expectError),
+			});
+			const result = await run(["check"], { cwd });
+			return `${result.stdout ?? ""}${result.stderr ?? ""}`.includes("TS2578")
+				? "unused @ts-expect-error"
+				: result.code;
+		};
+
+		expect(await check('\tcorrelation: { header: "X-Trace-Ref" },', true)).toBe(0);
+		expect(await check("\tcorrelation: true,", false)).toBe(0);
+		expect(await check("", false)).toBe(0);
+		expect(await check("\tcorrelation: true,", true)).toBe("unused @ts-expect-error");
+	}, 60_000);
+
 	it("LOG-AC-11 refuse to start when src/routa.ts changed correlation after generation", async () => {
 		const cwd = await generated('\tcorrelation: { header: "X-Trace-Ref" },');
 		writeFileSync(join(cwd, "src/routa.ts"), config("\tcorrelation: true,"));
