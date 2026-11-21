@@ -396,7 +396,9 @@ and middleware context schema failures also include `issueCount` and the distinc
 To see the error itself, configure
 [`onRequestError`](/docs/reference/configuration/#onrequesterror). It receives the original
 error and the same metadata for each failure `http.error` records, even with `logger: false`,
-and never changes the response.
+and never changes the response. A `ZodError` that escapes a handler or `createContext`, and a
+request body that cannot be read or parsed, including a body stream that errors when the client
+aborts, answer `400` and are not reported.
 
 Request events never carry the request's path, query, body, raw headers, cookies, credentials,
 principal, or any error's message, name, or stack. A thrown authenticator, an invalid principal,

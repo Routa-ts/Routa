@@ -492,6 +492,47 @@ describe("request error reporting", () => {
 		}
 	});
 
+	it("LOG-AC-13 keeps the error mapping's 400 for an escaping ZodError and an unreadable body", async () => {
+		const { calls, onRequestError } = recorder();
+		const zod = () => {
+			throw new z.ZodError([]);
+		};
+		const app = createHonoApp(
+			[
+				get("/handler", zod),
+				get("/context", () => ({ type: "ok", data: { ok: true } }), { createContext: zod }),
+				{
+					method: "post",
+					path: "/body",
+					contract: createRoute({
+						input: { body: z.object({ name: z.string() }) },
+						responses: { ok: { status: 200 } },
+						run: () => ({ type: "ok" }),
+					}),
+				},
+			],
+			{ onRequestError },
+		);
+		const aborted = new ReadableStream({
+			start: (controller) => controller.error(new Error("client aborted")),
+		});
+
+		const responses = [
+			await app.request("/handler"),
+			await app.request("/context"),
+			await app.request("/body", {
+				method: "POST",
+				headers: json,
+				body: aborted,
+				duplex: "half",
+			} as RequestInit),
+		];
+
+		expect(responses.map((response) => response.status)).toEqual([400, 400, 400]);
+		expect((await responses[2]?.json()) as unknown).toMatchObject({ title: "Invalid JSON body" });
+		expect(calls).toEqual([]);
+	});
+
 	it("LOG-AC-13 names the context stage when a getter on the created context throws", async () => {
 		const thrown = new Error("secret");
 		const run = vi.fn(() => ({ type: "ok", data: { ok: true } }));

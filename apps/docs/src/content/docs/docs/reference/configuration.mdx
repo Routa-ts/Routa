@@ -263,10 +263,21 @@ types (`415`), unacceptable `Accept` headers (`406`), authentication rejections 
 declared outcomes and middleware rejects of any status, unmatched routes (`404`), `405`, and
 automatic `OPTIONS`.
 
+The callback sees only what Routa's error mapping answers with a server error, and that mapping
+does not change: any `ZodError` that escapes a handler or `createContext` answers `400` and is
+not reported, and a request body that cannot be read or parsed, including a body stream that
+errors, such as when the client aborts, answers `400` as invalid JSON and is not reported.
+Changing those classifications belongs to the future configurable error policy.
+
 Routa chooses the response before it calls the callback and does not wait for it, so the
 callback's return value, a throw, or a rejection never changes the response or delays it. When
 the callback throws or rejects, Routa writes one fixed line to `console.error`, once per
-application, without either error's text, and never calls the callback for its own failure:
+application, without either error's text, and never calls the callback for its own failure.
+Routa handles a returned promise's rejection the way it handles a logger sink's: through the
+built-in `Promise.prototype.then`, so the promise's own `then` never runs. The one rejection it
+cannot handle is from a promise subclass whose `constructor`, `Symbol.species`, or species
+constructor throws, because the built-in `then` runs them before it attaches a handler; that
+rejection can surface as an unhandled rejection, and the failure is still reported:
 
 ```txt
 {"level":"error","event":"routa.on_request_error.failed","message":"The onRequestError callback threw or rejected. Later failures of this callback in this application are not reported.","timestamp":"2026-01-01T00:00:00.000Z"}
