@@ -1651,9 +1651,9 @@ import { tracker } from "./tracker.js";
 
 // Send the original error to a tracker your application owns, never to stdout or Routa's
 // logger: it can hold a credential or other request data.
-const onRequestError: RequestErrorReporter = (error, diagnostic) => {
-	void tracker.capture(error, { ...diagnostic });
-};
+// Return the delivery promise, so Routa contains a failed delivery instead of leaving it unhandled.
+const onRequestError: RequestErrorReporter = (error, diagnostic) =>
+	tracker.capture(error, { ...diagnostic });
 
 export default createRouta({ onRequestError });
 ```

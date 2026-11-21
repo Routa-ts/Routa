@@ -215,9 +215,8 @@ import { createRouta } from "@routa-ts/core";
 import { tracker } from "./tracker.js";
 
 export default createRouta({
-	onRequestError: (error, diagnostic) => {
-		tracker.captureException(error, { tags: diagnostic });
-	},
+	// Returning the delivery promise lets Routa contain a delivery that fails.
+	onRequestError: (error, diagnostic) => tracker.captureException(error, { tags: diagnostic }),
 });
 ```
 
