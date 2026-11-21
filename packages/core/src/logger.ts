@@ -113,7 +113,7 @@ export function createLogger(options: CreateLoggerOptions = {}): RoutaLogger {
 	const now = options.now ?? (() => new Date());
 	const sink = options.sink ?? writeConsoleLog;
 	const paths: PendingPaths = (options.redact ?? []).map((path) =>
-		path.toLowerCase().split(".").map(safeText),
+		path.split(".").map(normalizeName),
 	);
 	const report = createFallbackReporter();
 
@@ -426,8 +426,30 @@ const sensitiveNames: ReadonlySet<string> = new Set([
 	"xcsrftoken",
 ]);
 
-function isSensitiveName(key: string): boolean {
-	return sensitiveNames.has(key.toLowerCase().replaceAll(/[-_]/g, ""));
+/**
+ * Whether the value under an object key is redacted, or the custom paths that continue below it.
+ * It decides on the whole key, before escaping or truncation can change it. A key longer than
+ * `maxStringLength` is always redacted: deciding exactly would cost time in proportion to its
+ * length, and a padded sensitive name such as `password` followed by thousands of `-` must
+ * still match.
+ */
+function redactionOf(key: string, pending: PendingPaths): PendingPaths | "redact" {
+	if (key.length > maxStringLength) {
+		return "redact";
+	}
+
+	const name = normalizeName(key);
+
+	return sensitiveNames.has(name.replaceAll(/[-_]/g, "")) ? "redact" : followPaths(pending, name);
+}
+
+/**
+ * The form in which keys and custom path segments are compared: escaped in full, as the sink
+ * receives them before any truncation, then lowercased. A path written with a control character
+ * and one written with its escape both match the key the sink sees.
+ */
+function normalizeName(name: string): string {
+	return escapeText(name).toLowerCase();
 }
 
 /**
@@ -444,19 +466,22 @@ function sanitizeText(value: unknown): string {
 	return typeof value === "string" ? safeText(value) : unsupportedMarker;
 }
 
+/** Escapes characters that could forge or hide log lines, so the text is one line. */
+function escapeText(value: string): string {
+	return value.replace(
+		unsafeCharacters,
+		(character) =>
+			namedEscapes[character] ?? `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+	);
+}
+
 /**
- * Escapes characters that could forge or hide log lines, so every emitted string is one line, then
- * bounds its length. Escaping only lengthens text, so it runs on at most the first
- * `maxStringLength` characters, whatever the input's length.
+ * Escapes text, so every emitted string is one line, then bounds its length. Escaping only
+ * lengthens text, so it runs on at most the first `maxStringLength` characters, whatever the
+ * input's length.
  */
 function safeText(value: string): string {
-	const escaped = value
-		.slice(0, maxStringLength)
-		.replace(
-			unsafeCharacters,
-			(character) =>
-				namedEscapes[character] ?? `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
-		);
+	const escaped = escapeText(value.slice(0, maxStringLength));
 
 	if (value.length <= maxStringLength && escaped.length <= maxStringLength) {
 		return escaped;
@@ -478,23 +503,21 @@ function safeText(value: string): string {
 type Traversal = { readonly ancestors: Set<object>; remaining: number };
 
 /**
- * The rest of each custom redaction path that can still match below a value, as lowercase
- * escaped segments, so they compare with keys in the form the sink receives; `*` matches any key
- * or array index.
+ * The rest of each custom redaction path that can still match below a value, as segments in the
+ * form {@link normalizeName} gives keys; `*` matches any key or array index.
  */
 type PendingPaths = readonly (readonly string[])[];
 
 /**
  * The custom paths that continue below a key, or `"redact"` when one ends at it.
  *
- * @param key - An escaped object key or an array index
+ * @param name - An object key as {@link normalizeName} gives it, or an array index
  */
-function followPaths(pending: PendingPaths, key: string): PendingPaths | "redact" {
+function followPaths(pending: PendingPaths, name: string): PendingPaths | "redact" {
 	if (pending.length === 0) {
 		return pending;
 	}
 
-	const name = key.toLowerCase();
 	const next: (readonly string[])[] = [];
 
 	for (const [segment, ...rest] of pending) {
@@ -670,25 +693,55 @@ function sanitizeItems(
 	return items;
 }
 
+/** An object member to sanitize: the key its redaction is decided on, and how to read its value. */
+type Member = { readonly key: string; readonly read: () => unknown };
+
 function sanitizeEntries(
 	value: object,
 	traversal: Traversal,
 	pending: PendingPaths,
 ): Record<string, unknown> {
-	const entries: Array<[string, unknown]> = [];
 	const keys = Object.keys(value);
+	const members = new Map<string, Member>();
 
 	for (const key of keys.slice(0, maxEntries)) {
-		const name = safeText(key);
-		const next = isSensitiveName(name) ? "redact" : followPaths(pending, name);
-		const item = sanitizeMember(() => memberValue(value, key), traversal, next);
+		members.set(safeText(key), { key, read: () => memberValue(value, key) });
+	}
+
+	return sanitizeMembers(members, keys.length > maxEntries, traversal, pending);
+}
+
+/**
+ * Sanitizes the first `maxEntries` members, each under the escaped name the sink receives.
+ *
+ * @param members - Members by escaped name; a later member replaces an earlier one with the same
+ *   name in place
+ * @param truncated - Whether members were left out before these, which adds the truncation marker
+ */
+function sanitizeMembers(
+	members: ReadonlyMap<string, Member>,
+	truncated: boolean,
+	traversal: Traversal,
+	pending: PendingPaths,
+): Record<string, unknown> {
+	const entries: Array<[string, unknown]> = [];
+	let visited = 0;
+
+	for (const [name, { key, read }] of members) {
+		if (visited === maxEntries) {
+			truncated = true;
+			break;
+		}
+
+		visited += 1;
+		const item = sanitizeMember(read, traversal, redactionOf(key, pending));
 
 		if (item !== undefined) {
 			entries.push([name, item]);
 		}
 	}
 
-	if (keys.length > maxEntries) {
+	if (truncated) {
 		entries.push([truncatedMarker, truncatedMarker]);
 	}
 
@@ -700,8 +753,9 @@ function sanitizeEntries(
  * whole: an event's data with its bindings, or a child's bindings with its parent's. `base` keys
  * come first, and an `added` key replaces a `base` key in place when both escape to the same name.
  *
- * @param base - Bindings that were already sanitized, so copying them runs no caller code and
- *   their keys are already escaped
+ * @param base - Bindings that were already sanitized, so reading them runs no caller code and
+ *   their keys are already escaped; deciding their redaction again reveals nothing the first
+ *   decision redacted
  * @throws {TypeError} When `added` is not a plain object
  */
 function sanitizeMerged(base: RoutaLogData, added: unknown, paths: PendingPaths): RoutaLogData {
@@ -709,26 +763,24 @@ function sanitizeMerged(base: RoutaLogData, added: unknown, paths: PendingPaths)
 		throw new TypeError("Log data must be a plain object.");
 	}
 
-	const merged: Record<string, unknown> = { ...base };
+	const members = new Map<string, Member>();
 
-	// Copying descriptors, not values, keeps an accessor unread so it still reads as unsupported.
-	// Escaping a key twice changes nothing, so an added key escaped here meets its base key.
-	// One key past the limit is enough to mark the merged object as truncated.
-	for (const key of Object.keys(added).slice(0, maxEntries + 1)) {
-		const descriptor = Object.getOwnPropertyDescriptor(added, key);
-
-		if (descriptor) {
-			Object.defineProperty(merged, safeText(key), {
-				...descriptor,
-				configurable: true,
-				enumerable: true,
-			});
-		}
+	for (const name of Object.keys(base)) {
+		members.set(name, { key: name, read: () => base[name] });
 	}
 
-	// No caller can reach `merged`, so `added` stands in for it as the root: a reference back to
-	// the data still reads as circular, and depth counts from the data.
-	return sanitizeEntries(merged, { ancestors: new Set([added]), remaining: maxValues }, paths);
+	// Escaping a key twice changes nothing, so an added key escaped here meets its base key.
+	// One key past the limit is enough to mark the merged object as truncated.
+	const keys = Object.keys(added);
+	for (const key of keys.slice(0, maxEntries + 1)) {
+		members.set(safeText(key), { key, read: () => memberValue(added, key) });
+	}
+
+	// The merged object is never built, so `added` stands in for it as the root: a reference back
+	// to the data still reads as circular, and depth counts from the data.
+	const traversal: Traversal = { ancestors: new Set([added]), remaining: maxValues };
+
+	return sanitizeMembers(members, keys.length > maxEntries + 1, traversal, paths);
 }
 
 /**

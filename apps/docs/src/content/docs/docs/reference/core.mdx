@@ -1326,6 +1326,12 @@ them, and never changes your objects.
   segments separated by `.`. Segments match keys case-insensitively, and `*` matches any key
   or array index: `"user.email"`, `"orders.*.card"`, `"matrix.0.1"`. A path applies to
   bindings and data alike. `createLogger` throws for a path with an empty segment.
+- **Whole keys.** Routa decides redaction on the whole key, before escaping or the string
+  limit changes it, and compares a key with a path segment in one form: escaped, then
+  lowercased. A key with a control character, such as `"tab\tkey"`, matches a segment
+  written with that character or with the escape the sink shows, `"tab\\tkey"`. A key longer
+  than 4,096 characters always has its value redacted, because checking it exactly costs time
+  in proportion to its length.
 - **Values.** Strings, booleans, `null`, and finite numbers are kept. A `bigint` becomes its
   decimal string, or `[Truncated]` when that string would be longer than 4,096 characters. A
   `Date` becomes its ISO string, and `NaN`, `Infinity`, and an invalid date become `null`. An

@@ -404,17 +404,26 @@ describe("createLogger sanitization", () => {
 	});
 
 	it("LOG-AC-03 replaces a binding with the event key that escapes to the same name", () => {
-		const { events, logger } = capture({ redact: ["tab\tkey"] });
+		// One path holds the control character; the other is written as the sink shows the key.
+		const { events, logger } = capture({ redact: ["tab\tkey", "line\\rkey"] });
 		const others = Object.fromEntries(
 			Array.from({ length: 99 }, (_, index) => [`k${index}`, index]),
 		);
 		const child = logger.child({ "line\nbreak": "old", ...others });
 
 		child.info("override", "Override.", { "line\nbreak": "new" });
-		logger.info("path", "Path.", { "tab\tkey": "secret", list: [{ "tab\tkey": "kept" }] });
+		logger.info("path", "Path.", {
+			"tab\tkey": "secret",
+			"line\rkey": "secret",
+			list: [{ "tab\tkey": "kept" }],
+		});
 
 		expect(events[0]?.data).toEqual({ "line\\nbreak": "new", ...others });
-		expect(events[1]?.data).toEqual({ "tab\\tkey": "[Redacted]", list: [{ "tab\\tkey": "kept" }] });
+		expect(events[1]?.data).toEqual({
+			"tab\\tkey": "[Redacted]",
+			"line\\rkey": "[Redacted]",
+			list: [{ "tab\\tkey": "kept" }],
+		});
 	});
 
 	it("LOG-AC-03 matches sensitive names case-insensitively without substring matches", () => {
@@ -486,6 +495,51 @@ describe("createLogger sanitization", () => {
 				[3, 4],
 			],
 			nested: { ssn: "not a root path", email: "not under user" },
+		});
+	});
+
+	it("LOG-AC-03 decides redaction on the whole key before escaping or truncating it", () => {
+		// Lowercasing İ adds a character, so the path grows past the string limit and the key does not.
+		const dotted = `${"a".repeat(4094)}İX`;
+		const controls = "\u0001".repeat(1000);
+		const nearControls = `${"\u0001".repeat(999)}x`;
+		const { events, logger } = capture({ redact: [dotted, `*.${controls}`] });
+		// Each is "password" once `-` is removed; only the first fits the string limit.
+		const baseline = {
+			[`password${"-".repeat(4000)}`]: "secret",
+			[`password${"-".repeat(4096)}`]: "secret",
+		};
+		const rooted = { ...baseline, [dotted]: "secret" };
+		const child = logger.child(rooted);
+
+		logger.info("top", "Top.", rooted);
+		logger.info("nested", "Nested.", {
+			list: [baseline],
+			near: { [nearControls]: "kept" },
+			exact: { [controls]: "secret" },
+		});
+		child.info("child", "Child.");
+		const [top, nested, bound] = events;
+		const values = (value: unknown) => Object.values(value as object);
+
+		for (const data of [top?.data, bound?.data, child.bindings()]) {
+			expect(values(data)).toEqual(["[Redacted]", "[Redacted]", "[Redacted]"]);
+		}
+		expect(values((nested?.data?.list as unknown[])[0])).toEqual(["[Redacted]", "[Redacted]"]);
+		expect(values(nested?.data?.exact)).toEqual(["[Redacted]"]);
+		expect(values(nested?.data?.near)).toEqual(["kept"]);
+		expect(JSON.stringify(events)).not.toContain("secret");
+	});
+
+	it("LOG-AC-03 redacts the value of every key longer than the string limit", () => {
+		const { events, logger } = capture();
+		const long = "k".repeat(4097);
+
+		logger.info("long", "Long.", { [long]: "v", [long.slice(1)]: "kept" });
+
+		expect(events[0]?.data).toEqual({
+			[`${"k".repeat(4085)}[Truncated]`]: "[Redacted]",
+			[long.slice(1)]: "kept",
 		});
 	});
 
@@ -569,7 +623,8 @@ describe("createLogger sanitization", () => {
 			widestNegative: `-${"9".repeat(4095)}`,
 			tooWideNegative: "[Truncated]",
 			small: "12",
-			[event?.message as string]: true,
+			// A key past the string limit is emitted truncated, and its value redacted.
+			[event?.message as string]: "[Redacted]",
 		});
 	});
 
