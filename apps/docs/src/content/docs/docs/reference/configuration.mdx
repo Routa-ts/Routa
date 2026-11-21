@@ -172,9 +172,11 @@ x-trace-ref: checkout-42
 
 Generated OpenAPI documents the header, so write the value as a literal: `true`, `false`, or
 `{ header: "..." }` with a string literal. `routa check` reads it without running
-`src/routa.ts`, following a default it imports or re-exports to the `createRouta` call in
-that module, and reports `ROUTA_CORRELATION_CONFIG_UNRESOLVED` for any other value, and for
-a spread, config argument, or computed key whose type may hold `correlation`. It also
+`src/routa.ts`. It follows a default that `src/routa.ts` imports or re-exports, and a spread
+or config argument bound to an object literal or a `createRouta` call, here or in another
+module, and reads the config there in place. It reports `ROUTA_CORRELATION_CONFIG_UNRESOLVED`
+for any other value, and for any other spread, config argument, or computed key whose type
+may hold `correlation`, including a value typed `RoutaConfig`. It also
 rejects a header name that is not a valid name (`ROUTA_CORRELATION_HEADER_INVALID`) or that
 names `x-request-id`, a credential header (`authorization`, `proxy-authorization`, `cookie`,
 `set-cookie`), or a header Routa writes itself (`ROUTA_CORRELATION_HEADER_CONFLICT`), so the
@@ -268,7 +270,8 @@ export default createRouta({
 ```
 
 `routa check` reads `services` from source: a member of the `createRouta` object, or of a
-`const` object literal, local or imported, that you pass to `createRouta` or spread into it.
+`const` bound to an object literal or a `createRouta` call, local or imported, that you pass
+to `createRouta` or spread into it.
 A spread or computed key it cannot read may hide `services` unless a visible `services`
 member follows it, so `routa check` warns with
 [`ROUTA_SERVICES_SPREAD_UNRESOLVED`](/docs/reference/diagnostics/#routa_services_spread_unresolved).

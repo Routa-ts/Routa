@@ -347,26 +347,26 @@ ROUTA_CORRELATION_CONFIG_UNRESOLVED: src/routa.ts: The correlation config in src
 
 When `src/routa.ts` imports or re-exports its default from another module, such as
 `export { default } from "./config.js"`, Routa follows it to the `createRouta` call there and
-reads `correlation` by the same rules, reporting the file that holds it.
+reads `correlation` by the same rules, reporting the file that holds it. It reads a spread or
+config argument the same way when it names an object literal or a `createRouta` call, such as
+`...shared` with `const shared = createRouta({ port: 3000 })`.
 
-It also fails when a part of the `createRouta` config Routa cannot read may set
-`correlation`: a spread, a config argument, or a default export whose TypeScript type has a
-`correlation` member, even an optional one, a string index signature, or is `any` or
+It also fails when any other part of the config may set `correlation`: a spread, a config
+argument, or a default export whose TypeScript type has a `correlation` member, even an
+optional one such as the one `RoutaConfig` declares, a string index signature, or is `any` or
 `unknown`; or a computed key whose type may be `"correlation"`, such as `string`. Routa asks
 the type checker, so it still runs no module. A part whose type has no `correlation` member,
-such as a spread of `{ host: string; port: number }`, is ignored, and so is the optional
-`correlation` of Routa's own `RoutaConfig`, which every `createRouta` result and every value
-typed `RoutaConfig` carries. Startup still refuses a config whose correlation differs from
-what `routa generate` recorded.
+such as a spread of `{ host: string; port: number }`, is ignored. Startup still refuses a
+config whose correlation differs from what `routa generate` recorded.
 
 ```ts title="src/routa.ts"
 import { createRouta } from "@routa-ts/core";
-import { deploymentOverrides } from "./deployment.js";
+import { deployment } from "./deployment.js";
 
 export default createRouta({
 	correlation: true,
-	// Its return type is { port?: number; correlation?: boolean }.
-	...deploymentOverrides(),
+	// deployment() returns a RoutaConfig, which may replace correlation above.
+	...deployment(),
 });
 ```
 
@@ -376,8 +376,9 @@ ROUTA_CORRELATION_CONFIG_UNRESOLVED: src/routa.ts: The createRouta config in src
 
 **Fix:** write `correlation: true`, `correlation: false`, or
 `correlation: { header: "x-correlation-id" }` as a member of the `createRouta` call in
-`src/routa.ts`, after every spread, and spread only values whose type has no `correlation`
-member.
+`src/routa.ts`, after every spread. Spread only an object literal or a `createRouta` call,
+written in place or bound to a `const`, or a value whose type has no `correlation` member; a
+value typed `RoutaConfig` may hold one.
 
 ### `ROUTA_CORRELATION_HEADER_INVALID`
 

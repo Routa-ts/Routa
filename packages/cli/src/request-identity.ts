@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { propertyName, unwrapExpression } from "./ast.js";
 import type { Diagnostic } from "./project.js";
 import { type HiddenPart, routaConfigMember, spreadObject } from "./services.js";
@@ -67,9 +67,11 @@ const shape =
 /**
  * Reads the `correlation` field of the `createRouta` config in `src/routa.ts` without executing
  * it. Whether correlation is on and which header it reads change the HTTP contract, so a value
- * Routa cannot read is an error, not an omitted header. That includes a spread, computed key,
- * config argument, or default export Routa cannot read whose type may hold `correlation`; one
- * whose type has no such member, such as a spread of `{ host: string; port: number }`, is ignored.
+ * Routa cannot read is an error, not an omitted header. A spread, config argument, or default
+ * export that resolves to an object literal or a `createRouta` call is read in place. Any other
+ * spread, computed key, config argument, or default export whose type may hold `correlation`,
+ * including a `RoutaConfig`, is an error; one whose type has no such member, such as a spread of
+ * `{ host: string; port: number }`, is ignored.
  *
  * @returns The lowercase correlation header when correlation is on, and diagnostics
  */
@@ -93,7 +95,7 @@ export function applicationCorrelation(
 					message: `The createRouta config in ${configFile} has a spread, computed key, config argument, or default export whose type may hold correlation, so routa generate cannot read the correlation header.`,
 					file: hiding.file,
 					suggestion:
-						"Write correlation as a visible member of the createRouta call in src/routa.ts, after every spread, and spread only values whose type has no correlation member, such as { host: string; port: number }. Generated OpenAPI documents the correlation header, so routa generate reads it without running src/routa.ts.",
+						"Write correlation as a visible member of the createRouta call in src/routa.ts, after every spread. Spread only object literals and createRouta calls, written in place or bound to a const, or values whose type has no correlation member, such as { host: string; port: number }; a RoutaConfig may hold one. Generated OpenAPI documents the correlation header, so routa generate reads it without running src/routa.ts.",
 				},
 			],
 			warnings: [],
@@ -169,10 +171,9 @@ const maxTypeDepth = 8;
 
 /**
  * Whether a value of `type`, spread into an object, may set member `name`: when the type is
- * `any`, `unknown`, or unresolved, declares the member, even optionally, or has a string index
- * signature. A union may when any of its members may. `undefined`, `null`, and `never` add nothing.
- * A member only `@routa-ts/core` declares does not count: every value `createRouta` returns has
- * the type `RoutaConfig`, whose optional `correlation` says nothing about the value itself.
+ * `any`, `unknown`, or unresolved, declares the member, even optionally, as `RoutaConfig` does,
+ * or has a string index signature. A union may when any of its members may. `undefined`, `null`,
+ * and `never` add nothing.
  */
 function mayHaveMember(checker: ts.Checker, type: ts.Type, name: string, depth: number): boolean {
 	if (depth > maxTypeDepth || type.flags & ts.TypeFlags.AnyOrUnknown || type.isErrorType()) {
@@ -197,33 +198,12 @@ function mayHaveMember(checker: ts.Checker, type: ts.Type, name: string, depth: 
 	}
 
 	const apparent = checker.getApparentType(type) ?? type;
-	const member = checker.getPropertyOfType(apparent, name);
 	return (
-		(member !== undefined
-			&& (member.declarations.length === 0
-				|| member.declarations.some((declaration) => !declaredByRouta(declaration))))
+		checker.getPropertyOfType(apparent, name) !== undefined
 		|| checker
 			.getIndexInfosOfType(apparent)
 			.some((info) => !(info.keyType.flags & (ts.TypeFlags.NumberLike | ts.TypeFlags.ESSymbolLike)))
 	);
-}
-
-/** Whether a declaration is written in the `@routa-ts/core` package, such as `RoutaConfig`'s. */
-function declaredByRouta(declaration: ts.NodeHandle): boolean {
-	const fileName = declaration.resolve()?.getSourceFile().fileName;
-	return fileName !== undefined && packageName(dirname(fileName)) === "@routa-ts/core";
-}
-
-/** The name in the nearest `package.json` at or above `directory`. */
-function packageName(directory: string): string | undefined {
-	const manifest = join(directory, "package.json");
-
-	if (existsSync(manifest)) {
-		return (JSON.parse(readFileSync(manifest, "utf8")) as { name?: string }).name;
-	}
-
-	const parent = dirname(directory);
-	return parent === directory ? undefined : packageName(parent);
 }
 
 /**

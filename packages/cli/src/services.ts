@@ -202,11 +202,9 @@ type ConfigMember = {
 };
 
 /**
- * Finds a member, such as `services`, of the `createRouta({ ... })` call `src/routa.ts` exports
- * as default, the config Routa loads at startup. The export may be the call itself or name a
- * `const` bound to it, declared locally or in a module the default is imported or re-exported
- * from, which the TypeScript checker resolves without running it. Any other default export may
- * hide the member.
+ * Finds a member, such as `services`, of the config `src/routa.ts` exports as default, the config
+ * Routa loads at startup. The export, its `createRouta` argument, and each spread in it are read
+ * through {@link configValue}. Any part it cannot follow may hide the member.
  */
 export function routaConfigMember(
 	cwd: string,
@@ -219,19 +217,52 @@ export function routaConfigMember(
 		return { hidden: [] };
 	}
 
-	const { file, node } = boundValue(cwd, parser, configFile, exported);
+	const config = configValue(cwd, parser, configFile, exported, 0);
 
-	if (!ts.isCallExpression(node) || callName(node.expression) !== "createRouta") {
-		return { hidden: [{ kind: "value", file, node }] };
+	if (!config) {
+		return { hidden: [] };
 	}
 
-	// The config argument is read like a spread: an object literal or a `const` binding to one.
-	const argument = node.arguments[0];
-	const config = argument && spreadObject(cwd, file, argument, parser, 0);
+	return ts.isObjectLiteralExpression(config.node)
+		? objectMember(cwd, config.file, config.node, parser, 1, member)
+		: { hidden: [{ kind: "value", ...config }] };
+}
 
-	return config
-		? objectMember(cwd, config.file, config.object, parser, 1, member)
-		: { hidden: argument ? [{ kind: "value", file, node: argument }] : [] };
+/**
+ * Follows a part of the config, such as the default export, the `createRouta` argument, or a
+ * spread, to the value it stands for: through `const` bindings, imports, and re-exports, and into
+ * the argument of each `createRouta` call, which returns its argument unchanged. The checker
+ * resolves bindings without running any module.
+ *
+ * @param file - The module containing `node`, relative to `cwd`
+ * @returns The object literal it found, or the node it stopped at as written, so its type keeps
+ *   any assertion, with the module it is written in; `undefined` for a `createRouta()` call
+ *   without a config, which holds no member
+ */
+function configValue(
+	cwd: string,
+	parser: ts.SourceFileParser,
+	file: string,
+	node: ts.Node,
+	depth: number,
+): { file: string; node: ts.Node } | undefined {
+	const bound = boundValue(cwd, parser, file, node);
+	const value = ts.isExpression(bound.node) ? unwrapExpression(bound.node) : bound.node;
+
+	if (ts.isObjectLiteralExpression(value)) {
+		return { file: bound.file, node: value };
+	}
+
+	if (
+		!ts.isCallExpression(value)
+		|| callName(value.expression) !== "createRouta"
+		|| depth >= maxBindingDepth
+	) {
+		return bound;
+	}
+
+	const [argument] = value.arguments;
+	return argument && configValue(cwd, parser, bound.file, argument, depth + 1);
 }
 
 /**
@@ -266,7 +297,7 @@ function defaultExport(sourceFile: ts.SourceFile): ts.Node | undefined {
  * module. It stops at any other node, such as a call, or a binding it cannot follow.
  *
  * @param file - The module containing `node`, relative to `cwd`
- * @returns The node it stopped at, and the module it is written in
+ * @returns The node it stopped at, as written, and the module it is written in
  */
 function boundValue(
 	cwd: string,
@@ -291,7 +322,7 @@ function boundValue(
 			: undefined;
 
 	if (!target) {
-		return { file, node: value };
+		return { file, node };
 	}
 
 	// Read the declaration from this parser's own parse of its module, where later reads find it.
@@ -301,9 +332,7 @@ function boundValue(
 		target.pos,
 	);
 
-	return declared
-		? boundValue(cwd, parser, declaredFile, declared, depth + 1)
-		: { file, node: value };
+	return declared ? boundValue(cwd, parser, declaredFile, declared, depth + 1) : { file, node };
 }
 
 /**
@@ -331,8 +360,9 @@ function boundInitializer(sourceFile: ts.SourceFile, pos: number): ts.Expression
 
 /**
  * Reads a member from a config object in source order, so a later member replaces an earlier
- * one as it does at runtime. A spread of an object literal, or of a `const` object literal
- * declared locally or imported, is read like members written in place.
+ * one as it does at runtime. A spread that {@link configValue} follows to an object literal, such
+ * as a `const` bound to one or to a `createRouta` call, declared locally or imported, is read like
+ * members written in place.
  *
  * @param file - The module containing `object`, relative to `cwd`
  */
@@ -348,10 +378,15 @@ function objectMember(
 
 	for (const property of object.properties) {
 		if (ts.isSpreadAssignment(property)) {
-			const spread = spreadObject(cwd, file, property.expression, parser, depth);
-			const member: ConfigMember = spread
-				? objectMember(cwd, spread.file, spread.object, parser, depth + 1, name)
-				: { hidden: [{ kind: "value", file, node: property.expression }] };
+			const spread =
+				depth <= maxBindingDepth
+					? configValue(cwd, parser, file, property.expression, depth)
+					: { file, node: property.expression };
+			const member: ConfigMember = !spread
+				? { hidden: [] }
+				: ts.isObjectLiteralExpression(spread.node)
+					? objectMember(cwd, spread.file, spread.node, parser, depth + 1, name)
+					: { hidden: [{ kind: "value", ...spread }] };
 			found = member.declaration
 				? member
 				: { declaration: found.declaration, hidden: [...found.hidden, ...member.hidden] };

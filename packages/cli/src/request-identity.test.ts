@@ -381,17 +381,37 @@ describe("correlation config", () => {
 			),
 			config("\t[key]: true,", "declare const key: string;\n"),
 			`import { createRouta, type RoutaConfig } from "@routa-ts/core";\ndeclare const settings: RoutaConfig & { correlation: true };\nexport default createRouta(settings);\n`,
+			// Routa's own RoutaConfig may hold correlation, so a value of that type may set it.
 			config(
-				"\t...shared,",
-				'const shared = createRouta({ correlation: { header: "x-trace-ref" } });\n',
+				"\tcorrelation: true,\n\t...deployment(),",
+				'import type { RoutaConfig } from "@routa-ts/core";\nconst deployment = (): RoutaConfig => ({ correlation: { header: "x-trace-ref" } });\n',
 			),
+			`import { createRouta, type RoutaConfig } from "@routa-ts/core";\ndeclare const settings: RoutaConfig;\nexport default createRouta(settings);\n`,
+			config(
+				"\t...base,",
+				'import type { RoutaConfig } from "@routa-ts/core";\ndeclare const base: Partial<RoutaConfig>;\n',
+			),
+			`import type { RoutaConfig } from "@routa-ts/core";\ndeclare function load(): RoutaConfig;\nexport default load();\n`,
 		]) {
 			expect(diagnostics({ "src/routa.ts": routa }), routa).toEqual([unresolved]);
 		}
+
+		// Behind an imported createRouta call, the value is reported where it is written.
+		const cwd = project({
+			"src/routa.ts": config("\t...shared,", 'import { shared } from "./shared.js";\n'),
+			"src/shared.ts": `import { createRouta, type RoutaConfig } from "@routa-ts/core";\ndeclare function load(): RoutaConfig;\nexport const shared = createRouta(load());\n`,
+			"src/routes/status/route.ts": statusRoute,
+		});
+		expect(
+			validateProject(cwd, { write: false }).diagnostics.map(({ code, file }) => ({ code, file })),
+		).toEqual([{ code: unresolved.code, file: "src/shared.ts" }]);
 	});
 
 	it("LOG-AC-11 reads correlation past a spread or key whose type has no correlation", () => {
-		for (const [routa, header] of [
+		const sharedModule = (members: string) =>
+			`import { createRouta } from "@routa-ts/core";\nexport const shared = createRouta({ ${members} });\n`;
+
+		const cases: Array<[string, string | undefined, Record<string, string>?]> = [
 			[
 				config(
 					"\tcorrelation: true,\n\t...deployment(),",
@@ -411,11 +431,7 @@ describe("correlation config", () => {
 				`import { createRouta } from "@routa-ts/core";\nconst listen = (): { port: number } => ({ port: 3000 });\nexport default createRouta(listen());\n`,
 				undefined,
 			],
-			// Only Routa's own RoutaConfig declares correlation in these types.
-			[
-				`import { createRouta, type RoutaConfig } from "@routa-ts/core";\ndeclare const settings: RoutaConfig;\nexport default createRouta(settings);\n`,
-				undefined,
-			],
+			// A createRouta call or object literal behind a spread or argument is read in place.
 			[
 				config(
 					"\tcorrelation: true,\n\t...shared,",
@@ -425,14 +441,30 @@ describe("correlation config", () => {
 			],
 			[
 				config(
-					"\t...base,",
-					'import type { RoutaConfig } from "@routa-ts/core";\ndeclare const base: Partial<RoutaConfig>;\n',
+					"\t...shared,",
+					'const shared = createRouta({ correlation: { header: "x-trace-ref" } });\n',
 				),
+				"x-trace-ref",
+			],
+			[
+				`import { createRouta } from "@routa-ts/core";\nconst shared = createRouta({ port: 3000 });\nexport default createRouta(shared);\n`,
 				undefined,
 			],
-		] as const) {
+			[
+				config("\t...shared,", 'import { shared } from "./shared.js";\n'),
+				"x-correlation-id",
+				{ "src/shared.ts": sharedModule("correlation: true") },
+			],
+			[
+				`import { createRouta } from "@routa-ts/core";\nimport { shared } from "./shared.js";\nexport default createRouta(shared);\n`,
+				undefined,
+				{ "src/shared.ts": sharedModule("port: 3000") },
+			],
+		];
+
+		for (const [routa, header, files = {}] of cases) {
 			const result = validateProject(
-				project({ "src/routa.ts": routa, "src/routes/status/route.ts": statusRoute }),
+				project({ "src/routa.ts": routa, "src/routes/status/route.ts": statusRoute, ...files }),
 				{ write: false },
 			);
 			expect(result.diagnostics, routa).toEqual([]);
