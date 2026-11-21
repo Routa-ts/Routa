@@ -3154,23 +3154,30 @@ function payloadObject(
 		return;
 	}
 
-	let found: ts.ObjectLiteralExpression | undefined;
-	const visit = (node: ts.Node): void => {
-		if (
-			ts.isVariableDeclaration(node)
-			&& ts.isIdentifier(node.name)
-			&& node.name.text === payload.text
-			&& ts.isVariableDeclarationList(node.parent)
-			&& (node.parent.flags & ts.NodeFlags.Const) !== 0
-		) {
-			found ??= objectLiteral(node.initializer);
+	// The `const` the call can see: the one declared in the nearest enclosing block within `run`,
+	// so a same-named `const` in another block never stands in for the payload.
+	for (let scope: ts.Node | undefined = payload.parent; scope; scope = scope.parent) {
+		if (ts.isBlock(scope)) {
+			for (const statement of scope.statements) {
+				if (
+					ts.isVariableStatement(statement)
+					&& (statement.declarationList.flags & ts.NodeFlags.Const) !== 0
+				) {
+					for (const declaration of statement.declarationList.declarations) {
+						if (ts.isIdentifier(declaration.name) && declaration.name.text === payload.text) {
+							return objectLiteral(declaration.initializer);
+						}
+					}
+				}
+			}
 		}
 
-		ts.forEachChild(node, visit);
-	};
+		if (scope === run) {
+			return;
+		}
+	}
 
-	visit(run);
-	return found;
+	return;
 }
 
 function middlewareRejectStatusDiagnostics(routes: RouteMetadata[]): Diagnostic[] {

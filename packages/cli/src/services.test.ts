@@ -981,6 +981,17 @@ describe("reserved ctx.services (routa check)", () => {
 		}
 	});
 
+	it("reads the payload const the next() call can see, not one in another block", () => {
+		const cwd = servicesProject({
+			"src/routes/middleware.ts": middlewareFile(
+				"export const withAudit = createMiddleware({\n\trun: ({ next }) => {\n\t\tif (Math.random() > 2) {\n\t\t\tconst payload = { services: 'logged' };\n\t\t\tvoid payload;\n\t\t}\n\t\tconst payload = { audited: true };\n\t\treturn next(payload as never);\n\t},\n});\n",
+			),
+			"src/routes/status/route.ts": statusRoute,
+		});
+
+		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
+	});
+
 	it("does not read a nested function's own next() as the continuation", () => {
 		const cwd = servicesProject({
 			"src/routes/middleware.ts": middlewareFile(
