@@ -446,6 +446,10 @@ describe("request identity", () => {
 		const passesLogger = createMiddleware({
 			run: ({ next }) => next({ logger: "forged" } as never),
 		});
+		// Passing the whole context on passes its identity and logger too.
+		const passesContext = createMiddleware({
+			run: ({ ctx, next }) => next(ctx),
+		});
 		const reached: string[] = [];
 		const route = (path: string, middleware: unknown): HonoRoute => ({
 			method: "get",
@@ -463,9 +467,10 @@ describe("request identity", () => {
 			route("/writes", writes),
 			route("/passes", passes),
 			route("/logger", passesLogger),
+			route("/context", passesContext),
 		]);
 
-		for (const path of ["/writes", "/passes", "/logger"]) {
+		for (const path of ["/writes", "/passes", "/logger", "/context"]) {
 			const response = await app.request(path);
 			expect(response.status, path).toBe(500);
 			expect(response.headers.get("x-request-id"), path).toMatch(uuid);

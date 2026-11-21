@@ -29,9 +29,10 @@ matched route, in order:
    object.
 5. **Middleware chain.** Each middleware's `requires` keys are checked against the current
    context, then `run` executes. It either returns one of its own rejects, ending the request,
-   or calls `next(ctx)` and returns what `next()` resolves to, unchanged. Returning anything
-   else after `next()` fails as invalid handler output. Declared `provides` values are parsed
-   before any are merged, and undeclared top-level keys are omitted.
+   or calls `next()`, or `next({ ... })` with the values its `provides` declares, and returns
+   what `next()` resolves to, unchanged. Returning anything else after `next()` fails as
+   invalid handler output. Declared `provides` values are parsed before any are merged, and
+   undeclared top-level keys are omitted.
 6. **Handler.** `run` receives the parsed input and the accumulated context, with
    framework-owned values such as `logger`, `requestId`, and `correlationId` applied last so
    they cannot be replaced.

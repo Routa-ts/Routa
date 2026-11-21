@@ -16,6 +16,7 @@ Generate a request identity for every request, add opt-in correlation, and repla
 
 Migration:
 
+- Replace `next(ctx)`, which passes the whole context on, with `next()`, or with `next({ ... })` holding only the values the middleware's `provides` declares. `ctx` now holds `requestId`, `correlationId`, and `logger`, which no middleware may pass on, so in a generated project TypeScript and `routa check` report `next(ctx)` as TS2345, and at runtime the request fails as a `500`.
 - Remove middleware that provided `requestId`, `correlationId`, or `logger`, and read `ctx.requestId` instead. To keep a caller-supplied ID, turn on `correlation` and read `ctx.correlationId`; it never replaces the request identity.
 - Remove `x-request-id`, and the correlation header if you turn correlation on, from outcome and reject `headers`.
 - Update log queries and alerts from `http.request` to `http.response.prepared`, and from `path` to `route`. `http.error` and `services.cleanup_failed` no longer carry error text; an error reporter that receives the original error is not shipped yet.
