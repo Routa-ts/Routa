@@ -292,6 +292,35 @@ describe("createLogger sanitization", () => {
 		expect(JSON.stringify(events[0])).not.toContain("internal-only");
 	});
 
+	it("LOG-AC-04 reads an array whose length is not a whole number as unsupported", () => {
+		const { events, logger } = capture();
+		const toPrimitive = vi.fn(() => 2);
+		const withLength = (length: unknown) =>
+			new Proxy([], {
+				getOwnPropertyDescriptor: (target, key) =>
+					key === "length"
+						? { value: length, writable: true, enumerable: false, configurable: false }
+						: Reflect.getOwnPropertyDescriptor(target, key),
+			});
+
+		logger.info("length", "Length.", {
+			object: withLength({ [Symbol.toPrimitive]: toPrimitive }),
+			text: withLength("2"),
+			fraction: withLength(1.5),
+			negative: withLength(-1),
+			infinite: withLength(Number.POSITIVE_INFINITY),
+		});
+
+		expect(toPrimitive).not.toHaveBeenCalled();
+		expect(events[0]?.data).toEqual({
+			object: "[Unsupported]",
+			text: "[Unsupported]",
+			fraction: "[Unsupported]",
+			negative: "[Unsupported]",
+			infinite: "[Unsupported]",
+		});
+	});
+
 	it("LOG-AC-04 escapes control characters in every emitted string", () => {
 		const { events, logger } = capture();
 		const forged = 'ok\n{"level":"fatal"}\r\t\u001b[31m\u007f\u0085\u2028\u202e\u0000';

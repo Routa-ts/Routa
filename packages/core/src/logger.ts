@@ -611,12 +611,21 @@ function memberValue(value: object, key: string): unknown {
 	return "value" in descriptor ? descriptor.value : unsupportedMarker;
 }
 
+/**
+ * Copies an array's items. A proxy can report any `length`, so one that is not a whole number
+ * reads the array as unsupported before anything compares with it and runs its code.
+ */
 function sanitizeItems(
 	value: readonly unknown[],
 	traversal: Traversal,
 	pending: PendingPaths,
-): unknown[] {
-	const length = ownValue(value, "length") as number;
+): unknown {
+	const length = ownValue(value, "length");
+
+	if (typeof length !== "number" || !Number.isInteger(length) || length < 0) {
+		return unsupportedMarker;
+	}
+
 	const items: unknown[] = [];
 
 	for (let index = 0; index < length; index += 1) {
