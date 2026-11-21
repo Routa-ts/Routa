@@ -182,23 +182,38 @@ for any other value, and for any other spread, config argument, or computed key 
 may hold `correlation`, including a value typed `RoutaConfig`. It also
 rejects a header name that is not a valid name (`ROUTA_CORRELATION_HEADER_INVALID`) or that
 names `x-request-id`, a credential header (`authorization`, `proxy-authorization`, `cookie`,
-`set-cookie`), or a header Routa writes itself (`ROUTA_CORRELATION_HEADER_CONFLICT`), so the
-echo never replaces one of Routa's headers. Routa writes `content-type`, `content-length`,
+`set-cookie`), a header a configured [authentication](#authentication) scheme reads its
+credential from, or a header Routa writes itself (`ROUTA_CORRELATION_HEADER_CONFLICT`), so the
+echo never replaces one of Routa's headers and a credential never lands in correlation. A
+scheme's header is an `apiKey()` scheme's `header` or a `custom()` scheme's
+`transport.header`; `bearer()` reads `authorization` and the cookie schemes read `cookie`,
+which are rejected anyway. `routa check` compares the scheme declarations it reads from
+source and never runs an authenticator or extractor. With an `apiKey({ header: "x-api-key" })`
+scheme named `serviceKey`, `correlation: { header: "X-API-Key" }` reports:
+
+````txt
+ROUTA_CORRELATION_HEADER_CONFLICT: src/routa.ts: The correlation header "X-API-Key" in src/routa.ts names x-api-key, which the apiKey scheme "serviceKey" reads its credential from.
+Suggestion: Choose a header of its own for correlation, such as x-correlation-id. A correlation ID is not a credential and never replaces x-request-id.
+``` Routa writes `content-type`, `content-length`,
 `transfer-encoding`, and `connection` on every response; `allow` on automatic `OPTIONS` and
 `405` responses; `access-control-allow-methods` and `vary` on automatic `OPTIONS` responses;
 the lifecycle headers `deprecation`, `sunset`, and `link`; and `www-authenticate` on
-authentication challenges. Startup rejects the same names, and a `src/routa.ts` whose
-correlation differs from what `routa generate` recorded.
+authentication challenges. Startup, `createApplication`, and `createHonoApp` reject the same
+names, comparing them with the validated authentication schemes before the services factory
+runs, and startup rejects a `src/routa.ts` whose correlation differs from what
+`routa generate` recorded.
 
 While correlation is on, Routa owns the configured header on every response: it echoes an
 accepted value, removes any value a handler wrote when it accepted none, and rejects an outcome
-that declares the header in `headers`.
+or middleware reject that declares the header in `headers`. TypeScript reports the declaration
+once `routa generate` has recorded the header in `.routa/routes.gen.ts`; `routa check` and
+startup report it either way.
 
 ## `onRequestError`
 
 ```ts
 onRequestError?: (error: unknown, diagnostic: RequestErrorDiagnostic) => void | Promise<void>
-```
+````
 
 Receives each request that fails unexpectedly or breaks its response contract: the value that
 was thrown, unchanged, and frozen metadata about the request. Use it to send the error to an

@@ -403,10 +403,14 @@ The correlation `header` names, in any casing, `x-request-id`, a credential head
 (`authorization`, `proxy-authorization`, `cookie`, or `set-cookie`), or a header Routa writes
 itself, which the echo would replace: `content-type`, `content-length`, `transfer-encoding`,
 `connection`, `allow`, `access-control-allow-methods`, `vary`, `deprecation`, `sunset`, `link`,
-or `www-authenticate`. Startup rejects the same names.
+or `www-authenticate`. It also names the header a configured authentication scheme reads its
+credential from: an `apiKey()` scheme's `header` or a `custom()` scheme's `transport.header`.
+The check reads the scheme declarations from source and never runs an authenticator. Startup
+rejects the same names.
 
 ```text
 ROUTA_CORRELATION_HEADER_CONFLICT: src/routa.ts: The correlation header "X-Request-ID" in src/routa.ts names x-request-id, which carries the request identity Routa generates.
+ROUTA_CORRELATION_HEADER_CONFLICT: src/routa.ts: The correlation header "X-API-Key" in src/routa.ts names x-api-key, which the apiKey scheme "serviceKey" reads its credential from.
 ```
 
 **Fix:** choose a header of its own, such as `x-correlation-id`. A correlation ID is not a
