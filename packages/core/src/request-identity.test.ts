@@ -1072,7 +1072,7 @@ describe("request identity", () => {
 		expect(inner.events).toEqual([]);
 	});
 
-	it("LOG-AC-09 LOG-AC-17 fails every request a mounted Routa app with another correlation setting receives", async () => {
+	it("LOG-AC-09 LOG-AC-17 fails every request a mounted Routa app receives when the outer app correlates on a header it reads or declares", async () => {
 		const outer = capture();
 		const inner = capture();
 		const reports: Array<{ error: unknown; diagnostic: RequestErrorDiagnostic }> = [];
@@ -1099,10 +1099,18 @@ describe("request identity", () => {
 				run: () => ({ type: "ok", headers: { "x-trace-ref": "inner-ref" } }),
 			}),
 		};
-		const plain: HonoRoute = {
+		const gated: HonoRoute = {
 			method: "get",
 			path: "/plain",
 			contract: createRoute({
+				middleware: [
+					createMiddleware({
+						rejects: {
+							limited: { status: 429, headers: z.object({ "x-trace-ref": z.string() }) },
+						},
+						run: ({ next }) => next({}),
+					}),
+				],
 				responses: { done: { status: 204 } },
 				run: () => ({ type: "done" }),
 			}),
@@ -1131,6 +1139,7 @@ describe("request identity", () => {
 				path: "/health",
 				header: "x-service-key",
 				value: "secret-key-native",
+				reason: 'the header the apiKey scheme "serviceKey" reads its credential from',
 			},
 			{
 				// Nothing in the mounted app answers.
@@ -1138,6 +1147,7 @@ describe("request identity", () => {
 				path: "/typo",
 				header: "x-service-key",
 				value: "secret-key-typo",
+				reason: 'the header the apiKey scheme "serviceKey" reads its credential from',
 			},
 			{
 				// The mounted app reads its API key from the header the outer app correlates on.
@@ -1155,6 +1165,7 @@ describe("request identity", () => {
 				path: "/keys",
 				header: "x-service-key",
 				value: "secret-key-1",
+				reason: 'the header the apiKey scheme "serviceKey" reads its credential from',
 			},
 			{
 				// The mounted app declares the header the outer app correlates on.
@@ -1165,20 +1176,46 @@ describe("request identity", () => {
 				path: "/traced",
 				header: "x-trace-ref",
 				value: "trace-1",
+				reason: 'a header outcome "ok" on GET /traced declares',
 			},
 			{
-				// The mounted app correlates on another header.
+				// The mounted app's middleware declares the header in a reject.
 				app: mount(
 					{ correlation: { header: "x-trace-ref" } },
-					createHonoApp([plain], { logger: inner.logger, onRequestError, correlation: true }),
+					createHonoApp([gated], { logger: inner.logger, onRequestError, correlation: true }),
 				),
 				path: "/plain",
 				header: "x-trace-ref",
 				value: "trace-2",
+				reason: 'a header middleware reject "limited" on GET /plain declares',
+			},
+			{
+				// A custom scheme in the mounted app reads its credential from the header.
+				app: mount(
+					{ correlation: { header: "x-client-cert" } },
+					createHonoApp([keys], {
+						logger: inner.logger,
+						onRequestError,
+						authentication: {
+							principal: z.object({ id: z.string(), type: z.literal("service") }),
+							schemes: {
+								clientCert: custom({
+									transport: { header: "X-Client-Cert" },
+									openapi: { type: "mutualTLS" },
+									authenticate,
+								}),
+							},
+						},
+					}),
+				),
+				path: "/keys",
+				header: "x-client-cert",
+				value: "secret-cert-1",
+				reason: 'the header the custom scheme "clientCert" reads its credential from',
 			},
 		];
 
-		for (const { app, path, header, value } of cases) {
+		for (const { app, path, header, value, reason } of cases) {
 			outer.events.length = 0;
 			inner.events.length = 0;
 			reports.length = 0;
@@ -1207,7 +1244,9 @@ describe("request identity", () => {
 				reports.map(({ diagnostic }) => diagnostic),
 				value,
 			).toEqual([{ ...data, code: "configuration_error", stage: "identity" }]);
-			expect(String(reports[0]?.error), value).toContain("correlation");
+			expect(String(reports[0]?.error), value).toContain(
+				`mounted in a Routa app that correlates on ${header}, which in this app is ${reason}.`,
+			);
 			expect(JSON.stringify([outer.events, inner.events]), value).not.toContain(value);
 			expect(String(reports[0]?.error), value).not.toContain(value);
 		}
@@ -1236,6 +1275,98 @@ describe("request identity", () => {
 		expect(JSON.stringify(outer.events)).not.toContain("trace-3");
 	});
 
+	it("LOG-AC-06 LOG-AC-08 shares the outer app's correlation with a mounted app whatever its own setting", async () => {
+		const outer = capture();
+		const inner = capture();
+		const ping: HonoRoute = {
+			method: "get",
+			path: "/ping",
+			contract: createRoute({
+				responses: { done: { status: 204 } },
+				run: () => ({ type: "done" }),
+			}),
+		};
+		const whoami: HonoRoute = {
+			method: "get",
+			path: "/whoami",
+			contract: createRoute({
+				responses: {
+					ok: {
+						status: 200,
+						schema: z.object({ requestId: z.string(), correlationId: z.string().nullable() }),
+					},
+				},
+				run: ({ ctx }) => {
+					ctx.logger.info("whoami.read", "Read the identity.");
+					return {
+						type: "ok",
+						data: { requestId: ctx.requestId, correlationId: ctx.correlationId ?? null },
+					};
+				},
+			}),
+		};
+		const mount = (
+			outerCorrelation: Parameters<typeof createHonoApp>[1],
+			innerCorrelation: Parameters<typeof createHonoApp>[1],
+		) => {
+			const app = createHonoApp([], { logger: outer.logger, ...outerCorrelation });
+			app.route(
+				"/api",
+				createHonoApp([ping, whoami], { logger: inner.logger, ...innerCorrelation }),
+			);
+			return app;
+		};
+
+		// A mounted app with the default configuration, without a correlation header in the request.
+		const ping204 = await mount({ correlation: true }, {}).request("/api/ping");
+
+		expect(ping204.status).toBe(204);
+		expect(ping204.headers.get("x-request-id")).toMatch(uuid);
+		expect(ping204.headers.has("x-correlation-id")).toBe(false);
+
+		for (const [outerCorrelation, innerCorrelation, header] of [
+			// The mounted app has correlation off.
+			[{ correlation: true }, {}, "x-correlation-id"],
+			// The mounted app correlates on another header it neither reads nor declares.
+			[{ correlation: { header: "x-trace-ref" } }, { correlation: true }, "x-trace-ref"],
+		] as const) {
+			outer.events.length = 0;
+			inner.events.length = 0;
+			const response = await mount(outerCorrelation, innerCorrelation).request("/api/whoami", {
+				headers: { [header]: "trace-1" },
+			});
+			const body = (await response.json()) as { requestId: string; correlationId: string };
+
+			expect(response.status, header).toBe(200);
+			expect(body, header).toEqual({
+				requestId: response.headers.get("x-request-id"),
+				correlationId: "trace-1",
+			});
+			expect(response.headers.get(header), header).toBe("trace-1");
+			expect(
+				inner.events.map((event) => [event.event, event.data]),
+				header,
+			).toEqual([["whoami.read", { requestId: body.requestId, correlationId: "trace-1" }]]);
+			expect(
+				outer.events.map((event) => [event.event, event.data?.correlationId]),
+				header,
+			).toEqual([["http.response.prepared", "trace-1"]]);
+		}
+
+		// The mounted app reads correlation from x-correlation-id itself, but the outer app's
+		// correlation ID, from x-trace-ref, is the one its handlers and logs see.
+		const both = await mount(
+			{ correlation: { header: "x-trace-ref" } },
+			{ correlation: true },
+		).request("/api/whoami", {
+			headers: { "x-trace-ref": "outer-1", "x-correlation-id": "inner-1" },
+		});
+
+		expect(((await both.json()) as { correlationId: string }).correlationId).toBe("outer-1");
+		expect(both.headers.get("x-trace-ref")).toBe("outer-1");
+		expect(both.headers.has("x-correlation-id")).toBe(false);
+	});
+
 	it("LOG-AC-09 shares identity with a mounted app built by another copy of @routa-ts/core", async () => {
 		const outer = capture();
 		vi.resetModules();
@@ -1248,16 +1379,24 @@ describe("request identity", () => {
 				run: ({ ctx }) => ({ type: "ok", data: { requestId: ctx.requestId } }),
 			}),
 		};
+		const traced: HonoRoute = {
+			method: "get",
+			path: "/traced",
+			contract: createRoute({
+				responses: { ok: { status: 200, headers: z.object({ "x-trace-ref": z.string() }) } },
+				run: () => ({ type: "ok", headers: { "x-trace-ref": "inner-ref" } }),
+			}),
+		};
 		const matching = createHonoApp([], { logger: outer.logger });
 		matching.route("/", copy.createHonoApp([route]));
-		const mismatched = createHonoApp([], {
+		const conflicting = createHonoApp([], {
 			logger: outer.logger,
 			correlation: { header: "x-trace-ref" },
 		});
-		mismatched.route("/", copy.createHonoApp([route]));
+		conflicting.route("/", copy.createHonoApp([route, traced]));
 
 		const shared = await matching.request("/who");
-		const refused = await mismatched.request("/who", { headers: { "x-trace-ref": "trace-1" } });
+		const refused = await conflicting.request("/who", { headers: { "x-trace-ref": "trace-1" } });
 
 		expect(((await shared.json()) as { requestId: string }).requestId).toBe(
 			shared.headers.get("x-request-id"),
@@ -1269,7 +1408,7 @@ describe("request identity", () => {
 		);
 	});
 
-	it("LOG-AC-09 refuses a mismatched mounted app's request after outer middleware set a response", async () => {
+	it("LOG-AC-09 refuses a conflicting mounted app's request after outer middleware set a response", async () => {
 		const outer = capture();
 		const inner = capture();
 		const app = createHonoApp([], {
@@ -1280,7 +1419,16 @@ describe("request identity", () => {
 			context.res = new Response("maintenance", { status: 503 });
 			await next();
 		});
-		const mounted = createHonoApp([], { logger: inner.logger });
+		// The mounted app reads an API key from the header the outer app correlates on.
+		const mounted = createHonoApp([], {
+			logger: inner.logger,
+			authentication: {
+				principal: z.object({ id: z.string(), type: z.literal("service") }),
+				schemes: {
+					serviceKey: apiKey({ header: "x-trace-ref", authenticate: () => ({ type: "rejected" }) }),
+				},
+			},
+		});
 		mounted.get("/health", (context) => context.text("ok"));
 		app.route("/", mounted);
 
