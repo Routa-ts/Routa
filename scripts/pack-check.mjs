@@ -876,8 +876,13 @@ function checkIdentity(logging) {
 		const error = events.find((line) => line.event === "http.error");
 
 		if (!logging) {
-			if (events.some((line) => line.event.startsWith("http."))) {
-				fail("expected logger: false to log no request events");
+			// Every output line, JSON or not, so an event written as plain text fails too.
+			const leaked = logs()
+				.split("\n")
+				.filter((line) => /\bhttp\.[a-z]/.test(line));
+
+			if (leaked.length > 0) {
+				fail(`expected logger: false to log no request events, got ${JSON.stringify(leaked)}`);
 			}
 
 			return;
