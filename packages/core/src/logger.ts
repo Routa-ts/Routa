@@ -112,7 +112,9 @@ export function createLogger(options: CreateLoggerOptions = {}): RoutaLogger {
 	const minimumLevel = options.level ?? "info";
 	const now = options.now ?? (() => new Date());
 	const sink = options.sink ?? writeConsoleLog;
-	const paths: PendingPaths = (options.redact ?? []).map((path) => path.toLowerCase().split("."));
+	const paths: PendingPaths = (options.redact ?? []).map((path) =>
+		path.toLowerCase().split(".").map(safeText),
+	);
 	const report = createFallbackReporter();
 
 	function isLevelEnabled(level: unknown): boolean {
@@ -451,14 +453,15 @@ type Traversal = { readonly ancestors: Set<object>; remaining: number };
 
 /**
  * The rest of each custom redaction path that can still match below a value, as lowercase
- * segments; `*` matches any key or array index.
+ * escaped segments, so they compare with keys in the form the sink receives; `*` matches any key
+ * or array index.
  */
 type PendingPaths = readonly (readonly string[])[];
 
 /**
  * The custom paths that continue below a key, or `"redact"` when one ends at it.
  *
- * @param key - An object key or array index
+ * @param key - An escaped object key or an array index
  */
 function followPaths(pending: PendingPaths, key: string): PendingPaths | "redact" {
 	if (pending.length === 0) {
@@ -626,11 +629,12 @@ function sanitizeEntries(
 	const keys = Object.keys(value);
 
 	for (const key of keys.slice(0, maxEntries)) {
-		const next = isSensitiveName(key) ? "redact" : followPaths(pending, key);
+		const name = safeText(key);
+		const next = isSensitiveName(name) ? "redact" : followPaths(pending, name);
 		const item = sanitizeMember(() => ownValue(value, key), traversal, next);
 
 		if (item !== undefined) {
-			entries.push([safeText(key), item]);
+			entries.push([name, item]);
 		}
 	}
 
@@ -644,9 +648,10 @@ function sanitizeEntries(
 /**
  * Sanitizes `added` merged over `base` as one object, so every limit holds for the result as a
  * whole: an event's data with its bindings, or a child's bindings with its parent's. `base` keys
- * come first, and an `added` key replaces a `base` key of the same name in place.
+ * come first, and an `added` key replaces a `base` key in place when both escape to the same name.
  *
- * @param base - Bindings that were already sanitized, so copying them runs no caller code
+ * @param base - Bindings that were already sanitized, so copying them runs no caller code and
+ *   their keys are already escaped
  * @throws {TypeError} When `added` is not a plain object
  */
 function sanitizeMerged(base: RoutaLogData, added: unknown, paths: PendingPaths): RoutaLogData {
@@ -657,12 +662,17 @@ function sanitizeMerged(base: RoutaLogData, added: unknown, paths: PendingPaths)
 	const merged: Record<string, unknown> = { ...base };
 
 	// Copying descriptors, not values, keeps an accessor unread so it still reads as unsupported.
+	// Escaping a key twice changes nothing, so an added key escaped here meets its base key.
 	// One key past the limit is enough to mark the merged object as truncated.
 	for (const key of Object.keys(added).slice(0, maxEntries + 1)) {
 		const descriptor = Object.getOwnPropertyDescriptor(added, key);
 
 		if (descriptor) {
-			Object.defineProperty(merged, key, { ...descriptor, configurable: true, enumerable: true });
+			Object.defineProperty(merged, safeText(key), {
+				...descriptor,
+				configurable: true,
+				enumerable: true,
+			});
 		}
 	}
 

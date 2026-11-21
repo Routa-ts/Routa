@@ -1289,7 +1289,8 @@ produce deterministic timestamps.
 Every event carries `timestamp`, `level`, `event`, `message`, and optional `data`. `log`
 reads only those five fields of the object it receives. A child sanitizes its bindings once,
 when you call `child`, so later changes to the object you passed do not appear. Each event
-merges the bindings with its `data`, and a `data` key replaces a binding of the same name.
+merges the bindings with its `data`, and a `data` key replaces a binding of the same name,
+compared after [escaping](#sanitization).
 The [limits](#sanitization) apply to that merged `data` as one object, bindings first, so
 a child whose bindings fill 100 keys leaves an event's own keys as one `[Truncated]` key.
 A child's bindings are merged and limited the same way over its parent's.

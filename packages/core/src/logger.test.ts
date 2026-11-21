@@ -362,6 +362,20 @@ describe("createLogger sanitization", () => {
 		]);
 	});
 
+	it("LOG-AC-03 replaces a binding with the event key that escapes to the same name", () => {
+		const { events, logger } = capture({ redact: ["tab\tkey"] });
+		const others = Object.fromEntries(
+			Array.from({ length: 99 }, (_, index) => [`k${index}`, index]),
+		);
+		const child = logger.child({ "line\nbreak": "old", ...others });
+
+		child.info("override", "Override.", { "line\nbreak": "new" });
+		logger.info("path", "Path.", { "tab\tkey": "secret", list: [{ "tab\tkey": "kept" }] });
+
+		expect(events[0]?.data).toEqual({ "line\\nbreak": "new", ...others });
+		expect(events[1]?.data).toEqual({ "tab\\tkey": "[Redacted]", list: [{ "tab\\tkey": "kept" }] });
+	});
+
 	it("LOG-AC-03 matches sensitive names case-insensitively without substring matches", () => {
 		const { events, logger } = capture();
 		const redacted = [
