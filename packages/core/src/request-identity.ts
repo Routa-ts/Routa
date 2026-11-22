@@ -147,49 +147,6 @@ export function assertCorrelationReadsNoCredential(
 }
 
 /**
- * The headers a mounted Routa app refuses as the correlation header of the app it is mounted in,
- * each by its lowercase name with why: the names it would refuse as its own correlation header,
- * the headers its credential schemes read, and the response headers it declares. Built once when
- * the app is created, so each request it receives is checked with one lookup.
- *
- * @param authentication - The validated authentication config
- * @param declared - Each response header name the app's outcomes and middleware rejects declare,
- *   with who declares it, such as `outcome "ok" on GET /items`
- */
-export function refusedCorrelationHeaders(
-	authentication: RuntimeAuthentication | undefined,
-	declared: Iterable<readonly [header: string, declaredBy: string]>,
-): ReadonlyMap<string, string> {
-	const refused = new Map<string, string>([
-		[requestIdHeader, "the header that carries the request identity Routa generates"],
-		...[...credentialHeaders].map((name) => [name, "a credential header"] as const),
-		...[...routaHeaders].map(([name, owner]) => [name, `a header ${owner}`] as const),
-	]);
-	const refuse = (header: string, reason: string) => {
-		const name = header.toLowerCase();
-
-		if (!refused.has(name)) {
-			refused.set(name, reason);
-		}
-	};
-
-	for (const scheme of authentication?.schemes ?? []) {
-		if ("header" in scheme.transport) {
-			refuse(
-				scheme.transport.header,
-				`the header the ${scheme.kind} scheme ${JSON.stringify(scheme.name)} reads its credential from`,
-			);
-		}
-	}
-
-	for (const [header, declaredBy] of declared) {
-		refuse(header, `a header ${declaredBy} declares`);
-	}
-
-	return refused;
-}
-
-/**
  * Why a correlation header name cannot be used, or `undefined` when it can. Names compare
  * case-insensitively.
  */

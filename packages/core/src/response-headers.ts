@@ -218,11 +218,6 @@ export function lifecycleOwnedHeaders(
 }
 
 /** The Zod object shape of a header declaration, or `undefined` when there is none or it is not an object. */
-/** The header names a declaration names, or none when it is not a `z.object({ ... })` schema. */
-export function declaredHeaderNames(headers: unknown): string[] {
-	return Object.keys(declaredShape(headers) ?? {});
-}
-
 function declaredShape(headers: unknown): Record<string, z.ZodType> | undefined {
 	const def = zodDef(headers);
 
