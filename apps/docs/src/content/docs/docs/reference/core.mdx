@@ -1619,9 +1619,11 @@ type RequestErrorReporter = (
 ```
 
 The `onRequestError` option of `createRouta`, `createHonoApp`, and `createApplication`. Routa
-calls it once for each request that fails unexpectedly, breaks its response contract, or reaches
-a Routa app mounted in another Routa app with `route()`, with the value that was thrown and a frozen [`RequestErrorDiagnostic`](#requesterrordiagnostic). It
-has already chosen the response and does not wait for the callback.
+calls it once for each request that fails unexpectedly or breaks its response contract, with the
+value that was thrown and a frozen [`RequestErrorDiagnostic`](#requesterrordiagnostic). A request
+that reaches a Routa app mounted in another Routa app with `route()` is reported too, with an
+`Error` Routa creates to explain the refusal, since nothing was thrown. Routa has already chosen
+the response and does not wait for the callback.
 [Configuration](/docs/reference/configuration/#onrequesterror) lists which failures are not
 reported and what happens when the callback fails.
 
