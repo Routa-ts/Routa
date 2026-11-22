@@ -405,29 +405,31 @@ async function runWithMiddleware(
 		const continuation = Object.freeze(Object.create(null) as object);
 		const input = await failures.at("input", () => inputReader.parse(item.input));
 		// Called as a method of its contract, so a `run() {}` method can read `this`.
-		const result = await run.call(item, {
-			input,
-			ctx,
-			/**
-			 * Continues the middleware chain. Callers must `await next(...)` (or return its
-			 * promise). Fire-and-forget `next()` without awaiting drops the downstream result
-			 * and can leave the request hanging or returning invalid middleware output.
-			 */
-			next: async (providedCtx = {}) => {
-				if (nextCalled) {
-					throw new Error("Middleware next() called multiple times.");
-				}
+		const result = await Reflect.apply(run, item, [
+			{
+				input,
+				ctx,
+				/**
+				 * Continues the middleware chain. Callers must `await next(...)` (or return its
+				 * promise). Fire-and-forget `next()` without awaiting drops the downstream result
+				 * and can leave the request hanging or returning invalid middleware output.
+				 */
+				next: async (providedCtx = {}) => {
+					if (nextCalled) {
+						throw new Error("Middleware next() called multiple times.");
+					}
 
-				nextCalled = true;
-				assertNoReservedContext(providedCtx, "Middleware passed next()");
-				const provided = parseMiddlewareProvides(item.provides, providedCtx);
-				for (const stage of stages) {
-					Object.assign(stage.ctx, provided);
-				}
-				downstream = await dispatch(index + 1, stages);
-				return continuation;
+					nextCalled = true;
+					assertNoReservedContext(providedCtx, "Middleware passed next()");
+					const provided = parseMiddlewareProvides(item.provides, providedCtx);
+					for (const stage of stages) {
+						Object.assign(stage.ctx, provided);
+					}
+					downstream = await dispatch(index + 1, stages);
+					return continuation;
+				},
 			},
-		});
+		]);
 
 		assertServicesKept({ ctx, services });
 

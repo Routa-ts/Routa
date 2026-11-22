@@ -1125,6 +1125,33 @@ describe("request error reporting", () => {
 			expect({ status: response.status, body: await response.text() }).toEqual(expected);
 		}
 	});
+
+
+
+	it("LOG-AC-13 calls a middleware's run whatever its own call property holds", async () => {
+		const run = ({ next }: { next: () => Promise<object> }) => next();
+		Object.defineProperty(run, "call", { value: undefined });
+		const { calls, onRequestError } = recorder();
+		const app = createHonoApp(
+			[
+				{
+					method: "get",
+					path: "/x",
+					contract: createRoute({
+						middleware: [createMiddleware({ run: run as never })],
+						responses: { ok: { status: 204 } },
+						run: () => ({ type: "ok" }),
+					}),
+				},
+			],
+			{ onRequestError },
+		);
+
+		expect((await app.request("/x")).status).toBe(204);
+		expect(calls).toEqual([]);
+	});
+
+
 });
 
 describe("request error reporter failures", () => {
