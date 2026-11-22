@@ -514,8 +514,11 @@ function identifyRequests(
 					const state = stateFor({ requestId: owner.requestId });
 					states.set(context, state);
 					// Assigned rather than returned, so the refusal replaces a response outer
-					// middleware already set before calling `next()`.
-					context.res = refuse(context, owner, state, conflict);
+					// middleware already set before calling `next()`. That response is cleared first,
+					// because Hono's setter copies an existing response's headers onto the new one.
+					const refusal = refuse(context, owner, state, conflict);
+					context.res = undefined;
+					context.res = refusal;
 					return;
 				}
 

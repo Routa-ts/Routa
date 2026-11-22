@@ -1416,7 +1416,10 @@ describe("request identity", () => {
 			correlation: { header: "x-trace-ref" },
 		});
 		app.use("*", async (context, next) => {
-			context.res = new Response("maintenance", { status: 503 });
+			context.res = new Response("maintenance", {
+				status: 503,
+				headers: { "content-length": "11", "x-maintenance": "on" },
+			});
 			await next();
 		});
 		// The mounted app reads an API key from the header the outer app correlates on.
@@ -1436,6 +1439,12 @@ describe("request identity", () => {
 
 		expect(response.status).toBe(500);
 		expect(response.headers.has("x-trace-ref")).toBe(false);
+		// The refusal carries only its own headers, never the replaced response's.
+		const body = await response.text();
+		const length = response.headers.get("content-length");
+		expect(length === null || Number(length) === new TextEncoder().encode(body).length).toBe(true);
+		expect(response.headers.has("x-maintenance")).toBe(false);
+		expect(response.headers.get("x-request-id")).toMatch(/^[0-9a-f-]{36}$/);
 		expect(outer.events.map((event) => event.data?.status)).toEqual([500]);
 		expect(inner.events.map((event) => [event.event, event.data?.status])).toEqual([
 			["http.error", 500],
