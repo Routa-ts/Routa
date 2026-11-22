@@ -1030,11 +1030,12 @@ describe("request error reporting", () => {
 
 		expect((await outer.request("/kept")).status).toBe(500);
 		expect((await outer.request("/replaced")).status).toBe(500);
-		expect(
-			calls.map(({ error, diagnostic }) => [error, diagnostic.stage, diagnostic.route]),
-		).toEqual([
-			[thrown, "handler", "/kept"],
-			[replaced, "middleware", "/replaced"],
+		expect(calls).toHaveLength(2);
+		expect(calls[0]?.error).toBe(thrown);
+		expect(calls[1]?.error).toBe(replaced);
+		expect(calls.map(({ diagnostic }) => [diagnostic.stage, diagnostic.route])).toEqual([
+			["handler", "/kept"],
+			["middleware", "/replaced"],
 		]);
 	});
 
@@ -1057,9 +1058,9 @@ describe("request error reporting", () => {
 		const response = await app.request("/x");
 
 		expect(response.status).toBe(500);
-		expect(calls.map(({ error, diagnostic }) => [error, diagnostic.stage])).toEqual([
-			[thrown, "services"],
-		]);
+		expect(calls).toHaveLength(1);
+		expect(calls[0]?.error).toBe(thrown);
+		expect(calls[0]?.diagnostic.stage).toBe("services");
 	});
 
 	it("LOG-AC-13 passes a credential extractor's own error", async () => {
@@ -1096,9 +1097,9 @@ describe("request error reporting", () => {
 		);
 
 		expect((await app.request("/x", { headers: { "x-device": "d" } })).status).toBe(500);
-		expect(calls.map(({ error, diagnostic }) => [error, diagnostic.stage])).toEqual([
-			[thrown, "authentication"],
-		]);
+		expect(calls).toHaveLength(1);
+		expect(calls[0]?.error).toBe(thrown);
+		expect(calls[0]?.diagnostic.stage).toBe("authentication");
 	});
 
 	it("LOG-AC-13 keeps the response whatever the reporter returns or does to its arguments", async () => {
