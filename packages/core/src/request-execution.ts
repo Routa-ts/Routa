@@ -156,7 +156,10 @@ export function createRequestExecutor(
 		constructed: CleanupScope[],
 		failures: FailureStages,
 	): Promise<Response> => {
-		const lifecycle = lifecycleHeaders(contract.deprecation, options.lifecycleHeaders);
+		// Reading the deprecation can run application getters; it prepares the response.
+		const lifecycle = failures.sync("response", () =>
+			lifecycleHeaders(contract.deprecation, options.lifecycleHeaders),
+		);
 		const select = (produced: ProducedResult) =>
 			failures.sync("response", () =>
 				finalizeResponse(validateResult(produced, options.validateResponses), lifecycle),

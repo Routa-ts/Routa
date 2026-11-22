@@ -1127,6 +1127,38 @@ describe("request error reporting", () => {
 	});
 
 
+	it("LOG-AC-13 names the response stage when preparing lifecycle headers throws", async () => {
+		const thrown = new Error("sunset secret");
+		const handler = vi.fn(() => ({ type: "ok" as const }));
+		const { calls, onRequestError } = recorder();
+		const app = createHonoApp(
+			[
+				{
+					method: "get",
+					path: "/x",
+					contract: createRoute({
+						deprecation: {
+							get sunset(): string {
+								throw thrown;
+							},
+						},
+						responses: { ok: { status: 204 } },
+						run: handler,
+					}),
+				},
+			],
+			{ onRequestError, lifecycleHeaders: true },
+		);
+
+		expect((await app.request("/x")).status).toBe(500);
+		expect(handler).not.toHaveBeenCalled();
+		expect(calls).toHaveLength(1);
+		expect(calls[0]?.error).toBe(thrown);
+		expect([calls[0]?.diagnostic.code, calls[0]?.diagnostic.stage]).toEqual([
+			"unexpected_failure",
+			"response",
+		]);
+	});
 
 	it("LOG-AC-13 calls a middleware's run whatever its own call property holds", async () => {
 		const run = ({ next }: { next: () => Promise<object> }) => next();
