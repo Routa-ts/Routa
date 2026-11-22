@@ -273,21 +273,22 @@ function snapshotLoggerOptions(input: unknown): CreateLoggerOptions {
 		throw new TypeError("createLogger options must be an object.");
 	}
 
-	const snapshot: Record<string, unknown> = {};
-	for (const name of Object.keys(input)) {
+	// Unknown names are rejected as written, and each known option is read once, as plain property
+	// access reads it, into an object with no prototype, so a `__proto__` key cannot reach it.
+	assertKnownOptionNames(input);
+	const snapshot = Object.create(null) as Record<string, unknown>;
+	for (const name of optionNames) {
 		const value: unknown = (input as Record<string, unknown>)[name];
-		snapshot[name] = Array.isArray(value) ? [...(value as unknown[])] : value;
+		if (value !== undefined) {
+			snapshot[name] = Array.isArray(value) ? [...(value as unknown[])] : value;
+		}
 	}
 
 	assertLoggerOptions(snapshot);
 	return snapshot;
 }
 
-function assertLoggerOptions(options: unknown): asserts options is CreateLoggerOptions {
-	if (typeof options !== "object" || options === null || Array.isArray(options)) {
-		throw new TypeError("createLogger options must be an object.");
-	}
-
+function assertKnownOptionNames(options: object): void {
 	for (const name of Object.keys(options)) {
 		if (!(optionNames as readonly string[]).includes(name)) {
 			throw new TypeError(
@@ -295,6 +296,14 @@ function assertLoggerOptions(options: unknown): asserts options is CreateLoggerO
 			);
 		}
 	}
+}
+
+function assertLoggerOptions(options: unknown): asserts options is CreateLoggerOptions {
+	if (typeof options !== "object" || options === null || Array.isArray(options)) {
+		throw new TypeError("createLogger options must be an object.");
+	}
+
+	assertKnownOptionNames(options);
 
 	const { enabled, level, sink, redact, now } = options as Record<string, unknown>;
 

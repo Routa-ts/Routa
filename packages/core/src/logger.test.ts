@@ -971,6 +971,19 @@ describe("createLogger failure containment", () => {
 });
 
 describe("createLogger options", () => {
+	it("LOG-AC-03 keeps a non-enumerable redact option and rejects a __proto__ key", () => {
+		const events: RoutaLogEvent[] = [];
+		const options = { sink: (event: RoutaLogEvent) => events.push(event) };
+		Object.defineProperty(options, "redact", { value: ["user.email"], enumerable: false });
+
+		createLogger(options).info("signed.in", "Signed in.", { user: { email: "ada@example.com" } });
+
+		expect(events[0]?.data).toEqual({ user: { email: "[Redacted]" } });
+		expect(() => createLogger(JSON.parse('{"__proto__":{"enabled":false}}'))).toThrow(
+			'createLogger does not accept "__proto__".',
+		);
+	});
+
 	it("LOG-AC-03 reads each option once, so the redact paths it validated are the ones applied", () => {
 		const events: RoutaLogEvent[] = [];
 		let reads = 0;
