@@ -41,15 +41,17 @@ response, after the outcome's own headers. When `src/routa.ts` turns
 the correlation header as optional, because Routa echoes it only for a valid incoming value:
 
 ```json
-"headers": {
-	"x-request-id": {
-		"required": true,
-		"description": "The request identity Routa generated for this request.",
-		"schema": { "type": "string", "format": "uuid" }
-	},
-	"x-correlation-id": {
-		"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
-		"schema": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._-]+$" }
+{
+	"headers": {
+		"x-request-id": {
+			"required": true,
+			"description": "The request identity Routa generated for this request.",
+			"schema": { "type": "string", "format": "uuid" }
+		},
+		"x-correlation-id": {
+			"description": "The caller's correlation ID, echoed when the request sent one valid value in this header.",
+			"schema": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._-]+$" }
+		}
 	}
 }
 ```

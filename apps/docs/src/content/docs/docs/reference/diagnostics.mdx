@@ -327,7 +327,7 @@ ROUTA_CONTEXT_RESERVED: src/routes/middleware.ts: Middleware withRequest passes 
 
 **Fix:** rename the context key. When the value is an application dependency, declare it
 as an application service instead. A middleware that generated or copied a request ID can
-go: every middleware, services factory, and handler already reads `ctx.requestId`, and
+go: every middleware, route-file and method services factory, and handler already reads `ctx.requestId`, and
 `correlation` accepts a caller's ID as `ctx.correlationId`.
 
 ## Correlation

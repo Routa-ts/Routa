@@ -55,7 +55,7 @@ matched route, in order:
 ## Request Identity
 
 Routa generates a UUID for every request it receives and never takes one from the request.
-Handlers, middleware, and services factories read it as `ctx.requestId`, every response
+Handlers, middleware, and route-file and method services factories read it as `ctx.requestId`, every response
 carries it as `x-request-id`, and every event the request logger writes includes it. The same
 holds for unmatched requests, validation failures, middleware rejects, authentication
 failures, `406`, automatic `OPTIONS`, `405`, and server errors.
