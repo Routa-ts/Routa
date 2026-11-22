@@ -1025,7 +1025,7 @@ describe("request identity", () => {
 		]);
 	});
 
-	it("LOG-AC-06 serves a Routa app mounted in a plain Hono app or reached through fetch", async () => {
+	it("LOG-AC-06 serves a Routa app in a plain Hono app, a plain Hono app in it, and fetch forwarding", async () => {
 		const outer = capture();
 		const host = new Hono();
 		host.route("/api", createHonoApp([echoRoute], { logger: outer.logger }));
@@ -1042,6 +1042,17 @@ describe("request identity", () => {
 			expect(((await response.json()) as { requestId: string }).requestId).toMatch(uuid);
 			expect(response.headers.get("x-request-id")).toMatch(uuid);
 		}
+
+		const withPlain = createHonoApp([]);
+		withPlain.route(
+			"/plain",
+			new Hono().get("/ping", (context) => context.text("pong")),
+		);
+		const pong = await withPlain.request("/plain/ping");
+
+		expect(pong.status).toBe(200);
+		expect(await pong.text()).toBe("pong");
+		expect(pong.headers.get("x-request-id")).toMatch(uuid);
 
 		expect(outer.events.map((event) => event.event)).toEqual([
 			"echo.read",
