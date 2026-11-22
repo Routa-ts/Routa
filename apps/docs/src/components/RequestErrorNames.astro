@@ -1,0 +1,16 @@
+---
+import { requestErrorCodes, requestErrorStages } from "@routa-ts/contract-rules";
+
+type Props = {
+	/** The failure codes or the stages Routa reports to `onRequestError` and in `http.error`. */
+	list: "codes" | "stages";
+};
+
+const lists = { codes: requestErrorCodes, stages: requestErrorStages };
+// "a, b, or c", with each name as a code span.
+const parts = new Intl.ListFormat("en", { type: "disjunction" }).formatToParts(
+	lists[Astro.props.list].map(({ name }) => name),
+);
+---
+
+{parts.map(({ type, value }) => (type === "element" ? <code dir="auto">{value}</code> : value))}

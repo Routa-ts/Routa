@@ -4,6 +4,7 @@ description: Every option src/routa.ts accepts and every environment variable Ro
 ---
 
 import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
+import RequestErrorNames from "@components/RequestErrorNames.astro";
 import RequestErrorTable from "@components/RequestErrorTable.astro";
 
 Routa reads its runtime configuration from the default export of `src/routa.ts`. The file
@@ -270,7 +271,7 @@ The diagnostic holds the same facts as the request's `http.error` event:
 
 | Field           | Value                                                                    |
 | --------------- | ------------------------------------------------------------------------ |
-| `code`          | `unexpected_failure`, `contract_violation`, or `configuration_error`     |
+| `code`          | <RequestErrorNames list="codes" />                                       |
 | `stage`         | Where the request failed, from the table below                           |
 | `requestId`     | The request's `x-request-id`                                             |
 | `correlationId` | The accepted correlation ID; absent when Routa accepted none             |

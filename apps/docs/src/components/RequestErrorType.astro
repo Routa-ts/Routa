@@ -1,0 +1,23 @@
+---
+import { Code } from "@astrojs/starlight/components";
+import { requestErrorCodes, requestErrorStages } from "@routa-ts/contract-rules";
+
+type Props = {
+	/** The exported union to write the signature of. */
+	type: "RequestErrorCode" | "RequestErrorStage";
+};
+
+const lists = { RequestErrorCode: requestErrorCodes, RequestErrorStage: requestErrorStages };
+const { type } = Astro.props;
+const members = lists[type].map(({ name }) => JSON.stringify(name));
+
+// Laid out as Oxfmt writes it: on one line when it fits the 100-column print width, otherwise
+// one member per line.
+const line = `type ${type} = ${members.join(" | ")}`;
+const code =
+	line.length <= 100
+		? line
+		: [`type ${type} =`, ...members.map((member) => `\t| ${member}`)].join("\n");
+---
+
+<Code code={code} lang="ts" />
