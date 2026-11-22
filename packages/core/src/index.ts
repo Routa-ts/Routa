@@ -1,6 +1,7 @@
 import type {
 	requestErrorCodes,
 	requestErrorStages,
+	reservedContext,
 	reservedResponseHeaders,
 } from "@routa-ts/contract-rules";
 import type { z } from "zod";
@@ -479,21 +480,25 @@ declare class SelectedOutcome {
 export type MiddlewareContinuation = SelectedOutcome;
 
 /**
+ * The compiler message for each context key Routa reserves. The keys come from the shared reserved
+ * context map, so a key added there fails this type until it has a message.
+ */
+type ReservedContextMessages = ForEachReservedKey<{
+	services: "ctx.services is reserved for injected services. Rename this context key.";
+	requestId: "ctx.requestId is reserved for the request identity Routa generates. Rename this context key.";
+	correlationId: "ctx.correlationId is reserved for the correlation ID Routa accepts. Rename this context key.";
+	logger: "ctx.logger is reserved for the request logger. Rename this context key.";
+}>;
+
+type ForEachReservedKey<T extends Record<keyof typeof reservedContext, string>> = T;
+
+/**
  * The context keys Routa reserves, each typed so the property name carries the message; see
  * {@link ForbiddenData}.
  */
 type ReservedContextKeys = {
-	readonly services: {
-		readonly "ctx.services is reserved for injected services. Rename this context key.": never;
-	};
-	readonly requestId: {
-		readonly "ctx.requestId is reserved for the request identity Routa generates. Rename this context key.": never;
-	};
-	readonly correlationId: {
-		readonly "ctx.correlationId is reserved for the correlation ID Routa accepts. Rename this context key.": never;
-	};
-	readonly logger: {
-		readonly "ctx.logger is reserved for the request logger. Rename this context key.": never;
+	readonly [K in keyof typeof reservedContext]: {
+		readonly [M in ReservedContextMessages[K]]: never;
 	};
 };
 
