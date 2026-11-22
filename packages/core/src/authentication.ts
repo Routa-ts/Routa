@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { MiddlewareContract, Register } from "./index.js";
 import type { RoutaLogger } from "./logger.js";
+import { contractViolation, wrapThrown } from "./request-errors.js";
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -1524,7 +1525,8 @@ const authenticatorFailures = {
  * schema step while Routa read the result. Routa answers with the generic `500` problem and logs
  * neither the scheme nor the thrown value, because anything the thrown value carries, including its
  * message, stack, and name, is set by application or provider code and may carry the credential.
- * Only `onRequestError` receives the thrown value, as `cause`.
+ * Only `onRequestError` receives the thrown value. It is also the error's `cause`, but Routa reports
+ * the value it recorded here, never `cause` read back.
  */
 export class AuthenticatorError extends Error {
 	override readonly name = "AuthenticatorError";
@@ -1535,6 +1537,7 @@ export class AuthenticatorError extends Error {
 		stage: keyof typeof authenticatorFailures = "authenticate",
 	) {
 		super(`${authenticatorFailures[stage]} "${scheme}" threw.`, { cause });
+		wrapThrown(this, cause);
 	}
 }
 
@@ -1551,5 +1554,6 @@ export class AuthenticationContractError extends Error {
 		readonly issues?: ReadonlyArray<{ code: string; path: readonly PropertyKey[] }>,
 	) {
 		super(message);
+		contractViolation(this);
 	}
 }

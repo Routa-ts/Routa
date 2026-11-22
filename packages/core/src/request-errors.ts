@@ -1,5 +1,3 @@
-import { AuthenticationContractError } from "./authentication.js";
-import { InvalidHandlerOutputError } from "./handler-output-error.js";
 import type { RequestErrorCode, RequestErrorDiagnostic, RequestErrorReporter } from "./index.js";
 import { observeRejection, writeFallbackLine } from "./fallback.js";
 
@@ -57,9 +55,46 @@ function containReporter(reporter: RequestErrorReporter): ReportRequestError {
 	};
 }
 
-/** Whether Routa detected a contract violation, or something failed that it did not expect. */
-export function requestErrorCode(error: unknown): RequestErrorCode {
-	return error instanceof InvalidHandlerOutputError || error instanceof AuthenticationContractError
-		? "contract_violation"
-		: "unexpected_failure";
+/**
+ * Errors Routa created to report a contract violation it detected. Membership is recorded when
+ * Routa creates the error, so classifying a failure never reads or inspects what was thrown.
+ */
+const violations = new WeakSet<object>();
+
+/**
+ * Errors Routa wraps around a value application code threw, mapped to that value. It is kept here
+ * rather than read back from the wrapper's `cause`, which middleware can redefine.
+ */
+const wrapped = new WeakMap<object, unknown>();
+
+/** Records that Routa created `error` to report a contract violation it detected. */
+export function contractViolation<E extends object>(error: E): E {
+	violations.add(error);
+	return error;
+}
+
+/** Records that Routa created `error` around `thrown`, the value application code threw. */
+export function wrapThrown<E extends object>(error: E, thrown: unknown): E {
+	wrapped.set(error, thrown);
+	return error;
+}
+
+/**
+ * The value application code threw, when Routa wrapped it in `error`, or `error` itself. Only
+ * Routa's own records are consulted, so this never throws, whatever `error` is.
+ */
+export function thrownValue(error: unknown): unknown {
+	return isObject(error) && wrapped.has(error) ? wrapped.get(error) : error;
+}
+
+/**
+ * Whether Routa detected a contract violation, or something failed that it did not expect.
+ * Classified by what was thrown, from Routa's own records: never throws, whatever was thrown.
+ */
+export function requestErrorCode(thrown: unknown): RequestErrorCode {
+	return isObject(thrown) && violations.has(thrown) ? "contract_violation" : "unexpected_failure";
+}
+
+function isObject(value: unknown): value is object {
+	return (typeof value === "object" && value !== null) || typeof value === "function";
 }

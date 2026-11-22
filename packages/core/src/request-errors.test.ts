@@ -1126,6 +1126,57 @@ describe("request error reporting", () => {
 		}
 	});
 
+	it("LOG-AC-13 reports services a factory returns against its contract as Routa's contract violation", async () => {
+		const ownError = new TypeError("the factory's own type error");
+		const factories: ReadonlyArray<[RequestErrorCode, RequestServicesDeclaration["factory"]]> = [
+			["contract_violation", () => ({})],
+			["contract_violation", () => ({ audit: {}, extra: {} })],
+			[
+				"unexpected_failure",
+				() => {
+					throw ownError;
+				},
+			],
+		];
+
+		for (const [code, factory] of factories) {
+			const { calls, onRequestError } = recorder();
+			const { events, logger } = capture();
+			const released: string[] = [];
+			const app = createHonoApp(
+				[
+					get("/x", () => ({ type: "ok", data: { ok: true } }), {
+						services: {
+							method: scope((args) => {
+								args.onCleanup(() => {
+									released.push("audit");
+								});
+								return factory(args);
+							}),
+						},
+					}),
+				],
+				{ logger, onRequestError },
+			);
+
+			const response = await app.request("/x");
+
+			expect(response.status, code).toBe(500);
+			expect(released, code).toEqual(["audit"]);
+			expect(
+				calls.map(({ diagnostic }) => [diagnostic.code, diagnostic.stage]),
+				code,
+			).toEqual([[code, "services"]]);
+			expect(calls[0]?.error, code).toBeInstanceOf(TypeError);
+			if (code === "unexpected_failure") {
+				expect(calls[0]?.error).toBe(ownError);
+			}
+			expect(events.find((event) => event.event === "http.error")?.data, code).toMatchObject({
+				code,
+				stage: "services",
+			});
+		}
+	});
 
 	it("LOG-AC-13 names the response stage when preparing lifecycle headers throws", async () => {
 		const thrown = new Error("sunset secret");
@@ -1183,7 +1234,126 @@ describe("request error reporting", () => {
 		expect(calls).toEqual([]);
 	});
 
+	it("LOG-AC-13 reports the original services error after middleware redefines the cause Routa set", async () => {
+		const database = new Error("connection reset");
+		const decorations: PropertyDescriptor[] = [
+			{
+				get() {
+					throw new Error("cause getter secret");
+				},
+				configurable: true,
+			},
+			{ value: "replaced", writable: true, configurable: true },
+		];
 
+		for (const decoration of decorations) {
+			const { calls, onRequestError } = recorder();
+			const { events, logger } = capture();
+			const released: string[] = [];
+			const decorate = createMiddleware({
+				run: async ({ next }) => {
+					try {
+						return await next();
+					} catch (error) {
+						Object.defineProperty(error, "cause", decoration);
+						throw error;
+					}
+				},
+			});
+			const app = createHonoApp(
+				[
+					{
+						method: "get",
+						path: "/x",
+						contract: createRoute({
+							middleware: [decorate],
+							responses: { ok: { status: 204 } },
+							run: () => ({ type: "ok" }),
+						}),
+						services: {
+							method: {
+								...scope(({ onCleanup }) => {
+									onCleanup(() => {
+										released.push("audit");
+									});
+									throw database;
+								}),
+								after: 1,
+							},
+						},
+					},
+				],
+				{ logger, onRequestError },
+			);
+
+			const response = await app.request("/x");
+
+			expect(response.status).toBe(500);
+			expect(released).toEqual(["audit"]);
+			expect(calls).toHaveLength(1);
+			expect(calls[0]?.error).toBe(database);
+			expect([calls[0]?.diagnostic.code, calls[0]?.diagnostic.stage]).toEqual([
+				"unexpected_failure",
+				"services",
+			]);
+			expect(events.filter((event) => event.event === "http.error")).toHaveLength(1);
+			expect(JSON.stringify(events)).not.toContain("secret");
+		}
+	});
+
+	it("LOG-AC-13 answers, reports, and cleans up after a thrown revoked Proxy", async () => {
+		const unhandled: unknown[] = [];
+		const onUnhandled = (reason: unknown) => unhandled.push(reason);
+		process.on("unhandledRejection", onUnhandled);
+
+		try {
+			const revoked = () => {
+				const { proxy, revoke } = Proxy.revocable({}, {});
+				revoke();
+				return proxy;
+			};
+			const fromFactory = revoked();
+			const fromHandler = revoked();
+			const released: string[] = [];
+			const { calls, onRequestError } = recorder();
+			const { events, logger } = capture();
+			const app = createHonoApp(
+				[
+					get("/factory", () => ({ type: "ok", data: { ok: true } }), {
+						services: {
+							method: scope(({ onCleanup }) => {
+								onCleanup(() => {
+									released.push("factory");
+								});
+								throw fromFactory;
+							}),
+						},
+					}),
+					get("/handler", () => {
+						throw fromHandler;
+					}),
+				],
+				{ logger, onRequestError },
+			);
+
+			expect((await app.request("/factory")).status).toBe(500);
+			expect((await app.request("/handler")).status).toBe(500);
+			await new Promise((resolve) => setTimeout(resolve, 0));
+
+			expect(released).toEqual(["factory"]);
+			expect(calls).toHaveLength(2);
+			expect(calls[0]?.error).toBe(fromFactory);
+			expect(calls[1]?.error).toBe(fromHandler);
+			expect(calls.map(({ diagnostic }) => [diagnostic.code, diagnostic.stage])).toEqual([
+				["unexpected_failure", "services"],
+				["unexpected_failure", "handler"],
+			]);
+			expect(events.filter((event) => event.event === "http.error")).toHaveLength(2);
+			expect(unhandled).toEqual([]);
+		} finally {
+			process.off("unhandledRejection", onUnhandled);
+		}
+	});
 });
 
 describe("request error reporter failures", () => {

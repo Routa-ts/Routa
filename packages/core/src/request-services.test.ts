@@ -492,7 +492,11 @@ describe("request-scoped service failures and cleanup", () => {
 
 		expect((await request(app)).status).toBe(500);
 		expect(cleaned).toBe(1);
-		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedOrders);
+		// Routa found the mapping breaks the services contract: a violation, not an unexpected failure.
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual({
+			...failedOrders,
+			code: "contract_violation",
+		});
 		await app.dispose();
 	});
 

@@ -1,7 +1,6 @@
 import { ZodError, type z } from "zod";
 import {
 	type AuthContext,
-	AuthenticatorError,
 	authenticationFailure,
 	resolveAuthentication,
 	type RouteAuthentication,
@@ -16,7 +15,12 @@ import type {
 import { type HandlerOutputIssue, InvalidHandlerOutputError } from "./handler-output-error.js";
 import type { RoutaLogger } from "./logger.js";
 import type { FrameworkEvent } from "./logger-registry.js";
-import { type ReportRequestError, requestErrorCode } from "./request-errors.js";
+import {
+	type ReportRequestError,
+	requestErrorCode,
+	thrownValue,
+	wrapThrown,
+} from "./request-errors.js";
 import { loggedMethod, type RequestIdentity, type RequestState } from "./request-identity.js";
 import {
 	type CookieEntry,
@@ -230,11 +234,12 @@ export function createRequestExecutor(
 		try {
 			response = await execute(request, params, state, constructed, failures);
 		} catch (error) {
-			response = errorResponse(error);
+			response = failedResponse(error);
 
 			// Only a failure Routa answers with a server error is unexpected. Rejected input answers
 			// 4xx; declared outcomes and rejects never reach this catch.
 			if (response.status >= 500) {
+				// Both come from Routa's own records, so neither reads what application code threw.
 				const thrown = thrownValue(error);
 				const diagnostic: RequestErrorDiagnostic = Object.freeze({
 					// Classified by what was thrown, so a body's own throw is unexpected, not a violation.
@@ -255,12 +260,12 @@ export function createRequestExecutor(
 
 				options.report?.(thrown, diagnostic);
 			}
-		}
-
-		for (const scope of constructed.reverse()) {
-			await scope
-				.release()
-				.catch((cleanupError: unknown) => logCleanupFailure(state.logger, cleanupError));
+		} finally {
+			for (const scope of constructed.reverse()) {
+				await scope
+					.release()
+					.catch((cleanupError: unknown) => logCleanupFailure(state.logger, cleanupError));
+			}
 		}
 
 		return response;
@@ -1324,6 +1329,18 @@ export function isBodylessStatus(status: number): boolean {
 }
 
 /**
+ * Converts a failure into its HTTP response, without letting the failure break the conversion: a
+ * value whose type cannot be checked, such as a revoked Proxy, is answered with the generic `500`.
+ */
+function failedResponse(error: unknown): Response {
+	try {
+		return errorResponse(error);
+	} catch {
+		return internalError();
+	}
+}
+
+/**
  * Converts an error into an HTTP response.
  *
  * @returns A response that maps known error types to problem JSON responses.
@@ -1354,6 +1371,10 @@ function errorResponse(error: unknown): Response {
 		});
 	}
 
+	return internalError();
+}
+
+function internalError(): Response {
 	return problem("https://routa-ts.dev/problems/internal", "Internal Server Error", 500);
 }
 
@@ -1375,7 +1396,9 @@ function logRequestError(
 		status: diagnostic.status,
 		code: diagnostic.code,
 		stage: diagnostic.stage,
-		...(error instanceof InvalidHandlerOutputError
+		// Only an error Routa created is inspected, never a value application code threw.
+		...(requestErrorCode(error) === "contract_violation"
+			&& error instanceof InvalidHandlerOutputError
 			&& error.issues && {
 				issueCount: error.issues.length,
 				issueCodes: [...new Set(error.issues.map((issue) => issue.code))].sort(),
@@ -1394,6 +1417,7 @@ class UnsupportedMediaTypeError extends Error {}
 class RequestServicesError extends Error {
 	constructor(cause: unknown) {
 		super("Request services construction failed.", { cause });
+		wrapThrown(this, cause);
 	}
 }
 
@@ -1401,23 +1425,17 @@ class RequestServicesError extends Error {
  * Application code threw while Routa checked or serialized a value it produced: a response body's
  * `toJSON()` or getter, or a schema refinement on a response or provided context. Routa answers it
  * as invalid handler output, whatever was thrown, so a `ZodError` never reads as a client error.
- * `onRequestError` receives the thrown value. It is kept privately rather than as `cause`, so
- * middleware that unwraps `cause` from `next()` still sees the invalid output it always saw.
- */
-const outputCodeThrew = new WeakMap<InvalidHandlerOutputError, unknown>();
-
-/**
- * The same `InvalidHandlerOutputError` Routa has always answered with, so middleware that catches
- * `next()` sees no new class or `cause`, remembering privately what application code threw.
+ *
+ * This is the same `InvalidHandlerOutputError` Routa has always answered with, so middleware that
+ * catches `next()` sees no new class or `cause`. `onRequestError` receives the thrown value, which
+ * Routa remembers privately rather than as `cause`.
  */
 function outputCodeError(
 	message: string,
 	thrown: unknown,
 	issues?: readonly HandlerOutputIssue[],
 ): InvalidHandlerOutputError {
-	const error = new InvalidHandlerOutputError(message, issues);
-	outputCodeThrew.set(error, thrown);
-	return error;
+	return wrapThrown(new InvalidHandlerOutputError(message, issues), thrown);
 }
 
 /**
@@ -1464,20 +1482,6 @@ class FailureStages {
 			}
 		}
 	}
-}
-
-/**
- * The value application code threw: an authenticator's, a services factory's, or a response body's
- * own error rather than the error Routa wraps it in to answer the request.
- */
-function thrownValue(error: unknown): unknown {
-	if (error instanceof InvalidHandlerOutputError && outputCodeThrew.has(error)) {
-		return outputCodeThrew.get(error);
-	}
-
-	return error instanceof AuthenticatorError || error instanceof RequestServicesError
-		? error.cause
-		: error;
 }
 
 /** The identity fields of a request's state, without its logger. */

@@ -1,3 +1,5 @@
+import { contractViolation } from "./request-errors.js";
+
 export type HandlerOutputIssue = {
 	code: string;
 	path: readonly PropertyKey[];
@@ -10,5 +12,6 @@ export class InvalidHandlerOutputError extends Error {
 		readonly issues?: readonly HandlerOutputIssue[],
 	) {
 		super(message);
+		contractViolation(this);
 	}
 }
