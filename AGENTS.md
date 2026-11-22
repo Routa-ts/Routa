@@ -56,6 +56,11 @@ Read `docs/agents/issue-tracker.md` before creating, changing, or completing Dex
 - For a consequential design decision, present one bounded recommendation. Build a disposable preview when code or prose hides the tradeoff. Record the decision after approval.
 - If a task requires breaking an accepted Routa boundary, say so loudly and get a human sign-off before breaking it.
 
+### Things to keep in mind
+
+- `routa dev` watches the project and rewrites generated files (`routes.gen.ts`, `.routa/`). Stop it before editing or checking generated output. If generated files change on their own, find the leftover watcher with `pgrep -fl "(routa|dist/index\.js) dev"`, which also matches the local CLI shim.
+- Run one package's checks with `vp run --filter <package> test` or `typecheck`. Both build that package's workspace dependencies first, because packages read each other's `dist/` through `node_modules`. A bare `vp test` skips that build and runs against stale output.
+
 ## Pull requests should arrive ready
 
 A pull request is for review, not a placeholder.

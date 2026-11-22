@@ -24,6 +24,20 @@ export default defineConfig({
 					env: ["CI"],
 				},
 			},
+			// Tests and typechecks read workspace packages through node_modules, so build them first.
+			test: {
+				command: "vp test run --coverage",
+				dependsOn: [{ task: "build", from: ["dependencies", "devDependencies"] }],
+				cache: false,
+			},
+			typecheck: {
+				command: [
+					"vp exec tsc -p tsconfig.json --noEmit",
+					"vp exec tsc -p tsconfig.test.json --noEmit",
+				],
+				dependsOn: [{ task: "build", from: ["dependencies", "devDependencies"] }],
+				cache: false,
+			},
 		},
 	},
 	test: {
