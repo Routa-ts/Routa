@@ -2285,6 +2285,9 @@ paths:
 
 		const baseline = readFileSync(join(cwd, ".routa/openapi-baseline.json"), "utf8");
 		expect(baseline).toContain('"x-correlation-id"');
+		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
+			'routaCorrelationHeader = "x-correlation-id"',
+		);
 
 		const drift = await run(["openapi", "check"], { cwd });
 		expect(drift.code).toBe(0);

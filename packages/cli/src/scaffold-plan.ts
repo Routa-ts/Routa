@@ -1950,7 +1950,10 @@ ${Array.from(schemaExports.entries())
 	}
 
 	// Shared with `routa check` so the runtime always loads the same metadata shape.
-	generatedContent.set(".routa/routes.gen.ts", routesMetadataSource(metadataRoutes));
+	generatedContent.set(
+		".routa/routes.gen.ts",
+		routesMetadataSource(metadataRoutes, undefined, undefined, correlationHeader),
+	);
 
 	return assembleScaffoldPlan(
 		document,
