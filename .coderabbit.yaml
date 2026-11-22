@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# Settings not set here come from the organization's CodeRabbit settings.
+inheritance: true
+reviews:
+  auto_review:
+    # Review a pull request when it opens. Comment `@coderabbitai review` to review later pushes.
+    auto_incremental_review: false
