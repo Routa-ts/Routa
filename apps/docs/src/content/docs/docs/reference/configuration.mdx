@@ -210,6 +210,25 @@ not a function:
 onRequestError must be a function that receives the original error and its diagnostic. Omit it to report nothing.
 ```
 
+`src/tracker.ts` is your own module. This one is a stand-in that keeps what it receives in
+memory; replace the body of `send` with a call to your error tracking client. The
+[full API example](/docs/examples/full-api/)'s `src/error-tracker.ts` is a complete version.
+
+```ts title="src/tracker.ts"
+import type { RequestErrorDiagnostic } from "@routa-ts/core";
+
+class Tracker {
+	readonly sent: Array<{ error: unknown; tags: RequestErrorDiagnostic }> = [];
+
+	async send(error: unknown, tags: RequestErrorDiagnostic): Promise<void> {
+		// Forward to your error tracking client here.
+		this.sent.push({ error, tags });
+	}
+}
+
+export const tracker = new Tracker();
+```
+
 ```ts title="src/routa.ts"
 import { createRouta } from "@routa-ts/core";
 import { tracker } from "./tracker.js";
@@ -217,12 +236,13 @@ import { tracker } from "./tracker.js";
 export default createRouta({
 	// Awaiting the delivery lets Routa contain a delivery that fails.
 	onRequestError: async (error, diagnostic) => {
-		await tracker.send(error, { tags: diagnostic });
+		await tracker.send(error, diagnostic);
 	},
 });
 ```
 
-`tracker` stands for your error tracking client, whose `send` returns a promise. With a client whose capture call returns something else, such as an event ID, call it in a block body instead of returning its result. The callback is a runtime
+With a client whose capture call returns something other than a promise, such as an event ID,
+call it in a block body instead of returning its result. The callback is a runtime
 value: `routa check` and `routa generate` never read or run it, and it does not change generated
 OpenAPI.
 

@@ -1615,7 +1615,38 @@ type RequestErrorReporter = (
 	error: unknown,
 	diagnostic: RequestErrorDiagnostic,
 ) => void | Promise<void>
+```
 
+The `onRequestError` option of `createRouta`, `createHonoApp`, and `createApplication`. Routa
+calls it once for each request that fails unexpectedly or breaks its response contract, with
+the value that was thrown and a frozen [`RequestErrorDiagnostic`](#requesterrordiagnostic). It
+has already chosen the response and does not wait for the callback.
+[Configuration](/docs/reference/configuration/#onrequesterror) lists which failures are not
+reported and what happens when the callback fails.
+
+`./tracker.js` is your own module. [Configuration](/docs/reference/configuration/#onrequesterror)
+shows a minimal stand-in for it.
+
+```ts title="src/routa.ts"
+import { createRouta, type RequestErrorReporter } from "@routa-ts/core";
+import { tracker } from "./tracker.js";
+
+// Send the original error to a tracker your application owns, never to stdout or Routa's
+// logger: it can hold a credential or other request data.
+// Await the delivery, so Routa contains a failed delivery instead of leaving it unhandled.
+const onRequestError: RequestErrorReporter = async (error, diagnostic) => {
+	await tracker.send(error, diagnostic);
+};
+
+export default createRouta({ onRequestError });
+```
+
+**Errors:** `createHonoApp`, `createApplication`, and startup throw a `TypeError` when the
+option is present and not a function.
+
+## `RequestErrorDiagnostic`
+
+```ts
 type RequestErrorDiagnostic = Readonly<{
 	code: RequestErrorCode
 	stage: RequestErrorStage
@@ -1625,9 +1656,55 @@ type RequestErrorDiagnostic = Readonly<{
 	route: string
 	status: number
 }>
+```
 
+The metadata Routa passes to `onRequestError`. It holds the same facts as the request's
+`http.error` event, so a tracker's event and Routa's log share a request ID.
+[Configuration](/docs/reference/configuration/#onrequesterror) describes each field.
+
+```ts title="src/error-tags.ts"
+import type { RequestErrorDiagnostic } from "@routa-ts/core";
+
+/** Tags a tracker can index, so its event can be found from the request's http.error log. */
+export function errorTags(diagnostic: RequestErrorDiagnostic): Record<string, string> {
+	return {
+		requestId: diagnostic.requestId,
+		route: `${diagnostic.method} ${diagnostic.route}`,
+		status: String(diagnostic.status),
+		code: diagnostic.code,
+		stage: diagnostic.stage,
+	};
+}
+```
+
+**Errors:** none. It is a type. Assigning a field fails TypeScript. The object is frozen, so an
+assignment that bypasses the types throws inside the callback and never changes the response.
+
+## `RequestErrorCode`
+
+```ts
 type RequestErrorCode = "unexpected_failure" | "contract_violation"
+```
 
+Whether application code threw, or produced a value its declared contract forbids. The
+[failure codes and stages](/docs/reference/configuration/#failure-codes-and-stages) table
+lists what each code covers and which error the callback receives.
+
+```ts title="src/error-titles.ts"
+import type { RequestErrorCode } from "@routa-ts/core";
+
+// A Record over the union, so TypeScript flags a code without a title.
+export const errorTitles: Record<RequestErrorCode, string> = {
+	unexpected_failure: "Unexpected request failure",
+	contract_violation: "Contract violation",
+};
+```
+
+**Errors:** none. It is a type.
+
+## `RequestErrorStage`
+
+```ts
 type RequestErrorStage =
 	| "authentication"
 	| "context"
@@ -1638,29 +1715,26 @@ type RequestErrorStage =
 	| "response"
 ```
 
-The `onRequestError` option of `createRouta`, `createHonoApp`, and `createApplication`. Routa
-calls it once for each request that fails unexpectedly or breaks its response contract, with
-the value that was thrown and a frozen diagnostic. It has already chosen the response and does
-not wait for the callback.
-[Configuration](/docs/reference/configuration/#onrequesterror) lists what each code and stage
-means, which failures are not reported, and what happens when the callback fails.
+Where the request failed. The
+[failure codes and stages](/docs/reference/configuration/#failure-codes-and-stages) table
+lists what each stage covers.
 
-```ts title="src/routa.ts"
-import { createRouta, type RequestErrorReporter } from "@routa-ts/core";
-import { tracker } from "./tracker.js";
+```ts title="src/error-owners.ts"
+import type { RequestErrorStage } from "@routa-ts/core";
 
-// Send the original error to a tracker your application owns, never to stdout or Routa's
-// logger: it can hold a credential or other request data.
-// Await the delivery, so Routa contains a failed delivery instead of leaving it unhandled.
-const onRequestError: RequestErrorReporter = async (error, diagnostic) => {
-	await tracker.send(error, { ...diagnostic });
+// The team each alert goes to. A Record over the union, so TypeScript flags a missing stage.
+export const stageOwners: Record<RequestErrorStage, string> = {
+	authentication: "identity",
+	context: "platform",
+	input: "api",
+	services: "platform",
+	middleware: "api",
+	handler: "api",
+	response: "api",
 };
-
-export default createRouta({ onRequestError });
 ```
 
-**Errors:** `createHonoApp`, `createApplication`, and startup throw a `TypeError` when the
-option is present and not a function.
+**Errors:** none. It is a type.
 
 ## `RouteRootConfigForCtx`
 
