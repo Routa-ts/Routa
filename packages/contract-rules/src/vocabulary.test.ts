@@ -20,7 +20,7 @@ describe("reserved context", () => {
 });
 
 describe("request error vocabulary", () => {
-	it("lists the codes and the stages in the order a request reaches them", () => {
+	it("lists the codes and the stages in documentation order", () => {
 		expect(requestErrorCodes.map((entry) => entry.name)).toEqual([
 			"unexpected_failure",
 			"contract_violation",

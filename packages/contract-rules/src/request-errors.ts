@@ -21,7 +21,7 @@ export const requestErrorCodes = [
 ] as const;
 
 /**
- * Where in the request a reported failure happened, in the order a request reaches each stage.
+ * Where in the request a reported failure happened, in the order the documentation lists them.
  * Descriptions are Markdown text with inline code spans.
  */
 export const requestErrorStages = [

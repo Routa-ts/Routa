@@ -80,8 +80,8 @@ job summaries and one PR comment that updates on each run. The comment includes 
 commit, job results, and a link to the full reports. Long reports are shortened in the
 comment. Fork and Dependabot PRs keep reports in Actions because their tokens cannot
 write comments. Neither report blocks a merge yet. The audit lists dead code, complexity,
-duplication, and import cycles in changed files. The mutation report changes the core and
-CLI code the pull request touched and lists the changes no test catches. `.fallowrc.jsonc`
+duplication, and import cycles in changed files. The mutation report changes the core,
+CLI, and contract-rules code the pull request touched and lists the changes no test catches. `.fallowrc.jsonc`
 declares the files Routa loads by convention. Run them locally with `vp exec fallow audit`
 and `vp exec fallow mutation --root packages/core`. The measurements behind these checks
 are in [Code-quality tooling for Routa](docs/quality-tooling-research.md).
