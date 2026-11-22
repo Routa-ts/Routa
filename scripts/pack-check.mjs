@@ -585,7 +585,14 @@ async function smokeTestStart(cwd, check, env = {}) {
 	// "close" fires once the process has exited and both of its output streams have ended.
 	const closed = new Promise((resolveClosed) => child.once("close", resolveClosed));
 	const signalTree = (signal) => {
-		if (process.platform !== "win32" && child.pid) {
+		// With shell: true the child is cmd.exe, so stop the whole tree under it, which Windows
+		// does only by force.
+		if (process.platform === "win32" && child.pid) {
+			spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+			return;
+		}
+
+		if (child.pid) {
 			try {
 				process.kill(-child.pid, signal);
 				return;
