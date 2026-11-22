@@ -841,6 +841,26 @@ describe("request error reporting", () => {
 		).toEqual([[true, "unexpected_failure", "middleware"]]);
 	});
 
+	it("LOG-AC-13 passes a revoked Proxy a body's toJSON throws to the reporter unchanged", async () => {
+		const { calls, onRequestError } = recorder();
+		const { proxy, revoke } = Proxy.revocable({}, {});
+		revoke();
+		const body = {
+			toJSON() {
+				throw proxy;
+			},
+		};
+		const app = createHonoApp([get("/x", () => ({ type: "ok", data: body }))], { onRequestError });
+
+		const response = await app.request("/x");
+
+		expect(response.status).toBe(500);
+		expect(await response.json()).toMatchObject({ title: "Invalid handler output" });
+		expect(calls).toHaveLength(1);
+		expect(calls[0]?.error).toBe(proxy);
+		expect(calls[0]?.diagnostic).toMatchObject({ code: "unexpected_failure", stage: "response" });
+	});
+
 	it("LOG-AC-13 reports what JSON.stringify throws, and a body JSON has no text for", async () => {
 		const circular: Record<string, unknown> = { ok: true };
 		circular.self = circular;

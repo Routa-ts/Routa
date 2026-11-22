@@ -1280,6 +1280,18 @@ function finalizeResponse(
 }
 
 /**
+ * A thrown value's message for Routa's own error text. Reading it can run application code, such
+ * as a revoked Proxy's traps, so a value that cannot be described gets a fixed text instead.
+ */
+function describeThrown(error: unknown): string {
+	try {
+		return error instanceof Error ? error.message : String(error);
+	} catch {
+		return "the thrown value could not be described";
+	}
+}
+
+/**
  * Serializes a response body as JSON, the representation that goes on the wire.
  *
  * @throws {InvalidHandlerOutputError} When JSON has no representation for the value
@@ -1292,10 +1304,7 @@ function jsonText(data: unknown): string {
 	try {
 		text = JSON.stringify(data);
 	} catch (error) {
-		throw outputCodeError(
-			`Failed to serialize response as JSON: ${error instanceof Error ? error.message : String(error)}`,
-			error,
-		);
+		throw outputCodeError(`Failed to serialize response as JSON: ${describeThrown(error)}`, error);
 	}
 
 	if (text === undefined) {
