@@ -6,8 +6,9 @@ export type ReservedContextKey = {
 };
 
 /**
- * The context keys Routa reserves, which no middleware can provide or pass to `next()` and no
- * `createContext` can return.
+ * The context keys Routa reserves, which no middleware can provide or pass to `next()`. A
+ * low-level route's `createContext` fails the request only when it returns `services`; Routa
+ * replaces the other keys it returns with its own.
  */
 export const reservedContext: Readonly<
 	Record<"services" | "requestId" | "correlationId" | "logger", ReservedContextKey>
