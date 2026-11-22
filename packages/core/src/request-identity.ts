@@ -134,8 +134,14 @@ export function assertCorrelationReadsNoCredential(
 				);
 
 	if (scheme) {
+		// Recommend the default header only when no scheme reads it too.
+		const advice = authentication?.schemes.some(
+			(item) => "header" in item.transport && item.transport.header === defaultCorrelationHeader,
+		)
+			? "Choose a header no configured scheme reads and no route declares."
+			: "Choose another header, such as x-correlation-id.";
 		throw new TypeError(
-			`The correlation header ${JSON.stringify(header)} is the header the ${scheme.kind} scheme ${JSON.stringify(scheme.name)} reads its credential from. Choose another header, such as x-correlation-id.`,
+			`The correlation header ${JSON.stringify(header)} is the header the ${scheme.kind} scheme ${JSON.stringify(scheme.name)} reads its credential from. ${advice}`,
 		);
 	}
 }

@@ -643,6 +643,33 @@ describe("correlation config", () => {
 		expect(existsSync(sentinel)).toBe(false);
 	});
 
+	it("LOG-AC-09 recommends x-correlation-id only when no declared scheme reads it", () => {
+		const suggestion = (header: string, schemeHeader: string) =>
+			validateProject(
+				project({
+					"src/routa.ts": credentialConfig(header, "unused").replace(
+						'header: "X-Api-Key"',
+						`header: ${JSON.stringify(schemeHeader)}`,
+					),
+					"src/routes/status/route.ts": statusRoute,
+				}),
+				{ write: false },
+			).diagnostics.map(({ code, message, suggestion }) => ({ code, message, suggestion }));
+
+		expect(suggestion("X-Correlation-Id", "x-correlation-id")).toEqual([
+			{
+				code: "ROUTA_CORRELATION_HEADER_CONFLICT",
+				message:
+					'The correlation header "X-Correlation-Id" in src/routa.ts names x-correlation-id, which the apiKey scheme "serviceKey" reads its credential from.',
+				suggestion:
+					"Choose a header of its own for correlation, one no configured scheme reads and no route declares. A correlation ID is not a credential and never replaces x-request-id.",
+			},
+		]);
+		expect(suggestion("x-client-cert", "x-api-key")[0]?.suggestion).toBe(
+			"Choose a header of its own for correlation, such as x-correlation-id. A correlation ID is not a credential and never replaces x-request-id.",
+		);
+	});
+
 	it("LOG-AC-09 leaves a credential header it cannot read to the authentication diagnostic", () => {
 		const routa = credentialConfig("x-api-key", "unused").replace(
 			'header: "X-Api-Key"',

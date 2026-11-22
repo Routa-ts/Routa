@@ -146,10 +146,16 @@ export function applicationCorrelation(
 			&& `the ${scheme.kind} scheme ${JSON.stringify(scheme.name)} reads its credential from`);
 
 	if (claimed) {
+		// Recommend the default header only when no scheme reads it too.
+		const another = authentication?.schemes.some(
+			(item) => credentialHeader(item) === defaultCorrelationHeader,
+		)
+			? "one no configured scheme reads and no route declares"
+			: `such as ${defaultCorrelationHeader}`;
 		return fail(
 			"ROUTA_CORRELATION_HEADER_CONFLICT",
 			`The correlation header ${JSON.stringify(header)} in ${configFile} names ${name}, which ${claimed}.`,
-			"Choose a header of its own for correlation, such as x-correlation-id. A correlation ID is not a credential and never replaces x-request-id.",
+			`Choose a header of its own for correlation, ${another}. A correlation ID is not a credential and never replaces x-request-id.`,
 		);
 	}
 

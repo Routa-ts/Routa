@@ -1755,6 +1755,39 @@ describe("correlation identity", () => {
 		expect(extract).not.toHaveBeenCalled();
 	});
 
+	it("LOG-AC-09 recommends x-correlation-id only when that header would not conflict too", async () => {
+		const authenticate = vi.fn(() => ({ type: "rejected" as const }));
+		const authentication = {
+			principal: z.object({ id: z.string(), type: z.literal("service") }),
+			schemes: { serviceKey: apiKey({ header: "X-Correlation-Id", authenticate }) },
+		};
+		const advice = "Choose a header no configured scheme reads and no route declares.";
+
+		expect(() => createHonoApp([], { authentication, correlation: true })).toThrow(
+			`The correlation header "x-correlation-id" is the header the apiKey scheme "serviceKey" reads its credential from. ${advice}`,
+		);
+
+		// A mounted app that reads x-correlation-id refuses an owner correlating on it, and the
+		// report recommends no header the mounted app would refuse too.
+		const reports: unknown[] = [];
+		const mounted = createHonoApp([], {
+			authentication,
+			onRequestError: (error) => {
+				reports.push(error);
+			},
+		});
+		mounted.get("/health", (context) => context.text("ok"));
+		const app = createHonoApp([], { correlation: true });
+		app.route("/", mounted);
+
+		expect((await app.request("/health")).status).toBe(500);
+		expect(String(reports[0])).toContain(
+			"Correlate the outer app on a header the mounted app neither reads nor declares.",
+		);
+		expect(String(reports[0])).not.toContain("such as x-correlation-id");
+		expect(authenticate).not.toHaveBeenCalled();
+	});
+
 	it("LOG-AC-17 reads authentication schemes after the services factory, with correlation on or off", async () => {
 		const principal = z.object({ id: z.string(), type: z.literal("service") });
 		const whoami: HonoRoute = {

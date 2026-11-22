@@ -36,6 +36,7 @@ import {
 	acceptedCorrelation,
 	assertCorrelationReadsNoCredential,
 	correlationHeaderOf,
+	defaultCorrelationHeader,
 	loggedMethod,
 	refusedCorrelationHeaders,
 	type RequestIdentity,
@@ -615,7 +616,7 @@ function identifyRequests(
 
 		report?.(
 			new Error(
-				`This Routa app is mounted in a Routa app that correlates on ${request.correlationHeader}, which in this app is ${conflict}. Routa withholds the correlation ID, so the header's value never reaches the response or the logs. Correlate the outer app on a header the mounted app neither reads nor declares, such as x-correlation-id.`,
+				`This Routa app is mounted in a Routa app that correlates on ${request.correlationHeader}, which in this app is ${conflict}. Routa withholds the correlation ID, so the header's value never reaches the response or the logs. Correlate the outer app on a header the mounted app neither reads nor declares${refused.has(defaultCorrelationHeader) ? "" : ", such as x-correlation-id"}.`,
 			),
 			diagnostic,
 		);
