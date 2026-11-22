@@ -1782,7 +1782,7 @@ describe("correlation identity", () => {
 
 		expect((await app.request("/health")).status).toBe(500);
 		expect(String(reports[0])).toContain(
-			"Correlate the outer app on a header the mounted app neither reads nor declares.",
+			"Correlate the outer app on a header that neither app reads a credential from and the mounted app does not declare.",
 		);
 		expect(String(reports[0])).not.toContain("such as x-correlation-id");
 		expect(authenticate).not.toHaveBeenCalled();

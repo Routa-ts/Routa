@@ -201,17 +201,17 @@ export function correlationHeaderProblem(header: string): string | undefined {
 	}
 
 	if (name === requestIdHeader) {
-		return `${JSON.stringify(header)} names x-request-id, which carries the request identity Routa generates. Choose another header, such as x-correlation-id.`;
+		return `${JSON.stringify(header)} names x-request-id, which carries the request identity Routa generates. Choose another header that no configured scheme reads.`;
 	}
 
 	if (credentialHeaders.has(name)) {
-		return `${JSON.stringify(header)} names a credential header. A correlation ID is not a credential, so choose another header, such as x-correlation-id.`;
+		return `${JSON.stringify(header)} names a credential header. A correlation ID is not a credential, so choose another header that no configured scheme reads.`;
 	}
 
 	const owner = routaHeaders.get(name);
 
 	if (owner) {
-		return `${JSON.stringify(header)} names ${name}, which ${owner}. Choose another header, such as x-correlation-id.`;
+		return `${JSON.stringify(header)} names ${name}, which ${owner}. Choose another header that no configured scheme reads.`;
 	}
 
 	return undefined;
