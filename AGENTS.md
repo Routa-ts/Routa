@@ -58,7 +58,7 @@ Read `docs/agents/issue-tracker.md` before creating, changing, or completing Dex
 
 ### Things to keep in mind
 
-- `routa dev` watches the project and rewrites generated files (`routes.gen.ts`, `.routa/`). Stop it before editing or checking generated output. If generated files change on their own, find the leftover watcher with `pgrep -fl "routa dev"`.
+- `routa dev` watches the project and rewrites generated files (`routes.gen.ts`, `.routa/`). Stop it before editing or checking generated output. If generated files change on their own, find the leftover watcher with `pgrep -fl "(routa|dist/index\.js) dev"`, which also matches the local CLI shim.
 - Run one package's checks with `vp run --filter <package> test` or `typecheck`. Both build that package's workspace dependencies first, because packages read each other's `dist/` through `node_modules`. A bare `vp test` skips that build and runs against stale output.
 
 ## Pull requests should arrive ready
