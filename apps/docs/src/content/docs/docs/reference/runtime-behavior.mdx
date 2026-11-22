@@ -150,6 +150,9 @@ the mounted app reads from that header never reaches the response or the logs. T
 logs `http.error` and calls its `onRequestError` with `code` `configuration_error` and `stage`
 `identity`. The error it passes names the header and why the mounted app refuses it, and holds no
 header value. Correlate the outer app on a header the mounted app neither reads nor declares.
+The check covers Routa apps built with the same version of `@routa-ts/core`, even from separate
+copies of it. An app built with a different version of core is outside this guarantee, so mount
+only apps built with the same version.
 
 This rule covers `route()` mounting only. An app that forwards a request to another app through
 its `fetch`, for example with Hono's `mount()` or `inner.fetch(c.req.raw)`, sends a new request:
