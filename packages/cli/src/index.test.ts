@@ -2261,6 +2261,36 @@ paths:
 		expect(drift.stdout).toContain("No drift detected");
 	});
 
+	it("documents the project's correlation header in the scaffold baseline", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-identity-correlation-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routa.ts"),
+			'import { createRouta } from "@routa-ts/core";\n\nexport default createRouta({ correlation: true });\n',
+		);
+		writeOpenApiPaths(
+			cwd,
+			`  /status:
+    get:
+      operationId: getStatus
+      responses:
+        "204":
+          description: Up
+`,
+		);
+
+		const scaffold = await run(["scaffold", "openapi.yaml"], { cwd });
+		expect(scaffold.code).toBe(0);
+
+		const baseline = readFileSync(join(cwd, ".routa/openapi-baseline.json"), "utf8");
+		expect(baseline).toContain('"x-correlation-id"');
+
+		const drift = await run(["openapi", "check"], { cwd });
+		expect(drift.code).toBe(0);
+		expect(drift.stdout).toContain("No drift detected");
+	});
+
 	it("rejects structured parameter schemas that cannot arrive as strings", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-param-structured-"));
 		createTypeScriptProject(cwd);

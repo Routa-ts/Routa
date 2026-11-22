@@ -2908,7 +2908,7 @@ const reservedContext: ReadonlyArray<readonly [string, string, string]> = [
 	[
 		"requestId",
 		"the request identity it generates",
-		"Rename the context key. Every middleware, services factory, and handler already reads ctx.requestId.",
+		"Rename the context key. Every middleware, route-file and method services factory, and handler already reads ctx.requestId.",
 	],
 	[
 		"correlationId",
@@ -3011,6 +3011,16 @@ function nextPayloadKeys(contract: ts.ObjectLiteralExpression): string[] {
 			return;
 		}
 
+		// A block that declares its own binding of the name calls that binding, not the continuation.
+		if (
+			ts.isBlock(node)
+			&& node.parent !== run
+			&& "binding" in continuation
+			&& blockDeclares(node, continuation.binding)
+		) {
+			return;
+		}
+
 		if (ts.isCallExpression(node) && callsContinuation(node.expression, continuation)) {
 			keys.push(...payloadKeys(run, payloadObject(run, node.arguments[0]), 0));
 		}
@@ -3020,6 +3030,18 @@ function nextPayloadKeys(contract: ts.ObjectLiteralExpression): string[] {
 
 	visit(run);
 	return keys;
+}
+
+/** Whether a block's own statements declare `name`, as a variable, function, or class. */
+function blockDeclares(block: ts.Block, name: string): boolean {
+	return block.statements.some((statement) =>
+		ts.isVariableStatement(statement)
+			? statement.declarationList.declarations.some((declaration) =>
+					bindsName(declaration.name, name),
+				)
+			: (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement))
+				&& statement.name?.text === name,
+	);
 }
 
 /** The keys an object payload names, including those of spreads `payloadObject` can read. */
@@ -3172,6 +3194,26 @@ function payloadObject(
 				|| ts.isFunctionDeclaration(scope)
 				|| ts.isMethodDeclaration(scope))
 			&& scope.parameters.some((parameter) => bindsName(parameter.name, payload.text))
+		) {
+			return;
+		}
+
+		// A loop or catch binding between the call and `run` also shadows an outer `const`.
+		if (
+			(ts.isForOfStatement(scope) || ts.isForInStatement(scope) || ts.isForStatement(scope))
+			&& scope.initializer
+			&& ts.isVariableDeclarationList(scope.initializer)
+			&& scope.initializer.declarations.some((declaration) =>
+				bindsName(declaration.name, payload.text),
+			)
+		) {
+			return;
+		}
+
+		if (
+			ts.isCatchClause(scope)
+			&& scope.variableDeclaration
+			&& bindsName(scope.variableDeclaration.name, payload.text)
 		) {
 			return;
 		}

@@ -10,6 +10,8 @@ import {
 	type ScaffoldRoute,
 	type ScaffoldSnapshot,
 } from "./scaffold-plan.js";
+import { applicationCorrelation } from "./request-identity.js";
+import * as ts from "./typescript.js";
 
 export type { ScaffoldPreviewChange } from "./scaffold-plan.js";
 
@@ -56,7 +58,11 @@ export function scaffoldOpenApi(
 	}
 
 	const raw = readFileSync(absoluteInput, "utf8");
-	const plan = createScaffoldPlan(raw, extension, source);
+	// The baseline documents the project's correlation header too, read the way generation reads it.
+	const { header: correlationHeader } = ts.withSourceFileParsing(cwd, (parser) =>
+		applicationCorrelation(cwd, parser),
+	);
+	const plan = createScaffoldPlan(raw, extension, source, correlationHeader);
 	const snapshot = readScaffoldSnapshot(cwd, plan);
 	const evaluation = evaluateScaffold(plan, snapshot);
 

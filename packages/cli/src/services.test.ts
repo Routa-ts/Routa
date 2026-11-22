@@ -1003,6 +1003,28 @@ describe("reserved ctx.services (routa check)", () => {
 		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
 	});
 
+	it("does not read a block's own next binding as the continuation", () => {
+		const cwd = servicesProject({
+			"src/routes/middleware.ts": middlewareFile(
+				"export const withLabel = createMiddleware({\n\trun: ({ next }) => {\n\t\tif (Math.random() < 2) {\n\t\t\tconst next = (value: object) => value;\n\t\t\tnext({ services: 'label' });\n\t\t}\n\t\treturn next();\n\t},\n});\n",
+			),
+			"src/routes/status/route.ts": statusRoute,
+		});
+
+		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
+	});
+
+	it("does not read an outer const that a loop binding shadows", () => {
+		const cwd = servicesProject({
+			"src/routes/middleware.ts": middlewareFile(
+				"export const withTenant = createMiddleware({\n\trun: ({ next }) => {\n\t\tconst payload = { services: 'logged' };\n\t\tvoid payload;\n\t\tfor (const payload of [{ tenant: 'acme' }]) {\n\t\t\treturn next(payload as never);\n\t\t}\n\t\treturn next();\n\t},\n});\n",
+			),
+			"src/routes/status/route.ts": statusRoute,
+		});
+
+		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
+	});
+
 	it("does not read an outer const that an inner let shadows", () => {
 		const cwd = servicesProject({
 			"src/routes/middleware.ts": middlewareFile(
