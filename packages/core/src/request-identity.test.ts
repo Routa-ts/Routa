@@ -1312,12 +1312,15 @@ describe("correlation identity", () => {
 			[{ header: "X-Request-ID" }, 'The correlation header "X-Request-ID" names x-request-id'],
 			[
 				{ header: "Authorization" },
-				'The correlation header "Authorization" names a credential header',
+				'The correlation header "Authorization" names authorization, which is a credential header',
 			],
-			[{ header: "proxy-authorization" }, "names a credential header"],
-			[{ header: "Cookie" }, "names a credential header"],
-			[{ header: "set-cookie" }, "names a credential header"],
-			[{ header: "Content-Type" }, "names content-type, which Routa owns on every response"],
+			[{ header: "proxy-authorization" }, "which is a credential header"],
+			[{ header: "Cookie" }, "which is a credential header"],
+			[{ header: "set-cookie" }, "which is a credential header"],
+			[
+				{ header: "Content-Type" },
+				"names content-type, which is a header Routa owns on every response",
+			],
 			[{ header: "x correlation" }, "is not a valid header name"],
 			[{ header: "" }, "is not a valid header name"],
 			[{ header: 1 }, "correlation must be true, false, or { header"],
@@ -1332,13 +1335,13 @@ describe("correlation identity", () => {
 
 	it("LOG-AC-09 rejects every header Routa writes itself as the correlation header", () => {
 		for (const [header, owner] of [
-			["Allow", "Routa sets on automatic OPTIONS and 405 responses"],
-			["access-control-allow-methods", "Routa sets on automatic OPTIONS responses"],
-			["Vary", "Routa sets on automatic OPTIONS responses"],
-			["Deprecation", "Routa's lifecycle headers emit"],
-			["sunset", "Routa's lifecycle headers emit"],
-			["Link", "Routa's lifecycle headers emit"],
-			["WWW-Authenticate", "Routa's authentication challenges use"],
+			["Allow", "is a header Routa sets on automatic OPTIONS and 405 responses"],
+			["access-control-allow-methods", "is a header Routa sets on automatic OPTIONS responses"],
+			["Vary", "is a header Routa sets on automatic OPTIONS responses"],
+			["Deprecation", "is a lifecycle header Routa emits"],
+			["sunset", "is a lifecycle header Routa emits"],
+			["Link", "is a lifecycle header Routa emits"],
+			["WWW-Authenticate", "carries Routa's authentication challenges"],
 		] as const) {
 			expect(() => createHonoApp([], { correlation: { header } }), header).toThrow(
 				`The correlation header ${JSON.stringify(header)} names ${header.toLowerCase()}, which ${owner}.`,
@@ -1370,15 +1373,15 @@ describe("correlation identity", () => {
 		for (const [header, message] of [
 			[
 				"x-api-key",
-				'The correlation header "x-api-key" is the header the apiKey scheme "serviceKey" reads its credential from. Choose another header, such as x-correlation-id.',
+				'The correlation header "x-api-key" names x-api-key, which the apiKey scheme "serviceKey" reads its credential from. Choose a header of its own for correlation, such as x-correlation-id. A correlation ID is not a credential and never replaces x-request-id.',
 			],
 			[
 				"X-API-KEY",
-				'The correlation header "x-api-key" is the header the apiKey scheme "serviceKey" reads its credential from.',
+				'The correlation header "x-api-key" names x-api-key, which the apiKey scheme "serviceKey" reads its credential from.',
 			],
 			[
 				"X-Client-Cert",
-				'The correlation header "x-client-cert" is the header the custom scheme "clientCert" reads its credential from.',
+				'The correlation header "x-client-cert" names x-client-cert, which the custom scheme "clientCert" reads its credential from.',
 			],
 		] as const) {
 			expect(() => createHonoApp([], { authentication, correlation: { header } }), header).toThrow(
@@ -1410,7 +1413,9 @@ describe("correlation identity", () => {
 				correlation: { header: "Authorization" },
 				services: { factory, names: ["clock"] },
 			}),
-		).rejects.toThrow('The correlation header "Authorization" names a credential header.');
+		).rejects.toThrow(
+			'The correlation header "Authorization" names authorization, which is a credential header.',
+		);
 		expect(factory).not.toHaveBeenCalled();
 
 		expect(authenticate).not.toHaveBeenCalled();
@@ -1427,10 +1432,11 @@ describe("correlation identity", () => {
 				}),
 			},
 		};
-		const advice = "Choose a header no configured scheme reads and no route declares.";
+		const advice =
+			"Choose a header of its own for correlation, one no configured scheme reads and no route declares.";
 
 		expect(() => createHonoApp([], { authentication, correlation: true })).toThrow(
-			`The correlation header "x-correlation-id" is the header the apiKey scheme "serviceKey" reads its credential from. ${advice}`,
+			`The correlation header "x-correlation-id" names x-correlation-id, which the apiKey scheme "serviceKey" reads its credential from. ${advice}`,
 		);
 	});
 

@@ -46,7 +46,10 @@ metadata, example contracts, scaffold diagnostics, and packed-package validation
   `localeCompare`, `toLocaleLowerCase`, and `toLocaleUpperCase` in package source. Sort
   names with the CLI's `compareText`, which compares UTF-16 code units.
 - `vp run build:packages` builds the three published packages with `vp pack` and caches
-  their `dist` outputs. Source, manifests, lockfile, and build-config changes invalidate
+  their `dist` outputs. It first emits the declarations of the private
+  `@routa-ts/contract-rules`, which core and the CLI bundle from source; core's own
+  declarations inline them, and `.pnpmfile.mjs` drops the package from published
+  manifests. Source, manifests, lockfile, and build-config changes invalidate
   the cache. The CLI also fingerprints core and creator outputs; task dependencies
   control ordering, while these inputs prevent stale bundles. Use
   `vp run --no-cache compile` to force a rebuild. Run

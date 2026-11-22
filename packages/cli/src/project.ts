@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { reservedAuthContext, reservedContext } from "@routa-ts/contract-rules";
 import {
 	callName,
 	coreCall,
@@ -2898,30 +2899,6 @@ function middlewareOrderDiagnostics(routes: RouteMetadata[], authenticated: bool
 	return diagnostics;
 }
 
-/** The context keys Routa reserves, and what for, which no middleware can provide or pass on. */
-const reservedContext: ReadonlyArray<readonly [string, string, string]> = [
-	[
-		"services",
-		"injected services",
-		"Rename the context key. To share an application dependency, declare it as an application service.",
-	],
-	[
-		"requestId",
-		"the request identity it generates",
-		"Rename the context key. Every middleware, route-file and method services factory, and handler already reads ctx.requestId.",
-	],
-	[
-		"correlationId",
-		"the correlation ID it accepts",
-		"Rename the context key. Configure correlation in createRouta, and read the accepted value as ctx.correlationId.",
-	],
-	[
-		"logger",
-		"the request logger",
-		"Rename the context key. Handlers and services factories receive the request logger as ctx.logger.",
-	],
-];
-
 /**
  * Reports middleware context Routa cannot accept: `ctx.services`, `ctx.requestId`,
  * `ctx.correlationId`, and `ctx.logger`, which it reserves, whether provided or passed to
@@ -2935,6 +2912,7 @@ function middlewareContextDiagnostics(
 ): Diagnostic[] {
 	const diagnostics: Diagnostic[] = [];
 	const seen = new Set<ts.ObjectLiteralExpression>();
+	const provided = { ...reservedContext, ...(authenticated && { auth: reservedAuthContext }) };
 
 	for (const route of routes) {
 		for (const item of [route.middleware, ...Object.values(route.methodMiddleware)].flat()) {
@@ -2958,30 +2936,22 @@ function middlewareContextDiagnostics(
 				);
 			}
 
-			for (const [key, owner, suggestion] of reservedContext) {
+			for (const [key, { reason, advice }] of Object.entries(provided)) {
 				if (item.provides.includes(key)) {
 					report(
 						"ROUTA_CONTEXT_RESERVED",
-						`Middleware ${item.name} provides ctx.${key}, which Routa reserves for ${owner}.`,
-						suggestion,
+						`Middleware ${item.name} provides ctx.${key}, which Routa reserves for ${reason}.`,
+						advice,
 					);
 				}
 			}
 
-			if (authenticated && item.provides.includes("auth")) {
-				report(
-					"ROUTA_CONTEXT_RESERVED",
-					`Middleware ${item.name} provides ctx.auth, which Routa reserves for authentication.`,
-					"Rename the context key. Routa resolves ctx.auth from the request's credential.",
-				);
-			}
-
-			for (const [key, owner, suggestion] of reservedContext) {
+			for (const [key, { reason, advice }] of Object.entries(reservedContext)) {
 				if (passed.includes(key)) {
 					report(
 						"ROUTA_CONTEXT_RESERVED",
-						`Middleware ${item.name} passes ctx.${key} to next(), which Routa reserves for ${owner}.`,
-						suggestion,
+						`Middleware ${item.name} passes ctx.${key} to next(), which Routa reserves for ${reason}.`,
+						advice,
 					);
 				}
 			}

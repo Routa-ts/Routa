@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { isHeaderName, requestIdHeader, reservedResponseHeaders } from "@routa-ts/contract-rules";
 import {
 	createRouteObject,
 	objectLiteral,
@@ -1310,7 +1311,7 @@ class SchemaProjector {
 
 			names.set(lower, name);
 
-			if (!/^[!#$%&'*+\-.^_`|~0-9a-z]+$/.test(lower)) {
+			if (!isHeaderName(lower)) {
 				fail(
 					"ROUTA_RESPONSE_HEADER_NAME",
 					`Response header "${name}" is not a valid header name`,
@@ -1322,7 +1323,7 @@ class SchemaProjector {
 					`Response header "${name}" is reserved: Routa owns Set-Cookie`,
 					"Declare response cookies as cookies, not as a header. Routa serializes Set-Cookie itself.",
 				);
-			} else if (lower === "x-request-id") {
+			} else if (lower === requestIdHeader) {
 				fail(
 					"ROUTA_RESPONSE_HEADER_RESERVED",
 					`Response header "${name}" is reserved: Routa owns x-request-id`,
@@ -3123,14 +3124,7 @@ function signedNumber(expression: ts.Expression): number | undefined {
 type LifecycleOwnership = { owned: ReadonlySet<string>; unreadable?: ts.Expression };
 
 /** Header names Routa owns on every response. */
-const reservedHeaderNames = new Set([
-	"content-type",
-	"content-length",
-	"transfer-encoding",
-	"connection",
-	"set-cookie",
-	"x-request-id",
-]);
+const reservedHeaderNames: ReadonlySet<string> = new Set(reservedResponseHeaders);
 
 function placementOf(context: Context): string {
 	if (context.io === "output") return "a response";

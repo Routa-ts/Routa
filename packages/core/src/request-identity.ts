@@ -1,13 +1,12 @@
+import {
+	correlationHeaderProblem,
+	defaultCorrelationHeader,
+	type HeaderCredentialScheme,
+	isCorrelationValue,
+} from "@routa-ts/contract-rules";
 import type { RuntimeAuthentication } from "./authentication.js";
 import type { RoutaLogger } from "./logger.js";
 import type { FrameworkEvent } from "./logger-registry.js";
-import { reservedHeaders } from "./response-headers.js";
-
-/** The response header that carries Routa's generated request identity. */
-export const requestIdHeader = "x-request-id";
-
-/** The correlation header `correlation: true` reads and echoes. */
-export const defaultCorrelationHeader = "x-correlation-id";
 
 /** The `route` that framework events log for a request no route path matched. */
 export const unmatchedRoute = "[Unmatched]";
@@ -25,35 +24,6 @@ export type RequestState = RequestIdentity & {
 	/** Writes Routa's own events through `logger`, so no application binding crowds out their fields. */
 	readonly event: FrameworkEvent;
 };
-
-/** One value of 1 to 128 ASCII letters, digits, dots, underscores, and hyphens. */
-const correlationValue = /^[A-Za-z0-9._-]{1,128}$/;
-
-/** RFC 9110 `token`, the grammar of header names. */
-const headerName = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
-
-const credentialHeaders: ReadonlySet<string> = new Set([
-	"authorization",
-	"proxy-authorization",
-	"cookie",
-	"set-cookie",
-]);
-
-/**
- * Headers Routa writes itself, and who writes each. The echo would replace one, so none can be
- * the correlation header. Headers that authentication schemes or outcomes declare are checked
- * with those declarations.
- */
-const routaHeaders: ReadonlyMap<string, string> = new Map([
-	...reservedHeaders.map((name) => [name, "Routa owns on every response"] as const),
-	["allow", "Routa sets on automatic OPTIONS and 405 responses"],
-	["access-control-allow-methods", "Routa sets on automatic OPTIONS responses"],
-	["vary", "Routa sets on automatic OPTIONS responses"],
-	["deprecation", "Routa's lifecycle headers emit"],
-	["sunset", "Routa's lifecycle headers emit"],
-	["link", "Routa's lifecycle headers emit"],
-	["www-authenticate", "Routa's authentication challenges use"],
-]);
 
 /**
  * The method a framework event logs: one of the standard methods as the request spelled it, or
@@ -105,12 +75,7 @@ export function correlationHeaderOf(option: unknown): string | undefined {
 		);
 	}
 
-	const problem = correlationHeaderProblem(header);
-
-	if (problem) {
-		throw new TypeError(`The correlation header ${problem}`);
-	}
-
+	assertCorrelationHeader(header);
 	return header.toLowerCase();
 }
 
@@ -126,52 +91,32 @@ export function assertCorrelationReadsNoCredential(
 	header: string | undefined,
 	authentication: RuntimeAuthentication | undefined,
 ): void {
-	const scheme =
-		header === undefined
-			? undefined
-			: authentication?.schemes.find(
-					(item) => "header" in item.transport && item.transport.header === header,
-				);
-
-	if (scheme) {
-		// Recommend the default header only when no scheme reads it too.
-		const advice = authentication?.schemes.some(
-			(item) => "header" in item.transport && item.transport.header === defaultCorrelationHeader,
-		)
-			? "Choose a header no configured scheme reads and no route declares."
-			: "Choose another header, such as x-correlation-id.";
-		throw new TypeError(
-			`The correlation header ${JSON.stringify(header)} is the header the ${scheme.kind} scheme ${JSON.stringify(scheme.name)} reads its credential from. ${advice}`,
+	if (header !== undefined) {
+		assertCorrelationHeader(
+			header,
+			(authentication?.schemes ?? []).flatMap(({ kind, name, transport }) =>
+				"header" in transport ? [{ kind, name, header: transport.header }] : [],
+			),
 		);
 	}
 }
 
 /**
- * Why a correlation header name cannot be used, or `undefined` when it can. Names compare
- * case-insensitively.
+ * @param schemes - The schemes that read a header of their own, once the authentication config is
+ *   read
+ * @throws {TypeError} When the header cannot be the correlation header
  */
-export function correlationHeaderProblem(header: string): string | undefined {
-	const name = header.toLowerCase();
+function assertCorrelationHeader(
+	header: string,
+	schemes?: readonly HeaderCredentialScheme[],
+): void {
+	const problem = correlationHeaderProblem(header, schemes);
 
-	if (!headerName.test(header)) {
-		return `${JSON.stringify(header)} is not a valid header name. Use letters, digits, and ! # $ % & ' * + - . ^ _ \` | ~.`;
+	if (problem) {
+		throw new TypeError(
+			`The correlation header ${JSON.stringify(header)} ${problem.reason}. ${problem.advice}`,
+		);
 	}
-
-	if (name === requestIdHeader) {
-		return `${JSON.stringify(header)} names x-request-id, which carries the request identity Routa generates. Choose another header that no configured scheme reads.`;
-	}
-
-	if (credentialHeaders.has(name)) {
-		return `${JSON.stringify(header)} names a credential header. A correlation ID is not a credential, so choose another header that no configured scheme reads.`;
-	}
-
-	const owner = routaHeaders.get(name);
-
-	if (owner) {
-		return `${JSON.stringify(header)} names ${name}, which ${owner}. Choose another header that no configured scheme reads.`;
-	}
-
-	return undefined;
 }
 
 /**
@@ -181,5 +126,5 @@ export function correlationHeaderProblem(header: string): string | undefined {
  */
 export function acceptedCorrelation(headers: Headers, header: string): string | undefined {
 	const value = headers.get(header);
-	return value !== null && correlationValue.test(value) ? value : undefined;
+	return value !== null && isCorrelationValue(value) ? value : undefined;
 }

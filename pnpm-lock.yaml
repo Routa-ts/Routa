@@ -8,6 +8,8 @@ overrides:
   '@emnapi/core': 1.11.3
   '@emnapi/runtime': 1.11.3
 
+pnpmfileChecksum: sha256-7TFOcLGpvanT3iQFWXXp3tyCJ53T2YEj2J3zp7jnv88=
+
 importers:
 
   .:
@@ -179,6 +181,9 @@ importers:
         specifier: 2.9.1
         version: 2.9.1
     devDependencies:
+      '@routa-ts/contract-rules':
+        specifier: workspace:*
+        version: link:../contract-rules
       create-routa-ts:
         specifier: workspace:*
         version: link:../create-routa-ts
@@ -186,8 +191,13 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
 
+  packages/contract-rules: {}
+
   packages/core:
     devDependencies:
+      '@routa-ts/contract-rules':
+        specifier: workspace:*
+        version: link:../contract-rules
       hono:
         specifier: ^4.13.19
         version: 4.13.19

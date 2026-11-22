@@ -1,45 +1,19 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import {
+	correlationHeaderProblem,
+	correlationValueSchema,
+	defaultCorrelationHeader,
+	type HeaderCredentialScheme,
+	requestIdHeader,
+} from "@routa-ts/contract-rules";
 import { propertyName, unwrapExpression } from "./ast.js";
-import type { AuthenticationMetadata, AuthenticationSchemeMetadata } from "./authentication.js";
+import type { AuthenticationMetadata } from "./authentication.js";
 import type { Diagnostic } from "./project.js";
 import { type HiddenPart, routaConfigMember, spreadObject } from "./services.js";
 import * as ts from "./typescript.js";
 
 const configFile = "src/routa.ts";
-
-/** The response header that carries Routa's generated request identity. */
-export const requestIdHeader = "x-request-id";
-
-/** The correlation header `correlation: true` reads and echoes. */
-const defaultCorrelationHeader = "x-correlation-id";
-
-/** RFC 9110 `token`, the grammar of header names. */
-const headerName = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
-
-/**
- * Headers a correlation ID cannot use: credential headers, and the headers Routa writes itself,
- * which the echo would replace. Headers that authentication schemes or outcomes declare are
- * checked with those declarations.
- */
-const claimedHeaders: ReadonlyMap<string, string> = new Map([
-	[requestIdHeader, "carries the request identity Routa generates"],
-	["authorization", "is a credential header"],
-	["proxy-authorization", "is a credential header"],
-	["cookie", "is a credential header"],
-	["set-cookie", "is a credential header"],
-	["content-type", "is a header Routa owns on every response"],
-	["content-length", "is a header Routa owns on every response"],
-	["transfer-encoding", "is a header Routa owns on every response"],
-	["connection", "is a header Routa owns on every response"],
-	["allow", "is a header Routa sets on automatic OPTIONS and 405 responses"],
-	["access-control-allow-methods", "is a header Routa sets on automatic OPTIONS responses"],
-	["vary", "is a header Routa sets on automatic OPTIONS responses"],
-	["deprecation", "is a lifecycle header Routa emits"],
-	["sunset", "is a lifecycle header Routa emits"],
-	["link", "is a lifecycle header Routa emits"],
-	["www-authenticate", "carries Routa's authentication challenges"],
-]);
 
 /**
  * The OpenAPI Header Objects for the identity Routa sends on every response: `x-request-id`
@@ -56,7 +30,8 @@ export function identityHeaders(correlationHeader: string | undefined): Record<s
 			[correlationHeader]: {
 				description:
 					"The caller's correlation ID, echoed when the request sent one valid value in this header.",
-				schema: { type: "string", minLength: 1, maxLength: 128, pattern: "^[A-Za-z0-9._-]+$" },
+				// A copy, so the YAML writer never aliases one schema object across responses.
+				schema: { ...correlationValueSchema },
 			},
 		}),
 	};
@@ -130,50 +105,37 @@ export function applicationCorrelation(
 		return { diagnostics: [], warnings: [] };
 	}
 
-	if (!headerName.test(header)) {
+	const problem = correlationHeaderProblem(header, credentialHeaders(authentication));
+
+	if (problem) {
 		return fail(
-			"ROUTA_CORRELATION_HEADER_INVALID",
-			`The correlation header ${JSON.stringify(header)} in ${configFile} is not a valid header name.`,
-			"Use a header name made of letters, digits, and the characters ! # $ % & ' * + - . ^ _ ` | ~, such as x-correlation-id.",
+			problem.kind === "invalid"
+				? "ROUTA_CORRELATION_HEADER_INVALID"
+				: "ROUTA_CORRELATION_HEADER_CONFLICT",
+			`The correlation header ${JSON.stringify(header)} in ${configFile} ${problem.reason}.`,
+			problem.advice,
 		);
 	}
 
-	const name = header.toLowerCase();
-	const scheme = authentication?.schemes.find((item) => credentialHeader(item) === name);
-	const claimed =
-		claimedHeaders.get(name)
-		?? (scheme
-			&& `the ${scheme.kind} scheme ${JSON.stringify(scheme.name)} reads its credential from`);
-
-	if (claimed) {
-		// Recommend the default header only when no scheme reads it too.
-		const another = authentication?.schemes.some(
-			(item) => credentialHeader(item) === defaultCorrelationHeader,
-		)
-			? "one no configured scheme reads and no route declares"
-			: `such as ${defaultCorrelationHeader}`;
-		return fail(
-			"ROUTA_CORRELATION_HEADER_CONFLICT",
-			`The correlation header ${JSON.stringify(header)} in ${configFile} names ${name}, which ${claimed}.`,
-			`Choose a header of its own for correlation, ${another}. A correlation ID is not a credential and never replaces x-request-id.`,
-		);
-	}
-
-	return { header: name, diagnostics: [], warnings: [] };
+	return { header: header.toLowerCase(), diagnostics: [], warnings: [] };
 }
 
 /**
- * The lowercase header a scheme reads its credential from, when it reads a header of its own.
- * Bearer reads `authorization` and cookie schemes read `cookie`, which are credential headers anyway.
+ * The schemes that read their credential from a header of their own. Bearer reads `authorization`
+ * and cookie schemes read `cookie`, which are credential headers anyway.
  */
-function credentialHeader(scheme: AuthenticationSchemeMetadata): string | undefined {
-	const header =
-		scheme.kind === "apiKey"
-			? scheme.header
-			: scheme.kind === "custom" && "header" in scheme.transport
-				? scheme.transport.header
-				: undefined;
-	return header?.toLowerCase();
+function credentialHeaders(
+	authentication: AuthenticationMetadata | undefined,
+): HeaderCredentialScheme[] {
+	return (authentication?.schemes ?? []).flatMap((scheme) => {
+		const header =
+			scheme.kind === "apiKey"
+				? scheme.header
+				: scheme.kind === "custom" && "header" in scheme.transport
+					? scheme.transport.header
+					: undefined;
+		return header === undefined ? [] : [{ kind: scheme.kind, name: scheme.name, header }];
+	});
 }
 
 /**

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
@@ -381,6 +381,20 @@ for (const packageName of packages) {
 
 	if (packageJson.includes("workspace:")) {
 		throw new Error(`${packageName} tarball contains a workspace: dependency.`);
+	}
+
+	// Core and the CLI bundle the private contract rules, so no published file may name them.
+	const unpacked = mkdtempSync(join(tmp, "unpacked-"));
+	run("tar", ["-xzf", tarball, "-C", unpacked], root);
+	const namingPrivate = readdirSync(unpacked, { recursive: true, withFileTypes: true })
+		.filter((entry) => entry.isFile())
+		.map((entry) => join(entry.parentPath, entry.name))
+		.filter((file) => readFileSync(file, "utf8").includes("@routa-ts/contract-rules"));
+
+	if (namingPrivate.length > 0) {
+		throw new Error(
+			`${packageName} tarball names the private @routa-ts/contract-rules in ${namingPrivate.join(", ")}.`,
+		);
 	}
 
 	// Lint the published metadata, then resolve the types the way Node ESM and bundlers do.

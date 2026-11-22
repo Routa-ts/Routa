@@ -1,3 +1,4 @@
+import { reservedAuthContext, reservedContext, requestIdHeader } from "@routa-ts/contract-rules";
 import { type Context, Hono } from "hono";
 import {
 	isAuthenticationGuard,
@@ -38,7 +39,6 @@ import {
 	correlationHeaderOf,
 	loggedMethod,
 	type RequestIdentity,
-	requestIdHeader,
 	type RequestState,
 	unmatchedRoute,
 } from "./request-identity.js";
@@ -736,14 +736,6 @@ function outcomeProblem(
 	return undefined;
 }
 
-/** What Routa reserves each context key for, which no middleware can provide. */
-const reservedProvides: Readonly<Record<string, string>> = {
-	services: "injected services",
-	requestId: "request identity",
-	correlationId: "request identity",
-	logger: "the request logger",
-};
-
 /**
  * Rejects middleware that provides `ctx.services`, `ctx.requestId`, `ctx.correlationId`, or
  * `ctx.logger`, which Routa reserves, or `ctx.auth` when authentication is configured. TypeScript
@@ -754,19 +746,18 @@ function assertReservedContext(
 	label: string,
 	authenticated: boolean,
 ): void {
+	const reserved = Object.entries({
+		...reservedContext,
+		...(authenticated && { auth: reservedAuthContext }),
+	});
+
 	for (const [index, item] of (contract.middleware ?? []).entries()) {
-		for (const [key, owner] of Object.entries(reservedProvides)) {
+		for (const [key, { reason, advice }] of reserved) {
 			if (item.provides && Object.hasOwn(item.provides, key)) {
 				throw new Error(
-					`middleware[${index}] on ${label} provides ctx.${key}, which Routa reserves for ${owner}. Rename the provided key.`,
+					`middleware[${index}] on ${label} provides ctx.${key}, which Routa reserves for ${reason}. ${advice}`,
 				);
 			}
-		}
-
-		if (authenticated && item.provides && Object.hasOwn(item.provides, "auth")) {
-			throw new Error(
-				`middleware[${index}] on ${label} provides ctx.auth, which Routa reserves for authentication. Rename the provided key.`,
-			);
 		}
 	}
 }
