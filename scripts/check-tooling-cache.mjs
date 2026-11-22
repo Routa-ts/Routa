@@ -6,6 +6,7 @@ import { join } from "node:path";
 const root = process.cwd();
 const source = "packages/create-routa-ts/src/create-project.ts";
 const original = readFileSync(source, "utf8");
+const packageNames = ["contract-rules", "core", "cli", "create-routa-ts"];
 const sha = (filePath) => createHash("sha256").update(readFileSync(filePath)).digest("hex");
 const walk = (directory) =>
 	readdirSync(directory, { withFileTypes: true }).flatMap((entry) =>
@@ -13,7 +14,7 @@ const walk = (directory) =>
 	);
 const snapshot = () =>
 	Object.fromEntries(
-		["core", "cli", "create-routa-ts"]
+		packageNames
 			.flatMap((packageName) => walk(`packages/${packageName}/dist`))
 			.map((filePath) => [
 				filePath,
@@ -33,11 +34,11 @@ build("cache-vp-prime");
 const warm = build("cache-vp-warm");
 log.push({
 	scenario: "warm-cache",
-	passed: /3\/3 cache hit/.test(warm),
+	passed: /4\/4 cache hit/.test(warm),
 	cacheSummary: warm.match(/vp run:.*cache hit.*/)?.[0],
 });
 const before = snapshot();
-for (const packageName of ["core", "cli", "create-routa-ts"])
+for (const packageName of packageNames)
 	rmSync(`packages/${packageName}/dist`, { recursive: true, force: true });
 const restoredLog = build("cache-vp-restored");
 const restored = snapshot();
