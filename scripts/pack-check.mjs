@@ -600,7 +600,8 @@ async function smokeTestStart(cwd, check, env = {}) {
 	const stop = () => {
 		stopping ??= (async () => {
 			signalTree("SIGTERM");
-			const timeout = sleep(10_000).then(() => "timeout");
+			// Unref'd, so the deadline never keeps pack:check running after the server has stopped.
+			const timeout = sleep(10_000, undefined, { ref: false }).then(() => "timeout");
 
 			if ((await Promise.race([closed, timeout])) === "timeout") {
 				signalTree("SIGKILL");
