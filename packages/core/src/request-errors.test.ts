@@ -841,24 +841,30 @@ describe("request error reporting", () => {
 		).toEqual([[true, "unexpected_failure", "middleware"]]);
 	});
 
-	it("LOG-AC-13 passes a revoked Proxy a body's toJSON throws to the reporter unchanged", async () => {
-		const { calls, onRequestError } = recorder();
+	it("LOG-AC-13 passes an undescribable value a body's toJSON throws to the reporter unchanged", async () => {
 		const { proxy, revoke } = Proxy.revocable({}, {});
 		revoke();
-		const body = {
-			toJSON() {
-				throw proxy;
-			},
-		};
-		const app = createHonoApp([get("/x", () => ({ type: "ok", data: body }))], { onRequestError });
+		const symbolMessage = Object.assign(new Error("ignored"), { message: Symbol("detail") });
 
-		const response = await app.request("/x");
+		for (const thrown of [proxy, symbolMessage]) {
+			const { calls, onRequestError } = recorder();
+			const body = {
+				toJSON() {
+					throw thrown;
+				},
+			};
+			const app = createHonoApp([get("/x", () => ({ type: "ok", data: body }))], {
+				onRequestError,
+			});
 
-		expect(response.status).toBe(500);
-		expect(await response.json()).toMatchObject({ title: "Invalid handler output" });
-		expect(calls).toHaveLength(1);
-		expect(calls[0]?.error).toBe(proxy);
-		expect(calls[0]?.diagnostic).toMatchObject({ code: "unexpected_failure", stage: "response" });
+			const response = await app.request("/x");
+
+			expect(response.status).toBe(500);
+			expect(await response.json()).toMatchObject({ title: "Invalid handler output" });
+			expect(calls).toHaveLength(1);
+			expect(calls[0]?.error).toBe(thrown);
+			expect(calls[0]?.diagnostic).toMatchObject({ code: "unexpected_failure", stage: "response" });
+		}
 	});
 
 	it("LOG-AC-13 reports what JSON.stringify throws, and a body JSON has no text for", async () => {
