@@ -121,63 +121,56 @@ with its status. Routa raises it only after every middleware you added has retur
 middleware that answers after `await next()` still supplies the response, and that response
 carries the identity.
 
-When you mount one Routa app in another with `outer.route("/api", inner)`, both built by
-`createHonoApp`, the request is identified once, by the outer app. Handlers in the inner app
-see the same `ctx.requestId` and `ctx.correlationId`. Only the outer app sets the identity
-headers and logs `http.response.prepared`, through its logger, with the route pattern the inner
-app declares, such as `/whoami`, without the mount prefix. The inner app's request logger still
-writes to the inner app's logger, bound to the same identity. Only the outer app fails an
-unanswered request, so outer middleware that answers after `await next()` can answer for the
-inner app. A Routa app mounted in a plain Hono app owns the request instead, so it fails an
-unanswered request before the host app's middleware returns; answer such requests inside the
-Routa app. Hono's `route()` also changes a mounted app that sets its own `app.onError()`: it
-wraps each of that app's handlers and finalizes an unanswered request as an empty `200`, which
-Routa then identifies and logs with that status. Answer every request inside an app that sets
-`onError()` before you mount it.
+Routa does not support mounting one Routa app in another with Hono's `route()`, such as
+`outer.route("/api", inner)` where both are built by `createHonoApp`. Put the routes in the
+outer app's [folders under `src/routes/`](/docs/concepts/routing/), such as a `src/routes/v2/`
+version folder, with [folder middleware](/docs/concepts/middleware/#folder-inheritance) where
+they need their own, or mount a plain Hono app instead. Run apps that need separate settings as
+separate servers.
 
-The mounted app's handlers and request logger see the outer app's correlation ID, whatever the
-mounted app's own `correlation` setting; when the outer app has correlation off, they see none.
-The outer app checks its correlation header only against its own credential schemes and declared
-response headers, so the mounted app checks it as well, in any casing, against the headers it
-would refuse as its own correlation header: `x-request-id`, the credential headers, the headers
-Routa writes, a header one of its credential schemes reads, such as an `apiKey()` scheme's
-`header`, and a response header one of its outcomes or middleware rejects declares. When the
-outer app correlates on one of these, the mounted app answers every request that reaches it,
-whether a Routa route, a Hono handler you added to it, or nothing would answer it, with Routa's
-internal `500` problem, logged with the `[Unmatched]` route. The response keeps its
-`x-request-id`, and the outer app neither echoes nor logs a correlation ID for it, so a credential
-the mounted app reads from that header never reaches the response or the logs. The mounted app
-logs `http.error` and calls its `onRequestError` with `code` `configuration_error` and `stage`
-`identity`. The error it passes names the header and why the mounted app refuses it, and holds no
-header value. Correlate the outer app on a header the mounted app neither reads nor declares.
-The check covers Routa apps built with the same version of `@routa-ts/core`, even from separate
-copies of it. An app built with a different version of core is outside this guarantee, so mount
-only apps built with the same version.
+A mounted Routa app finds the request already identified by the outer app and refuses every
+request it receives, whether a Routa route, a Hono handler you added to it, or nothing would
+answer it, with Routa's internal `500` problem, logged with the `[Unmatched]` route. Its
+authenticators never run. The response keeps the outer app's `x-request-id`, and neither app
+echoes nor logs a correlation ID for it. The mounted app logs `http.error` and calls its
+`onRequestError` with `code` `configuration_error` and `stage` `identity`. The error it passes
+says that the app is mounted in another Routa app, which Routa does not support, and what to do
+instead. It holds no header value. Routa detects apps built with the same version of
+`@routa-ts/core`, even from separate copies of it. An app built with a different version of core
+is outside this guarantee.
 
-This rule covers `route()` mounting only. An app that forwards a request to another app through
-its `fetch`, for example with Hono's `mount()` or `inner.fetch(c.req.raw)`, sends a new request:
-the other app identifies it again and checks nothing against the forwarding app's settings. Do
-not correlate the forwarding app on a header the other app reads a credential from, or the
-forwarding app echoes and logs that credential.
+A Routa app mounted in a plain Hono app owns the request, so it identifies it, answers it, and
+fails an unanswered request before the host app's middleware returns; answer such requests
+inside the Routa app. A plain Hono app mounted in a Routa app is ordinary Hono code inside it,
+like a handler you add. Hono's `route()` also changes a mounted app that sets its own
+`app.onError()`: it wraps each of that app's handlers and finalizes an unanswered request as an
+empty `200`, which Routa then identifies and logs with that status. Answer every request inside
+an app that sets `onError()` before you mount it.
+
+The refusal covers `route()` mounting only. An app that forwards a request to another app
+through its `fetch`, for example with Hono's `mount()` or `inner.fetch(c.req.raw)`, sends a new
+request: the other app identifies it again and checks nothing against the forwarding app's
+settings. Do not correlate the forwarding app on a header the other app reads a credential from,
+or the forwarding app echoes and logs that credential.
 
 ## Status Codes Routa Produces
 
-| Status | Cause                                                                                          |
-| ------ | ---------------------------------------------------------------------------------------------- |
-| `204`  | Automatic `OPTIONS` response                                                                   |
-| `400`  | Input failed schema validation, or the JSON body could not be parsed                           |
-| `400`  | Strict mode received credentials of several accepted schemes (`ambiguousCredentials`)          |
-| `401`  | A presented credential failed authentication (`authenticationFailed`)                          |
-| `401`  | A `requireAuth` guard received an anonymous request (`authenticationRequired`)                 |
-| `404`  | No route matches the request path                                                              |
-| `405`  | The path exists but does not declare the requested method                                      |
-| `406`  | The `Accept` header cannot be satisfied by JSON                                                |
-| `415`  | The request body's content type is not a JSON media type                                       |
-| `500`  | A handler or middleware returned output that does not match its contract                       |
-| `500`  | A route-file or method service factory failed during the request                               |
-| `500`  | A handler or middleware threw an error it did not handle                                       |
-| `500`  | An authenticator threw, or returned a result or principal that breaks its contract             |
-| `500`  | A mounted Routa app reads a credential from or declares the header its outer app correlates on |
+| Status | Cause                                                                                 |
+| ------ | ------------------------------------------------------------------------------------- |
+| `204`  | Automatic `OPTIONS` response                                                          |
+| `400`  | Input failed schema validation, or the JSON body could not be parsed                  |
+| `400`  | Strict mode received credentials of several accepted schemes (`ambiguousCredentials`) |
+| `401`  | A presented credential failed authentication (`authenticationFailed`)                 |
+| `401`  | A `requireAuth` guard received an anonymous request (`authenticationRequired`)        |
+| `404`  | No route matches the request path                                                     |
+| `405`  | The path exists but does not declare the requested method                             |
+| `406`  | The `Accept` header cannot be satisfied by JSON                                       |
+| `415`  | The request body's content type is not a JSON media type                              |
+| `500`  | A handler or middleware returned output that does not match its contract              |
+| `500`  | A route-file or method service factory failed during the request                      |
+| `500`  | A handler or middleware threw an error it did not handle                              |
+| `500`  | An authenticator threw, or returned a result or principal that breaks its contract    |
+| `500`  | A Routa app mounted in another Routa app with `route()` received the request          |
 
 Every other status comes from your contract: a handler outcome or a middleware reject.
 
