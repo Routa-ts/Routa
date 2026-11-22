@@ -2294,6 +2294,45 @@ paths:
 		expect(drift.stdout).toContain("No drift detected");
 	});
 
+	it("stops scaffold before writing files when the correlation header is a credential header", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-scaffold-correlation-conflict-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routa.ts"),
+			`import { apiKey, createRouta } from "@routa-ts/core";
+import { z } from "zod";
+
+export default createRouta({
+	correlation: { header: "x-api-key" },
+	authentication: {
+		principal: z.object({ id: z.string() }),
+		schemes: {
+			serviceKey: apiKey({ header: "X-Api-Key", authenticate: () => ({ type: "rejected" }) }),
+		},
+	},
+});
+`,
+		);
+		writeOpenApiPaths(
+			cwd,
+			`  /status:
+    get:
+      operationId: getStatus
+      responses:
+        "204":
+          description: Up
+`,
+		);
+
+		const scaffold = await run(["scaffold", "openapi.yaml"], { cwd });
+
+		expect(scaffold.code).toBe(1);
+		expect(scaffold.stderr).toContain("ROUTA_CORRELATION_HEADER_CONFLICT: src/routa.ts:");
+		expect(scaffold.stderr).toContain('the apiKey scheme "serviceKey"');
+		expect(existsSync(join(cwd, ".routa"))).toBe(false);
+	});
+
 	it("rejects structured parameter schemas that cannot arrive as strings", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-param-structured-"));
 		createTypeScriptProject(cwd);

@@ -10,6 +10,8 @@ import {
 	type ScaffoldRoute,
 	type ScaffoldSnapshot,
 } from "./scaffold-plan.js";
+import { applicationAuthentication } from "./authentication.js";
+import { formatDiagnostics } from "./project.js";
 import { applicationCorrelation } from "./request-identity.js";
 import * as ts from "./typescript.js";
 
@@ -59,9 +61,15 @@ export function scaffoldOpenApi(
 
 	const raw = readFileSync(absoluteInput, "utf8");
 	// The baseline documents the project's correlation header too, read the way generation reads it.
-	const { header: correlationHeader } = ts.withSourceFileParsing(cwd, (parser) =>
-		applicationCorrelation(cwd, parser),
+	const correlation = ts.withSourceFileParsing(cwd, (parser) =>
+		applicationCorrelation(cwd, parser, applicationAuthentication(cwd, parser).authentication),
 	);
+
+	if (correlation.diagnostics.length > 0) {
+		throw new Error(formatDiagnostics(correlation.diagnostics));
+	}
+
+	const correlationHeader = correlation.header;
 	const plan = createScaffoldPlan(raw, extension, source, correlationHeader);
 	const snapshot = readScaffoldSnapshot(cwd, plan);
 	const evaluation = evaluateScaffold(plan, snapshot);

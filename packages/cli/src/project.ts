@@ -4021,7 +4021,7 @@ function appendOutput(lines: string[], output?: string): string {
  * @param diagnostics - Diagnostics to format
  * @returns The formatted diagnostic report
  */
-function formatDiagnostics(diagnostics: Diagnostic[]): string {
+export function formatDiagnostics(diagnostics: Diagnostic[]): string {
 	return diagnostics
 		.map((diagnostic) => {
 			const severity = diagnostic.severity === "warning" ? "Warning: " : "";
