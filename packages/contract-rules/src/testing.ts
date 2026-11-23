@@ -18,7 +18,8 @@ export function expectNoLeak(output: unknown, secret: string): void {
 		);
 	}
 
-	const text = typeof output === "string" ? output : JSON.stringify(output);
+	// JSON has no text for `undefined` or a function, which therefore carry no secret.
+	const text = typeof output === "string" ? output : (JSON.stringify(output) ?? "");
 	// JSON escapes a quote or backslash in the secret, so look for its escaped form too.
 	const forms =
 		typeof output === "string" ? [secret] : [secret, JSON.stringify(secret).slice(1, -1)];

@@ -5,6 +5,7 @@ describe("expectNoLeak", () => {
 	it("passes when the output does not contain the secret", () => {
 		expect(() => expectNoLeak("request failed", "hunter2-password")).not.toThrow();
 		expect(() => expectNoLeak({ status: 500 }, "hunter2-password")).not.toThrow();
+		expect(() => expectNoLeak(undefined, "hunter2-password")).not.toThrow();
 	});
 
 	it("fails when a string carries the secret", () => {
