@@ -1,5 +1,6 @@
 import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vite-plus/test";
+import { expectNoLeak } from "@routa-ts/contract-rules/testing";
 import { z } from "zod";
 import { createHonoApp, type HonoRoute } from "./hono.js";
 import {
@@ -444,8 +445,8 @@ describe("custom scheme failures", () => {
 
 		expect(status).toBe(500);
 		expect(reported).toEqual(failure("unexpected_failure"));
-		expect(logs).not.toContain("secret-credential-value");
-		expect(logs).not.toContain("provider could not parse");
+		expectNoLeak(logs, "secret-credential-value");
+		expectNoLeak(logs, "provider could not parse");
 	});
 
 	it("answers 500 for an extractor result that is neither a credential nor malformed", async () => {
@@ -458,7 +459,7 @@ describe("custom scheme failures", () => {
 			const { status, logs, failure: reported } = await logged(failing(() => result));
 			expect(status).toBe(500);
 			expect(reported).toEqual(failure("contract_violation"));
-			expect(logs).not.toContain("secret-credential-value");
+			expectNoLeak(logs, "secret-credential-value");
 		}
 	});
 
@@ -493,7 +494,7 @@ describe("custom scheme failures", () => {
 
 				expect(status, name).toBe(500);
 				expect(reported, name).toEqual(failure("contract_violation"));
-				expect(logs, name).not.toContain("secret-credential-value");
+				expectNoLeak(logs, "secret-credential-value");
 				expect(unhandled, name).toEqual([]);
 			}
 		} finally {
@@ -510,15 +511,18 @@ describe("custom scheme failures", () => {
 		);
 		expect(thrown.status).toBe(500);
 		expect(thrown.failure).toEqual(failure("unexpected_failure"));
-		expect(thrown.logs).not.toContain("secret-credential-value");
-		expect(thrown.logs).not.toContain("provider down");
+		expectNoLeak(thrown.logs, "secret-credential-value");
+		expectNoLeak(thrown.logs, "provider down");
 
 		const invalid = await logged(
-			failing(extract, () => ({ type: "authenticated", principal: { type: "admin", id: "a" } })),
+			failing(extract, () => ({
+				type: "authenticated",
+				principal: { type: "impostor-admin", id: "a" },
+			})),
 		);
 		expect(invalid.status).toBe(500);
 		expect(invalid.failure).toEqual(failure("contract_violation"));
-		expect(invalid.logs).not.toContain("admin");
+		expectNoLeak(invalid.logs, "impostor-admin");
 	});
 
 	it("gives the extractor the declared value alone and keeps contract facts out of its reach", async () => {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { expectNoLeak } from "@routa-ts/contract-rules/testing";
 import { z } from "zod";
 import { createHonoApp, type HonoRoute } from "./hono.js";
 import { createMiddleware, createRoute } from "./index.js";
@@ -567,7 +568,7 @@ describe("response header ownership (runtime)", () => {
 		await appFor(
 			handBuilt(declared, {
 				type: "ok",
-				headers: { etag: "secret-value", "x-extra": "secret-too" },
+				headers: { etag: "secret-value", "x-undeclared-extra": "secret-too" },
 			}),
 			modes[0],
 			events,
@@ -575,9 +576,9 @@ describe("response header ownership (runtime)", () => {
 
 		const logged = JSON.stringify(events);
 		expect(events.find((event) => event.event === "http.error")?.data?.status).toBe(500);
-		expect(logged).not.toContain("x-extra");
-		expect(logged).not.toContain("secret-value");
-		expect(logged).not.toContain("secret-too");
+		expectNoLeak(logged, "x-undeclared-extra");
+		expectNoLeak(logged, "secret-value");
+		expectNoLeak(logged, "secret-too");
 	});
 });
 
@@ -665,14 +666,18 @@ describe("response header validation policy", () => {
 		for (const mode of modes) {
 			const events: RoutaLogEvent[] = [];
 			const response = await appFor(
-				route(z.object({ etag: z.string().trim().toLowerCase() }), { etag: "ABC" }),
+				route(z.object({ etag: z.string().trim().toLowerCase() }), {
+					etag: "Changed-ETag-Sentinel",
+				}),
 				mode,
 				events,
 			).request("/item");
 
 			expect(response.status, mode.name).toBe(mode.validates ? 500 : 200);
-			expect(response.headers.get("etag"), mode.name).toBe(mode.validates ? null : "ABC");
-			expect(JSON.stringify(events), mode.name).not.toContain("ABC");
+			expect(response.headers.get("etag"), mode.name).toBe(
+				mode.validates ? null : "Changed-ETag-Sentinel",
+			);
+			expectNoLeak(events, "Changed-ETag-Sentinel");
 		}
 	});
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { expectNoLeak } from "@routa-ts/contract-rules/testing";
 import { z } from "zod";
 import { createHonoApp } from "./hono.js";
 import { createMiddleware, createRoute, createRouteRootFactory } from "./index.js";
@@ -309,7 +310,7 @@ describe("createHonoApp", () => {
 				}),
 			]),
 		);
-		expect(JSON.stringify(events)).not.toContain("database-secret");
+		expectNoLeak(events, "database-secret");
 	});
 
 	it("validates production responses when configured as always", async () => {
@@ -371,7 +372,7 @@ describe("createHonoApp", () => {
 							schema: z.object({ name: z.string().transform((name) => name.toUpperCase()) }),
 						},
 					},
-					run: () => ({ type: "success", data: { name: "Jane" } }),
+					run: () => ({ type: "success", data: { name: "Jane Sentinel" } }),
 				}),
 			},
 		];
@@ -405,11 +406,11 @@ describe("createHonoApp", () => {
 				}),
 			]),
 		);
-		expect(JSON.stringify(events)).not.toContain("JANE");
+		expectNoLeak(events, "JANE SENTINEL");
 
 		const production = await productionApp.request("/profile");
 		expect(production.status).toBe(200);
-		await expect(production.json()).resolves.toEqual({ name: "Jane" });
+		await expect(production.json()).resolves.toEqual({ name: "Jane Sentinel" });
 
 		expect((await alwaysApp.request("/profile")).status).toBe(500);
 	});
@@ -475,7 +476,7 @@ describe("createHonoApp", () => {
 			title: "Internal Server Error",
 			status: 500,
 		});
-		expect(JSON.stringify(body)).not.toContain("sensitive raw body");
+		expectNoLeak(body, "sensitive raw body");
 	});
 
 	it("rejects unsupported request body media types", async () => {
@@ -1334,7 +1335,7 @@ describe("createHonoApp", () => {
 				}),
 			]),
 		);
-		expect(JSON.stringify(events)).not.toContain("middleware-secret");
+		expectNoLeak(events, "middleware-secret");
 	});
 
 	it("does not partially mutate context when middleware provides validation fails", async () => {

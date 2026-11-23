@@ -37,9 +37,10 @@ export default defineConfig({
 	lint: frameworkConfig.lint,
 	fmt: frameworkConfig.fmt,
 	// Consumers run and bundle the source. The build emits only the declarations core's own
-	// declaration build inlines, which tsgo cannot emit for a file outside core's project.
+	// declaration build inlines, which tsgo cannot emit for a file outside core's project, and
+	// those of the test-only `testing` entry.
 	pack: {
-		entry: ["src/index.ts"],
+		entry: ["src/index.ts", "src/testing.ts"],
 		fixedExtension: false,
 		target: "node24",
 		dts: { generator: "tsgo", sourcemap: false, emitDtsOnly: true },

@@ -1,5 +1,6 @@
 import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vite-plus/test";
+import { expectNoLeak } from "@routa-ts/contract-rules/testing";
 import { z } from "zod";
 import { createApplication, createHonoApp } from "./hono.js";
 import type * as LoggerModule from "./logger.js";
@@ -333,7 +334,7 @@ describe("createLogger sanitization", () => {
 		logger.info("hidden", "Hidden.", { hidden, mixed, object });
 
 		expect(events[0]?.data).toEqual({ hidden: [null], mixed: [1, null], object: { shown: 1 } });
-		expect(JSON.stringify(events[0])).not.toContain("internal-only");
+		expectNoLeak(events[0], "internal-only");
 	});
 
 	it("LOG-AC-04 reads an array whose length is not a whole number as unsupported", () => {
@@ -550,17 +551,17 @@ describe("createLogger sanitization", () => {
 		const { events, logger } = capture({ redact: [dotted, `*.${controls}`] });
 		// Each is "password" once `-` is removed; only the first fits the string limit.
 		const baseline = {
-			[`password${"-".repeat(4000)}`]: "secret",
-			[`password${"-".repeat(4096)}`]: "secret",
+			[`password${"-".repeat(4000)}`]: "redacted-secret",
+			[`password${"-".repeat(4096)}`]: "redacted-secret",
 		};
-		const rooted = { ...baseline, [dotted]: "secret" };
+		const rooted = { ...baseline, [dotted]: "redacted-secret" };
 		const child = logger.child(rooted);
 
 		logger.info("top", "Top.", rooted);
 		logger.info("nested", "Nested.", {
 			list: [baseline],
 			near: { [nearControls]: "kept" },
-			exact: { [controls]: "secret" },
+			exact: { [controls]: "redacted-secret" },
 		});
 		child.info("child", "Child.");
 		const [top, nested, bound] = events;
@@ -572,7 +573,7 @@ describe("createLogger sanitization", () => {
 		expect(values((nested?.data?.list as unknown[])[0])).toEqual(["[Redacted]", "[Redacted]"]);
 		expect(values(nested?.data?.exact)).toEqual(["[Redacted]"]);
 		expect(values(nested?.data?.near)).toEqual(["kept"]);
-		expect(JSON.stringify(events)).not.toContain("secret");
+		expectNoLeak(events, "redacted-secret");
 	});
 
 	it("LOG-AC-03 redacts the value of every key longer than the string limit", () => {
@@ -779,7 +780,9 @@ describe("createLogger sanitization", () => {
 
 	it("LOG-AC-04 counts redacted values against the per-event budget", () => {
 		const { events, logger } = capture({ redact: ["rows.*.*"] });
-		const rows = Array.from({ length: 100 }, () => Array.from({ length: 100 }, () => "secret"));
+		const rows = Array.from({ length: 100 }, () =>
+			Array.from({ length: 100 }, () => "redacted-row"),
+		);
 		const redactedCount = (value: unknown): number =>
 			typeof value === "object" && value !== null
 				? Object.values(value).reduce<number>((total, item) => total + redactedCount(item), 0)
@@ -794,7 +797,7 @@ describe("createLogger sanitization", () => {
 		expect(redactedCount(events[0]?.data)).toBeLessThan(1000);
 		expect(redactedCount(child.bindings())).toBeLessThan(1000);
 		expect(redactedCount(events[1]?.data)).toBeLessThan(1000);
-		expect(JSON.stringify(events)).not.toContain("secret");
+		expectNoLeak(events, "redacted-row");
 	});
 });
 
@@ -820,17 +823,19 @@ describe("createLogger failure containment", () => {
 		const logger = createLogger({ sink });
 
 		try {
-			expect(() => logger.info("unsafe", "Unsafe.", { body: hostile("hunter2") })).not.toThrow();
+			expect(() =>
+				logger.info("unsafe", "Unsafe payload.", { body: hostile("hunter2-password") }),
+			).not.toThrow();
 			expect(() =>
 				logger.log({
 					level: "info",
 					event: "unsafe",
-					message: "Unsafe.",
+					message: "Unsafe payload.",
 					timestamp: "now",
-					data: hostile("hunter2") as Record<string, unknown>,
+					data: hostile("hunter2-password") as Record<string, unknown>,
 				}),
 			).not.toThrow();
-			const child = logger.child(hostile("hunter2") as Record<string, unknown>);
+			const child = logger.child(hostile("hunter2-password") as Record<string, unknown>);
 			child.info("child", "Child of unsafe bindings.");
 			logger.info("safe", "Still delivered.");
 
@@ -838,8 +843,8 @@ describe("createLogger failure containment", () => {
 			expect(child.bindings()).toEqual({});
 			expect(consoleError).toHaveBeenCalledTimes(1);
 			const output = String(consoleError.mock.calls[0]?.[0]);
-			expect(output).not.toContain("hunter2");
-			expect(output).not.toContain("Unsafe");
+			expectNoLeak(output, "hunter2-password");
+			expectNoLeak(output, "Unsafe payload");
 			expect(fallbackLines(consoleError)).toEqual([
 				{
 					level: "error",
@@ -900,7 +905,7 @@ describe("createLogger failure containment", () => {
 			expect(calls).toBe(10);
 			expect(unhandled).not.toHaveBeenCalled();
 			expect(consoleError).toHaveBeenCalledTimes(1);
-			expect(String(consoleError.mock.calls[0]?.[0])).not.toContain("secret");
+			expectNoLeak(String(consoleError.mock.calls[0]?.[0]), "secret message");
 			expect(fallbackLines(consoleError)).toEqual([
 				{
 					level: "error",

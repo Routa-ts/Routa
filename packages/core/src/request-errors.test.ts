@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { expectNoLeak } from "@routa-ts/contract-rules/testing";
 import { z } from "zod";
 import { AuthenticationContractError } from "./authentication.js";
 import { InvalidHandlerOutputError } from "./handler-output-error.js";
@@ -66,7 +67,7 @@ describe("request error reporting", () => {
 	it("LOG-AC-13 reports a thrown handler error once, with the original error and frozen metadata", async () => {
 		const { events, logger } = capture();
 		const { calls, onRequestError } = recorder();
-		const thrown = new Error("boom with secret detail");
+		const thrown = new Error("boom with handler-secret-detail");
 		const app = createHonoApp(
 			[
 				get("/boom", () => {
@@ -107,7 +108,7 @@ describe("request error reporting", () => {
 			code: "unexpected_failure",
 			stage: "handler",
 		});
-		expect(JSON.stringify(events)).not.toContain("secret");
+		expectNoLeak(events, "handler-secret-detail");
 	});
 
 	it("LOG-AC-13 names the stage of each unexpected failure and passes the error that was thrown", async () => {
@@ -1264,7 +1265,7 @@ describe("request error reporting", () => {
 		const decorations: PropertyDescriptor[] = [
 			{
 				get() {
-					throw new Error("cause getter secret");
+					throw new Error("cause-getter-secret");
 				},
 				configurable: true,
 			},
@@ -1322,7 +1323,7 @@ describe("request error reporting", () => {
 				"services",
 			]);
 			expect(events.filter((event) => event.event === "http.error")).toHaveLength(1);
-			expect(JSON.stringify(events)).not.toContain("secret");
+			expectNoLeak(events, "cause-getter-secret");
 		}
 	});
 
@@ -1391,16 +1392,16 @@ describe("request error reporter failures", () => {
 		try {
 			const routes = [
 				get("/boom", () => {
-					throw new Error("original secret");
+					throw new Error("original-handler-secret");
 				}),
 			];
 			const baseline = await createHonoApp(routes).request("/boom");
 			const expected = { status: baseline.status, body: await baseline.text() };
 			const throwing = vi.fn(() => {
-				throw new Error("reporter secret");
+				throw new Error("reporter-callback-secret");
 			});
 			const rejecting = vi.fn(async () => {
-				throw new Error("reporter secret");
+				throw new Error("reporter-callback-secret");
 			});
 
 			for (const onRequestError of [throwing, rejecting]) {
@@ -1423,7 +1424,8 @@ describe("request error reporter failures", () => {
 						"The onRequestError callback threw or rejected. Later failures of this callback in this application are not reported.",
 					timestamp: expect.any(String),
 				});
-				expect(JSON.stringify(errors.mock.calls)).not.toContain("secret");
+				expectNoLeak(errors.mock.calls, "original-handler-secret");
+				expectNoLeak(errors.mock.calls, "reporter-callback-secret");
 			}
 
 			// Another application reports its own reporter's first failure.
@@ -1439,7 +1441,7 @@ describe("request error reporter failures", () => {
 	it("LOG-AC-14 writes the fallback line when the configured logger's sink is the one failing", async () => {
 		const errors = vi.spyOn(console, "error").mockImplementation(() => {});
 		const sink = vi.fn(() => {
-			throw new Error("sink secret");
+			throw new Error("sink-failure-secret");
 		});
 		const app = createHonoApp(
 			[
@@ -1450,7 +1452,7 @@ describe("request error reporter failures", () => {
 			{
 				logger: createLogger({ sink }),
 				onRequestError: () => {
-					throw new Error("reporter secret");
+					throw new Error("reporter-callback-secret");
 				},
 			},
 		);
@@ -1460,7 +1462,8 @@ describe("request error reporter failures", () => {
 			"routa.logger.sink_failed",
 			"routa.on_request_error.failed",
 		]);
-		expect(JSON.stringify(errors.mock.calls)).not.toContain("secret");
+		expectNoLeak(errors.mock.calls, "sink-failure-secret");
+		expectNoLeak(errors.mock.calls, "reporter-callback-secret");
 	});
 });
 

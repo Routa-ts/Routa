@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createCookie } from "@routa-ts/core";
 import { describe, expect, it } from "vite-plus/test";
+import { expectNoLeak } from "@routa-ts/contract-rules/testing";
 import { z } from "zod";
 import { run } from "./index.js";
 import { generateOpenApi } from "./openapi.js";
@@ -160,7 +161,8 @@ describe("response cookie OpenAPI", () => {
 
 		const text = JSON.stringify(generateOpenApi(cwd));
 
-		expect(text).not.toContain("s3cr3t");
+		expectNoLeak(text, "s3cr3t-token");
+		expectNoLeak(text, "s3cr3t-description");
 		expect(text).toContain('"Set-Cookie"');
 	});
 
