@@ -12,16 +12,16 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { run } from "./index.js";
-import { routesMetadataSource } from "./generate.js";
-import { generateOpenApi } from "./openapi.js";
 import {
 	runtimeArgs,
 	sourceSnapshot,
 	sourceSnapshotChanged,
 	stubEmptyRouteFiles,
-	validateProject,
-} from "./project.js";
+} from "./commands.js";
+import { routesMetadataSource } from "./generate.js";
+import { run } from "./index.js";
+import { generateOpenApi } from "./openapi.js";
+import { validateProject } from "./project.js";
 import { createProjectApplication } from "./runtime.js";
 import { shouldUseColor } from "./ui.js";
 

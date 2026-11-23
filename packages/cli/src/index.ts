@@ -3,7 +3,6 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { runCreate } from "create-routa-ts";
-import { runOpenApiBreaking, runOpenApiCheck } from "./openapi.js";
 import {
 	runProjectBuild,
 	runProjectCheck,
@@ -12,7 +11,8 @@ import {
 	runProjectGenerate,
 	runProjectRoutes,
 	runProjectStart,
-} from "./project.js";
+} from "./commands.js";
+import { runOpenApiBreaking, runOpenApiCheck } from "./openapi.js";
 import type { ScaffoldPreviewChange } from "./scaffold.js";
 import { scaffoldOpenApi } from "./scaffold.js";
 import { createUi, shouldUseColor, type Ui } from "./ui.js";
