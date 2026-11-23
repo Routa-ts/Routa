@@ -3,11 +3,17 @@
 	// Routa loads `src/routa.ts` and every file under `src/routes` by convention, so no
 	// import reaches them.
 	"dynamicallyLoaded": ["examples/**/src/routa.ts", "examples/**/src/routes/**/*.ts"],
-	// Maintainers run these by hand; CONTRIBUTING.md documents them.
-	"entry": ["scripts/benchmark-tooling.mjs", "scripts/check-tooling-cache.mjs"],
+	// Maintainers run the first two by hand; CONTRIBUTING.md documents them. Pack check runs the
+	// last with Node.
+	"entry": [
+		"scripts/benchmark-tooling.mjs",
+		"scripts/check-tooling-cache.mjs",
+		"scripts/pack-check/fixtures/compiled-test-app-check.mjs",
+	],
 	// The generated `.routa` graphs only list file paths, so nothing in them needs analysis. Pack
-	// check copies its fixtures into scaffolded projects, so nothing in the repository imports them.
-	"ignorePatterns": ["examples/**/.routa/**", "scripts/pack-check/fixtures/**"],
+	// check copies its fixture projects into scaffolded consumers, so nothing in the repository
+	// imports them.
+	"ignorePatterns": ["examples/**/.routa/**", "scripts/pack-check/fixtures/*/**"],
 	// Routa reads service contracts by their exported names, and `.routa` references them only
 	// through `import("…")` types Fallow does not follow. Each contract is used in its own file by
 	// `defineServices` or `createMiddleware`, so count same-file use for type exports.

@@ -29,9 +29,10 @@ export default defineConfig({
 		},
 	},
 	lint: {
-		// Pack check copies its fixtures into scaffolded projects, where `routa check` type-checks
-		// them against the packed packages. Here nothing resolves their imports.
-		ignorePatterns: [...generatedIgnores, "scripts/pack-check/fixtures/**"],
+		// Pack check copies each fixture project into a scaffolded consumer, where `routa check`
+		// type-checks it against the packed packages. Here nothing resolves their imports. The
+		// script beside them runs here as it is, so lint still covers it.
+		ignorePatterns: [...generatedIgnores, "scripts/pack-check/fixtures/*/**"],
 		jsPlugins: [
 			{ name: "dependency-checks", specifier: "eslint-plugin-import-x" },
 			"eslint-plugin-no-secrets",
