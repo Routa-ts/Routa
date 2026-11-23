@@ -97,8 +97,10 @@ export type ProjectValidationResult = {
 };
 
 /**
- * What reading a project's source found, read once for checks and generation: its routes and
- * middleware, the configuration facts `src/routa.ts` declares, and what reading reported.
+ * What reading a project's source found, gathered in one place for checks and generation: its
+ * routes and middleware, the configuration facts `src/routa.ts` declares, and what reading
+ * reported. Each part reads its files separately, so a file saved during a run can leave parts
+ * from different versions of it.
  */
 export type ProjectModel = {
 	cwd: string;
@@ -170,8 +172,8 @@ function validateProjectInSession(
 }
 
 /**
- * Reads a project's source once: its configuration, routes, middleware, and contract schemas,
- * and what reading each part reported.
+ * Builds one project model from the configuration, routes, middleware, and contract schemas,
+ * and what reading each part reported. Each part reads its own files; see {@link ProjectModel}.
  */
 function readProject(cwd: string, parser: ts.SourceFileParser): ProjectModel {
 	const auth = applicationAuthentication(cwd, parser);
