@@ -13,9 +13,9 @@ import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { run } from "./index.js";
+import { routesMetadataSource } from "./generate.js";
 import { generateOpenApi } from "./openapi.js";
 import {
-	routesMetadataSource,
 	runtimeArgs,
 	sourceSnapshot,
 	sourceSnapshotChanged,
