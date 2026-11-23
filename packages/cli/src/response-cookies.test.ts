@@ -147,7 +147,7 @@ describe("response cookie OpenAPI", () => {
 			"src/cookies.ts": cookieFile(
 				`export const session = createCookie({
 	name: "session",
-	schema: z.string().meta({ examples: ["s3cr3t-token"], description: "s3cr3t-description" }),
+	schema: z.string().meta({ examples: ["s3cr3t-marker-token"], description: "s3cr3t-marker-description" }),
 	httpOnly: true,
 	secure: true,
 	sameSite: "lax",
@@ -161,8 +161,7 @@ describe("response cookie OpenAPI", () => {
 
 		const text = JSON.stringify(generateOpenApi(cwd));
 
-		expectNoLeak(text, "s3cr3t-token");
-		expectNoLeak(text, "s3cr3t-description");
+		expectNoLeak(text, "s3cr3t-marker");
 		expect(text).toContain('"Set-Cookie"');
 	});
 
