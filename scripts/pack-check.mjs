@@ -296,17 +296,29 @@ async function startServer(cwd, env = {}) {
 			// The server has already exited.
 		}
 	};
+	// The timer is unref'd, so a deadline never keeps pack:check running after the server stops.
+	const closedWithin = async (ms) =>
+		(await Promise.race([closed, sleep(ms, "timeout", { ref: false })])) !== "timeout";
 	let stopping;
 	const stop = () => {
 		stopping ??= (async () => {
 			signalGroup("SIGTERM");
-			// Unref'd, so the deadline never keeps pack:check running after the server has stopped.
-			const timeout = sleep(10_000, "timeout", { ref: false });
 
-			if ((await Promise.race([closed, timeout])) === "timeout") {
-				signalGroup("SIGKILL");
-				throw new Error(`routa start did not stop within 10s of SIGTERM.\n${output()}`);
+			if (await closedWithin(10_000)) {
+				return;
 			}
+
+			signalGroup("SIGKILL");
+
+			if (!(await closedWithin(5_000))) {
+				// A process that outlived SIGKILL may still hold the pipes open; let go of them so
+				// pack:check can exit.
+				child.stdout.destroy();
+				child.stderr.destroy();
+				child.unref();
+			}
+
+			throw new Error(`routa start did not stop within 10s of SIGTERM.\n${output()}`);
 		})();
 		return stopping;
 	};
