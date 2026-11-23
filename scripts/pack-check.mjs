@@ -262,9 +262,10 @@ function scaffoldConsumer(name, flags) {
  * starter route. This guards the packaged runtime entry (dist/runtime.js), which `routa check`
  * and `routa build` never exercise.
  *
- * Returns the port; a signal that aborts 30 seconds after the start, for every request a check
- * sends; `output()`, what the server has written so far; and `stop()`, which resolves once the
- * server has exited and both of its output streams have ended.
+ * Returns the port; a signal that aborts 30 seconds after the start, the one deadline for
+ * readiness and for every request and log wait a check makes; `output()`, what the server has
+ * written so far; and `stop()`, which resolves once the server has exited and both of its output
+ * streams have ended, and rejects if that takes longer than its bounded waits.
  */
 async function startServer(cwd, env = {}) {
 	const port = await freePort();
@@ -329,6 +330,10 @@ async function startServer(cwd, env = {}) {
 				throw new Error(`routa start exited early with code ${child.exitCode}.\n${output()}`);
 			}
 
+			if (signal.aborted) {
+				throw new Error(`routa start smoke test timed out after 30s.\n${output()}`);
+			}
+
 			try {
 				const response = await fetch(`http://127.0.0.1:${port}/status`, { signal });
 				const body = await response.json();
@@ -341,17 +346,14 @@ async function startServer(cwd, env = {}) {
 
 				break;
 			} catch (error) {
-				if (signal.aborted) {
-					throw new Error(`routa start smoke test timed out after 30s.\n${output()}`);
-				}
-
-				// Until the server listens, fetch throws a TypeError.
-				if (!(error instanceof TypeError)) {
+				// Until the server listens, fetch throws a TypeError. Once the deadline aborts a
+				// request, the next pass reports the timeout.
+				if (!(error instanceof TypeError) && !signal.aborted) {
 					throw error;
 				}
-
-				await sleep(250);
 			}
+
+			await sleep(250);
 		}
 	} catch (error) {
 		// Report why the server never served over a failure to stop it.
@@ -574,11 +576,13 @@ async function checkIdentity({ port, signal, output, stop }, logging) {
 		}
 	} else {
 		// The report goes to stderr and the events to stdout, and the two streams arrive
-		// independently: wait for all three, and fail if any is missing after five seconds.
-		const deadline = Date.now() + 5_000;
-
-		while (!(reported() && prepared() && error()) && Date.now() < deadline) {
+		// independently: wait for all three until the server's deadline.
+		while (!signal.aborted && !(reported() && prepared() && error())) {
 			await sleep(50);
+		}
+
+		if (signal.aborted) {
+			fail("timed out waiting for the request report and events");
 		}
 	}
 
