@@ -19,6 +19,14 @@ describe("expectNoLeak", () => {
 		).toThrow('Expected the output not to contain "hunter2-password"');
 	});
 
+	it("finds a secret with a quote or backslash in other output's JSON", () => {
+		for (const secret of ['hunter2"password', "hunter2\\password"]) {
+			expect(() => expectNoLeak({ message: `db ${secret} rejected` }, secret)).toThrow(
+				`Expected the output not to contain ${JSON.stringify(secret)}`,
+			);
+		}
+	});
+
 	it("accepts a secret of exactly 8 characters with one that is not a hex digit or dash", () => {
 		expect(() => expectNoLeak("request failed", "abcdef-g")).not.toThrow();
 	});
