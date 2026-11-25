@@ -293,6 +293,10 @@ invalid principal logs the scheme in the message and the principal schema's `iss
 events record no headers or cookies, so Bearer tokens, API keys, and session values never reach
 the logs.
 
+Every event passes through the logger's
+[sanitization](/docs/reference/core/#sanitization) before its sink receives it. A sink that
+throws or rejects, or an event that cannot be sanitized, never changes the response.
+
 Handlers always receive `ctx.logger`. With logging disabled it is a complete no-op
 implementation of the same type.
 

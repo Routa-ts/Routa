@@ -13,6 +13,7 @@ import type {
 	ResponseValidation,
 } from "./index.js";
 import { createLogger, type RoutaLogger } from "./logger.js";
+import { assertCreatedLogger } from "./logger-registry.js";
 import {
 	createRequestExecutor,
 	isBodylessStatus,
@@ -112,13 +113,22 @@ export type RoutaApplication = {
  *
  * @param routes - Route definitions to register
  * @returns The application instance, once its services are constructed
+ * @throws {TypeError} When `options.logger` is not a logger `createLogger` created
  */
 export async function createApplication(
 	routes: readonly HonoRoute[],
 	options: CreateApplicationOptions = {},
 ): Promise<RoutaApplication> {
 	const { services: declaration, ...appOptions } = options;
-	const logger = appOptions.logger ?? createLogger({ enabled: false });
+	const requestLogger = appOptions.logger;
+	if (requestLogger !== undefined) {
+		assertCreatedLogger(
+			requestLogger,
+			"createApplication received",
+			"Omit logger to turn logging off.",
+		);
+	}
+	const logger = requestLogger ?? createLogger({ enabled: false });
 	const scope = createCleanupScope();
 	const services =
 		declaration
@@ -132,7 +142,7 @@ export async function createApplication(
 	let app: Hono;
 
 	try {
-		app = honoApp(routes, appOptions, services);
+		app = honoApp(routes, appOptions, services, requestLogger);
 	} catch (error) {
 		await scope.release().catch((cleanupError: unknown) => logCleanupFailure(logger, cleanupError));
 		throw error;
@@ -188,36 +198,48 @@ export function createProjectApplication(
  *
  * @param routes - Route definitions to register
  * @returns The configured Hono app
+ * @throws {TypeError} When `options.logger` is not a logger `createLogger` created
  */
 export function createHonoApp(
 	routes: readonly HonoRoute[],
 	options: CreateHonoAppOptions = {},
 ): Hono {
-	return honoApp(routes, options, undefined);
+	// Read the logger once, so the logger checked here is the one every request uses.
+	const logger = options.logger;
+	if (logger !== undefined) {
+		assertCreatedLogger(logger, "createHonoApp received", "Omit logger to turn logging off.");
+	}
+	return honoApp(routes, options, undefined, logger);
 }
 
+/**
+ * @param options - Read as given, except for its logger
+ * @param requestLogger - The logger already read from the options and checked, so a later change
+ *   to them cannot replace it
+ */
 function honoApp(
 	routes: readonly HonoRoute[],
-	options: CreateHonoAppOptions,
+	options: Omit<CreateHonoAppOptions, "logger">,
 	services: ServiceMapping | undefined,
+	requestLogger: RoutaLogger | undefined,
 ): Hono {
 	const app = new Hono();
 	const methodsByPath = new Map<string, Set<string>>();
-	const routeLogger = options.logger ?? createLogger({ enabled: false });
+	const routeLogger = requestLogger ?? createLogger({ enabled: false });
 	const validateResponses = shouldValidateResponses(options);
 	const authentication =
 		options.authentication === undefined
 			? undefined
 			: runtimeAuthentication(options.authentication);
 
-	if (options.logger) {
+	if (requestLogger) {
 		app.use("*", async (context, next) => {
 			const startedAt = performance.now();
 
 			await next();
 
 			const url = new URL(context.req.raw.url);
-			options.logger?.info("http.request", "Request completed.", {
+			requestLogger.info("http.request", "Request completed.", {
 				method: context.req.raw.method,
 				path: url.pathname,
 				status: context.res.status,
@@ -288,7 +310,7 @@ function honoApp(
 			logger: routeLogger,
 			validateResponses,
 			lifecycleHeaders: options.lifecycleHeaders,
-			requestLogger: options.logger,
+			requestLogger,
 			createContext: route.createContext,
 			services,
 			authentication: prepared.authentication,

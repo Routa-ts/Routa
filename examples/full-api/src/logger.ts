@@ -1,48 +1,70 @@
-import type { RoutaLogData, RoutaLogEvent, RoutaLogger, RoutaLogLevel } from "@routa-ts/core";
-import pino, { type Logger, type LoggerOptions } from "pino";
+import {
+	createLogger,
+	type RoutaLogger,
+	type RoutaLogLevelWithSilent,
+	type RoutaLogSink,
+} from "@routa-ts/core";
+import pino, { type DestinationStream, type Logger } from "pino";
 import pretty from "pino-pretty";
 
 /**
- * Adapts Pino to Routa's backend-agnostic structured logger interface.
- *
- * Development uses pino-pretty for readable terminal output. Production keeps
- * Pino's newline-delimited JSON output for log collectors.
+ * Forwards each event to Pino at the same level. Routa has already redacted, escaped, and bounded
+ * the event, so the sink only chooses the output. The data stays under its own key: Pino reads
+ * `level`, `time`, `msg`, and its other top-level fields as its own, so spreading the data there
+ * would let a `level` field change the line's level.
  */
-export function createFullApiLogger(): RoutaLogger {
-	const options: LoggerOptions = {
-		name: "full-api",
-		level: process.env.LOG_LEVEL ?? "info",
-		timestamp: pino.stdTimeFunctions.isoTime,
-	};
-	const destination =
-		process.env.NODE_ENV === "production"
-			? undefined
-			: pretty({
+function pinoSink(output: Logger): RoutaLogSink {
+	return ({ level, event, message, data }) => output[level]({ event, data }, message);
+}
+
+/** The environment variables the example's logger reads. */
+export type LoggerEnvironment = { readonly LOG_LEVEL?: string; readonly NODE_ENV?: string };
+
+/**
+ * The application's Pino instance, which the application owns: its destination, buffering,
+ * flushing, and shutdown. Development uses pino-pretty for readable terminal output; production
+ * keeps Pino's newline-delimited JSON for log collectors. Pino passes every level through, so the
+ * Routa logger's level is the only filter.
+ *
+ * @param destination - Where Pino writes instead, such as a capture in a test
+ */
+function createPino(environment: LoggerEnvironment, destination?: DestinationStream): Logger {
+	const options = { name: "full-api", level: "trace", timestamp: pino.stdTimeFunctions.isoTime };
+
+	if (destination) {
+		return pino(options, destination);
+	}
+
+	return environment.NODE_ENV === "production"
+		? pino(options)
+		: pino(
+				options,
+				pretty({
 					colorize: process.stdout.isTTY,
 					ignore: "pid,hostname",
 					translateTime: "SYS:standard",
-				});
-	const output = destination ? pino(options, destination) : pino(options);
-
-	return adaptPino(output);
+				}),
+			);
 }
 
-function adaptPino(output: Logger): RoutaLogger {
-	function emit(level: RoutaLogLevel, event: string, message: string, data?: RoutaLogData): void {
-		output[level]({ ...data, event }, message);
-	}
-
-	return {
-		log: ({ data, event, level, message }: RoutaLogEvent) => emit(level, event, message, data),
-		trace: (event, message, data) => emit("trace", event, message, data),
-		debug: (event, message, data) => emit("debug", event, message, data),
-		info: (event, message, data) => emit("info", event, message, data),
-		warn: (event, message, data) => emit("warn", event, message, data),
-		error: (event, message, data) => emit("error", event, message, data),
-		fatal: (event, message, data) => emit("fatal", event, message, data),
-		silent: (event, message, data) => output.silent({ ...data, event }, message),
-		child: (bindings) => adaptPino(output.child(bindings)),
-		bindings: () => output.bindings(),
-		isLevelEnabled: (level) => output.isLevelEnabled(level),
-	};
+/**
+ * Creates the example's logger: Routa's level from `LOG_LEVEL`, `info` by default, with every
+ * event forwarded to Pino.
+ *
+ * @param destination - Where Pino writes; defaults to the terminal
+ */
+export function createAppLogger(
+	environment: LoggerEnvironment,
+	destination?: DestinationStream,
+): RoutaLogger {
+	return createLogger({
+		level: (environment.LOG_LEVEL ?? "info") as RoutaLogLevelWithSilent,
+		sink: pinoSink(createPino(environment, destination)),
+	});
 }
+
+/**
+ * The application's shared logger. `src/routa.ts` configures it for Routa, and any module can
+ * import it directly; a service that logs for one request takes `ctx.logger` as an argument instead.
+ */
+export const logger = createAppLogger(process.env);

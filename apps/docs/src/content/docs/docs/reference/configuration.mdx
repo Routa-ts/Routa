@@ -49,12 +49,15 @@ logs `api.start_failed` at `error` level and sets a non-zero exit code.
 logger?: RoutaLogger | false
 ```
 
-The logger instance used for runtime lifecycle events, request logging, and `ctx.logger`
-in every handler. Defaults to `createLogger()`, the built-in console logger at `info`
-level.
+The logger used for runtime lifecycle events, request logging, and `ctx.logger` in every
+handler. It must come from [`createLogger`](/docs/reference/core/#createlogger), which
+redacts, escapes, and bounds each event before its sink writes it. Without `logger`, Routa
+uses `createLogger()`, which writes one JSON line per event to the console at `info` level.
 
-Set `false` to disable logging entirely. Handlers still receive `ctx.logger`, implemented
-as a complete no-op with the same type, so handler code never needs a configuration guard.
+Set `false` to disable logging for this application. Handlers still receive `ctx.logger`,
+implemented as a complete no-op with the same type, so handler code never needs a
+configuration guard. `false` changes no logger instance, so a module that imports a shared
+logger keeps writing through it.
 
 ```ts title="src/routa.ts"
 import { createRouta } from "@routa-ts/core";
@@ -65,9 +68,24 @@ export default createRouta({
 });
 ```
 
-Because `RoutaLogger` is a structural type, any object implementing its members is valid,
-including an adapter over Pino, Winston, or a hosted logging SDK. See
-[Core reference](/docs/reference/core/) for the full member list.
+Routa accepts no other logger object. Loading a `src/routa.ts` whose `logger` is an adapter
+or any object `createLogger` did not create fails with a `TypeError` that names the
+migration. To keep a backend such as Pino, move the adapter into a
+[sink](/docs/reference/core/#sinks):
+
+```ts title="src/logger.ts"
+import { createLogger, type RoutaLogSink } from "@routa-ts/core";
+import pino from "pino";
+
+const output = pino({ level: "trace" });
+
+const pinoSink: RoutaLogSink = ({ level, event, message, data }) =>
+	output[level]({ event, data }, message);
+
+export const logger = createLogger({ level: "info", sink: pinoSink });
+```
+
+The [logging guide](/docs/guides/logging/) shows how to share this logger with your services.
 
 Routa enables logging when a logger is configured. Set `logger: false` to disable it. The
 runtime emits two startup lifecycle events and two request events:

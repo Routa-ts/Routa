@@ -1,0 +1,210 @@
+---
+title: Logging
+description: Share one redacting logger across src/routa.ts and your services, and send its events to your backend.
+---
+
+import { Aside, CardGrid, LinkCard, Steps } from "@astrojs/starlight/components";
+import PackageManagers from "@components/PackageManagers.astro";
+
+A Routa logger comes from `createLogger`, which redacts, escapes, and bounds every event
+before its sink writes it anywhere. You create one logger, give it to `src/routa.ts`,
+import it wherever else you log, and choose where events go with a sink.
+
+## Before You Start
+
+- A Routa project with `src/routa.ts`, as in
+  [Configuration](/docs/reference/configuration/).
+- For the backend step, a logging library such as Pino. Routa depends on none.
+
+## Steps
+
+<Steps>
+
+1. Create the shared logger in its own module. Add a `redact` path for each field your
+   application considers sensitive beyond Routa's [baseline names](/docs/reference/core/#sanitization).
+
+   ```ts title="src/logger.ts"
+   import { createLogger } from "@routa-ts/core";
+
+   export const logger = createLogger({
+   	level: "info",
+   	redact: ["customer.email"],
+   });
+   ```
+
+2. Configure it in `src/routa.ts`. Routa writes its own events, such as `api.started`,
+   through it, and every handler receives it as `ctx.logger`.
+
+   ```ts title="src/routa.ts"
+   import { createRouta } from "@routa-ts/core";
+   import { logger } from "./logger.js";
+
+   export default createRouta({ logger });
+   ```
+
+3. Import the same logger in a service. A child adds bindings to every event it writes, and
+   those bindings pass through the same redaction and limits as event data.
+
+   ```ts title="src/billing.ts"
+   import { logger } from "./logger.js";
+
+   const log = logger.child({ service: "billing" });
+
+   export function recordCharge(customer: { id: string; email: string }, token: string): void {
+   	log.info("billing.charged", "Customer charged.", {
+   		customer: { id: customer.id, email: customer.email },
+   		token,
+   		tokenCount: 1,
+   	});
+   }
+   ```
+
+   Name the fields you log. A parameter type does not remove a caller's extra properties, so
+   logging `customer` itself would log those too.
+
+   The service needs no Routa context or dependency injection. Set `logger: false` in
+   `src/routa.ts` to silence Routa's logging for the application; a module that imports the
+   shared logger keeps writing through it.
+
+4. Send events to your backend with a sink. Install Pino:
+
+   <PackageManagers type="add" args="pino" />
+
+   Then forward each sanitized event at its own level, with its data under its own key.
+   Pino reads `level`, `time`, `msg`, `pid`, and `hostname` at the top level of its first
+   argument as its own fields, so spreading the data there would let a `level` field change
+   the line's level. Pino passes every level through, so the Routa logger's `level` stays
+   the only filter.
+
+   ```ts title="src/logger.ts"
+   import { createLogger, type RoutaLogSink } from "@routa-ts/core";
+   import pino from "pino";
+
+   const output = pino({ level: "trace" });
+
+   const pinoSink: RoutaLogSink = ({ level, event, message, data }) =>
+   	output[level]({ event, data }, message);
+
+   export const logger = createLogger({
+   	level: "info",
+   	redact: ["customer.email"],
+   	sink: pinoSink,
+   });
+   ```
+
+   Your application owns the Pino instance: its destination, buffering, flushing, and
+   shutdown. Routa calls the sink and never waits for it.
+
+   This sink uses Pino's own `time` and leaves out Routa's `timestamp`. If you pass your own
+   timestamps to `logger.log()`, forward `timestamp` beside `event` and `data`.
+
+5. Log the fields you choose from a caught error. Routa logs an `Error` itself as
+   `[Unsupported]`, because its message and stack can hold credentials or request data.
+
+   ```ts title="src/charges.ts"
+   import { logger } from "./logger.js";
+
+   export async function tryCharge(orderId: string, charge: () => Promise<void>): Promise<boolean> {
+   	try {
+   		await charge();
+   		return true;
+   	} catch (error) {
+   		logger.error("billing.charge_failed", "Charge failed.", {
+   			orderId,
+   			errorName: error instanceof Error ? error.name : "unknown",
+   		});
+   		return false;
+   	}
+   }
+   ```
+
+   Add an error code when the library documents a stable one, such as `ECONNREFUSED`. Do not
+   log `error.message` or `String(error)` unless you know the text is safe: Routa does not
+   redact secrets inside strings.
+
+</Steps>
+
+## Verify
+
+Call the service from a route:
+
+```ts title="src/routes/charges/route.ts"
+import { createRoute, createRouteRoot } from "@routa-ts/core";
+import { recordCharge } from "../../billing.js";
+
+export default createRouteRoot("/charges")({
+	post: createRoute({
+		responses: { charged: { status: 204 } },
+		run: () => {
+			recordCharge({ id: "cus_1", email: "ada@example.com" }, "tok_visa");
+			return { type: "charged" };
+		},
+	}),
+});
+```
+
+Start the API:
+
+<PackageManagers type="run" args="dev" />
+
+Then send a request from another terminal:
+
+```sh
+curl -X POST http://127.0.0.1:3000/charges
+```
+
+With the logger from step 1, the default sink writes this line alongside Routa's own events:
+
+```txt
+{"timestamp":"2026-01-01T00:00:00.000Z","level":"info","event":"billing.charged","message":"Customer charged.","data":{"service":"billing","customer":{"id":"cus_1","email":"[Redacted]"},"token":"[Redacted]","tokenCount":1}}
+```
+
+`email` is redacted by your path and `token` by the baseline names. `tokenCount` stays,
+because names match whole, not as substrings. Your `customer` object still holds the
+real email.
+
+With the Pino sink from step 4, Pino writes the same sanitized event in its own format, with
+the data under `data` and the message as `msg`:
+
+```txt
+{"level":30,"time":1767225600000,"pid":4242,"hostname":"api-1","event":"billing.charged","data":{"service":"billing","customer":{"id":"cus_1","email":"[Redacted]"},"token":"[Redacted]","tokenCount":1},"msg":"Customer charged."}
+```
+
+## Troubleshooting
+
+| Problem                                                                        | Fix                                                                                                                                                                                |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/routa.ts configures a logger that createLogger did not create.`           | Routa no longer accepts hand-written logger objects or adapters. Wrap the backend in a sink, as in step 4, and configure `createLogger({ sink })`                                  |
+| TypeScript reports `Property '[useCreateLoggerWithASink]' is missing`          | The value is not a logger `createLogger` created. Wrap the backend in a sink, as in step 4, and configure `createLogger({ sink })`                                                 |
+| A field you need shows `[Redacted]`                                            | Its name is a baseline name, which no option turns off, or is longer than 4,096 characters. Rename it only if its value is safe to log. For a credential, log a presence flag      |
+| A field shows `[Unsupported]`                                                  | Only plain objects, arrays, dates, and primitives are logged. Log the parts you need, such as `{ errorName: error.name }`, instead of the `Error`, `Map`, or class instance        |
+| A value ends in `[Truncated]`                                                  | It passed a [traversal limit](/docs/reference/core/#sanitization). Log a smaller, flatter value                                                                                    |
+| The console shows `routa.logger.sink_failed` or `routa.logger.event_discarded` | Your sink threw or rejected, or an event could not be sanitized. Each `createLogger()` call, its children included, reports each kind once; later failures of that kind are silent |
+| Logs still appear with `logger: false`                                         | They come from a module that imports the shared logger. Create it with `enabled: false` to silence it everywhere                                                                   |
+
+<Aside type="caution" title="What redaction does not cover">
+	Redaction matches field names and paths. It does not find a secret inside a message string
+	or under a name it does not know, and it cannot see what your sink or a direct backend call
+	adds. Routa does not yet generate request IDs; its automatic `http.request` and `http.error`
+	events still include the request path and, for `http.error`, the error message and stack.
+</Aside>
+
+## Next Steps
+
+<CardGrid>
+	<LinkCard
+		title="createLogger reference"
+		href="/docs/reference/core/#createlogger"
+		description="Every option, the sanitization rules and limits, and sink failure handling."
+	/>
+	<LinkCard
+		title="logger configuration"
+		href="/docs/reference/configuration/#logger"
+		description="Defaults, logger: false, and the events Routa writes."
+	/>
+	<LinkCard
+		title="Full API example"
+		href="/docs/examples/full-api/"
+		description="A runnable project that shares a Pino-backed logger."
+	/>
+</CardGrid>

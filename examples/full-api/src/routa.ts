@@ -1,10 +1,8 @@
 import { X509Certificate } from "node:crypto";
 import { apiKey, bearer, createRouta, custom, sessionCookie } from "@routa-ts/core";
 import { z } from "zod";
-import { createFullApiLogger } from "./logger.js";
+import { logger } from "./logger.js";
 import { appServices } from "./services.js";
-
-const logger = process.env.ROUTA_DEMO_LOGGER === "off" ? false : createFullApiLogger();
 
 /** Who a request can act as: a person's account, or another service. */
 const Principal = z.discriminatedUnion("type", [
@@ -15,7 +13,9 @@ const Principal = z.discriminatedUnion("type", [
 export default createRouta({
 	host: "127.0.0.1",
 	port: 3000,
-	logger,
+	// `false` turns off Routa's logging for this application only; modules that import the shared
+	// logger keep writing through it.
+	logger: process.env.ROUTA_DEMO_LOGGER === "off" ? false : logger,
 	lifecycleHeaders: true,
 	services: appServices,
 	// Every credential below is a demonstration value from src/identities.ts. None is fit for production.

@@ -121,8 +121,8 @@ cookies, so return the object when an outcome sets one. See
 
 ## Handler Context
 
-Every handler receives `ctx.logger`, Routa's structural `RoutaLogger`, regardless of
-configuration. When logging is disabled, `ctx.logger` is a complete no-op implementation
+Every handler receives `ctx.logger`, the configured
+[`createLogger`](/docs/reference/core/#createlogger) logger, regardless of configuration. When logging is disabled, `ctx.logger` is a complete no-op implementation
 of the same type, so handler code never needs a configuration guard. Middleware adds its
 own typed keys to `ctx` on top of that.
 

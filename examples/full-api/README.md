@@ -19,9 +19,10 @@ Runtime configuration is executable and typed in `src/routa.ts`:
 
 - `host` and `port` provide application defaults.
 - `HOST=0.0.0.0 PORT=4000 pnpm dev` demonstrates runtime environment overrides.
-- The example adapts Pino to Routa's backend-agnostic logger interface. Pino is an example dependency, not part of Routa's contract. Development uses `pino-pretty` for readable terminal output; `NODE_ENV=production pnpm start` keeps structured JSON for log collectors.
-- `LOG_LEVEL=debug pnpm dev` configures Pino's minimum level.
-- `ROUTA_DEMO_LOGGER=off pnpm dev` demonstrates `logger: false`; routes still receive a typed no-op `ctx.logger` and do not need conditional logging code.
+- `src/logger.ts` creates the application's shared logger with `createLogger({ sink })`. The sink forwards each event, already redacted and escaped by Routa, to Pino, keeping the event data under `data` so a field such as `level` cannot replace Pino's own. `pnpm pino:exercise` builds the logger through the same `createAppLogger` factory, captures what Pino writes, and asserts that line and that `LOG_LEVEL` alone decides which levels pass. Pino is an example dependency, not part of Routa's contract, and the application owns its destination, buffering, and shutdown. Development uses `pino-pretty` for readable terminal output; `NODE_ENV=production pnpm start` keeps structured JSON for log collectors.
+- `src/routa.ts` configures that logger, and `src/services.ts` imports it directly: the project catalog logs `projects.catalog_ready` through a child with a `service` binding. Request work passes `ctx.logger` instead, as `ProjectAudit.flush` does.
+- `LOG_LEVEL=debug pnpm dev` sets the shared logger's minimum level.
+- `ROUTA_DEMO_LOGGER=off pnpm dev` demonstrates `logger: false`; routes still receive a typed no-op `ctx.logger` and do not need conditional logging code. Modules that import the shared logger keep writing through it.
 - `ROUTA_DEMO_LOGGER_SHOWCASE=on` explicitly enables the dedicated logger exercise route; it returns `403` by default so normal runs cannot emit demonstration `error` or `fatal` events.
 - `lifecycleHeaders: true` emits deprecation, sunset, and replacement headers.
 
@@ -48,8 +49,8 @@ Runtime configuration is executable and typed in `src/routa.ts`:
 | `Fields()` and `Sort()` query helpers                                   | `GET /tenants/:tenantId/projects`                                                                    |
 | Directory, flat, dynamic-flat, group, and dynamic-segment routing       | `status/route.ts`, `legacy.ts`, `legacy.$id.ts`, `(private)`, `$tenantId`                            |
 | Local and absolute-URL deprecation replacements                         | `/legacy` points to `/status`; `/legacy/:id` points to a reserved `.invalid` external URL            |
-| Host, port, env overrides, disabled/custom logger                       | `src/routa.ts`, `src/logger.ts`, and start commands above                                            |
-| Complete typed logger in route context                                  | `POST /logger-showcase` and `pnpm logger:exercise` exercise every `RoutaLogger` capability           |
+| Host, port, env overrides, disabled logger, Pino sink                   | `src/routa.ts`, `src/logger.ts`, and start commands above                                            |
+| Complete typed logger in route context and a shared imported logger     | `POST /logger-showcase`, `pnpm logger:exercise`, and the project catalog in `src/services.ts`        |
 | OpenAPI drift and breaking-change baseline                              | `.routa/openapi-baseline.json` and scripts below                                                     |
 | Safe scaffold preview/update with manifest ownership                    | `scaffold/openapi.yaml` and `scaffold/.routa/manifest.json`                                          |
 | Scaffolded formats, nullable values, maps, unions, const                | `scaffold/src/routes/catalog/items/$itemId/schemas.ts`                                               |
@@ -100,7 +101,7 @@ curl -s 'http://127.0.0.1:3000/showcase/item-1?verbose=true'       # 200 success
 curl -s -i http://127.0.0.1:3000/showcase/missing                  # 404 notFound
 ```
 
-Both showcase requests emit a route-owned `showcase.item_read` info event through the configured `ctx.logger`, followed by Routa's global `http.request` event. The same configured logger instance is used for both paths. `RoutaLogger` supports `trace`, `debug`, `info`, `warn`, `error`, `fatal`, and a `silent` no-op, plus child bindings and level checks; the adapter maps that portable surface to Pino.
+Both showcase requests emit a route-owned `showcase.item_read` info event through the configured `ctx.logger`, followed by Routa's global `http.request` event. The same configured logger instance is used for both paths. `RoutaLogger` supports `trace`, `debug`, `info`, `warn`, `error`, `fatal`, and a `silent` no-op, plus child bindings and level checks. Every event passes through Routa's redaction before the Pino sink receives it.
 
 ### Exercise every logger capability
 
@@ -139,7 +140,7 @@ ROUTA_DEMO_LOGGER=off ROUTA_DEMO_LOGGER_SHOWCASE=on pnpm dev
 pnpm logger:exercise
 ```
 
-Every request still succeeds, `operationLogEmitted` and all level checks are `false`, and no route or lifecycle logs are written. This demonstrates that handlers need no conditional logger guards.
+Every request still succeeds, `operationLogEmitted` and all level checks are `false`, and Routa writes no route, request, or lifecycle logs. This demonstrates that handlers need no conditional logger guards. The project catalog's `projects.catalog_ready` line still appears at startup, because `src/services.ts` imports the shared logger directly and `logger: false` does not change it.
 
 Normal PUT and HEAD contracts, plus framework-owned OPTIONS:
 
@@ -272,6 +273,7 @@ pnpm openapi:check
 pnpm openapi:breaking
 pnpm logger:exercise       # while the opt-in local showcase server is running
 pnpm auth:exercise         # the authentication credential matrix, no server needed
+pnpm pino:exercise         # the Pino lines the example's logger writes, no server needed
 pnpm routes
 pnpm routes:json
 ```

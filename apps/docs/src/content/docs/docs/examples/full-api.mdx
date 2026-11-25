@@ -8,7 +8,7 @@ import { Aside, CardGrid, FileTree, LinkCard } from "@astrojs/starlight/componen
 `examples/full-api` in the Routa repository exercises the whole public surface:
 authentication with four credential schemes, layered middleware, route groups, tenant-scoped
 context, typed services, flat and directory routing, response cookies, deprecation metadata,
-automatic `OPTIONS`, scaffold workflows, and a custom logger adapter.
+automatic `OPTIONS`, scaffold workflows, and a shared logger that forwards to Pino through a sink.
 
 ```sh
 vp install --frozen-lockfile
@@ -28,7 +28,7 @@ once at startup, so export it before you start the server.
   - identities.ts demo credential lookups the authenticators call
   - session.ts signed demo session tokens
   - cookies.ts `createCookie` handles
-  - logger.ts optional Pino adapter
+  - logger.ts the shared logger and its Pino sink
   - services.ts service contracts and the application factory
   - middleware/ application-owned middleware
   - routes/
@@ -56,6 +56,7 @@ once at startup, so export it before you start the server.
       - route.ts
 - scripts/
   - exercise-auth.ts the credential matrix, asserted
+  - exercise-pino-sink.ts the Pino line one event produces, asserted
   - mint-session.mjs signs a demo session token
   - demo-client-cert.pem a demo client certificate, without its key
 </FileTree>
@@ -95,7 +96,7 @@ The `requireAuth` guards are declared in the folders themselves, where `routa ch
 | `src/routes/legacy.ts`                                 | Deprecation metadata with a replacement                             |
 | `src/services.ts`                                      | Service contracts, their named helpers, and the application factory |
 | `src/middleware/projects.ts`                           | `withProjectList`, a middleware that requires a service             |
-| `src/logger.ts`                                        | Adapting Pino to the `RoutaLogger` contract                         |
+| `src/logger.ts`                                        | A shared `createLogger` logger whose sink forwards to Pino          |
 | `src/routes/showcase/$itemId/route.ts`                 | Logging from a handler through `ctx.logger`                         |
 
 ## Services
@@ -338,13 +339,14 @@ configured log levels.
 
 Restarting with `ROUTA_DEMO_LOGGER=off` runs the identical handler through Routa's
 complete no-op logger, which is the point: handler code does not change when logging is
-disabled.
+disabled. The project catalog in `src/services.ts` imports the shared logger directly, so its
+`projects.catalog_ready` startup line still appears.
 
 ## Limits
 
-Pino belongs to this example only. `@routa-ts/core` exposes a structural logger contract
-and depends on no logging package, so the adapter in `src/logger.ts` is a demonstration
-rather than a requirement.
+Pino belongs to this example only, and `@routa-ts/core` depends on no logging package. The
+sink in `src/logger.ts` receives events Routa has already redacted and escaped, and the
+example owns the Pino instance it writes to.
 
 <Aside type="caution" title="Demonstration credentials">
 	Every credential in this example is a fixed demonstration value: the Bearer tokens and API
