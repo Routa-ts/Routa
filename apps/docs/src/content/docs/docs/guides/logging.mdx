@@ -127,7 +127,7 @@ import it wherever else you log, and choose where events go with a sink.
    This sink uses Pino's own `time` and leaves out Routa's `timestamp`. If you pass your own
    timestamps to `logger.log()`, forward `timestamp` beside `event` and `data`.
 
-5. Log the fields you choose from a caught error. Routa logs an `Error` itself as
+6. Log the fields you choose from a caught error. Routa logs an `Error` itself as
    `[Unsupported]`, because its message and stack can hold credentials or request data.
 
    ```ts title="src/charges.ts"
