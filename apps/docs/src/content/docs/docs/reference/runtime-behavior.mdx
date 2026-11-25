@@ -108,8 +108,9 @@ handler is your Hono code rather than a Routa route. Hono's default handler answ
 `HTTPException` with its own response and prints nothing. For any other error it prints the
 error, including its message and stack, to the console and answers `500 Internal Server Error`.
 Either response carries `x-request-id` and is logged once as `http.response.prepared` with its
-status, without an `http.error` event. Set `app.onError()` to decide what such failures print
-and return.
+status, without an `http.error` event, and
+[`onRequestError`](/docs/reference/configuration/#onrequesterror) is not called. Set
+`app.onError()` to decide what such failures print, report, and return.
 
 A handler or middleware you add that neither returns a response nor calls `next()` leaves the
 request unanswered. Hono fails such a request through its error handler only after the whole
@@ -300,15 +301,19 @@ operation every authentication outcome keeps its status and challenge without a 
 | Returns `{ type: "rejected" }`                                                                        | `401` `authenticationFailed`                        |
 | Throws                                                                                                | `500` `…/problems/internal`                         |
 | Returns a principal the principal schema rejects, or parses to a value without string `id` and `type` | `500` `…/problems/internal`                         |
-| Returns anything other than `authenticated` or `rejected`, or a result whose `type` throws when read  | `500` `…/problems/internal`                         |
+| Returns anything other than `authenticated` or `rejected`                                             | `500` `…/problems/internal`                         |
+| Returns a result whose `type` throws when read, or a principal whose parsing or parsed fields throw   | `500` `…/problems/internal`                         |
 | A custom `extract` returns `{ type: "malformed" }`                                                    | `401` `authenticationFailed`; no authenticator runs |
 | A custom `extract` throws, or returns neither `credential` nor `malformed`, such as a promise         | `500` `…/problems/internal`; no authenticator runs  |
 
-An invalid result is an application contract violation, not a client error. When an
-authenticator or extractor throws, `http.error` carries only the request identity, method,
-route, and status: never the scheme or the thrown value, which may carry the credential. A
-thrown error
-stays a server error so an outage at a provider never reads as a bad credential.
+An invalid result is an application contract violation, not a client error: `http.error`
+records it with `code` `contract_violation` and `stage` `authentication`. When an
+authenticator or extractor throws, or a getter or principal schema step throws while Routa reads
+the result, `http.error` carries only the request identity, method, route, status, `code`
+`unexpected_failure`, and `stage` `authentication`: never the scheme or the thrown value, which
+may carry the credential. Only [`onRequestError`](/docs/reference/configuration/#onrequesterror)
+receives the thrown value. A thrown error stays a server error so an outage at a provider never
+reads as a bad credential.
 
 ## Methods
 
@@ -355,7 +360,9 @@ passes the mode explicitly; Routa does not infer it from `NODE_ENV`.
 Routa sends the value the handler returned, never the parsed value. Data that does not match
 the schema, or that the schema would change, produces a handler-output problem. Data that
 cannot be serialized as JSON also produces a handler-output problem rather than a partial
-response. See [Configuration](/docs/reference/configuration/) for the policy table.
+response. When serializing throws, for a bigint, a circular reference, or a `toJSON()` method or
+getter in the data, it is an unexpected failure whose thrown value goes to `onRequestError`;
+data JSON writes no text for, such as `undefined`, is a contract violation. See [Configuration](/docs/reference/configuration/) for the policy table.
 
 An outcome's declared `headers` are part of the same step. In every mode Routa checks that
 the result writes only declared names, writes each once whatever its case, includes every
@@ -374,12 +381,24 @@ handled as an internal error. Both produce a generic `500` problem response.
 When a logger is configured, `createHonoApp` records `http.response.prepared` at `info` once
 for every response it prepares, with `requestId`, `method`, `route`, `status`, and
 `durationMs`. It records `http.error` at `error` when a Routa route fails unexpectedly and Routa
-answers with a 500 or above, with `requestId`, `method`, `route`, and `status`. A declared
+answers with a 500 or above, with `requestId`, `method`, `route`, `status`, and the failure's
+`code` and `stage`. A declared
 outcome with a 5xx status, such as a `503` your handler returns, is an application decision and
 logs only `http.response.prepared`. The
 [events table](/docs/reference/configuration/#events-routa-writes) defines each field. Response
 and middleware context schema failures also include `issueCount` and the distinct, sorted
 `issueCodes`; issue paths and rejected values are never logged.
+
+```txt
+{"timestamp":"2026-01-01T00:00:00.000Z","level":"error","event":"http.error","message":"Request failed.","data":{"requestId":"5e8f2a1c-3b4d-4c6e-9f0a-1b2c3d4e5f6a","method":"GET","route":"/orders/:id","status":500,"code":"unexpected_failure","stage":"handler"}}
+```
+
+To see the error itself, configure
+[`onRequestError`](/docs/reference/configuration/#onrequesterror). It receives the original
+error and the same metadata for each failure `http.error` records, even with `logger: false`,
+and never changes the response. A `ZodError` that escapes a handler or `createContext`, and a
+request body that cannot be read or parsed, including a body stream that errors when the client
+aborts, answer `400` and are not reported.
 
 Request events never carry the request's path, query, body, raw headers, cookies, credentials,
 principal, or any error's message, name, or stack. A thrown authenticator, an invalid principal,

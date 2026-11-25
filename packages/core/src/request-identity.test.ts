@@ -179,6 +179,13 @@ describe("request identity", () => {
 
 		expect(responses.map((response) => response.status)).toEqual(sent.map((item) => item.status));
 		expect(ids.every((id) => uuid.test(id))).toBe(true);
+		const failedBoom = {
+			method: "GET",
+			route: "/boom",
+			status: 500,
+			code: "unexpected_failure",
+			stage: "handler",
+		};
 		expect(new Set(ids).size).toBe(ids.length);
 
 		const prepared = events.filter((event) => event.event === "http.response.prepared");
@@ -203,8 +210,8 @@ describe("request identity", () => {
 			events.filter((event) => event.event === "http.error").map((event) => event.data),
 		).toEqual(
 			expect.arrayContaining([
-				{ requestId: ids[5], method: "GET", route: "/boom", status: 500 },
-				{ requestId: ids[cases.length + 5], method: "GET", route: "/boom", status: 500 },
+				{ requestId: ids[5], ...failedBoom },
+				{ requestId: ids[cases.length + 5], ...failedBoom },
 			]),
 		);
 		const logged = JSON.stringify(events);
@@ -727,6 +734,8 @@ describe("request identity", () => {
 			method: "GET",
 			route: "/totals",
 			status: 500,
+			code: "contract_violation",
+			stage: "response",
 			issueCount: 2,
 			issueCodes: ["invalid_type"],
 		});

@@ -75,11 +75,14 @@ const passThrough = (hooks: { before?: () => void; after?: () => void }) => {
 };
 
 /** What `http.error` logs for a failed GET /orders: its identity and route, never the error. */
+/** The `http.error` data of a failed `/orders` request, which failed in services by default. */
 const failedOrders = {
 	requestId: expect.any(String),
 	method: "GET",
 	route: "/orders",
 	status: 500,
+	code: "unexpected_failure",
+	stage: "services",
 };
 
 const request = (app: { fetch: (request: Request) => Promise<Response> }, method = "GET") =>
@@ -489,7 +492,11 @@ describe("request-scoped service failures and cleanup", () => {
 
 		expect((await request(app)).status).toBe(500);
 		expect(cleaned).toBe(1);
-		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedOrders);
+		// Routa found the mapping breaks the services contract: a violation, not an unexpected failure.
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual({
+			...failedOrders,
+			code: "contract_violation",
+		});
 		await app.dispose();
 	});
 
@@ -706,7 +713,10 @@ describe("middleware service requirements (runtime)", () => {
 		expect(counter.runs).toBe(0);
 		// The failure skips the later middleware, the later factory, and the handler.
 		expect(ran).toEqual(["earlier"]);
-		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedOrders);
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual({
+			...failedOrders,
+			stage: "middleware",
+		});
 		await app.dispose();
 	});
 
@@ -738,6 +748,7 @@ describe("middleware service requirements (runtime)", () => {
 		expect(events.find((event) => event.event === "http.error")?.data).toEqual({
 			...failedOrders,
 			method: "POST",
+			stage: "middleware",
 		});
 	});
 });

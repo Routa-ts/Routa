@@ -15,6 +15,10 @@ import {
 const compareText = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
 
 describe("createLogger", () => {
+	it("exports only createLogger at runtime from the public logger entry", async () => {
+		expect(Object.keys(await import("./logger.js"))).toEqual(["createLogger"]);
+	});
+
 	it("emits structured log events", () => {
 		const events: RoutaLogEvent[] = [];
 		const logger = createLogger({

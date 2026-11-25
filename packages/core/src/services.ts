@@ -1,5 +1,6 @@
 import type { ApplicationServicesFactory, OnCleanup, RequestServicesFactory } from "./index.js";
 import type { RoutaLogger } from "./logger.js";
+import { contractViolation } from "./request-errors.js";
 
 /** A frozen service mapping, as handlers receive it on `ctx.services`. */
 export type ServiceMapping = Readonly<Record<string, unknown>>;
@@ -119,7 +120,8 @@ export function logCleanupFailure(logger: RoutaLogger, error: unknown): void {
  * Checks a factory result against the declared names, then copies and freezes it. The services
  * themselves are not frozen, so their own state stays mutable.
  *
- * @throws {TypeError} When the result is not an object, or its names differ from the declared ones
+ * @throws {TypeError} When the result is not an object, or its names differ from the declared ones.
+ * Routa records the error as a contract violation it detected.
  */
 export function exactServices(
 	value: unknown,
@@ -129,8 +131,10 @@ export function exactServices(
 	const declared = quotedList(names);
 
 	if (typeof value !== "object" || value === null || Array.isArray(value)) {
-		throw new TypeError(
-			`The ${label} must return an object with the declared services (${declared}), received ${value === null ? "null" : Array.isArray(value) ? "an array" : typeof value}.`,
+		throw contractViolation(
+			new TypeError(
+				`The ${label} must return an object with the declared services (${declared}), received ${value === null ? "null" : Array.isArray(value) ? "an array" : typeof value}.`,
+			),
 		);
 	}
 
@@ -143,8 +147,10 @@ export function exactServices(
 			...(unexpected.length > 0 ? [`unexpected ${quotedList(unexpected)}`] : []),
 		];
 
-		throw new TypeError(
-			`The ${label} must return exactly the declared services (${declared}): ${problems.join("; ")}.`,
+		throw contractViolation(
+			new TypeError(
+				`The ${label} must return exactly the declared services (${declared}): ${problems.join("; ")}.`,
+			),
 		);
 	}
 

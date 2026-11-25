@@ -4,7 +4,7 @@ import { createMiddleware, createRoute, createRouteRootFactory } from "./index.j
 import { createLogger } from "./logger.js";
 import { createRequestExecutor, type RuntimeRouteContract } from "./request-execution.js";
 
-const executionOptions = { validateResponses: true };
+const executionOptions = { validateResponses: true, path: "/" };
 const state = {
 	requestId: "00000000-0000-4000-8000-000000000000",
 	logger: createLogger({ enabled: false }),
@@ -49,6 +49,30 @@ describe("createRequestExecutor", () => {
 		expect(response.status).toBe(200);
 		await expect(response.json()).resolves.toEqual({ user: "user_1", include: "posts" });
 		expect(events).toEqual(["middleware:before", "handler"]);
+	});
+
+	it("calls a middleware's run method with its contract as this", async () => {
+		let declared: unknown;
+		const gate = createMiddleware({
+			run({ next }) {
+				declared = this;
+				return next();
+			},
+		});
+		const contract = createRoute({
+			middleware: [gate],
+			responses: { ok: { status: 204 } },
+			run: () => ({ type: "ok" }),
+		});
+		const execute = createRequestExecutor(
+			contract as unknown as RuntimeRouteContract,
+			executionOptions,
+		);
+
+		const response = await execute(new Request("http://local/"), {}, state);
+
+		expect(response.status).toBe(204);
+		expect(declared).toBe(gate);
 	});
 
 	it.each([true, false])(

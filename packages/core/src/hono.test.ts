@@ -993,6 +993,8 @@ describe("createHonoApp", () => {
 			method: "GET",
 			route: "/status",
 			status: 500,
+			code: "contract_violation",
+			stage: "context",
 		});
 	});
 
@@ -1180,6 +1182,8 @@ describe("createHonoApp", () => {
 			method: "GET",
 			route: "/secure",
 			status: 500,
+			code: "unexpected_failure",
+			stage: "middleware",
 		});
 	});
 
@@ -1618,6 +1622,8 @@ describe("createHonoApp", () => {
 						method: "GET",
 						route: "/boom",
 						status: 500,
+						code: "unexpected_failure",
+						stage: "handler",
 					},
 				}),
 			]),

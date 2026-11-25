@@ -1,6 +1,7 @@
 import { X509Certificate } from "node:crypto";
 import { apiKey, bearer, createRouta, custom, sessionCookie } from "@routa-ts/core";
 import { z } from "zod";
+import { reportRequestError } from "./error-tracker.js";
 import { logger } from "./logger.js";
 import { appServices } from "./services.js";
 
@@ -19,6 +20,9 @@ export default createRouta({
 	// Every response carries x-request-id, which Routa generates. This also accepts one valid
 	// x-correlation-id from the caller, exposes it as ctx.correlationId, and echoes it.
 	correlation: true,
+	// Sends the original error of each unexpected request failure to the application's error
+	// tracker, even when logger is false. Routa's own logs never carry the error's text.
+	onRequestError: reportRequestError,
 	lifecycleHeaders: true,
 	services: appServices,
 	// Every credential below is a demonstration value from src/identities.ts. None is fit for production.

@@ -24,11 +24,12 @@ once at startup, so export it before you start the server.
 
 <FileTree>
 - src/
-  - routa.ts host, port, logger, correlation, lifecycleHeaders, authentication
+  - routa.ts host, port, logger, correlation, onRequestError, lifecycleHeaders, authentication
   - identities.ts demo credential lookups the authenticators call
   - session.ts signed demo session tokens
   - cookies.ts `createCookie` handles
   - logger.ts the shared logger and its Pino sink
+  - error-tracker.ts a stand-in error tracker that `onRequestError` forwards failures to
   - services.ts service contracts and the application factory
   - middleware/ application-owned middleware
   - routes/
@@ -75,6 +76,13 @@ events carry no request identity. The projects `POST` gives `ProjectAudit.flush`
 `vp run --filter full-api pino:exercise` starts the application through its generated
 `createTestApp`, creates one project, and asserts both events as Pino writes them.
 
+`src/routa.ts` sets `onRequestError` to `reportRequestError` from `src/error-tracker.ts`, which
+hands the original error and Routa's diagnostic to a stand-in error tracker. A real application
+calls its tracker's client there instead. The same exercise fails one project creation with a
+services factory that throws, then asserts that the tracker received that error itself, tagged
+with the request ID and `stage` `services`, and that the `http.error` line Pino wrote carries
+the same `code`, `stage`, and request ID without the error's text.
+
 `(private)` is a route group: it shapes the middleware tree without appearing in any URL.
 `/admin/audit-events` is the real path, not `/private/admin/audit-events`.
 
@@ -103,6 +111,7 @@ The `requireAuth` guards are declared in the folders themselves, where `routa ch
 | `src/services.ts`                                      | Service contracts, their named helpers, and the application factory |
 | `src/middleware/projects.ts`                           | `withProjectList`, a middleware that requires a service             |
 | `src/logger.ts`                                        | A shared `createLogger` logger whose sink forwards to Pino          |
+| `src/error-tracker.ts`                                 | An `onRequestError` reporter that forwards errors to a tracker      |
 | `src/routes/showcase/$itemId/route.ts`                 | Logging from a handler through `ctx.logger`                         |
 
 ## Services

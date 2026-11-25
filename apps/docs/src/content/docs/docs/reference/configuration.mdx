@@ -99,12 +99,12 @@ Routa enables logging when a logger is configured. Set `logger: false` to disabl
 runtime emits two startup lifecycle events and two request events. Request events go through
 the request logger, so their data starts with `requestId`, then `correlationId` when present:
 
-| Event                    | Level   | Data                                                                               |
-| ------------------------ | ------- | ---------------------------------------------------------------------------------- |
-| `api.started`            | `info`  | `host`, `port`, `routes`                                                           |
-| `api.start_failed`       | `error` | `error`, `host`, `port`                                                            |
-| `http.response.prepared` | `info`  | `requestId`, `method`, `route`, `status`, `durationMs`                             |
-| `http.error`             | `error` | `requestId`, `method`, `route`, `status`, and sometimes `issueCount`, `issueCodes` |
+| Event                    | Level   | Data                                                                                                |
+| ------------------------ | ------- | --------------------------------------------------------------------------------------------------- |
+| `api.started`            | `info`  | `host`, `port`, `routes`                                                                            |
+| `api.start_failed`       | `error` | `error`, `host`, `port`                                                                             |
+| `http.response.prepared` | `info`  | `requestId`, `method`, `route`, `status`, `durationMs`                                              |
+| `http.error`             | `error` | `requestId`, `method`, `route`, `status`, `code`, `stage`, and sometimes `issueCount`, `issueCodes` |
 
 `http.response.prepared` is written once for every response Routa prepares, including
 unmatched requests, validation failures, middleware rejects, automatic `OPTIONS`, `405`, and
@@ -124,7 +124,8 @@ principal, or any error's message, name, or stack.
 
 `http.error` is emitted only when a Routa route fails unexpectedly and Routa answers with a
 status of 500 or above; a declared outcome with a 5xx status logs only `http.response.prepared`.
-When response
+Its `code` and `stage` say what kind of failure it was and where it happened, with the values
+in the [failure codes and stages](#failure-codes-and-stages) table. When response
 or middleware context validation fails, `issueCount` is the number of issues Routa found and
 `issueCodes` lists their distinct codes, sorted, such as `["invalid_type"]`. Routa never logs
 an issue's path, which can hold request data such as a record key, or the rejected response
@@ -192,6 +193,129 @@ correlation differs from what `routa generate` recorded.
 While correlation is on, Routa owns the configured header on every response: it echoes an
 accepted value, removes any value a handler wrote when it accepted none, and rejects an outcome
 that declares the header in `headers`.
+
+## `onRequestError`
+
+```ts
+onRequestError?: (error: unknown, diagnostic: RequestErrorDiagnostic) => void | Promise<void>
+```
+
+Receives each request that fails unexpectedly or breaks its response contract: the value that
+was thrown, unchanged, and frozen metadata about the request. Use it to send the error to an
+error tracker, which needs the error's message and stack that Routa's logs leave out. Omitted,
+nothing is reported. Routa reads the option once at startup and throws a `TypeError` when it is
+not a function:
+
+```txt
+onRequestError must be a function that receives the original error and its diagnostic. Omit it to report nothing.
+```
+
+`src/tracker.ts` is your own module. This one is a stand-in that keeps what it receives in
+memory; replace the body of `send` with a call to your error tracking client. The
+[full API example](/docs/examples/full-api/)'s `src/error-tracker.ts` is a complete version.
+
+```ts title="src/tracker.ts"
+import type { RequestErrorDiagnostic } from "@routa-ts/core";
+
+class Tracker {
+	readonly sent: Array<{ error: unknown; tags: RequestErrorDiagnostic }> = [];
+
+	async send(error: unknown, tags: RequestErrorDiagnostic): Promise<void> {
+		// Forward to your error tracking client here.
+		this.sent.push({ error, tags });
+	}
+}
+
+export const tracker = new Tracker();
+```
+
+```ts title="src/routa.ts"
+import { createRouta } from "@routa-ts/core";
+import { tracker } from "./tracker.js";
+
+export default createRouta({
+	// Awaiting the delivery lets Routa contain a delivery that fails.
+	onRequestError: async (error, diagnostic) => {
+		await tracker.send(error, diagnostic);
+	},
+});
+```
+
+With a client whose capture call returns something other than a promise, such as an event ID,
+call it in a block body instead of returning its result. The callback is a runtime
+value: `routa check` and `routa generate` never read or run it, and it does not change generated
+OpenAPI.
+
+The diagnostic holds the same facts as the request's `http.error` event:
+
+| Field           | Value                                                                    |
+| --------------- | ------------------------------------------------------------------------ |
+| `code`          | `unexpected_failure` or `contract_violation`                             |
+| `stage`         | Where the request failed, from the table below                           |
+| `requestId`     | The request's `x-request-id`                                             |
+| `correlationId` | The accepted correlation ID; absent when Routa accepted none             |
+| `method`        | The request method, or `_OTHER` for a nonstandard one                    |
+| `route`         | The matched route pattern, such as `/orders/:id`                         |
+| `status`        | The status of the response Routa chose, which the callback cannot change |
+
+### Failure Codes and Stages
+
+| `code`               | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unexpected_failure` | Application code threw, or Routa failed for a reason it did not expect. The callback receives what was thrown: for an authenticator, extractor, principal schema, services factory, response data `JSON.stringify` throws for, such as a bigint, a circular reference, or a throwing `toJSON()` or getter, or a refinement in a response, header, cookie, or `provides` schema, its own error                                                                               |
+| `contract_violation` | Application code produced a value its declared contract forbids, such as response data, headers, or cookies that fail the outcome's schema, response data JSON writes no text for, such as `undefined`, a `next()` payload that fails `provides`, a services factory result that is not exactly its declared services, or an authenticator result or principal that fails its contract without throwing. The callback receives Routa's error, which describes the violation |
+
+| `stage`          | Where the failure happened                                                                                                                                                                                                   |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `authentication` | Resolving credentials: an authenticator or extractor threw or returned an invalid result                                                                                                                                     |
+| `context`        | Building a low-level `createContext` value, including reading the object it returns                                                                                                                                          |
+| `input`          | Reading input, such as a schema refinement that throws instead of reporting an issue                                                                                                                                         |
+| `services`       | A route-file or method services factory                                                                                                                                                                                      |
+| `middleware`     | A middleware callback, including what it passes to `next()` and what it returns                                                                                                                                              |
+| `handler`        | The route handler, including a return value that is not an outcome result at all                                                                                                                                             |
+| `response`       | Preparing the response: reading the route's `deprecation` for lifecycle headers, and checking and serializing the selected outcome, including an outcome type the route does not declare, and its body, headers, and cookies |
+
+A failure is reported once, at the stage where it was first thrown. A handler error that
+middleware rethrows keeps the `handler` stage; a different error that middleware throws in its
+place is reported, with the `middleware` stage, instead.
+
+Routa does not report expected results: input validation failures (`400`), unsupported media
+types (`415`), unacceptable `Accept` headers (`406`), authentication rejections (`401`),
+declared outcomes and middleware rejects of any status, unmatched routes (`404`), `405`, and
+automatic `OPTIONS`.
+
+The callback sees only what Routa's error mapping answers with a server error, and that mapping
+does not change: any `ZodError` that escapes a handler or `createContext` answers `400` and is
+not reported, and a request body that cannot be read or parsed, including a body stream that
+errors, such as when the client aborts, answers `400` as invalid JSON and is not reported.
+Changing those classifications belongs to the future configurable error policy.
+
+Routa chooses the response before it calls the callback and does not await a promise it
+returns, so the callback's return value, a throw, or a rejection never changes the response.
+Routa calls the callback synchronously, so its synchronous work runs before the response is
+returned; do slow work, such as sending to an error tracker, asynchronously. When
+the callback throws or rejects, Routa writes one fixed line to `console.error`, once per
+application, without either error's text, and never calls the callback for its own failure.
+Routa handles a returned promise's rejection the way it handles a logger sink's: through the
+built-in `Promise.prototype.then`, so the promise's own `then` never runs. The one rejection it
+cannot handle is from a promise subclass whose `constructor`, `Symbol.species`, or species
+constructor throws, because the built-in `then` runs them before it attaches a handler; that
+rejection can surface as an unhandled rejection, and the failure is still reported:
+
+```txt
+{"level":"error","event":"routa.on_request_error.failed","message":"The onRequestError callback threw or rejected. Later failures of this callback in this application are not reported.","timestamp":"2026-01-01T00:00:00.000Z"}
+```
+
+The callback runs whether or not logging is on: `logger: false` and a logger level above
+`error` silence `http.error`, not the callback. Never pass the error to Routa's logger from the
+callback, which would put its text in your logs; send it to your tracker instead. Your
+application owns the tracker client, its delivery, and flushing it before the process exits.
+
+Other failures keep their owners and never reach the callback. A configuration or application
+services factory that fails at startup rejects `createApplication` and stops `routa start`, and
+a server that cannot listen logs `api.start_failed`. A cleanup callback that fails logs
+`services.cleanup_failed`, and `dispose()` rejects with its error. An error thrown by a handler
+you add to the Hono app goes to Hono's `app.onError()`.
 
 ## `lifecycleHeaders`
 

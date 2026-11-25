@@ -1,3 +1,4 @@
+import { observeRejection, writeFallbackLine } from "./fallback.js";
 import {
 	type FrameworkEvent,
 	markCreatedLogger,
@@ -408,27 +409,6 @@ function assertLoggerOptions(options: unknown): asserts options is CreateLoggerO
 	}
 }
 
-/**
- * Calls `onRejected` if what a sink returned rejects, without waiting for it. A native promise,
- * a subclass's instance included, gets the handler through the intrinsic `then`, so its own
- * `then` never runs and its rejection is always handled. Any other value is resolved as `await`
- * would resolve it, which runs a thenable's `then`. The fulfilled value is dropped: the derived
- * promise would otherwise read that value's `then`, whose throw nothing handles.
- *
- * A promise subclass whose `constructor`, `Symbol.species`, or species constructor throws cannot
- * be observed: every intrinsic that attaches a handler runs them first.
- *
- * @throws When `delivery` cannot be observed
- */
-function observeRejection(delivery: unknown, onRejected: () => void): void {
-	try {
-		// Throws a TypeError, before reading anything, for a value that is not a native promise.
-		void Promise.prototype.then.call(delivery, () => undefined, onRejected);
-	} catch {
-		void Promise.prototype.then.call(Promise.resolve(delivery), () => undefined, onRejected);
-	}
-}
-
 type FallbackKind = "event_discarded" | "sink_failed";
 
 const fallbackMessages: Readonly<Record<FallbackKind, string>> = {
@@ -452,19 +432,7 @@ function createFallbackReporter(): (kind: FallbackKind) => void {
 		}
 
 		reported.add(kind);
-
-		try {
-			globalThis.console.error(
-				JSON.stringify({
-					level: "error",
-					event: `routa.logger.${kind}`,
-					message: fallbackMessages[kind],
-					timestamp: new Date().toISOString(),
-				}),
-			);
-		} catch {
-			// Nowhere is left to report to.
-		}
+		writeFallbackLine(`routa.logger.${kind}`, fallbackMessages[kind]);
 	};
 }
 

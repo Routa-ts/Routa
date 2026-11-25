@@ -386,9 +386,6 @@ describe("custom schemes in credential selection", () => {
 });
 
 describe("custom scheme failures", () => {
-	/** The data `http.error` logs for a failed GET /whoami, after its request ID. */
-	const failedWhoami = '"method":"GET","route":"/whoami","status":500}';
-
 	function failing(
 		extract: (value: string) => unknown,
 		authenticate: (credential: any) => unknown = () => ({ type: "rejected" }),
@@ -417,18 +414,36 @@ describe("custom scheme failures", () => {
 			{ "x-signed": "secret-credential-value" },
 			createLogger({ sink: (event) => events.push(event) }),
 		);
-		return { status: result.status, logs: JSON.stringify(events) };
+		return {
+			status: result.status,
+			logs: JSON.stringify(events),
+			failure: events.find((event) => event.event === "http.error")?.data,
+		};
 	}
 
+	/** The exact data `http.error` logs for a failed GET /whoami. */
+	const failure = (code: "unexpected_failure" | "contract_violation") => ({
+		requestId: expect.any(String),
+		method: "GET",
+		route: "/whoami",
+		status: 500,
+		code,
+		stage: "authentication",
+	});
+
 	it("answers 500 for a throwing extractor and logs nothing it threw", async () => {
-		const { status, logs } = await logged(
+		const {
+			status,
+			logs,
+			failure: reported,
+		} = await logged(
 			failing((value) => {
 				throw new Error(`provider could not parse ${value}`);
 			}),
 		);
 
 		expect(status).toBe(500);
-		expect(logs).toContain(failedWhoami);
+		expect(reported).toEqual(failure("unexpected_failure"));
 		expect(logs).not.toContain("secret-credential-value");
 		expect(logs).not.toContain("provider could not parse");
 	});
@@ -440,9 +455,9 @@ describe("custom scheme failures", () => {
 			Promise.resolve({ type: "malformed" }),
 			{ credential: "x" },
 		]) {
-			const { status, logs } = await logged(failing(() => result));
+			const { status, logs, failure: reported } = await logged(failing(() => result));
 			expect(status).toBe(500);
-			expect(logs).toContain(failedWhoami);
+			expect(reported).toEqual(failure("contract_violation"));
 			expect(logs).not.toContain("secret-credential-value");
 		}
 	});
@@ -473,11 +488,11 @@ describe("custom scheme failures", () => {
 					},
 				],
 			] as const) {
-				const { status, logs } = await logged(failing(extract));
+				const { status, logs, failure: reported } = await logged(failing(extract));
 				await new Promise((resolve) => setTimeout(resolve, 10));
 
 				expect(status, name).toBe(500);
-				expect(logs, name).toContain(failedWhoami);
+				expect(reported, name).toEqual(failure("contract_violation"));
 				expect(logs, name).not.toContain("secret-credential-value");
 				expect(unhandled, name).toEqual([]);
 			}
@@ -494,7 +509,7 @@ describe("custom scheme failures", () => {
 			}),
 		);
 		expect(thrown.status).toBe(500);
-		expect(thrown.logs).toContain(failedWhoami);
+		expect(thrown.failure).toEqual(failure("unexpected_failure"));
 		expect(thrown.logs).not.toContain("secret-credential-value");
 		expect(thrown.logs).not.toContain("provider down");
 
@@ -502,7 +517,7 @@ describe("custom scheme failures", () => {
 			failing(extract, () => ({ type: "authenticated", principal: { type: "admin", id: "a" } })),
 		);
 		expect(invalid.status).toBe(500);
-		expect(invalid.logs).toContain(failedWhoami);
+		expect(invalid.failure).toEqual(failure("contract_violation"));
 		expect(invalid.logs).not.toContain("admin");
 	});
 

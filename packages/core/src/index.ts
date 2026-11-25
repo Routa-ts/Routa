@@ -887,12 +887,64 @@ type ServiceContractRules<TServices> = string extends keyof TServices
  */
 export type CorrelationConfig = boolean | { readonly header: string };
 
+/**
+ * What kind of failure Routa reports. `unexpected_failure`: application code threw, or Routa
+ * failed for a reason it did not expect. `contract_violation`: application code produced a value
+ * its declared contract forbids, such as response data that does not match the outcome's schema.
+ */
+export type RequestErrorCode = "unexpected_failure" | "contract_violation";
+
+/**
+ * Where in the request the failure happened: resolving credentials, building the low-level
+ * route context, reading input, constructing request services, running middleware, running the
+ * handler, or preparing the selected outcome's response.
+ */
+export type RequestErrorStage =
+	| "authentication"
+	| "context"
+	| "input"
+	| "services"
+	| "middleware"
+	| "handler"
+	| "response";
+
+/** What Routa knows about a failed request. It holds no error text and no request data. */
+export type RequestErrorDiagnostic = Readonly<{
+	code: RequestErrorCode;
+	stage: RequestErrorStage;
+	requestId: string;
+	/** Present only when Routa accepted a correlation ID for the request. */
+	correlationId?: string;
+	/** The request method, or `_OTHER` for a nonstandard one. */
+	method: string;
+	/** The matched route pattern, such as `/orders/:id`. */
+	route: string;
+	/** The status of the response Routa already chose. */
+	status: number;
+}>;
+
+/**
+ * Observes a request that failed unexpectedly or broke its response contract. It receives the
+ * value that was thrown, unchanged, and frozen metadata. Routa has already chosen the response and
+ * does not wait for the callback, so its result, a throw, or a rejection never changes the
+ * response. Expected rejections and declared outcomes are not reported.
+ */
+export type RequestErrorReporter = (
+	error: unknown,
+	diagnostic: RequestErrorDiagnostic,
+) => void | Promise<void>;
+
 export type RoutaConfig = {
 	host?: string;
 	port?: number;
 	logger?: RoutaLogger | false;
 	/** Off unless set. See {@link CorrelationConfig}. */
 	correlation?: CorrelationConfig;
+	/**
+	 * Receives the original error of each unexpected request failure or response contract
+	 * violation, even with `logger: false`. See {@link RequestErrorReporter}.
+	 */
+	onRequestError?: RequestErrorReporter;
 	lifecycleHeaders?: boolean;
 	/** Defaults to `"development"`, which skips response schema parsing during `routa start`. */
 	responseValidation?: ResponseValidation;
