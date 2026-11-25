@@ -1265,7 +1265,7 @@ function createLogger(options?: CreateLoggerOptions): RoutaLogger
 | --------- | -------------------------------------------------------------------------- | -------------------------------- |
 | `enabled` | `boolean`                                                                  | `true`                           |
 | `level`   | `"trace" \| "debug" \| "info" \| "warn" \| "error" \| "fatal" \| "silent"` | `"info"`                         |
-| `sink`    | `RoutaLogSink`                                                             | One JSON line on the console     |
+| `sink`    | [`RoutaLogSink`](#routalogsink)                                            | One JSON line on the console     |
 | `redact`  | `readonly string[]`                                                        | `[]`; the baseline still applies |
 | `now`     | `() => Date`                                                               | `() => new Date()`               |
 
@@ -1290,7 +1290,9 @@ Every event carries `timestamp`, `level`, `event`, `message`, and optional `data
 reads only those five fields of the object it receives. A child sanitizes its bindings once,
 when you call `child`, so later changes to the object you passed do not appear. Each event
 merges the bindings with its `data`, and a `data` key replaces a binding of the same name,
-compared after [escaping](#sanitization).
+compared after [escaping](#sanitization). Past the first 101 keys of `data`, a key replaces a
+binding only when it equals the key you gave `child`: a binding of `"a\nb"`, with a newline,
+keeps its value when `data` spells that name with a backslash and an `n`.
 The [limits](#sanitization) apply to that merged `data` as one object, bindings first, so
 a child whose bindings fill 100 keys leaves an event's own keys as one `[Truncated]` key.
 A child's bindings are merged and limited the same way over its parent's.
@@ -1354,6 +1356,9 @@ them, and never changes your objects.
 | Values per event, bindings and data together | 1,000 | Later values become `[Truncated]`; `[Redacted]` and other markers count |
 | Characters per string, after escaping        | 4,096 | The string is cut to 4,096 characters ending in `[Truncated]`           |
 
+A value past the 1,000 still appears as `[Truncated]`, so an event can hold more than 1,000
+values in total.
+
 The limits bound what reaches the sink, not the work of reading your data: JavaScript lists every
 own key of an object before Routa keeps the first 100, so logging an object with a very large
 number of keys still takes time in proportion to its size. Log the fields you need from such a
@@ -1364,18 +1369,72 @@ an unknown name, and it cannot see what a sink or a direct backend call adds.
 
 ### Sinks
 
-```ts
-type RoutaLogSink = (event: RoutaLogEvent) => void
-```
-
-A sink receives each event already sanitized, as a new object it may change. Routa calls it
-synchronously and never awaits a promise it returns. The default sink writes
+The `sink` option is a [`RoutaLogSink`](#routalogsink). The default sink writes
 `JSON.stringify(event)` to `console.error` for `error` and `fatal`, `console.warn` for
 `warn`, and `console.log` otherwise:
 
 ```txt
 {"timestamp":"2026-01-01T00:00:00.000Z","level":"info","event":"billing.charged","message":"Customer charged.","data":{"service":"billing","customer":{"id":"cus_1","email":"[Redacted]"},"token":"[Redacted]","tokenCount":1}}
 ```
+
+When the sink throws or its promise rejects, that event is lost and the request continues
+unchanged. Routa handles a returned promise's rejection through the built-in
+`Promise.prototype.then`, so the promise's own `then` never runs. The one rejection it cannot
+handle is from a promise subclass whose `constructor`, `Symbol.species`, or species constructor
+throws, because the built-in `then` runs them before it attaches a handler; that failure is
+still reported.
+When an event cannot be sanitized, because `data` or the bindings are not a plain
+object, a proxy trap throws, or `now` fails, Routa discards it; a child whose bindings could
+not be sanitized discards every event. Each `createLogger()` call, its children included,
+reports each kind of failure once, as a fixed line on `console.error` that never includes the
+event or the error:
+
+| `event`                        | Written when                                    |
+| ------------------------------ | ----------------------------------------------- |
+| `routa.logger.sink_failed`     | The sink threw or rejected                      |
+| `routa.logger.event_discarded` | An event could not be sanitized and was dropped |
+
+```txt
+{"level":"error","event":"routa.logger.sink_failed","message":"A Routa logger sink threw or rejected. Later sink failures from this logger are not reported.","timestamp":"2026-01-01T00:00:00.000Z"}
+```
+
+### Errors
+
+`createLogger` throws a `TypeError` for an unknown option, such as `transport`, and for a
+`level`, `enabled`, `sink`, `now`, or `redact` value of the wrong shape:
+
+```txt
+TypeError: createLogger does not accept "transport". It accepts enabled, level, sink, redact, and now; send events to another backend from a sink.
+```
+
+Loading `src/routa.ts`, in `routa dev`, `routa start`, or a test application, throws a
+`TypeError` when its `logger` is an object `createLogger` did not create:
+
+```txt
+TypeError: src/routa.ts configures a logger that createLogger did not create. Routa accepts only loggers from createLogger, so redaction runs before any output. Forward events to your backend from a sink instead: logger: createLogger({ sink: (event) => backend.write(event) }). Set logger: false to turn logging off.
+```
+
+`createHonoApp` throws the same error for its `logger` option, and the promise from
+`createApplication` rejects with it, so await that promise to catch it. They do not accept
+`logger: false`, so their message ends differently:
+
+```txt
+TypeError: createHonoApp received a logger that createLogger did not create. Routa accepts only loggers from createLogger, so redaction runs before any output. Forward events to your backend from a sink instead: logger: createLogger({ sink: (event) => backend.write(event) }). Omit logger to turn logging off.
+```
+
+## `RoutaLogSink`
+
+```ts
+type RoutaLogSink = (event: RoutaLogEvent) => void
+```
+
+The `sink` option of [`createLogger`](#createlogger). A sink receives each event already
+sanitized, as a new object it may change. Routa calls it synchronously and never awaits a
+promise it returns.
+
+| Parameter | Type            | Purpose                                                            |
+| --------- | --------------- | ------------------------------------------------------------------ |
+| `event`   | `RoutaLogEvent` | The sanitized `timestamp`, `level`, `event`, `message`, and `data` |
 
 A sink that forwards to another backend leaves that backend's destination, buffering,
 flushing, and shutdown to you. Keep `data` under its own key when the backend reserves
@@ -1417,49 +1476,8 @@ export const logger = createLogger({
 });
 ```
 
-When the sink throws or its promise rejects, that event is lost and the request continues
-unchanged. Routa handles a returned promise's rejection through the built-in
-`Promise.prototype.then`, so the promise's own `then` never runs. The one rejection it cannot
-handle is from a promise subclass whose `constructor`, `Symbol.species`, or species constructor
-throws, because the built-in `then` runs them before it attaches a handler; that failure is
-still reported.
-When an event cannot be sanitized, because `data` or the bindings are not a plain
-object, a proxy trap throws, or `now` fails, Routa discards it; a child whose bindings could
-not be sanitized discards every event. Each `createLogger()` call, its children included,
-reports each kind of failure once, as a fixed line on `console.error` that never includes the
-event or the error:
-
-| `event`                        | Written when                                    |
-| ------------------------------ | ----------------------------------------------- |
-| `routa.logger.sink_failed`     | The sink threw or rejected                      |
-| `routa.logger.event_discarded` | An event could not be sanitized and was dropped |
-
-```txt
-{"level":"error","event":"routa.logger.sink_failed","message":"A Routa logger sink threw or rejected. Later sink failures from this logger are not reported.","timestamp":"2026-01-01T00:00:00.000Z"}
-```
-
-### Errors
-
-`createLogger` throws a `TypeError` for an unknown option, such as `transport`, and for a
-`level`, `enabled`, `sink`, `now`, or `redact` value of the wrong shape:
-
-```txt
-TypeError: createLogger does not accept "transport". It accepts enabled, level, sink, redact, and now; send events to another backend from a sink.
-```
-
-Loading `src/routa.ts`, in `routa dev`, `routa start`, or a test application, throws a
-`TypeError` when its `logger` is an object `createLogger` did not create:
-
-```txt
-TypeError: src/routa.ts configures a logger that createLogger did not create. Routa accepts only loggers from createLogger, so redaction runs before any output. Forward events to your backend from a sink instead: logger: createLogger({ sink: (event) => backend.write(event) }). Set logger: false to turn logging off.
-```
-
-`createApplication` and `createHonoApp` throw the same error for their `logger` option. They
-do not accept `logger: false`, so their message ends differently:
-
-```txt
-TypeError: createHonoApp received a logger that createLogger did not create. Routa accepts only loggers from createLogger, so redaction runs before any output. Forward events to your backend from a sink instead: logger: createLogger({ sink: (event) => backend.write(event) }). Omit logger to turn logging off.
-```
+**Errors:** a throw or a rejected promise loses that event and never reaches the caller.
+[Sinks](#sinks) describes how Routa reports it.
 
 ## `Sort`
 
