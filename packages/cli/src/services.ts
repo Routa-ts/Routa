@@ -13,7 +13,7 @@ import {
 } from "./ast.js";
 import { compareText } from "./compare-text.js";
 import { boundDeclaration, namedImportMap, parseTypeScriptFile } from "./declarations.js";
-import type { Diagnostic } from "./project.js";
+import type { Diagnostic, MiddlewareMetadata, RouteMetadata } from "./project.js";
 import * as ts from "./typescript.js";
 
 /** A service contract one scope declares, read from source. */
@@ -928,4 +928,90 @@ function contractMembers(declaration: ContractDeclaration): {
 export function contractTypeReference(services: ServiceContractMetadata): string {
 	const file = services.file.split(sep).join("/").replace(/\.ts$/, ".js");
 	return `import(${JSON.stringify(`../${file}`)}).${services.name}`;
+}
+
+/** One middleware that requires services, where it runs in a route's chains. */
+type RequirementPlacement = {
+	middleware: MiddlewareMetadata & { requiresServices: ServiceContractMetadata };
+	position: "filesystem" | "route-file" | "method";
+	/** Names the position in messages: `Filesystem`, `Route-file`, or the method, such as `POST`. */
+	kind: string;
+	/** Names the middleware and its placement, such as `withCache on POST /orders`. */
+	label: string;
+	/** The route, or route and method, it runs on, such as `/orders` or `POST /orders`. */
+	where: string;
+	/** The request-scoped contracts built before it runs, in order. */
+	scopes: ReadonlyArray<ServiceContractMetadata | undefined>;
+	/** The request-scoped contracts the same request builds after it runs. */
+	later: ReadonlyArray<{ owner: string; contract: ServiceContractMetadata }>;
+};
+
+/**
+ * Lists a route's middleware that require services, with the scopes built before and after each.
+ * Filesystem and route-file middleware run for every method, so each appears once per route.
+ */
+export function requirementPlacements(route: RouteMetadata): RequirementPlacement[] {
+	const { routeFile, methods = {} } = route.services ?? {};
+	const methodScopes = Object.entries(methods)
+		.sort(([left], [right]) => compareText(left, right))
+		.map(([method, contract]) => ({ owner: `The ${method.toUpperCase()} services`, contract }));
+	const routeFileScope = routeFile
+		? [{ owner: "The route file's services", contract: routeFile }]
+		: [];
+	const placements: RequirementPlacement[] = [];
+	const add = (
+		chain: readonly MiddlewareMetadata[],
+		placement: Omit<RequirementPlacement, "middleware" | "label">,
+		label: (middleware: MiddlewareMetadata) => string,
+	) => {
+		for (const middleware of chain) {
+			if (middleware.requiresServices) {
+				placements.push({
+					...placement,
+					middleware: { ...middleware, requiresServices: middleware.requiresServices },
+					label: label(middleware),
+				});
+			}
+		}
+	};
+
+	add(
+		route.middleware.filter((item) => item.file !== route.file),
+		{
+			position: "filesystem",
+			kind: "Filesystem",
+			where: route.path,
+			scopes: [],
+			later: [...routeFileScope, ...methodScopes],
+		},
+		(item) => `${item.name} in ${item.file}`,
+	);
+	add(
+		route.middleware.filter((item) => item.file === route.file),
+		{
+			position: "route-file",
+			kind: "Route-file",
+			where: route.path,
+			scopes: [routeFile],
+			later: methodScopes,
+		},
+		(item) => `${item.name} on ${route.path}`,
+	);
+
+	for (const method of route.methods.map((item) => item.toLowerCase())) {
+		const where = `${method.toUpperCase()} ${route.path}`;
+		add(
+			(route.methodMiddleware[method] ?? route.middleware).slice(route.middleware.length),
+			{
+				position: "method",
+				kind: method.toUpperCase(),
+				where,
+				scopes: [routeFile, methods[method]],
+				later: [],
+			},
+			(item) => `${item.name} on ${where}`,
+		);
+	}
+
+	return placements;
 }

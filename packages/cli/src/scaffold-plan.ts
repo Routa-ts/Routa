@@ -1,13 +1,10 @@
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { parse as parseYaml } from "yaml";
+import { routesMetadataSource } from "./generate.js";
 import { operationId, pascalCase } from "./operation-id.js";
 import { identityHeaders } from "./request-identity.js";
-import {
-	type RouteMetadata,
-	type RouteMethodInputMetadata,
-	routesMetadataSource,
-} from "./project.js";
+import type { RouteMetadata, RouteMethodInputMetadata } from "./project.js";
 
 export type ScaffoldRoute = {
 	file: string;

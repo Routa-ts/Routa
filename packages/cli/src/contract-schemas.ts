@@ -18,14 +18,9 @@ import {
 	rejectsAmbiguousCredentials,
 } from "./authentication.js";
 import { compareText } from "./compare-text.js";
-import {
-	cookieDeclaration,
-	type Diagnostic,
-	importedSchemaDeclaration,
-	middlewareContract,
-	type MiddlewareMetadata,
-	type RouteMetadata,
-} from "./project.js";
+import { middlewareContract } from "./middleware-contracts.js";
+import type { Diagnostic, MiddlewareMetadata, RouteMetadata } from "./project.js";
+import { cookieDeclaration, importedSchemaDeclaration } from "./route-contracts.js";
 import * as ts from "./typescript.js";
 
 /**
