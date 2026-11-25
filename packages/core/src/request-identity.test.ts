@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vite-plus/test";
+import { expectNoLeak } from "@routa-ts/contract-rules/testing";
 import { z } from "zod";
 import {
 	createApplication,
@@ -94,7 +95,12 @@ const cases: readonly Case[] = [
 		status: 405,
 		route: "/items/:id",
 	},
-	{ name: "unmatched", path: "/nowhere?token=secret", status: 404, route: "[Unmatched]" },
+	{
+		name: "unmatched",
+		path: "/no-such-route?token=query-token-secret",
+		status: 404,
+		route: "[Unmatched]",
+	},
 ];
 
 function matrixApp(logger: ReturnType<typeof capture>["logger"]) {
@@ -127,7 +133,7 @@ function matrixApp(logger: ReturnType<typeof capture>["logger"]) {
 				contract: createRoute({
 					responses: { ok: { status: 200 } },
 					run: () => {
-						throw new Error("boom with secret detail");
+						throw new Error("boom with handler-secret-detail");
 					},
 				}),
 			},
@@ -176,7 +182,10 @@ describe("request identity", () => {
 			sent.map(({ path, init }) =>
 				app.request(path, {
 					...init,
-					headers: { ...(init?.headers as Record<string, string>), "x-request-id": "forged" },
+					headers: {
+						...(init?.headers as Record<string, string>),
+						"x-request-id": "forged-request-id",
+					},
 				}),
 			),
 		);
@@ -220,10 +229,11 @@ describe("request identity", () => {
 			]),
 		);
 		const logged = JSON.stringify(events);
-		expect(logged).not.toContain("forged");
-		expect(logged).not.toContain("secret");
-		expect(logged).not.toContain("/items/1");
-		expect(logged).not.toContain("nowhere");
+		expectNoLeak(logged, "forged-request-id");
+		expectNoLeak(logged, "handler-secret-detail");
+		expectNoLeak(logged, "query-token-secret");
+		expectNoLeak(logged, "/items/1");
+		expectNoLeak(logged, "no-such-route");
 	});
 
 	it("LOG-AC-07 keeps request identity in logs whatever events and children add", async () => {
@@ -731,7 +741,7 @@ describe("request identity", () => {
 		});
 		const app = createHonoApp([{ method: "get", path: "/totals", contract: totals }], { logger });
 
-		const response = await app.request("/totals?key=alice@example.com");
+		const response = await app.request("/totals?key=alice-sentinel@example.com");
 
 		expect(response.status).toBe(500);
 		expect(events.find((event) => event.event === "http.error")?.data).toEqual({
@@ -744,7 +754,7 @@ describe("request identity", () => {
 			issueCount: 2,
 			issueCodes: ["invalid_type"],
 		});
-		expect(JSON.stringify(events)).not.toContain("alice");
+		expectNoLeak(events, "alice-sentinel");
 	});
 
 	it("LOG-AC-12 logs no preparation when no response was prepared", async () => {
@@ -991,7 +1001,7 @@ describe("request identity", () => {
 				);
 
 				for (const value of Object.values(headers)) {
-					expect(JSON.stringify([outer.events, inner.events]), label).not.toContain(value);
+					expectNoLeak([outer.events, inner.events], value);
 				}
 			}
 		}
@@ -1076,7 +1086,7 @@ describe("request identity", () => {
 		expect(outer.events.map((event) => [event.event, event.data?.status])).toEqual([
 			["http.response.prepared", 500],
 		]);
-		expect(JSON.stringify(outer.events)).not.toContain("trace-secret-1");
+		expectNoLeak(outer.events, "trace-secret-1");
 	});
 
 	it("LOG-AC-09 refuses a mounted app's request after outer middleware set a response", async () => {
@@ -1237,11 +1247,11 @@ async function correlate(
 describe("correlation identity", () => {
 	it("LOG-AC-08 ignores correlation headers unless correlation is configured", async () => {
 		for (const correlation of [undefined, false]) {
-			const result = await correlate({ correlation }, { "x-correlation-id": "abc-123" });
+			const result = await correlate({ correlation }, { "x-correlation-id": "unconfigured-trace" });
 
 			expect(result).toMatchObject({ correlationId: null, readonly: true });
 			expect(result.echoed.has("x-correlation-id")).toBe(false);
-			expect(result.logged).not.toContain("abc-123");
+			expectNoLeak(result.logged, "unconfigured-trace");
 		}
 	});
 
@@ -1264,29 +1274,29 @@ describe("correlation identity", () => {
 	it("LOG-AC-08 reads a custom header in any casing and leaves the default one alone", async () => {
 		const result = await correlate(
 			{ correlation: { header: "X-Trace-Ref" } },
-			{ "x-TRACE-ref": "trace-1", "x-correlation-id": "ignored" },
+			{ "x-TRACE-ref": "trace-1", "x-correlation-id": "ignored-default-header" },
 		);
 
 		expect(result).toMatchObject({ correlationId: "trace-1", readonly: true });
 		expect(result.echoed.get("x-trace-ref")).toBe("trace-1");
 		expect(result.echoed.has("x-correlation-id")).toBe(false);
-		expect(result.logged).not.toContain("ignored");
+		expectNoLeak(result.logged, "ignored-default-header");
 	});
 
 	it("LOG-AC-08 accepts 1 to 128 allowed characters and ignores everything else", async () => {
 		const accepted = ["a", "x".repeat(128), "AZaz09._-"];
 		const repeated = new Headers();
-		repeated.append("x-correlation-id", "first");
-		repeated.append("x-correlation-id", "second");
+		repeated.append("x-correlation-id", "first-trace");
+		repeated.append("x-correlation-id", "second-trace");
 		const ignored: HeadersInit[] = [
 			{ "x-correlation-id": "" },
 			{ "x-correlation-id": "x".repeat(129) },
 			{ "x-correlation-id": "has space" },
-			{ "x-correlation-id": "a/b" },
-			{ "x-correlation-id": "a:b" },
-			{ "x-correlation-id": "a,b" },
-			{ "x-correlation-id": "a+b" },
-			{ "x-correlation-id": "café" },
+			{ "x-correlation-id": "trace/slash" },
+			{ "x-correlation-id": "trace:colon" },
+			{ "x-correlation-id": "trace,comma" },
+			{ "x-correlation-id": "trace+plus" },
+			{ "x-correlation-id": "trace-café" },
 			repeated,
 		];
 
@@ -1302,7 +1312,7 @@ describe("correlation identity", () => {
 			expect(result, sent).toMatchObject({ correlationId: null, readonly: true });
 			expect(result.echoed.has("x-correlation-id"), sent).toBe(false);
 			if (sent) {
-				expect(result.logged, sent).not.toContain(JSON.stringify(sent).slice(1, -1));
+				expectNoLeak(result.logged, JSON.stringify(sent).slice(1, -1));
 			}
 		}
 	});

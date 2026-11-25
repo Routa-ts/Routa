@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { expectNoLeak } from "@routa-ts/contract-rules/testing";
 import { z } from "zod";
 import { createHonoApp, type HonoRoute } from "./hono.js";
 import { apiKey, bearer, createRoute, createRouta, requireAuth, sessionCookie } from "./index.js";
@@ -429,8 +430,8 @@ describe("credential values stay out of logs", () => {
 		const logged = JSON.stringify(events);
 		expect(logged).toContain("http.response.prepared");
 		expect(logged).toContain("http.error");
-		expect(logged).not.toContain("key-secret-value");
-		expect(logged).not.toContain("session-secret-value");
+		expectNoLeak(logged, "key-secret-value");
+		expectNoLeak(logged, "session-secret-value");
 	});
 });
 

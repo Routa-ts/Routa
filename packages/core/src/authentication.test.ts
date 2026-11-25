@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { expectNoLeak } from "@routa-ts/contract-rules/testing";
 import { z } from "zod";
 import type * as AuthenticationModule from "./authentication.js";
 import {
@@ -321,8 +322,8 @@ describe("authenticator failures", () => {
 		expect(events.find((event) => event.event === "http.error")?.data).toEqual(
 			failedWhoami("unexpected_failure"),
 		);
-		expect(logged).not.toContain("secret-token-value");
-		expect(logged).not.toContain("provider said");
+		expectNoLeak(logged, "secret-token-value");
+		expectNoLeak(logged, "provider said");
 	});
 
 	it("logs nothing the thrown error carries, not even its name", async () => {
@@ -340,7 +341,7 @@ describe("authenticator failures", () => {
 		expect(events.find((event) => event.event === "http.error")?.data).toEqual(
 			failedWhoami("unexpected_failure"),
 		);
-		expect(JSON.stringify(events)).not.toContain("SecretToken123");
+		expectNoLeak(events, "SecretToken123");
 	});
 
 	it("reports a principal that fails the principal schema as a contract violation", async () => {
@@ -357,7 +358,7 @@ describe("authenticator failures", () => {
 		expect(response.status).toBe(500);
 		const error = events.find((event) => event.event === "http.error");
 		expect(error?.data).toEqual(failedWhoami("contract_violation"));
-		expect(JSON.stringify(events)).not.toContain("PrincipalSecret");
+		expectNoLeak(events, "PrincipalSecret");
 	});
 
 	it("keeps an error thrown while parsing the principal a safe server error", async () => {
@@ -381,11 +382,11 @@ describe("authenticator failures", () => {
 		const response = await app.request("/whoami", { headers: { authorization: "Bearer abc" } });
 
 		expect(response.status).toBe(500);
-		expect(await response.text()).not.toContain("secret-tenant-detail");
+		expectNoLeak(await response.text(), "secret-tenant-detail");
 		expect(events.find((event) => event.event === "http.error")?.data).toEqual(
 			failedWhoami("unexpected_failure"),
 		);
-		expect(JSON.stringify(events)).not.toContain("secret-tenant-detail");
+		expectNoLeak(events, "secret-tenant-detail");
 	});
 
 	it("keeps a getter that throws on the parsed principal a safe server error", async () => {
@@ -411,11 +412,11 @@ describe("authenticator failures", () => {
 		const response = await app.request("/whoami", { headers: { authorization: "Bearer abc" } });
 
 		expect(response.status).toBe(500);
-		expect(await response.text()).not.toContain("secret-getter-detail");
+		expectNoLeak(await response.text(), "secret-getter-detail");
 		expect(events.find((event) => event.event === "http.error")?.data).toEqual(
 			failedWhoami("unexpected_failure"),
 		);
-		expect(JSON.stringify(events)).not.toContain("secret-getter-detail");
+		expectNoLeak(events, "secret-getter-detail");
 	});
 
 	it("reports a result that is neither authenticated nor rejected as a contract violation", async () => {
@@ -444,11 +445,11 @@ describe("authenticator failures", () => {
 		});
 
 		expect(response.status).toBe(500);
-		expect(await response.text()).not.toContain("provider said");
+		expectNoLeak(await response.text(), "provider said");
 		expect(events.find((event) => event.event === "http.error")?.data).toEqual(
 			failedWhoami("unexpected_failure"),
 		);
-		expect(JSON.stringify(events)).not.toContain("secret-token-value");
+		expectNoLeak(events, "secret-token-value");
 	});
 
 	it("reports a principal schema output without string id and type as a contract violation", async () => {

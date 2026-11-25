@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { expectNoLeak } from "@routa-ts/contract-rules/testing";
 import { z } from "zod";
 import { createHonoApp, type HonoRoute } from "./hono.js";
 import { createCookie, createMiddleware, createRoute } from "./index.js";
@@ -715,11 +716,21 @@ describe("required response cookies at runtime", () => {
 
 	it("logs the missing-cookie failure as a server error without its message", async () => {
 		const events: RoutaLogEvent[] = [];
-		await appFor(routeFor([]), modes[0]!, events).request("/a");
+		const named = createCookie({
+			name: "required-session",
+			schema: z.string(),
+			httpOnly: true,
+			secure: true,
+			sameSite: "lax",
+			path: "/",
+		});
+		await appFor(routeFor([], [{ handle: named, required: true }]), modes[0]!, events).request(
+			"/a",
+		);
 
 		const failure = events.find((event) => event.event === "http.error");
 		expect(failure?.data).toMatchObject({ method: "GET", route: "/a", status: 500 });
-		expect(JSON.stringify(events)).not.toContain("session");
+		expectNoLeak(events, "required-session");
 	});
 
 	it("accepts a set or a clear as the required effect, in every mode", async () => {

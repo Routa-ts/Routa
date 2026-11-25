@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createCookie } from "@routa-ts/core";
 import { describe, expect, it } from "vite-plus/test";
+import { expectNoLeak } from "@routa-ts/contract-rules/testing";
 import { z } from "zod";
 import { run } from "./index.js";
 import { generateOpenApi } from "./openapi.js";
@@ -146,7 +147,7 @@ describe("response cookie OpenAPI", () => {
 			"src/cookies.ts": cookieFile(
 				`export const session = createCookie({
 	name: "session",
-	schema: z.string().meta({ examples: ["s3cr3t-token"], description: "s3cr3t-description" }),
+	schema: z.string().meta({ examples: ["s3cr3t-marker-token"], description: "s3cr3t-marker-description" }),
 	httpOnly: true,
 	secure: true,
 	sameSite: "lax",
@@ -160,7 +161,7 @@ describe("response cookie OpenAPI", () => {
 
 		const text = JSON.stringify(generateOpenApi(cwd));
 
-		expect(text).not.toContain("s3cr3t");
+		expectNoLeak(text, "s3cr3t-marker");
 		expect(text).toContain('"Set-Cookie"');
 	});
 

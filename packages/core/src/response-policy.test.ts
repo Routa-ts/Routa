@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { expectNoLeak } from "@routa-ts/contract-rules/testing";
 import { z } from "zod";
 import { createHonoApp, type HonoRoute } from "./hono.js";
 import { createMiddleware, createRoute } from "./index.js";
@@ -197,7 +198,7 @@ describe("response validation policy", () => {
 
 			expect(response.status, mode.name).toBe(mode.validates ? 500 : 200);
 			if (mode.validates) {
-				expect(JSON.stringify(events), mode.name).not.toContain("Jane@Example.com");
+				expectNoLeak(events, "Jane@Example.com");
 			} else {
 				await expect(response.json(), mode.name).resolves.toEqual({
 					email: " Jane@Example.com ",

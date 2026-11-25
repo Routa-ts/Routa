@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { expectNoLeak } from "@routa-ts/contract-rules/testing";
 import { z } from "zod";
 import {
 	type ApplicationServicesDeclaration,
@@ -357,10 +358,10 @@ describe("request-scoped service failures and cleanup", () => {
 		const body = await response.text();
 
 		expect(response.status).toBe(500);
-		expect(body).not.toContain("database unavailable");
+		expectNoLeak(body, "database unavailable");
 		expect(ran).toEqual(["route-file middleware", "release partial", "release route file"]);
 		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedOrders);
-		expect(JSON.stringify(events)).not.toContain("database unavailable");
+		expectNoLeak(events, "database unavailable");
 
 		// No retry: the next request runs the factory again from scratch.
 		await request(app);
@@ -391,10 +392,10 @@ describe("request-scoped service failures and cleanup", () => {
 		const body = await response.text();
 
 		expect(response.status).toBe(500);
-		expect(body).not.toContain("secret config missing");
+		expectNoLeak(body, "secret config missing");
 		expect(JSON.parse(body)).toMatchObject({ title: "Internal Server Error" });
 		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedOrders);
-		expect(JSON.stringify(events)).not.toContain("secret config missing");
+		expectNoLeak(events, "secret config missing");
 		await app.dispose();
 	});
 
@@ -523,7 +524,7 @@ describe("request-scoped service failures and cleanup", () => {
 
 		expect((await request(app)).status).toBe(500);
 		expect(events.find((event) => event.event === "http.error")?.data).toEqual(failedOrders);
-		expect(JSON.stringify(events)).not.toContain("construction failed");
+		expectNoLeak(events, "construction failed");
 		expect(events.find((event) => event.event === "services.cleanup_failed")?.data).toEqual({
 			requestId: expect.stringMatching(/^[0-9a-f-]{36}$/),
 			failureCount: 1,
