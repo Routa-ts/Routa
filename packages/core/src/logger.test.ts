@@ -171,6 +171,45 @@ describe("createLogger sanitization", () => {
 		});
 	});
 
+	it.each([
+		"newPassword",
+		"current_password",
+		"password-hash",
+		"JWT",
+		"credentials",
+		"secretKey",
+		"SECRET_ACCESS_KEY",
+		"cookies",
+		"pwd",
+		"passwd",
+		"cvv",
+	])("LOG-AC-03 redacts the credential name %s", (name) => {
+		const { events, logger } = capture();
+
+		logger.child({ [name]: "bound" }).info("signup", "Signed up.", { user: { [name]: "nested" } });
+
+		expect(events[0]?.data).toEqual({
+			[name]: "[Redacted]",
+			user: { [name]: "[Redacted]" },
+		});
+	});
+
+	it("LOG-AC-03 keeps names that only contain a credential name", () => {
+		const { events, logger } = capture();
+		const data = {
+			passwordHashedAt: "2026-06-26",
+			credentialsCount: 2,
+			secretKeyId: "key_1",
+			jwtIssuer: "routa",
+			cookiesEnabled: true,
+			cvvMatched: true,
+		};
+
+		logger.info("audit", "Audited.", data);
+
+		expect(events[0]?.data).toEqual(data);
+	});
+
 	it("LOG-AC-04 replaces cycles with a marker and keeps shared references", () => {
 		const { events, logger } = capture();
 		const shared = { id: 1 };

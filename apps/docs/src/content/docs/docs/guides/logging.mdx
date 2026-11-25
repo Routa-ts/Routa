@@ -88,6 +88,33 @@ import it wherever else you log, and choose where events go with a sink.
    Your application owns the Pino instance: its destination, buffering, flushing, and
    shutdown. Routa calls the sink and never waits for it.
 
+   This sink uses Pino's own `time` and leaves out Routa's `timestamp`. If you pass your own
+   timestamps to `logger.log()`, forward `timestamp` beside `event` and `data`.
+
+5. Log the fields you choose from a caught error. Routa logs an `Error` itself as
+   `[Unsupported]`, because its message and stack can hold credentials or request data.
+
+   ```ts title="src/charges.ts"
+   import { logger } from "./logger.js";
+
+   export async function tryCharge(orderId: string, charge: () => Promise<void>): Promise<boolean> {
+   	try {
+   		await charge();
+   		return true;
+   	} catch (error) {
+   		logger.error("billing.charge_failed", "Charge failed.", {
+   			orderId,
+   			errorName: error instanceof Error ? error.name : "unknown",
+   		});
+   		return false;
+   	}
+   }
+   ```
+
+   Add an error code when the library documents a stable one, such as `ECONNREFUSED`. Do not
+   log `error.message` or `String(error)` unless you know the text is safe: Routa does not
+   redact secrets inside strings.
+
 </Steps>
 
 ## Verify

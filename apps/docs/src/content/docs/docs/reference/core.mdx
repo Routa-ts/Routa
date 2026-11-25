@@ -1317,9 +1317,11 @@ them, and never changes your objects.
 
 - **Baseline names.** A key is replaced with `[Redacted]` at any depth when, lowercased with
   `-` and `_` removed, it equals one of `accesstoken`, `apikey`, `authorization`,
-  `authtoken`, `clientsecret`, `cookie`, `csrftoken`, `idtoken`, `passphrase`, `password`,
-  `privatekey`, `proxyauthorization`, `refreshtoken`, `secret`, `sessionid`, `sessiontoken`,
-  `setcookie`, `token`, `xapikey`, `xauthtoken`, or `xcsrftoken`. So `Set-Cookie`, `x-api-key`,
+  `authtoken`, `clientsecret`, `cookie`, `cookies`, `credentials`, `csrftoken`,
+  `currentpassword`, `cvv`, `idtoken`, `jwt`, `newpassword`, `passphrase`, `passwd`,
+  `password`, `passwordhash`, `privatekey`, `proxyauthorization`, `pwd`, `refreshtoken`,
+  `secret`, `secretaccesskey`, `secretkey`, `sessionid`, `sessiontoken`, `setcookie`,
+  `token`, `xapikey`, `xauthtoken`, or `xcsrftoken`. So `Set-Cookie`, `x-api-key`,
   and `API_KEY` match. Names match whole, never as substrings: `tokenCount` and
   `passwordHint` are kept. No option turns the baseline off.
 - **`redact` paths.** Each path names a field from the root of the event data, with
@@ -1389,6 +1391,30 @@ const pinoSink: RoutaLogSink = ({ level, event, message, data }) =>
 	output[level]({ event, data }, message);
 
 export const logger = createLogger({ sink: pinoSink });
+```
+
+To write to several outputs, call each one from your sink. If one throws, the calls after it
+do not run. Here `finally` writes to the error file even when the first output throws, and
+Routa still reports that failure:
+
+```ts title="src/logger.ts"
+import { createLogger } from "@routa-ts/core";
+import pino from "pino";
+
+const output = pino({ level: "trace" });
+const errors = pino({ level: "trace" }, pino.destination("errors.log"));
+
+export const logger = createLogger({
+	sink: ({ level, event, message, data }) => {
+		try {
+			output[level]({ event, data }, message);
+		} finally {
+			if (level === "error" || level === "fatal") {
+				errors[level]({ event, data }, message);
+			}
+		}
+	},
+});
 ```
 
 When the sink throws or its promise rejects, that event is lost and the request continues
