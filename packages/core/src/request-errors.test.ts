@@ -1048,14 +1048,12 @@ describe("request error reporting", () => {
 			}),
 		});
 		const { calls, onRequestError } = recorder();
-		const inner = createHonoApp([route("/kept", [rethrow]), route("/replaced", [replace])], {
+		const app = createHonoApp([route("/kept", [rethrow]), route("/replaced", [replace])], {
 			onRequestError,
 		});
-		const outer = createHonoApp([], { onRequestError });
-		outer.route("/", inner);
 
-		expect((await outer.request("/kept")).status).toBe(500);
-		expect((await outer.request("/replaced")).status).toBe(500);
+		expect((await app.request("/kept")).status).toBe(500);
+		expect((await app.request("/replaced")).status).toBe(500);
 		expect(calls).toHaveLength(2);
 		expect(calls[0]?.error).toBe(thrown);
 		expect(calls[1]?.error).toBe(replaced);
@@ -1615,7 +1613,9 @@ describe("request error reporter (types)", () => {
 			const reporter: RequestErrorReporter = (error, diagnostic) => {
 				expectType<unknown>(error);
 				expectType<RequestErrorCode>(diagnostic.code);
-				expectType<"unexpected_failure" | "contract_violation">(diagnostic.code);
+				expectType<"unexpected_failure" | "contract_violation" | "configuration_error">(
+					diagnostic.code,
+				);
 				expectType<RequestErrorStage>(diagnostic.stage);
 				expectType<string>(diagnostic.requestId);
 				expectType<string | undefined>(diagnostic.correlationId);

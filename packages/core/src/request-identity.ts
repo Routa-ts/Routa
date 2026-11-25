@@ -1,3 +1,4 @@
+import type { RuntimeAuthentication } from "./authentication.js";
 import type { RoutaLogger } from "./logger.js";
 import type { FrameworkEvent } from "./logger-registry.js";
 import { reservedHeaders } from "./response-headers.js";
@@ -114,6 +115,38 @@ export function correlationHeaderOf(option: unknown): string | undefined {
 }
 
 /**
+ * Rejects a correlation header that a declared credential scheme reads, so a credential never
+ * lands in correlation. Only the declared transports are read; no extractor or authenticator runs.
+ *
+ * @param header - The lowercase header {@link correlationHeaderOf} returned
+ * @param authentication - The validated authentication config
+ * @throws {TypeError} When an `apiKey` or `custom` scheme reads its credential from the header
+ */
+export function assertCorrelationReadsNoCredential(
+	header: string | undefined,
+	authentication: RuntimeAuthentication | undefined,
+): void {
+	const scheme =
+		header === undefined
+			? undefined
+			: authentication?.schemes.find(
+					(item) => "header" in item.transport && item.transport.header === header,
+				);
+
+	if (scheme) {
+		// Recommend the default header only when no scheme reads it too.
+		const advice = authentication?.schemes.some(
+			(item) => "header" in item.transport && item.transport.header === defaultCorrelationHeader,
+		)
+			? "Choose a header no configured scheme reads and no route declares."
+			: "Choose another header, such as x-correlation-id.";
+		throw new TypeError(
+			`The correlation header ${JSON.stringify(header)} is the header the ${scheme.kind} scheme ${JSON.stringify(scheme.name)} reads its credential from. ${advice}`,
+		);
+	}
+}
+
+/**
  * Why a correlation header name cannot be used, or `undefined` when it can. Names compare
  * case-insensitively.
  */
@@ -125,17 +158,17 @@ export function correlationHeaderProblem(header: string): string | undefined {
 	}
 
 	if (name === requestIdHeader) {
-		return `${JSON.stringify(header)} names x-request-id, which carries the request identity Routa generates. Choose another header, such as x-correlation-id.`;
+		return `${JSON.stringify(header)} names x-request-id, which carries the request identity Routa generates. Choose another header that no configured scheme reads.`;
 	}
 
 	if (credentialHeaders.has(name)) {
-		return `${JSON.stringify(header)} names a credential header. A correlation ID is not a credential, so choose another header, such as x-correlation-id.`;
+		return `${JSON.stringify(header)} names a credential header. A correlation ID is not a credential, so choose another header that no configured scheme reads.`;
 	}
 
 	const owner = routaHeaders.get(name);
 
 	if (owner) {
-		return `${JSON.stringify(header)} names ${name}, which ${owner}. Choose another header, such as x-correlation-id.`;
+		return `${JSON.stringify(header)} names ${name}, which ${owner}. Choose another header that no configured scheme reads.`;
 	}
 
 	return undefined;

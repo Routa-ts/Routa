@@ -11,6 +11,7 @@ import type {
 	AuthenticationConfig,
 	CorrelationConfig,
 	HttpMethod,
+	RequestErrorDiagnostic,
 	RequestErrorReporter,
 	ResponseValidation,
 } from "./index.js";
@@ -18,7 +19,9 @@ import { createLogger, type RoutaLogger } from "./logger.js";
 import { assertCreatedLogger, requestLoggers } from "./logger-registry.js";
 import {
 	createRequestExecutor,
+	internalErrorResponse,
 	isBodylessStatus,
+	logRequestError,
 	type RequestScope,
 	type RuntimeRouteContract,
 } from "./request-execution.js";
@@ -31,6 +34,7 @@ import {
 import { type ReportRequestError, requestErrorReporterOf } from "./request-errors.js";
 import {
 	acceptedCorrelation,
+	assertCorrelationReadsNoCredential,
 	correlationHeaderOf,
 	loggedMethod,
 	type RequestIdentity,
@@ -270,7 +274,8 @@ function honoApp(
 		options.authentication === undefined
 			? undefined
 			: runtimeAuthentication(options.authentication);
-	const requests = identifyRequests(app, routeLogger, correlationHeader);
+	assertCorrelationReadsNoCredential(correlationHeader, authentication);
+	const requests = identifyRequests(app, routeLogger, correlationHeader, report);
 
 	const registeredRoutes = new Set<string>();
 
@@ -350,13 +355,8 @@ function honoApp(
 				return await next();
 			}
 
-			return requests.prepared(
-				context,
-				await executeRoute(
-					context.req.raw,
-					context.req.param(),
-					requests.matched(context, route.path),
-				),
+			return requests.answer(context, route.path, (state) =>
+				executeRoute(context.req.raw, context.req.param(), state),
 			);
 		});
 	}
@@ -371,43 +371,57 @@ function honoApp(
 		allowedMethods.add("OPTIONS");
 		const allow = Array.from(allowedMethods).sort().join(", ");
 
-		app.on("OPTIONS", path, (context) => {
-			requests.matched(context, path);
-			return requests.prepared(
+		app.on("OPTIONS", path, (context) =>
+			requests.answer(
 				context,
-				new Response(null, {
-					status: 204,
-					headers: automaticOptionsHeaders(context.req.raw, allow),
-				}),
-			);
-		});
+				path,
+				() =>
+					new Response(null, {
+						status: 204,
+						headers: automaticOptionsHeaders(context.req.raw, allow),
+					}),
+			),
+		);
 
-		app.all(path, (context) => {
-			requests.matched(context, path);
-			return requests.prepared(
+		app.all(path, (context) =>
+			requests.answer(
 				context,
-				new Response("Method Not Allowed", {
-					status: 405,
-					headers: {
-						allow,
-					},
-				}),
-			);
-		});
+				path,
+				() =>
+					new Response("Method Not Allowed", {
+						status: 405,
+						headers: {
+							allow,
+						},
+					}),
+			),
+		);
 	}
 
 	return app;
 }
 
 /** A request's identity, the route pattern that matched it, and the response Routa prepared for it. */
-type TrackedRequest = RequestIdentity & { route?: string; prepared?: Response };
+type TrackedRequest = {
+	readonly requestId: string;
+	/** Removed when a mounted Routa app refuses the request, so the owner never echoes or logs it. */
+	correlationId?: string;
+	route?: string;
+	prepared?: Response;
+};
+
+const identityKey = Symbol.for("@routa-ts/core/request-identity");
 
 /**
  * The identity of each request a Routa app is handling, by its Hono context. When one Routa app
- * is mounted in another with `route()`, Hono passes one context through both, so the first Routa
- * app identifies the request and the app it mounts reuses that identity.
+ * is mounted in another with `route()`, Hono passes one context through both, so the mounted app
+ * finds the request already identified and refuses it. The map is registered globally, like the
+ * created-logger brand, so a mounted app that loaded another copy of `@routa-ts/core` still finds
+ * the identity.
  */
-const identified = new WeakMap<Context, TrackedRequest>();
+const identified: WeakMap<Context, TrackedRequest> = ((
+	globalThis as { [identityKey]?: WeakMap<Context, TrackedRequest> }
+)[identityKey] ??= new WeakMap());
 
 /** What Hono's error says when nothing on the app returned a response or called `next()`. */
 const unansweredMessage =
@@ -420,9 +434,12 @@ const unansweredMessage =
  * something else wrote, echoes an accepted correlation ID or removes the correlation header when
  * it accepted none, and logs `http.response.prepared`.
  *
- * The first Routa app a request reaches owns its identity. A Routa app mounted in it reuses that
- * identity, with its own request logger, and leaves the headers and the event to the owner, so
- * handlers, headers, and the one event agree.
+ * Routa does not support mounting one Routa app in another with `route()`. The first Routa app a
+ * request reaches owns its identity, so an app that finds the request already identified is
+ * mounted in another and refuses every request it receives, whatever would answer it: a Routa
+ * route, a Hono handler added to it, or nothing. It takes the correlation ID out of the identity,
+ * so the owner neither echoes nor logs it, and answers Routa's internal `500`, which it logs and
+ * reports as a `configuration_error`.
  *
  * Routa writes these headers in place only on a response it prepared for this request. Any other
  * response, such as one a handler added to the returned Hono app reuses across requests, or one
@@ -432,29 +449,30 @@ const unansweredMessage =
  *
  * When nothing on the app answers a request, Hono fails it only after the whole chain returns,
  * where Routa cannot identify the response. The owner raises the same error inside the chain
- * instead, once every middleware on it, including any app mounted in it, has had its chance to
- * answer, so Hono's error handler, or one the application set with `onError`, answers it there
- * and the answer carries the identity. A mounted Routa app leaves this to the owner.
+ * instead, once every middleware on it has had its chance to answer, so Hono's error handler, or
+ * one the application set with `onError`, answers it there and the answer carries the identity.
  *
  * The event says the response was prepared, not that it was sent or received: Routa logs it
  * before the body is transmitted. A request whose handling throws past Hono logs nothing.
  *
- * @returns `matched` records the route pattern that matched a request and returns this app's
- *   state for it; `prepared` records a response Routa prepared for the request and returns it
+ * @returns `answer` records the route pattern that matched a request, calls `respond` with this
+ *   app's state for it, and records the response Routa prepared
  */
 function identifyRequests(
 	app: Hono,
 	logger: RoutaLogger,
 	correlationHeader: string | undefined,
+	report: ReportRequestError | undefined,
 ): {
-	matched: (context: Context, path: string) => RequestState;
-	prepared: (context: Context, response: Response) => Response;
+	answer: (
+		context: Context,
+		path: string,
+		respond: (state: RequestState) => Response | Promise<Response>,
+	) => Promise<Response>;
 } {
 	const deriveLogger = requestLoggers(logger);
-	// This app's view of each request: its identity, and this app's request logger.
+	// This app's view of each request it owns: its identity, and this app's request logger.
 	const states = new WeakMap<Context, RequestState>();
-	// The requests whose identity this app owns.
-	const owned = new WeakSet<Context>();
 	const stateFor = ({ requestId, correlationId }: RequestIdentity): RequestState => ({
 		requestId,
 		...(correlationId !== undefined && { correlationId }),
@@ -469,8 +487,12 @@ function identifyRequests(
 			const owner = identified.get(context);
 
 			if (owner) {
-				states.set(context, stateFor(owner));
-				await next();
+				// Assigned rather than returned, so the refusal replaces a response outer middleware
+				// already set before calling `next()`. That response is cleared first, because Hono's
+				// setter copies an existing response's headers onto the new one.
+				const refusal = refuse(context, owner);
+				context.res = undefined;
+				context.res = refusal;
 				return;
 			}
 
@@ -487,7 +509,6 @@ function identifyRequests(
 			const state = stateFor(request);
 			identified.set(context, request);
 			states.set(context, state);
-			owned.add(context);
 
 			await next();
 
@@ -499,15 +520,17 @@ function identifyRequests(
 				// Routa did not accept, such as one a handler forwarded from upstream. No other header
 				// Routa writes can be the correlation header, and no other header is touched.
 				if (correlationHeader !== undefined) {
-					if (correlationId === undefined) {
+					if (request.correlationId === undefined) {
 						headers.delete(correlationHeader);
 					} else {
-						headers.set(correlationHeader, correlationId);
+						headers.set(correlationHeader, request.correlationId);
 					}
 				}
 			}
 
-			state.event("info", "http.response.prepared", "Response prepared.", {
+			// A mounted app that refused the request took its correlation ID out of the identity.
+			const logged = request.correlationId === correlationId ? state : stateFor(request);
+			logged.event("info", "http.response.prepared", "Response prepared.", {
 				method: loggedMethod(context.req.raw.method),
 				route: request.route ?? unmatchedRoute,
 				status: context.res.status,
@@ -517,8 +540,9 @@ function identifyRequests(
 		async (context, next) => {
 			await next();
 
+			// Only the owner gets here: a mounted app refuses the request without calling `next()`.
 			// Reading `context.res` here would make Hono create a placeholder 200 response.
-			if (owned.has(context) && !context.finalized) {
+			if (!context.finalized) {
 				throw new Error(unansweredMessage);
 			}
 		},
@@ -535,14 +559,38 @@ function identifyRequests(
 		return { request, state };
 	};
 
+	const refuse = (context: Context, request: TrackedRequest) => {
+		delete request.correlationId;
+		const diagnostic: RequestErrorDiagnostic = Object.freeze({
+			code: "configuration_error",
+			stage: "identity",
+			requestId: request.requestId,
+			method: loggedMethod(context.req.raw.method),
+			route: request.route ?? unmatchedRoute,
+			status: 500,
+		});
+
+		try {
+			logRequestError(stateFor(request).event, diagnostic, undefined);
+		} catch {
+			// A failing logger must not skip reporting or replace the error response.
+		}
+
+		report?.(
+			new Error(
+				"This Routa app is mounted in another Routa app with route(), which Routa does not support. Put its routes in the outer app's src/routes/ folders, or mount a plain Hono app instead.",
+			),
+			diagnostic,
+		);
+		return internalErrorResponse();
+	};
+
 	return {
-		matched: (context, path) => {
+		answer: async (context, path, respond) => {
 			const { request, state } = tracked(context);
 			request.route = path;
-			return state;
-		},
-		prepared: (context, response) => {
-			tracked(context).request.prepared = response;
+			const response = await respond(state);
+			request.prepared = response;
 			return response;
 		},
 	};

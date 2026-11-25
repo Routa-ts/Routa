@@ -197,7 +197,7 @@ function validateProjectInSession(
 	const write = options.write ?? true;
 	const auth = applicationAuthentication(cwd, parser);
 	const { authentication } = auth;
-	const correlation = applicationCorrelation(cwd, parser);
+	const correlation = applicationCorrelation(cwd, parser, authentication);
 	const correlationHeader = correlation.header;
 	const discovery = discoverRoutes(cwd, parser, authentication);
 	const routes = discovery.routes;
@@ -4021,7 +4021,7 @@ function appendOutput(lines: string[], output?: string): string {
  * @param diagnostics - Diagnostics to format
  * @returns The formatted diagnostic report
  */
-function formatDiagnostics(diagnostics: Diagnostic[]): string {
+export function formatDiagnostics(diagnostics: Diagnostic[]): string {
 	return diagnostics
 		.map((diagnostic) => {
 			const severity = diagnostic.severity === "warning" ? "Warning: " : "";

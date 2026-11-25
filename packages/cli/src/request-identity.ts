@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { propertyName, unwrapExpression } from "./ast.js";
+import type { AuthenticationMetadata, AuthenticationSchemeMetadata } from "./authentication.js";
 import type { Diagnostic } from "./project.js";
 import { type HiddenPart, routaConfigMember, spreadObject } from "./services.js";
 import * as ts from "./typescript.js";
@@ -73,11 +74,16 @@ const shape =
  * including a `RoutaConfig`, is an error; one whose type has no such member, such as a spread of
  * `{ host: string; port: number }`, is ignored.
  *
+ * The header cannot be one a declared credential scheme reads. Only the scheme declarations
+ * `routa generate` read statically are compared; an authenticator never runs.
+ *
+ * @param authentication - The authentication contract `src/routa.ts` declares, when readable
  * @returns The lowercase correlation header when correlation is on, and diagnostics
  */
 export function applicationCorrelation(
 	cwd: string,
 	parser: ts.SourceFileParser,
+	authentication?: AuthenticationMetadata,
 ): { header?: string; diagnostics: Diagnostic[]; warnings: Diagnostic[] } {
 	if (!existsSync(join(cwd, configFile))) {
 		return { diagnostics: [], warnings: [] };
@@ -133,17 +139,41 @@ export function applicationCorrelation(
 	}
 
 	const name = header.toLowerCase();
-	const claimed = claimedHeaders.get(name);
+	const scheme = authentication?.schemes.find((item) => credentialHeader(item) === name);
+	const claimed =
+		claimedHeaders.get(name)
+		?? (scheme
+			&& `the ${scheme.kind} scheme ${JSON.stringify(scheme.name)} reads its credential from`);
 
 	if (claimed) {
+		// Recommend the default header only when no scheme reads it too.
+		const another = authentication?.schemes.some(
+			(item) => credentialHeader(item) === defaultCorrelationHeader,
+		)
+			? "one no configured scheme reads and no route declares"
+			: `such as ${defaultCorrelationHeader}`;
 		return fail(
 			"ROUTA_CORRELATION_HEADER_CONFLICT",
 			`The correlation header ${JSON.stringify(header)} in ${configFile} names ${name}, which ${claimed}.`,
-			"Choose a header of its own for correlation, such as x-correlation-id. A correlation ID is not a credential and never replaces x-request-id.",
+			`Choose a header of its own for correlation, ${another}. A correlation ID is not a credential and never replaces x-request-id.`,
 		);
 	}
 
 	return { header: name, diagnostics: [], warnings: [] };
+}
+
+/**
+ * The lowercase header a scheme reads its credential from, when it reads a header of its own.
+ * Bearer reads `authorization` and cookie schemes read `cookie`, which are credential headers anyway.
+ */
+function credentialHeader(scheme: AuthenticationSchemeMetadata): string | undefined {
+	const header =
+		scheme.kind === "apiKey"
+			? scheme.header
+			: scheme.kind === "custom" && "header" in scheme.transport
+				? scheme.transport.header
+				: undefined;
+	return header?.toLowerCase();
 }
 
 /**

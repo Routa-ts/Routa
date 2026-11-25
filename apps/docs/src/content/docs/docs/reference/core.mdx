@@ -1025,8 +1025,9 @@ routes that read them need [`createApplication`](#createapplication) with a serv
 factory. Call it directly in tests of routes that use no application services. Every request
 the app receives, matched or not, gets a generated
 [request identity](/docs/reference/runtime-behavior/#request-identity) and an `x-request-id`
-response header, once: an app mounted in another Routa app with `route()` reuses the outer
-app's identity.
+response header. Routa does not support mounting one Routa app in another with `route()`: the
+mounted app [refuses every request](/docs/reference/runtime-behavior/#request-identity) it
+receives.
 
 | Parameter                    | Type                        | Purpose                                                                            |
 | ---------------------------- | --------------------------- | ---------------------------------------------------------------------------------- |
@@ -1618,9 +1619,11 @@ type RequestErrorReporter = (
 ```
 
 The `onRequestError` option of `createRouta`, `createHonoApp`, and `createApplication`. Routa
-calls it once for each request that fails unexpectedly or breaks its response contract, with
-the value that was thrown and a frozen [`RequestErrorDiagnostic`](#requesterrordiagnostic). It
-has already chosen the response and does not wait for the callback.
+calls it once for each request that fails unexpectedly or breaks its response contract, with the
+value that was thrown and a frozen [`RequestErrorDiagnostic`](#requesterrordiagnostic). A request
+that reaches a Routa app mounted in another Routa app with `route()` is reported too, with an
+`Error` Routa creates to explain the refusal, since nothing was thrown. Routa has already chosen
+the response and does not wait for the callback.
 [Configuration](/docs/reference/configuration/#onrequesterror) lists which failures are not
 reported and what happens when the callback fails.
 
@@ -1683,7 +1686,7 @@ assignment that bypasses the types throws inside the callback and never changes 
 ## `RequestErrorCode`
 
 ```ts
-type RequestErrorCode = "unexpected_failure" | "contract_violation"
+type RequestErrorCode = "unexpected_failure" | "contract_violation" | "configuration_error"
 ```
 
 Whether application code threw, or produced a value its declared contract forbids. The
@@ -1697,6 +1700,7 @@ import type { RequestErrorCode } from "@routa-ts/core";
 export const errorTitles: Record<RequestErrorCode, string> = {
 	unexpected_failure: "Unexpected request failure",
 	contract_violation: "Contract violation",
+	configuration_error: "Configuration error",
 };
 ```
 
@@ -1706,6 +1710,7 @@ export const errorTitles: Record<RequestErrorCode, string> = {
 
 ```ts
 type RequestErrorStage =
+	| "identity"
 	| "authentication"
 	| "context"
 	| "input"
@@ -1724,6 +1729,7 @@ import type { RequestErrorStage } from "@routa-ts/core";
 
 // The team each alert goes to. A Record over the union, so TypeScript flags a missing stage.
 export const stageOwners: Record<RequestErrorStage, string> = {
+	identity: "platform",
 	authentication: "identity",
 	context: "platform",
 	input: "api",

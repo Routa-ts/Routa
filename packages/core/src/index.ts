@@ -891,15 +891,18 @@ export type CorrelationConfig = boolean | { readonly header: string };
  * What kind of failure Routa reports. `unexpected_failure`: application code threw, or Routa
  * failed for a reason it did not expect. `contract_violation`: application code produced a value
  * its declared contract forbids, such as response data that does not match the outcome's schema.
+ * `configuration_error`: the application is configured in a way Routa cannot serve safely, such
+ * as a Routa app mounted in another Routa app with `route()`.
  */
-export type RequestErrorCode = "unexpected_failure" | "contract_violation";
+export type RequestErrorCode = "unexpected_failure" | "contract_violation" | "configuration_error";
 
 /**
- * Where in the request the failure happened: resolving credentials, building the low-level
- * route context, reading input, constructing request services, running middleware, running the
- * handler, or preparing the selected outcome's response.
+ * Where in the request the failure happened: identifying the request, resolving credentials,
+ * building the low-level route context, reading input, constructing request services, running
+ * middleware, running the handler, or preparing the selected outcome's response.
  */
 export type RequestErrorStage =
+	| "identity"
 	| "authentication"
 	| "context"
 	| "input"

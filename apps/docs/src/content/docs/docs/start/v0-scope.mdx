@@ -50,7 +50,7 @@ the complete list.
 | Generated files  | `.routa/routes.gen.ts`, `.routa/testing.gen.ts`, `.routa/manifest.json`, `.routa/openapi-baseline.json`                                                                                                                                                                                                                                                                                                        |
 | CLI              | `create`, `scaffold`, `dev`, `start`, `check`, `generate`, `build`, `routes`, `openapi check`, `openapi breaking`                                                                                                                                                                                                                                                                                              |
 | Logging          | [`createLogger`](/docs/guides/logging/) loggers that redact, escape, and bound every event before an application-owned sink; JSON console output by default; one `http.response.prepared` event per response without the path or error text; `http.error` with a stable code and failure stage; an [`onRequestError`](/docs/reference/configuration/#onrequesterror) callback that receives the original error |
-| Request identity | A generated [`x-request-id`](/docs/reference/runtime-behavior/#request-identity) and readonly `ctx.requestId` on every request; opt-in validated `correlation` echoed and exposed as `ctx.correlationId`; both bound to `ctx.logger`                                                                                                                                                                           |
+| Request identity | A generated [`x-request-id`](/docs/reference/runtime-behavior/#request-identity) and readonly `ctx.requestId` on every request; opt-in validated `correlation` echoed and exposed as `ctx.correlationId`, which cannot name a credential header a scheme reads; both bound to `ctx.logger` and documented on every OpenAPI response                                                                            |
 | Lifecycle        | Route `deprecation` metadata with optional `Deprecation`, `Sunset`, and `Link` headers                                                                                                                                                                                                                                                                                                                         |
 | Query helpers    | `Sort` and `Fields` parsers from `@routa-ts/core/query/helpers`                                                                                                                                                                                                                                                                                                                                                |
 | Testing          | Generated `createTestApp` with in-memory requests, scope service replacement, and disposal                                                                                                                                                                                                                                                                                                                     |
@@ -71,15 +71,14 @@ the complete list.
   accept a request carrying a stale session cookie, and authenticators or guards that set or
   clear cookies
 - Response caching, rate limiting, and broad observability features
-- Correlation header conflicts with configured API-key headers, session cookies, and custom
-  credential transports; only `x-request-id`, the fixed credential headers, and Routa's own
-  response headers are rejected today
 - A generated hosted API reference UI
 - Content types other than JSON at the request and response boundary, and streams, files,
   redirects, or raw `Response` objects
 - Multi-value application response headers
 - Custom bodies, headers, or cookies on the error responses Routa generates itself
 - A source setting for the OpenAPI `info` title, version, and `servers`
+- Mounting one Routa app in another with Hono's `route()`; the mounted app
+  [refuses every request](/docs/reference/runtime-behavior/#request-identity) it receives
 
 ## Consequences
 

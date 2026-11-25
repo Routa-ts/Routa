@@ -253,6 +253,107 @@ export default createRouteRoot("/keys")({
 `,
 };
 
+/**
+ * The identity consumer's src/routa.ts: the default JSON console logger, or `logger: false` when
+ * SMOKE_LOGGER is "off", correlation from x-correlation-id, and an onRequestError that prints what
+ * it receives, so the smoke test can read it from the server's output.
+ */
+const identityRouta = `import { createRouta } from "@routa-ts/core";
+
+export default createRouta({
+	port: 3000,
+	logger: process.env.SMOKE_LOGGER === "off" ? false : undefined,
+	correlation: true,
+	onRequestError: (error, diagnostic) => {
+		console.error(
+			JSON.stringify({
+				reported: diagnostic.code,
+				requestId: diagnostic.requestId,
+				correlationId: diagnostic.correlationId,
+				original: error instanceof Error ? error.message : String(error),
+			}),
+		);
+	},
+});
+`;
+
+/** A route whose handler fails unexpectedly, with error text Routa's own logs must not carry. */
+const identityFailingRoute = `import { createRoute, createRouteRoot } from "@routa-ts/core";
+
+export default createRouteRoot("/boom")({
+	get: createRoute({
+		responses: { ok: { status: 200 } },
+		run: () => {
+			throw new Error("db password=hunter2 rejected");
+		},
+	}),
+});
+`;
+
+/**
+ * A consumer test of identity through the packed packages: a custom sink receives redacted,
+ * identity-bound events, an application without a logger keeps its identity, and the request
+ * logger a handler passes on carries correlation while the imported shared logger does not.
+ */
+const identityConsumerTest = `import { createLogger, createRoute, type RoutaLogEvent, type RoutaLogger } from "@routa-ts/core";
+import { createApplication, type HonoRoute } from "@routa-ts/core/hono";
+import { expect, it } from "vitest";
+import { z } from "zod";
+
+const events: RoutaLogEvent[] = [];
+const shared = createLogger({ redact: ["user.email"], sink: (event) => void events.push(event) });
+
+/** An application service that logs through whichever logger its caller passes. */
+function lookUp(logger: RoutaLogger) {
+	logger.child({ component: "lookup" }).info("lookup.run", "Looked up.", {
+		password: "hunter2",
+		user: { email: "ada@example.com" },
+	});
+}
+
+const who: HonoRoute = {
+	method: "get",
+	path: "/who",
+	contract: createRoute({
+		responses: { ok: { status: 200, schema: z.object({ requestId: z.string() }) } },
+		run: ({ ctx }) => {
+			lookUp(ctx.logger);
+			lookUp(shared);
+			return { type: "ok", data: { requestId: ctx.requestId } };
+		},
+	}),
+};
+
+it("binds request identity to redacted sink events and keeps it without a logger", async () => {
+	const app = await createApplication([who], { logger: shared, correlation: true });
+	const response = await app.fetch(
+		new Request("http://localhost/who", { headers: { "x-correlation-id": "trace-1" } }),
+	);
+	const requestId = response.headers.get("x-request-id");
+	await app.dispose();
+
+	expect(response.headers.get("x-correlation-id")).toBe("trace-1");
+	expect(await response.json()).toEqual({ requestId });
+	const lookups = events.filter((event) => event.event === "lookup.run");
+	expect(lookups.map((event) => event.data)).toEqual([
+		{ requestId, correlationId: "trace-1", component: "lookup", password: "[Redacted]", user: { email: "[Redacted]" } },
+		{ component: "lookup", password: "[Redacted]", user: { email: "[Redacted]" } },
+	]);
+	expect(events.find((event) => event.event === "http.response.prepared")?.data).toMatchObject({
+		requestId,
+		correlationId: "trace-1",
+		route: "/who",
+		status: 200,
+	});
+
+	const quiet = await createApplication([who]);
+	const off = await quiet.fetch(new Request("http://localhost/who"));
+	await quiet.dispose();
+	expect(await off.json()).toEqual({ requestId: off.headers.get("x-request-id") });
+	expect(off.headers.get("x-request-id")).toMatch(/^[0-9a-f-]{36}$/);
+});
+`;
+
 run("vp", ["run", "build:packages"], root);
 mkdirSync(packDir, { recursive: true });
 writeFileSync(
@@ -410,6 +511,20 @@ checkAuthenticatedOpenApi(authenticatedDir);
 await smokeTestStart(authenticatedDir, checkAuthentication);
 process.stdout.write("Packed authenticated consumer passed.\n");
 
+// Request identity through the packed packages: identity-bound redacted sink events in a
+// consumer test, then routa start with the default JSON console logger and with logger: false.
+const identityDir = scaffoldConsumer("app-identity", []);
+writeFileSync(join(identityDir, "src/routa.ts"), identityRouta);
+mkdirSync(join(identityDir, "src/routes/boom"), { recursive: true });
+writeFileSync(join(identityDir, "src/routes/boom/route.ts"), identityFailingRoute);
+writeFileSync(join(identityDir, "src/identity.test.ts"), identityConsumerTest);
+run("vp", ["exec", "routa", "check"], identityDir);
+run("vp", ["exec", "routa", "build"], identityDir);
+run("vp", ["run", "test"], identityDir);
+await smokeTestStart(identityDir, checkIdentity(true));
+await smokeTestStart(identityDir, checkIdentity(false), { SMOKE_LOGGER: "off" });
+process.stdout.write("Packed identity consumer passed.\n");
+
 process.stdout.write(`Pack check passed in ${basename(tmp)}.\n`);
 
 /** Scaffolds a project from the packed creator and installs the packed packages into it. */
@@ -443,18 +558,19 @@ function scaffoldConsumer(name, flags) {
 
 /**
  * Starts the packaged `routa start` server, waits until it serves the starter route, then runs
- * `check(port, signal, output)` against it.
+ * `check(port, signal, output, logs, stop)` against it, where `logs()` reads the output so far and
+ * `stop()` stops the server and resolves once both of its output streams have ended.
  *
  * This guards the packaged runtime entry (dist/runtime.js), which `routa check`
  * and `routa build` never exercise.
  */
-async function smokeTestStart(cwd, check) {
+async function smokeTestStart(cwd, check, env = {}) {
 	const port = await freePort();
 	// detached puts the vp -> routa -> node chain in its own process group so
 	// the whole tree can be killed once the smoke test finishes.
 	const child = spawn("vp", ["exec", "routa", "start"], {
 		cwd,
-		env: { ...process.env, PORT: String(port), HOST: "127.0.0.1" },
+		env: { ...process.env, ...env, PORT: String(port), HOST: "127.0.0.1" },
 		stdio: ["ignore", "pipe", "pipe"],
 		shell: process.platform === "win32",
 		detached: process.platform !== "win32",
@@ -466,6 +582,41 @@ async function smokeTestStart(cwd, check) {
 	child.stderr.on("data", (chunk) => {
 		output += chunk;
 	});
+	// "close" fires once the process has exited and both of its output streams have ended.
+	const closed = new Promise((resolveClosed) => child.once("close", resolveClosed));
+	const signalTree = (signal) => {
+		// With shell: true the child is cmd.exe, so stop the whole tree under it, which Windows
+		// does only by force.
+		if (process.platform === "win32" && child.pid) {
+			spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+			return;
+		}
+
+		if (child.pid) {
+			try {
+				process.kill(-child.pid, signal);
+				return;
+			} catch {
+				// Fall back to the direct child below.
+			}
+		}
+
+		child.kill(signal);
+	};
+	let stopping;
+	const stop = () => {
+		stopping ??= (async () => {
+			signalTree("SIGTERM");
+			// Unref'd, so the deadline never keeps pack:check running after the server has stopped.
+			const timeout = sleep(10_000, undefined, { ref: false }).then(() => "timeout");
+
+			if ((await Promise.race([closed, timeout])) === "timeout") {
+				signalTree("SIGKILL");
+				throw new Error(`routa start did not stop within 10s of SIGTERM.\n${output}`);
+			}
+		})();
+		return stopping;
+	};
 
 	try {
 		const deadline = Date.now() + 30_000;
@@ -523,18 +674,20 @@ async function smokeTestStart(cwd, check) {
 		}
 
 		// Outside the readiness retries: a failing check reports its own error, never a timeout.
-		await check(port, AbortSignal.timeout(Math.max(1, deadline - Date.now())), output);
-	} finally {
-		if (process.platform !== "win32" && child.pid) {
-			try {
-				process.kill(-child.pid, "SIGTERM");
-			} catch {
-				child.kill("SIGTERM");
-			}
-		} else {
-			child.kill("SIGTERM");
-		}
+		await check(
+			port,
+			AbortSignal.timeout(Math.max(1, deadline - Date.now())),
+			output,
+			() => output,
+			stop,
+		);
+	} catch (error) {
+		// Stop the server either way, but report the check's failure over a failure to stop.
+		await stop().catch(() => {});
+		throw error;
 	}
+
+	await stop();
 }
 
 /** Checks the response contract route: header, repeated `Set-Cookie` fields, and an empty body. */
@@ -662,6 +815,132 @@ async function checkAuthentication(port, signal, output) {
 			);
 		}
 	}
+}
+
+/**
+ * Checks request identity over HTTP: a generated x-request-id that a forged one never replaces,
+ * one valid correlation ID echoed and an invalid one dropped, an unexpected failure reported to
+ * onRequestError with its original error, and, when logging is on, JSON events that share the
+ * identity and carry no error text.
+ */
+function checkIdentity(logging) {
+	return async (port, signal, _output, logs, stop) => {
+		const observe = async (path, headers) => {
+			const response = await fetch(`http://127.0.0.1:${port}${path}`, { headers, signal });
+			await response.arrayBuffer();
+			return {
+				status: response.status,
+				requestId: response.headers.get("x-request-id"),
+				correlationId: response.headers.get("x-correlation-id"),
+			};
+		};
+		const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+		const accepted = await observe("/status", {
+			"x-request-id": "forged",
+			"X-Correlation-Id": "trace-1",
+		});
+		const ignored = await observe("/status", { "x-correlation-id": "not valid" });
+		const failed = await observe("/boom", { "x-correlation-id": "trace-2" });
+		const fail = (problem) => {
+			throw new Error(
+				`Identity smoke test (logging ${logging ? "on" : "off"}) ${problem}.\n${logs()}`,
+			);
+		};
+
+		const expected = {
+			accepted: { status: 200, correlationId: "trace-1" },
+			ignored: { status: 200, correlationId: null },
+			failed: { status: 500, correlationId: "trace-2" },
+		};
+		const actual = { accepted, ignored, failed };
+
+		for (const [name, { status, correlationId }] of Object.entries(expected)) {
+			const observed = actual[name];
+
+			if (
+				observed.status !== status
+				|| !uuid.test(observed.requestId ?? "")
+				|| observed.correlationId !== correlationId
+			) {
+				fail(
+					`expected ${name} to be ${JSON.stringify(expected[name])} with a UUID, got ${JSON.stringify(observed)}`,
+				);
+			}
+		}
+
+		const lines = () =>
+			logs()
+				.split("\n")
+				.flatMap((line) => {
+					try {
+						return [JSON.parse(line)];
+					} catch {
+						return [];
+					}
+				});
+		const reported = () =>
+			lines().find((line) => line.reported !== undefined && line.requestId === failed.requestId);
+		const prepared = () =>
+			lines().find(
+				(line) =>
+					line.event === "http.response.prepared" && line.data?.requestId === accepted.requestId,
+			);
+		const error = () =>
+			lines().find(
+				(line) => line.event === "http.error" && line.data?.requestId === failed.requestId,
+			);
+
+		if (!logging) {
+			// Stop the server and read both streams to their end, so a request event written to
+			// either one, as JSON or as plain text, cannot arrive after the check.
+			await stop();
+			const leaked = logs()
+				.split("\n")
+				.filter((line) => /\bhttp\.[a-z]/.test(line));
+
+			if (leaked.length > 0) {
+				fail(`expected logger: false to log no request events, got ${JSON.stringify(leaked)}`);
+			}
+		} else {
+			// The report goes to stderr and the events to stdout, and the two streams arrive
+			// independently: wait for all three, and fail if any is missing after five seconds.
+			const deadline = Date.now() + 5_000;
+
+			while (!(reported() && prepared() && error()) && Date.now() < deadline) {
+				await sleep(50);
+			}
+		}
+
+		if (
+			JSON.stringify(reported())
+			!== JSON.stringify({
+				reported: "unexpected_failure",
+				requestId: failed.requestId,
+				correlationId: "trace-2",
+				original: "db password=hunter2 rejected",
+			})
+		) {
+			fail(
+				`expected onRequestError to receive the original error, got ${JSON.stringify(reported())}`,
+			);
+		}
+
+		if (!logging) {
+			return;
+		}
+
+		const events = lines().filter((line) => typeof line.event === "string");
+
+		if (
+			prepared()?.level !== "info"
+			|| prepared().data.correlationId !== "trace-1"
+			|| prepared().data.route !== "/status"
+			|| error() === undefined
+			|| JSON.stringify(events).includes("hunter2")
+		) {
+			fail(`expected JSON request events that share the identity, got ${JSON.stringify(events)}`);
+		}
+	};
 }
 
 /**
