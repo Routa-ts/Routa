@@ -3,6 +3,7 @@ import type { CreateApplicationOptions, HonoRoute, RoutaApplication } from "./ho
 import type { RoutaConfig } from "./index.js";
 import { createLogger, type RoutaLogger } from "./logger.js";
 import { assertCreatedLogger } from "./logger-registry.js";
+import { correlationHeaderOf } from "./request-identity.js";
 import type { ApplicationServicesDeclaration } from "./services.js";
 
 /**
@@ -71,6 +72,8 @@ type MetadataModule = {
 	routaApplicationServices?: readonly string[];
 	routaAuthenticationSchemes?: readonly string[];
 	routaMultipleCredentials?: string;
+	/** The lowercase correlation header, generated only when `src/routa.ts` turns correlation on. */
+	routaCorrelationHeader?: string;
 };
 
 type Middleware = NonNullable<HonoRoute["contract"]["middleware"]>[number];
@@ -122,9 +125,14 @@ export async function buildProjectApplication(
 		replacement: replacements.services,
 	});
 	assertAuthenticationMetadata(config.authentication, metadata);
+	// Read once into a value of Routa's own, so the header checked here is the one requests use,
+	// whatever code changes the config later.
+	const correlationHeader = correlationHeaderOf(config.correlation);
+	assertCorrelationMetadata(correlationHeader, metadata);
 	const application = await createApplication(routes, {
 		runtimeMode: options.runtimeMode,
 		...(config.authentication && { authentication: config.authentication }),
+		...(correlationHeader !== undefined && { correlation: { header: correlationHeader } }),
 		...(logger && { logger }),
 		...(config.lifecycleHeaders !== undefined && { lifecycleHeaders: config.lifecycleHeaders }),
 		...(config.responseValidation && { responseValidation: config.responseValidation }),
@@ -179,6 +187,33 @@ function assertAuthenticationMetadata(
 			`src/routa.ts configures multipleCredentials ${JSON.stringify(runtime.multipleCredentials)}, but .routa/routes.gen.ts declares ${JSON.stringify(metadata.routaMultipleCredentials)}. Run routa generate.`,
 		);
 	}
+}
+
+/**
+ * Checks that `src/routa.ts` reads correlation from the header `routa generate` read, so generated
+ * OpenAPI documents the header the running application echoes.
+ *
+ * @param configured - The lowercase header `src/routa.ts` configures, already validated
+ * @throws When it and the generated metadata disagree
+ */
+function assertCorrelationMetadata(configured: string | undefined, metadata: MetadataModule): void {
+	const generated = metadata.routaCorrelationHeader;
+
+	if (configured === generated) {
+		return;
+	}
+
+	if (configured === undefined) {
+		throw new Error(
+			`.routa/routes.gen.ts declares correlation header ${generated}, but src/routa.ts configures no correlation. Run routa generate.`,
+		);
+	}
+
+	throw new Error(
+		generated === undefined
+			? `src/routa.ts reads correlation from ${configured}, but .routa/routes.gen.ts declares no correlation header. Write correlation as a literal in the createRouta object, then run routa generate.`
+			: `src/routa.ts reads correlation from ${configured}, but .routa/routes.gen.ts declares ${generated}. Run routa generate.`,
+	);
 }
 
 /**

@@ -1,4 +1,9 @@
-import { markCreatedLogger } from "./logger-registry.js";
+import {
+	type FrameworkEvent,
+	markCreatedLogger,
+	type RequestIdentityFields,
+	type RequestLogging,
+} from "./logger-registry.js";
 
 /** Routa's standard log levels, ordered from least to most severe. */
 export type RoutaLogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
@@ -68,7 +73,9 @@ export type CreateLoggerOptions = {
 	/**
 	 * Field paths to redact in addition to the baseline sensitive names, which always apply.
 	 * Segments are separated by `.` and matched case-insensitively from the root of the event data;
-	 * `*` matches any key or array index, such as `"orders.*.card"`.
+	 * `*` matches any key or array index, such as `"orders.*.card"`. No path redacts the
+	 * `requestId` and `correlationId` a request logger binds at the root, so request events log
+	 * the identity the response headers carry.
 	 */
 	redact?: readonly string[];
 	/** The clock for event timestamps. Defaults to `() => new Date()`. */
@@ -92,6 +99,8 @@ type RawEvent = {
 	readonly message: unknown;
 	readonly timestamp: unknown;
 	readonly data: unknown;
+	/** Fields written first, which neither bindings nor data replace or crowd out. */
+	readonly kept?: RoutaLogData | undefined;
 };
 
 /**
@@ -131,8 +140,14 @@ export function createLogger(input: CreateLoggerOptions = {}): RoutaLogger {
 	/**
 	 * @param bindings - Sanitized bindings, which no caller can reach or change, or `undefined`
 	 *   when they could not be sanitized and every event must be discarded.
+	 * @param identity - The request identity fields among the bindings, which every event and
+	 *   child writes first and keeps whatever data or bindings it adds
+	 * @returns The logger, and the writer for Routa's own events through it
 	 */
-	function buildLogger(bindings: RoutaLogData | undefined): RoutaLogger {
+	function buildLogger(
+		bindings: RoutaLogData | undefined,
+		identity: RoutaLogData,
+	): RequestLogging<RoutaLogger> {
 		/**
 		 * The one path every event takes to the sink, whichever method produced it. Nothing it
 		 * calls can throw to the caller, and it never waits for the sink.
@@ -153,7 +168,14 @@ export function createLogger(input: CreateLoggerOptions = {}): RoutaLogger {
 					throw new TypeError("The logger's bindings could not be sanitized.");
 				}
 
-				const fields = sanitizeMerged(bindings, raw.data ?? {}, paths);
+				const fields = sanitizeMerged(
+					bindings,
+					raw.data ?? {},
+					paths,
+					false,
+					raw.kept ?? identity,
+					identity,
+				);
 				event = {
 					timestamp: sanitizeText(raw.timestamp),
 					level: raw.level,
@@ -177,7 +199,14 @@ export function createLogger(input: CreateLoggerOptions = {}): RoutaLogger {
 			}
 		}
 
-		function emit(level: RoutaLogLevel, event: string, message: string, data?: RoutaLogData): void {
+		/** @param kept - Fields written first, after the identity, which no binding crowds out */
+		function emit(
+			level: RoutaLogLevel,
+			event: string,
+			message: string,
+			data?: RoutaLogData,
+			kept?: RoutaLogData,
+		): void {
 			if (isLevelEnabled(level)) {
 				deliver(() => ({
 					level,
@@ -185,6 +214,7 @@ export function createLogger(input: CreateLoggerOptions = {}): RoutaLogger {
 					message,
 					timestamp: Date.prototype.toISOString.call(now()),
 					data,
+					kept,
 				}));
 			}
 		}
@@ -211,27 +241,57 @@ export function createLogger(input: CreateLoggerOptions = {}): RoutaLogger {
 			error: (event, message, data) => emit("error", event, message, data),
 			fatal: (event, message, data) => emit("fatal", event, message, data),
 			silent: () => undefined,
-			child: (childBindings) => buildLogger(childOf(bindings, childBindings)),
+			child: (childBindings) =>
+				buildLogger(childOf(bindings, childBindings, identity), identity).logger,
 			bindings: () => (bindings ? structuredClone(bindings) : {}),
 			isLevelEnabled,
 		};
+		// Routa's own events write their fields right after the identity, which still wins.
+		const frameworkEvent: FrameworkEvent = (level, event, message, data) =>
+			emit(level, event, message, {}, { ...identity, ...data, ...identity });
 
-		return markCreatedLogger(logger as RoutaLogger);
+		return {
+			logger: markCreatedLogger(logger as RoutaLogger, (fields) =>
+				requestLogger(bindings, identity, fields),
+			),
+			event: frameworkEvent,
+		};
 	}
 
-	function childOf(bindings: RoutaLogData | undefined, added: unknown): RoutaLogData | undefined {
+	/**
+	 * A child bound to request identity fields, which come first in its bindings and every event.
+	 * A field without a value, such as `correlationId` when none was accepted, appears in neither,
+	 * whatever the bindings or event data hold. The fields replace any identity this logger
+	 * already binds, so a request logger configured as another app's logger logs each request
+	 * that app handles with that request's identity, not its own.
+	 */
+	function requestLogger(
+		bindings: RoutaLogData | undefined,
+		identity: RoutaLogData,
+		fields: RequestIdentityFields,
+	): RequestLogging<RoutaLogger> {
+		const kept = { ...identity, ...fields };
+		return buildLogger(childOf(bindings, {}, kept), kept);
+	}
+
+	/** @param kept - The identity fields, which the child's bindings hold first and keep */
+	function childOf(
+		bindings: RoutaLogData | undefined,
+		added: unknown,
+		kept: RoutaLogData,
+	): RoutaLogData | undefined {
 		if (!bindings) {
 			return undefined;
 		}
 
 		try {
-			return sanitizeMerged(bindings, added, paths, true);
+			return sanitizeMerged(bindings, added, paths, true, kept, kept);
 		} catch {
 			return undefined;
 		}
 	}
 
-	return buildLogger({});
+	return buildLogger({}, {}).logger;
 }
 
 /**
@@ -253,7 +313,10 @@ function createDisabledLogger(): RoutaLogger {
 		bindings: () => ({}),
 		isLevelEnabled: () => false,
 	};
-	const logger = markCreatedLogger(methods as RoutaLogger);
+	const logger: RoutaLogger = markCreatedLogger(methods as RoutaLogger, () => ({
+		logger,
+		event: ignore,
+	}));
 
 	return logger;
 }
@@ -751,8 +814,14 @@ function sanitizeItems(
 	return items;
 }
 
-/** An object member to sanitize: the key its redaction is decided on, and how to read its value. */
-type Member = { readonly key: string; readonly read: () => unknown };
+/**
+ * An object member to sanitize: the key its redaction is decided on, how to read its value, and
+ * whether it is request identity Routa binds, which no `redact` path names.
+ */
+type Member = { readonly key: string; readonly read: () => unknown; readonly identity?: true };
+
+/** What a member that is never redacted continues with: no path. */
+const noPaths: PendingPaths = [];
 
 function sanitizeEntries(
 	value: object,
@@ -785,14 +854,14 @@ function sanitizeMembers(
 	const entries: Array<[string, unknown]> = [];
 	let visited = 0;
 
-	for (const [name, { key, read }] of members) {
+	for (const [name, { key, read, identity }] of members) {
 		if (visited === maxEntries) {
 			truncated = true;
 			break;
 		}
 
 		visited += 1;
-		const item = sanitizeMember(read, traversal, redactionOf(key, pending));
+		const item = sanitizeMember(read, traversal, identity ? noPaths : redactionOf(key, pending));
 
 		if (item !== undefined) {
 			entries.push([name, item]);
@@ -821,14 +890,23 @@ const bindingKeys = new WeakMap<RoutaLogData, ReadonlyMap<string, string>>();
 
 /**
  * Sanitizes `added` merged over `base` as one object, so every limit holds for the result as a
- * whole: an event's data with its bindings, or a child's bindings with its parent's. `base` keys
- * come first, and an `added` key replaces a `base` key in place when both escape to the same name.
+ * whole: an event's data with its bindings, or a child's bindings with its parent's. `kept` keys
+ * come first, then `base` keys, and an `added` key replaces a `base` key in place when both escape
+ * to the same name. No `base` or `added` key replaces a `kept` one, and coming first, `kept`
+ * fields are never the ones the limits leave out. A `kept` key whose value is `undefined` is
+ * written nowhere, so neither `base` nor `added` can supply it.
  *
  * @param base - Bindings that were already sanitized, so reading them runs no caller code and
  *   their keys are already escaped; deciding their redaction again reveals nothing the first
  *   decision redacted
  * @param rememberKeys - Whether the result is a child's bindings, whose changed keys later
  *   events may override
+ * @param kept - Fields Routa owns, such as request identity, whose keys need no escaping, and
+ *   names it reserves without a value
+ * @param identity - The request identity Routa binds, among `kept`. Its fields are never
+ *   redacted, so they log the values the response headers carry: no baseline name is an
+ *   identity name, and `redact` paths do not apply to them. A path still applies to a field of
+ *   the same name deeper in the data.
  * @throws {TypeError} When `added` is not a plain object
  */
 function sanitizeMerged(
@@ -836,6 +914,8 @@ function sanitizeMerged(
 	added: unknown,
 	paths: PendingPaths,
 	rememberKeys = false,
+	kept: RoutaLogData = {},
+	identity: RoutaLogData = {},
 ): RoutaLogData {
 	if (!isPlainObject(added)) {
 		throw new TypeError("Log data must be a plain object.");
@@ -844,10 +924,24 @@ function sanitizeMerged(
 	const members = new Map<string, Member>();
 	const baseKeys = bindingKeys.get(base);
 	const originalKeys = new Map<string, string>();
+	const isKept = (name: string) => Object.hasOwn(kept, name);
+
+	// A kept name without a value is reserved: no field of that name is written at all.
+	for (const name of Object.keys(kept)) {
+		if (kept[name] !== undefined) {
+			members.set(name, {
+				key: name,
+				read: () => kept[name],
+				...(Object.hasOwn(identity, name) && { identity: true as const }),
+			});
+		}
+	}
 
 	for (const name of Object.keys(base)) {
-		members.set(name, { key: name, read: () => base[name] });
-		originalKeys.set(name, baseKeys?.get(name) ?? name);
+		if (!isKept(name)) {
+			members.set(name, { key: name, read: () => base[name] });
+			originalKeys.set(name, baseKeys?.get(name) ?? name);
+		}
 	}
 
 	// Escaping a key twice changes nothing, so an added key escaped here meets its base key.
@@ -857,8 +951,11 @@ function sanitizeMerged(
 	for (const key of keys.slice(0, maxEntries + 1)) {
 		const name = safeText(key);
 		replaced.add(name);
-		members.set(name, { key, read: () => memberValue(added, key) });
-		originalKeys.set(name, key);
+
+		if (!isKept(name)) {
+			members.set(name, { key, read: () => memberValue(added, key) });
+			originalKeys.set(name, key);
+		}
 	}
 
 	// An added key past the ones read above still replaces a base key that escapes to the same
@@ -869,7 +966,11 @@ function sanitizeMerged(
 		for (const name of Object.keys(base)) {
 			const key = baseKeys?.get(name) ?? name;
 
-			if (!replaced.has(name) && Object.prototype.propertyIsEnumerable.call(added, key)) {
+			if (
+				!replaced.has(name)
+				&& !isKept(name)
+				&& Object.prototype.propertyIsEnumerable.call(added, key)
+			) {
 				members.set(name, { key, read: () => memberValue(added, key) });
 				originalKeys.set(name, key);
 			}

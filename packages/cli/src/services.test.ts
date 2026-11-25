@@ -311,6 +311,82 @@ export default createRouta(config);
 		}
 	});
 
+	it("reads services from a default re-exported or imported from another module", async () => {
+		for (const routa of [
+			'export { default } from "./config.js";\n',
+			'import config from "./config.js";\n\nexport default config;\n',
+		]) {
+			const cwd = servicesProject({
+				"src/services.ts": clockContract,
+				"src/routes/status/route.ts": statusRoute,
+				"src/config.ts": `import { createRouta } from "@routa-ts/core";
+import { defineAppServices } from "./services.js";
+
+export default createRouta({ services: defineAppServices(() => ({ clock: { now: () => "" } })) });
+`,
+				"src/routa.ts": routa,
+			});
+
+			expect(validateProject(cwd, { write: false }), routa).toMatchObject({
+				diagnostics: [],
+				warnings: [],
+			});
+			expect((await run(["generate"], { cwd })).code).toBe(0);
+			expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
+				'export const routaApplicationServices = [\n\t"clock"\n] as const;',
+			);
+
+			const { application } = await createProjectApplication(cwd, cwd, "dev");
+			await application.dispose();
+		}
+	});
+
+	it("reads services from createRouta imported under another name or as a namespace", async () => {
+		const factory = 'defineAppServices(() => ({ clock: { now: () => "" } }))';
+
+		for (const routa of [
+			`import { createRouta as defineApi } from "@routa-ts/core";\nimport { defineAppServices } from "./services.js";\n\nexport default defineApi({ services: ${factory} });\n`,
+			`import * as core from "@routa-ts/core";\nimport { defineAppServices } from "./services.js";\n\nexport default core.createRouta({ services: ${factory} });\n`,
+		]) {
+			const cwd = servicesProject({
+				"src/services.ts": clockContract,
+				"src/routes/status/route.ts": statusRoute,
+				"src/routa.ts": routa,
+			});
+
+			expect(validateProject(cwd, { write: false }), routa).toMatchObject({
+				diagnostics: [],
+				warnings: [],
+			});
+			expect((await run(["generate"], { cwd })).code, routa).toBe(0);
+			expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8"), routa).toContain(
+				'export const routaApplicationServices = [\n\t"clock"\n] as const;',
+			);
+		}
+	});
+
+	it("reads services from createRouta that a local module re-exports from @routa-ts/core", async () => {
+		const cwd = servicesProject({
+			"src/services.ts": clockContract,
+			"src/routes/status/route.ts": statusRoute,
+			"src/config-helpers.ts": 'export { createRouta } from "@routa-ts/core";\n',
+			"src/routa.ts": `import { createRouta } from "./config-helpers.js";
+import { defineAppServices } from "./services.js";
+
+export default createRouta({ services: defineAppServices(() => ({ clock: { now: () => "" } })) });
+`,
+		});
+
+		expect(validateProject(cwd, { write: false })).toMatchObject({
+			diagnostics: [],
+			warnings: [],
+		});
+		expect((await run(["generate"], { cwd })).code).toBe(0);
+		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
+			'export const routaApplicationServices = [\n\t"clock"\n] as const;',
+		);
+	});
+
 	it("reads services only from the default-exported createRouta config", async () => {
 		const factory = 'defineAppServices(() => ({ clock: { now: () => "" } }))';
 
@@ -799,6 +875,42 @@ export default createRouta({
 		});
 		expect(record.events).toEqual(["clock released", "services.cleanup_failed"]);
 	});
+
+	it("logs how many cleanup callbacks failed at startup, without their errors", async () => {
+		const key = `routa-cleanup-data-${Math.random()}`;
+		const cwd = servicesProject({
+			"src/services.ts": clockContract,
+			"src/routa.ts": `import { createLogger, createRouta } from "@routa-ts/core";
+import { defineAppServices } from "./services.js";
+
+const observed = (globalThis as any)[${JSON.stringify(key)}];
+
+export default createRouta({
+\tport: -1,
+\tlogger: createLogger({
+\t\tsink: (event) => {
+\t\t\tif (event.event === "services.cleanup_failed") observed.events.push(JSON.stringify(event));
+\t\t},
+\t}),
+\tservices: defineAppServices(({ onCleanup }) => {
+\t\tonCleanup(() => {
+\t\t\tthrow new Error("release failed with secret detail");
+\t\t});
+\t\treturn { clock: { now: () => "" } };
+\t}),
+});
+`,
+			"src/routes/status/route.ts": statusRoute,
+		});
+		const record = observed(key);
+
+		expect((await run(["generate"], { cwd })).code).toBe(0);
+		await expect(startRuntime(cwd, cwd, "start")).rejects.toMatchObject({
+			code: "ERR_SOCKET_BAD_PORT",
+		});
+		expect(record.events.map((line) => JSON.parse(line).data)).toEqual([{ failureCount: 1 }]);
+		expect(record.events.join("\n")).not.toMatch(/secret detail|Error|at /);
+	});
 });
 
 const statusRoute = `import { createRoute, createRouteRoot } from "@routa-ts/core";
@@ -867,6 +979,61 @@ describe("reserved ctx.services (routa check)", () => {
 				},
 			]);
 		}
+	});
+
+	it("reads the payload const the next() call can see, not one in another block", () => {
+		const cwd = servicesProject({
+			"src/routes/middleware.ts": middlewareFile(
+				"export const withAudit = createMiddleware({\n\trun: ({ next }) => {\n\t\tif (Math.random() > 2) {\n\t\t\tconst payload = { services: 'logged' };\n\t\t\tvoid payload;\n\t\t}\n\t\tconst payload = { audited: true };\n\t\treturn next(payload as never);\n\t},\n});\n",
+			),
+			"src/routes/status/route.ts": statusRoute,
+		});
+
+		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
+	});
+
+	it("does not read an outer const that a callback parameter shadows", () => {
+		const cwd = servicesProject({
+			"src/routes/middleware.ts": middlewareFile(
+				"export const withTenant = createMiddleware({\n\trun: ({ next }) => {\n\t\tconst payload = { services: 'logged', tenant: 'acme' };\n\t\tconst forward = (payload: { tenant: string }) => next(payload as never);\n\t\treturn forward({ tenant: payload.tenant });\n\t},\n});\n",
+			),
+			"src/routes/status/route.ts": statusRoute,
+		});
+
+		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
+	});
+
+	it("does not read a block's own next binding as the continuation", () => {
+		const cwd = servicesProject({
+			"src/routes/middleware.ts": middlewareFile(
+				"export const withLabel = createMiddleware({\n\trun: ({ next }) => {\n\t\tif (Math.random() < 2) {\n\t\t\tconst next = (value: object) => value;\n\t\t\tnext({ services: 'label' });\n\t\t}\n\t\treturn next();\n\t},\n});\n",
+			),
+			"src/routes/status/route.ts": statusRoute,
+		});
+
+		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
+	});
+
+	it("does not read an outer const that a loop binding shadows", () => {
+		const cwd = servicesProject({
+			"src/routes/middleware.ts": middlewareFile(
+				"export const withTenant = createMiddleware({\n\trun: ({ next }) => {\n\t\tconst payload = { services: 'logged' };\n\t\tvoid payload;\n\t\tfor (const payload of [{ tenant: 'acme' }]) {\n\t\t\treturn next(payload as never);\n\t\t}\n\t\treturn next();\n\t},\n});\n",
+			),
+			"src/routes/status/route.ts": statusRoute,
+		});
+
+		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
+	});
+
+	it("does not read an outer const that an inner let shadows", () => {
+		const cwd = servicesProject({
+			"src/routes/middleware.ts": middlewareFile(
+				"export const withTenant = createMiddleware({\n\trun: ({ next }) => {\n\t\tconst payload = { services: 'logged' };\n\t\tvoid payload;\n\t\tif (Math.random() < 2) {\n\t\t\tlet payload = { tenant: 'acme' };\n\t\t\treturn next(payload as never);\n\t\t}\n\t\treturn next();\n\t},\n});\n",
+			),
+			"src/routes/status/route.ts": statusRoute,
+		});
+
+		expect(validateProject(cwd, { write: false }).diagnostics).toEqual([]);
 	});
 
 	it("does not read a nested function's own next() as the continuation", () => {
@@ -1023,7 +1190,7 @@ export default createRouteRoot("/orders")({
 \t\t\tvoid ctx.services.orders;
 \t\t};
 \t\tvoid typeChecks;
-\t\tconst opened = \`\${ctx.requestId}@\${ctx.services.clock.now()}\`;
+\t\tconst opened = \`\${ctx.region}@\${ctx.services.clock.now()}\`;
 \t\treturn { orders: { opened: () => opened, count: () => 2 } };
 \t}),
 \tget: createRoute({
@@ -1073,8 +1240,8 @@ export default createRouta({
 });
 `,
 		"src/routes/middleware.ts": middlewareFile(`export const withRequest = createMiddleware({
-\tprovides: { requestId: z.string() },
-\trun: ({ next }) => next({ requestId: "req-1" }),
+\tprovides: { region: z.string() },
+\trun: ({ next }) => next({ region: "eu-1" }),
 });
 `),
 		"src/orders/services.ts": ordersServices,
@@ -1114,23 +1281,23 @@ describe("request-scoped services", () => {
 		expect(generated).toContain(`export type RoutaFactoryCtxByPath = {
 	"/orders": {
 		routeFile: {
-			"requestId": string;
+			"region": string;
 			readonly "services": Readonly<RoutaApplicationServices>;
 		};
 		post: {
-			"requestId": string;
+			"region": string;
 			"tenant": string;
 			readonly "services": Readonly<RoutaApplicationServices & ${orders}>;
 		};
 	};
 };`);
 		expect(generated).toContain(`		get: {
-			"requestId": string;
+			"region": string;
 			"tenant": string;
 			readonly "services": Readonly<RoutaApplicationServices & ${orders}>;
 		};
 		post: {
-			"requestId": string;
+			"region": string;
 			"tenant": string;
 			readonly "services": Readonly<RoutaApplicationServices & ${orders} & ${checkout}>;
 		};`);
@@ -1142,7 +1309,7 @@ describe("request-scoped services", () => {
 			new Request("http://localhost/orders", { method: "POST" }),
 		);
 
-		expect(await get.json()).toEqual({ opened: "req-1@noon", count: 2 });
+		expect(await get.json()).toEqual({ opened: "eu-1@noon", count: 2 });
 		expect(await post.json()).toEqual({ total: "acme:2", at: "noon" });
 		await application.dispose();
 	}, 30_000);
@@ -1630,7 +1797,7 @@ type RoutaServicesSatisfy<_TPlacement extends string, TAvailable extends TRequir
 		await application.dispose();
 	}, 30_000);
 
-	it("stops a request whose middleware lacks a service at runtime, naming where it runs", async () => {
+	it("stops a request whose middleware lacks a service at runtime", async () => {
 		const events: Array<{ event: string; data?: Record<string, unknown> }> = [];
 		Object.assign(globalThis, { routaRequirementEvents: events });
 		const cwd = requirementsProject({
@@ -1657,11 +1824,12 @@ export default createRouta({
 
 		expect(response.status).toBe(500);
 		expect(JSON.stringify(await response.json())).not.toContain("ledger");
-		expect(events.find((event) => event.event === "http.error")?.data).toMatchObject({
+		// The log carries the request's identity and route, never the error's message.
+		expect(events.find((event) => event.event === "http.error")?.data).toEqual({
+			requestId: response.headers.get("x-request-id"),
 			method: "GET",
-			path: "/ledger",
-			error:
-				'Middleware withTime on GET /ledger requires service "ledger", but ctx.services does not provide it where the middleware runs. Declare "ledger" in a services scope that runs before the middleware.',
+			route: "/ledger",
+			status: 500,
 		});
 		await application.dispose();
 	}, 30_000);

@@ -69,20 +69,27 @@ handler's data, header, or cookie objects afterwards does not change the respons
 validated headers, cookies, or query values without the route declaring them:
 
 ```ts title="src/middleware/context.ts"
-export const withRequest = createMiddleware({
+export const withLocale = createMiddleware({
 	input: {
 		headers: z.object({
-			"x-request-id": z.string().optional(),
+			"accept-language": z.string().optional(),
 		}),
 	},
 	provides: {
-		requestId: z.string(),
+		locale: z.string(),
 	},
 	run: async ({ input, next }) => {
-		return next({ requestId: input.headers["x-request-id"] ?? "local-request" });
+		return next({ locale: input.headers["accept-language"] ?? "en" });
 	},
 });
 ```
+
+Every middleware also reads the readonly [request identity](/docs/reference/core/#requestidentitycontext),
+`ctx.requestId` and `ctx.correlationId`, without requiring it. Routa generates `requestId` for
+each request, so no middleware provides it: `services`, `requestId`, `correlationId`, and
+`logger` are reserved. TypeScript and `routa check` (`ROUTA_CONTEXT_RESERVED`) reject a
+middleware that provides one or passes one to `next()`, registration rejects one in `provides`,
+and a request whose middleware passes one to `next()` past the types fails as a `500`.
 
 ### Service Requirements
 
@@ -123,7 +130,7 @@ A `middleware.ts` file applies to every route in its folder and below. Export or
 middleware contracts from it; the export order is the execution order.
 
 ```ts title="src/routes/middleware.ts"
-export { withRequest, withSession } from "../middleware/context.js";
+export { withLocale, withSession } from "../middleware/context.js";
 ```
 
 Context accumulates as routing gets more specific, which is why a group folder is a useful
@@ -131,18 +138,18 @@ place to attach a chain:
 
 <FileTree>
 - src/routes/
-  - middleware.ts `withRequest`, `withSession`
+  - middleware.ts `withLocale`, `withSession`
   - (private)/
     - middleware.ts `withAuth`
     - admin/
       - middleware.ts `withAdmin`
       - audit-events/
-        - route.ts sees requestId, session, auth, admin
+        - route.ts sees locale, session, auth, admin
     - tenants/
       - $tenantId/
         - middleware.ts `withTenant`
         - projects/
-          - route.ts sees requestId, session, auth, tenant
+          - route.ts sees locale, session, auth, tenant
 </FileTree>
 
 ### Per Route and Per Method

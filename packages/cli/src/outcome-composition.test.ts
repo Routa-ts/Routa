@@ -5,6 +5,15 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import { generateOpenApi } from "./openapi.js";
 import { validateProject } from "./project.js";
 
+/** The header Routa documents on every response. */
+const identity = {
+	"x-request-id": {
+		required: true,
+		description: "The request identity Routa generated for this request.",
+		schema: { type: "string", format: "uuid" },
+	},
+};
+
 type Json = Record<string, unknown>;
 
 const temporaryProjects = new Set<string>();
@@ -37,6 +46,7 @@ describe("same-status outcomes", () => {
 		expect(responseOf(document, 201)).toEqual({
 			description:
 				"- `created`: The project was created.\n- `queued`: The project was queued for creation.",
+			headers: identity,
 			content: {
 				"application/json": {
 					schema: {
@@ -349,6 +359,7 @@ export const KindD = z.object({ kind: z.literal("d") }).describe("D").and(Identi
 			etag: { description: "Tag.", schema: { type: "string", description: "Tag." } },
 			"x-a": { schema: { type: "string" } },
 			"x-b": { schema: { type: "number" } },
+			...identity,
 		});
 	});
 

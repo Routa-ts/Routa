@@ -5,8 +5,8 @@ import { createLogger, type RoutaLogger } from "./logger.js";
 import { createTestApplication, type ProjectModules } from "./testing.js";
 
 const withRequest = createMiddleware({
-	provides: { requestId: z.string() },
-	run: ({ next }) => next({ requestId: "req-1" }),
+	provides: { tenant: z.string() },
+	run: ({ next }) => next({ tenant: "acme" }),
 });
 
 /** The modules `.routa/testing.gen.ts` would list for a small project with every scope. */
@@ -21,9 +21,9 @@ function projectModules(
 	const route = {
 		services: ({
 			ctx,
-		}: RequestServicesContext<{ requestId: string; services: { clock: { now(): string } } }>) => {
+		}: RequestServicesContext<{ tenant: string; services: { clock: { now(): string } } }>) => {
 			built.push("orders");
-			return { orders: { opened: () => `${ctx.requestId}@${ctx.services.clock.now()}` } };
+			return { orders: { opened: () => `${ctx.tenant}@${ctx.services.clock.now()}` } };
 		},
 		get: createRoute({
 			responses: { ok: { status: 200, schema: z.string() } },
@@ -91,9 +91,9 @@ describe("createTestApplication", () => {
 		const { modules, built } = projectModules();
 		const app = await createTestApplication(modules);
 
-		expect(await (await app.request("/orders")).json()).toBe("req-1@noon");
+		expect(await (await app.request("/orders")).json()).toBe("acme@noon");
 		expect(await (await app.request(new URL("http://example.test/orders"))).json()).toBe(
-			"req-1@noon",
+			"acme@noon",
 		);
 		expect(
 			await (
@@ -116,7 +116,7 @@ describe("createTestApplication", () => {
 			},
 		});
 
-		expect(await (await app.request("/orders")).json()).toBe("req-1@test noon");
+		expect(await (await app.request("/orders")).json()).toBe("acme@test noon");
 		expect(await (await app.request("/orders", { method: "POST" })).json()).toBe("test total");
 		await app.dispose();
 		expect(built).toEqual(["orders", "orders"]);
@@ -176,7 +176,7 @@ describe("createTestApplication", () => {
 			clock: { now: () => "shorthand" },
 		}));
 
-		expect(await (await app.request("/orders")).json()).toBe("req-1@shorthand");
+		expect(await (await app.request("/orders")).json()).toBe("acme@shorthand");
 		await app.dispose();
 		expect(built).toEqual(["orders"]);
 	});
@@ -336,7 +336,7 @@ describe("createTestApplication", () => {
 
 		expect((await app.request("/orders")).status).toBe(500);
 		await app.dispose();
-		expect(events).toContain("http.request");
+		expect(events).toContain("http.response.prepared");
 	});
 
 	it("reports a module the generated list leaves out", async () => {
@@ -379,7 +379,7 @@ describe("project logger configuration", () => {
 		await app.dispose();
 
 		expect(read).toHaveBeenCalledTimes(1);
-		expect(events).toEqual(["http.request"]);
+		expect(events).toEqual(["http.response.prepared"]);
 		expect(swapped.info).not.toHaveBeenCalled();
 	});
 
@@ -443,9 +443,58 @@ describe("project logger configuration", () => {
 			"route.shared_logger",
 			"route.request_logger",
 			"route.shared_logger",
-			"http.request",
+			"http.response.prepared",
 		]);
 		await enabled.dispose();
 		await disabled.dispose();
+	});
+});
+
+describe("project request identity", () => {
+	const route = {
+		get: createRoute({
+			responses: { ok: { status: 200, schema: z.object({ requestId: z.string() }) } },
+			run: ({ ctx }) => ({ type: "ok", data: { requestId: ctx.requestId } }),
+		}),
+	};
+
+	it("LOG-AC-07 identifies requests with logging off and echoes the configured correlation header", async () => {
+		const { modules } = projectModules({
+			config: { logger: false, correlation: { header: "X-Trace-Ref" } },
+			metadata: { routaCorrelationHeader: "x-trace-ref" },
+			route,
+		});
+		const app = await createTestApplication(modules);
+
+		const response = await app.request("/orders", { headers: { "x-trace-ref": "trace-1" } });
+
+		expect(await response.json()).toEqual({ requestId: response.headers.get("x-request-id") });
+		expect(response.headers.get("x-trace-ref")).toBe("trace-1");
+		await app.dispose();
+	});
+
+	it("LOG-AC-11 refuses correlation that src/routa.ts and the generated metadata disagree on", async () => {
+		for (const [config, metadata, message] of [
+			[
+				{ correlation: true },
+				{},
+				"src/routa.ts reads correlation from x-correlation-id, but .routa/routes.gen.ts declares no correlation header. Write correlation as a literal in the createRouta object, then run routa generate.",
+			],
+			[
+				{},
+				{ routaCorrelationHeader: "x-correlation-id" },
+				".routa/routes.gen.ts declares correlation header x-correlation-id, but src/routa.ts configures no correlation. Run routa generate.",
+			],
+			[
+				{ correlation: { header: "x-trace-ref" } },
+				{ routaCorrelationHeader: "x-correlation-id" },
+				"src/routa.ts reads correlation from x-trace-ref, but .routa/routes.gen.ts declares x-correlation-id. Run routa generate.",
+			],
+		] as const) {
+			const { modules, built } = projectModules({ config, metadata });
+
+			await expect(createTestApplication(modules)).rejects.toThrow(message);
+			expect(built).toEqual([]);
+		}
 	});
 });

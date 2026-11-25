@@ -54,10 +54,16 @@ handler. It must come from [`createLogger`](/docs/reference/core/#createlogger),
 redacts, escapes, and bounds each event before its sink writes it. Without `logger`, Routa
 uses `createLogger()`, which writes one JSON line per event to the console at `info` level.
 
+Each request gets its own request logger: a child of this logger bound to the request's
+`requestId`, and its `correlationId` when [`correlation`](#correlation) accepted one. Handlers
+and route-file and method services factories receive it as `ctx.logger`. Event data and later `child()` bindings
+cannot replace those two fields, and the logger you configured stays without them.
+
 Set `false` to disable logging for this application. Handlers still receive `ctx.logger`,
 implemented as a complete no-op with the same type, so handler code never needs a
-configuration guard. `false` changes no logger instance, so a module that imports a shared
-logger keeps writing through it.
+configuration guard. Requests keep `ctx.requestId`, `x-request-id`, and correlation.
+`false` changes no logger instance, so a module that imports a shared logger keeps writing
+through it.
 
 ```ts title="src/routa.ts"
 import { createRouta } from "@routa-ts/core";
@@ -87,23 +93,105 @@ export const logger = createLogger({ level: "info", sink: pinoSink });
 
 The [logging guide](/docs/guides/logging/) shows how to share this logger with your services.
 
-Routa enables logging when a logger is configured. Set `logger: false` to disable it. The
-runtime emits two startup lifecycle events and two request events:
+### Events Routa Writes
 
-| Event              | Level   | Data                                                                    |
-| ------------------ | ------- | ----------------------------------------------------------------------- |
-| `api.started`      | `info`  | `host`, `port`, `routes`                                                |
-| `api.start_failed` | `error` | `error`, `host`, `port`                                                 |
-| `http.request`     | `info`  | `method`, `path`, `status`, `durationMs`                                |
-| `http.error`       | `error` | `method`, `path`, `status`, `error`, `name`, `stack`, optional `issues` |
+Routa enables logging when a logger is configured. Set `logger: false` to disable it. The
+runtime emits two startup lifecycle events and two request events. Request events go through
+the request logger, so their data starts with `requestId`, then `correlationId` when present:
+
+| Event                    | Level   | Data                                                                               |
+| ------------------------ | ------- | ---------------------------------------------------------------------------------- |
+| `api.started`            | `info`  | `host`, `port`, `routes`                                                           |
+| `api.start_failed`       | `error` | `error`, `host`, `port`                                                            |
+| `http.response.prepared` | `info`  | `requestId`, `method`, `route`, `status`, `durationMs`                             |
+| `http.error`             | `error` | `requestId`, `method`, `route`, `status`, and sometimes `issueCount`, `issueCodes` |
+
+`http.response.prepared` is written once for every response Routa prepares, including
+unmatched requests, validation failures, middleware rejects, automatic `OPTIONS`, `405`, and
+server errors. It records that the response was ready to send, not that it was sent or that
+the client received it. A request whose handling fails before any response is prepared logs
+no such event. Its fields:
+
+| Field        | Value                                                                                                                      |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `method`     | `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, `CONNECT`, or `TRACE` as the request spelled it, else `_OTHER` |
+| `route`      | The matched route pattern, such as `/users/:id`, or `[Unmatched]` when no route path matched                               |
+| `status`     | The status of the prepared response                                                                                        |
+| `durationMs` | Milliseconds from when Routa received the request until the response was prepared, rounded to two decimals                 |
+
+Neither request event includes the request's path, query, raw headers, body, credentials,
+principal, or any error's message, name, or stack.
+
+`http.error` is emitted only when a Routa route fails unexpectedly and Routa answers with a
+status of 500 or above; a declared outcome with a 5xx status logs only `http.response.prepared`.
+When response
+or middleware context validation fails, `issueCount` is the number of issues Routa found and
+`issueCodes` lists their distinct codes, sorted, such as `["invalid_type"]`. Routa never logs
+an issue's path, which can hold request data such as a record key, or the rejected response
+or context values.
 
 With [application services](/docs/concepts/services/), Routa also logs
-`services.cleanup_failed` at `error` level, with a `failures` list, when a cleanup callback
-throws or rejects.
+`services.cleanup_failed` at `error` level when a cleanup callback throws or rejects. Its
+`failureCount` is how many callbacks failed. Like the request events, it holds no error's
+message, name, or stack. For a request's services it goes through the request logger, so it
+starts with `requestId`, then `correlationId` when present. `dispose()` still rejects with an
+`AggregateError` of the original errors.
 
-`http.error` is emitted only for responses with a status of 500 or above. When response
-or middleware context validation fails, `issues` contains only Zod `code` and `path`
-fields. Routa never logs the rejected response or context values.
+## `correlation`
+
+```ts
+correlation?: boolean | { header: string }
+```
+
+Whether Routa accepts a caller's correlation ID, and from which request header. Off unless
+set. `true` reads `x-correlation-id`; `{ header: "x-trace-ref" }` reads another header. Header
+names compare case-insensitively. Routa reads the value once at startup, before the services
+factory runs, so later changes to the config object have no effect.
+
+Routa accepts the header's value when it is one value of 1 to 128 ASCII letters, digits, `.`,
+`_`, or `-`. It then exposes the value as `ctx.correlationId`, binds it to the request logger,
+and echoes it in the same response header. An absent, empty, repeated, or otherwise invalid
+value is ignored: the request continues, `ctx.correlationId` is `undefined`, and nothing is
+echoed or logged. A correlation ID is not authentication and never replaces the request
+identity Routa generates.
+
+```ts title="src/routa.ts"
+import { createRouta } from "@routa-ts/core";
+
+export default createRouta({
+	correlation: { header: "x-trace-ref" },
+});
+```
+
+```txt
+GET /status
+x-trace-ref: checkout-42
+
+HTTP/1.1 200 OK
+x-request-id: 0b7d4c2e-8f1a-4c6b-9d3e-5a2f1e0c9b8a
+x-trace-ref: checkout-42
+```
+
+Generated OpenAPI documents the header, so write the value as a literal: `true`, `false`, or
+`{ header: "..." }` with a string literal. `routa check` reads it without running
+`src/routa.ts`. It follows a default that `src/routa.ts` imports or re-exports, and a spread
+or config argument bound to an object literal or a `createRouta` call, here or in another
+module, and reads the config there in place. It reports `ROUTA_CORRELATION_CONFIG_UNRESOLVED`
+for any other value, and for any other spread, config argument, or computed key whose type
+may hold `correlation`, including a value typed `RoutaConfig`. It also
+rejects a header name that is not a valid name (`ROUTA_CORRELATION_HEADER_INVALID`) or that
+names `x-request-id`, a credential header (`authorization`, `proxy-authorization`, `cookie`,
+`set-cookie`), or a header Routa writes itself (`ROUTA_CORRELATION_HEADER_CONFLICT`), so the
+echo never replaces one of Routa's headers. Routa writes `content-type`, `content-length`,
+`transfer-encoding`, and `connection` on every response; `allow` on automatic `OPTIONS` and
+`405` responses; `access-control-allow-methods` and `vary` on automatic `OPTIONS` responses;
+the lifecycle headers `deprecation`, `sunset`, and `link`; and `www-authenticate` on
+authentication challenges. Startup rejects the same names, and a `src/routa.ts` whose
+correlation differs from what `routa generate` recorded.
+
+While correlation is on, Routa owns the configured header on every response: it echoes an
+accepted value, removes any value a handler wrote when it accepted none, and rejects an outcome
+that declares the header in `headers`.
 
 ## `lifecycleHeaders`
 
@@ -185,7 +273,8 @@ export default createRouta({
 ```
 
 `routa check` reads `services` from source: a member of the `createRouta` object, or of a
-`const` object literal, local or imported, that you pass to `createRouta` or spread into it.
+`const` bound to an object literal or a `createRouta` call, local or imported, that you pass
+to `createRouta` or spread into it.
 A spread or computed key it cannot read may hide `services` unless a visible `services`
 member follows it, so `routa check` warns with
 [`ROUTA_SERVICES_SPREAD_UNRESOLVED`](/docs/reference/diagnostics/#routa_services_spread_unresolved).

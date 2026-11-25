@@ -1,3 +1,5 @@
+import type { RoutaLogData, RoutaLogLevel } from "./logger.js";
+
 /**
  * Marks loggers `createLogger` returned. Routa configuration accepts only these, so every event a
  * configured logger writes passes through the factory's sanitization before any sink sees it. The
@@ -6,10 +8,72 @@
  */
 const createdKey = Symbol.for("@routa-ts/core/createLogger");
 
-/** Marks a logger as created by `createLogger` and freezes it, so its methods cannot be replaced. */
-export function markCreatedLogger<TLogger extends object>(logger: TLogger): TLogger {
+/**
+ * Where a created logger keeps the function that derives its request logger. A registered symbol,
+ * for the same reason as the brand: the CLI's copy of `@routa-ts/core` binds request identity to a
+ * logger the application's copy created.
+ */
+const requestLoggerKey = Symbol.for("@routa-ts/core/requestLogger");
+
+/**
+ * Request identity fields, which a request logger binds so no event or child can replace them. A
+ * field set to `undefined` is reserved without a value: no event or binding of the request logger
+ * carries it.
+ */
+export type RequestIdentityFields = Readonly<Record<string, string | undefined>>;
+
+/**
+ * Writes one of Routa's own events about a request. Its data comes right after the identity, so
+ * application bindings, which fill what is left of the entry and value limits, never crowd it out.
+ */
+export type FrameworkEvent = (
+	level: RoutaLogLevel,
+	event: string,
+	message: string,
+	data: RoutaLogData,
+) => void;
+
+/** One request's logger, and how Routa writes its own events through it. */
+export type RequestLogging<TLogger> = {
+	/** A child whose identity fields no event data or later child binding replaces. */
+	readonly logger: TLogger;
+	readonly event: FrameworkEvent;
+};
+
+/**
+ * Marks a logger as created by `createLogger` and freezes it, so its methods cannot be replaced.
+ *
+ * @param requestLogging - Derives the logger's request logger and its framework event writer
+ */
+export function markCreatedLogger<TLogger extends object>(
+	logger: TLogger,
+	requestLogging: (identity: RequestIdentityFields) => RequestLogging<TLogger>,
+): TLogger {
 	Object.defineProperty(logger, createdKey, { value: true });
+	Object.defineProperty(logger, requestLoggerKey, { value: requestLogging });
 	return Object.freeze(logger);
+}
+
+/**
+ * Derives request loggers from a logger `createLogger` created: each a child bound to one
+ * request's identity fields, which its events and later children cannot replace, with the writer
+ * for Routa's own events about the request. A disabled logger's request logger is itself.
+ *
+ * @throws {TypeError} When the logger comes from a copy of `@routa-ts/core` that cannot bind request
+ *   identity
+ */
+export function requestLoggers<TLogger extends object>(
+	logger: TLogger,
+): (identity: RequestIdentityFields) => RequestLogging<TLogger> {
+	const derive = Object.getOwnPropertyDescriptor(logger, requestLoggerKey);
+
+	if (!derive || !("value" in derive) || typeof derive.value !== "function") {
+		throw new TypeError(
+			"The configured logger comes from a copy of @routa-ts/core that cannot bind request identity. Install one version of @routa-ts/core for the application and the routa CLI.",
+		);
+	}
+
+	return derive.value as (identity: RequestIdentityFields) => RequestLogging<TLogger>;
 }
 
 /**

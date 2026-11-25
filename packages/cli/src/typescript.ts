@@ -1,8 +1,10 @@
 import { resolve } from "node:path";
 import type { Node, SourceFile } from "typescript/unstable/ast";
-import { API } from "typescript/unstable/sync";
+import { API, type Checker } from "typescript/unstable/sync";
 
 export * from "typescript/unstable/ast";
+export type { Checker, Type } from "typescript/unstable/sync";
+export { SymbolFlags, TypeFlags } from "typescript/unstable/sync";
 export {
 	isStringLiteralLikeNode as isStringLiteralLike,
 	isTypeAssertion as isTypeAssertionExpression,
@@ -15,6 +17,14 @@ type CachedSourceFile = {
 
 export type SourceFileParser = {
 	createSourceFile(fileName: string, source: string): SourceFile;
+	/**
+	 * Reads types in a file this parser already parsed, through the checker of the project that
+	 * holds it, which resolves imports from disk. The checker is valid only while `read` runs.
+	 *
+	 * @returns What `read` returned, or `undefined` when the file was never parsed or no project
+	 *   holds it
+	 */
+	withChecker<T>(fileName: string, read: (checker: Checker) => T): T | undefined;
 	close(): void;
 };
 
@@ -68,6 +78,15 @@ class NativeSourceFileParser implements SourceFileParser {
 			nextSnapshot.dispose();
 			throw error;
 		}
+	}
+
+	withChecker<T>(fileName: string, read: (checker: Checker) => T): T | undefined {
+		const file = resolve(this.cwd, fileName);
+		// Nodes from an earlier parse of an unchanged file keep their ids in later snapshots.
+		const project = this.files.has(file)
+			? this.snapshot?.getDefaultProjectForFile(file)
+			: undefined;
+		return project && read(project.checker);
 	}
 
 	close(): void {

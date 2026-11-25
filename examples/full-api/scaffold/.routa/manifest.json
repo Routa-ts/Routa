@@ -36,7 +36,7 @@
 			"path": ".routa/openapi-baseline.json",
 			"source": "openapi.yaml",
 			"kind": "openapi-baseline",
-			"sha256": "b6f6835b484b8e7d6e56b72c0975917d4f01a3f5ce3357d059e83130541cffcf"
+			"sha256": "196098ab2d6c7ccf3b03443d8dd15c5cbf8ea4f65d28b531c5005f05ab4ad5ff"
 		}
 	]
 }

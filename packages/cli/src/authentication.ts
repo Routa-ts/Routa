@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { objectLiteral, propertyName, unwrapExpression } from "./ast.js";
+import { coreCall, coreExportName, objectLiteral, propertyName, unwrapExpression } from "./ast.js";
 import { boundDeclaration, localBinding, type ModuleExport } from "./declarations.js";
 import type { Diagnostic, MiddlewareMetadata } from "./project.js";
 import { routaConfigMember, spreadObject } from "./services.js";
@@ -53,7 +53,6 @@ export type AuthenticationRequirementMetadata = {
 };
 
 const configFile = "src/routa.ts";
-const coreModule = "@routa-ts/core";
 /** Scheme names are OpenAPI security scheme keys, so they follow the component key rule. */
 // A leading letter also keeps names out of JavaScript's integer-key ordering, so scheme order is
 // the same in source, at runtime, and in generated metadata.
@@ -103,18 +102,19 @@ export function applicationAuthentication(
 	const { declaration, hidden } = routaConfigMember(cwd, parser, "authentication");
 	// Like services: a config Routa cannot read may only hold tuning values, so this is no error.
 	// Startup still rejects authentication that routa generate could not read.
-	const warnings: Diagnostic[] = hidden
-		? [
-				{
-					code: "ROUTA_AUTH_SPREAD_UNRESOLVED",
-					severity: "warning",
-					message: `The createRouta config in ${configFile} has a spread, computed key, or config argument that cannot be statically read, so authentication inside it cannot be read.`,
-					file: configFile,
-					suggestion:
-						"Declare authentication as a visible member of the createRouta object, after any spread, or spread a const object literal. Startup rejects authentication that routa generate could not read.",
-				},
-			]
-		: [];
+	const warnings: Diagnostic[] =
+		hidden.length > 0
+			? [
+					{
+						code: "ROUTA_AUTH_SPREAD_UNRESOLVED",
+						severity: "warning",
+						message: `The createRouta config in ${configFile} has a spread, computed key, or config argument that cannot be statically read, so authentication inside it cannot be read.`,
+						file: configFile,
+						suggestion:
+							"Declare authentication as a visible member of the createRouta object, after any spread, or spread a const object literal. Startup rejects authentication that routa generate could not read.",
+					},
+				]
+			: [];
 
 	if (!declaration) {
 		return { diagnostics: [], warnings };
@@ -945,78 +945,6 @@ function schemeChallenge(
 	}
 
 	return read;
-}
-
-/**
- * The call when an expression calls the `@routa-ts/core` function `name`, such as `bearer` or
- * `requireAuth`: imported by name, possibly aliased, or called on a namespace import, as in
- * `core.requireAuth()`. An application function that shares the name is not the core one.
- */
-export function coreCall(expression: ts.Expression, name: string): ts.CallExpression | undefined {
-	const node = unwrapExpression(expression);
-	return ts.isCallExpression(node) && coreExportName(unwrapExpression(node.expression)) === name
-		? node
-		: undefined;
-}
-
-/**
- * The `@routa-ts/core` export a node names: a binding its module imports from core, possibly
- * aliased, or a member of a namespace import of core, such as `core.requireAuth`.
- */
-function coreExportName(node: ts.Node): string | undefined {
-	const imports = coreImports(node.getSourceFile());
-
-	if (ts.isIdentifier(node)) {
-		return imports.named.get(node.text);
-	}
-
-	return ts.isPropertyAccessExpression(node)
-		&& ts.isIdentifier(node.expression)
-		&& imports.namespaces.has(node.expression.text)
-		? node.name.text
-		: undefined;
-}
-
-const coreImportsByFile = new WeakMap<
-	ts.SourceFile,
-	{ named: Map<string, string>; namespaces: Set<string> }
->();
-
-/**
- * What a module imports from `@routa-ts/core`: each local name and the export it names, and the
- * names of its namespace imports.
- */
-function coreImports(sourceFile: ts.SourceFile): {
-	named: Map<string, string>;
-	namespaces: Set<string>;
-} {
-	const cached = coreImportsByFile.get(sourceFile);
-
-	if (cached) {
-		return cached;
-	}
-
-	const imports = { named: new Map<string, string>(), namespaces: new Set<string>() };
-
-	for (const statement of sourceFile.statements) {
-		const bindings =
-			ts.isImportDeclaration(statement)
-			&& ts.isStringLiteral(statement.moduleSpecifier)
-			&& statement.moduleSpecifier.text === coreModule
-				? statement.importClause?.namedBindings
-				: undefined;
-
-		if (bindings && ts.isNamespaceImport(bindings)) {
-			imports.namespaces.add(bindings.name.text);
-		} else if (bindings && ts.isNamedImports(bindings)) {
-			for (const element of bindings.elements) {
-				imports.named.set(element.name.text, element.propertyName?.text ?? element.name.text);
-			}
-		}
-	}
-
-	coreImportsByFile.set(sourceFile, imports);
-	return imports;
 }
 
 /** The schemes each `requireAuth` guard lists, kept for guards that list them. */

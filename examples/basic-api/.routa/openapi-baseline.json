@@ -11,6 +11,16 @@
 				"responses": {
 					"200": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -36,6 +46,16 @@
 				"responses": {
 					"200": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -71,6 +91,16 @@
 				"responses": {
 					"200": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -98,6 +128,16 @@
 				"responses": {
 					"200": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -133,6 +173,16 @@
 				"responses": {
 					"200": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -157,7 +207,17 @@
 				],
 				"responses": {
 					"204": {
-						"description": "Success"
+						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							}
+						}
 					}
 				}
 			}
@@ -186,6 +246,16 @@
 				"responses": {
 					"200": {
 						"description": "Success",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							}
+						},
 						"content": {
 							"application/json": {
 								"schema": {
@@ -218,6 +288,14 @@
 								"schema": {
 									"type": "string",
 									"description": "Path of the created user"
+								}
+							},
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
 								}
 							}
 						},

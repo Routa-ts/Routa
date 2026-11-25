@@ -215,7 +215,9 @@ export function createTestApp(
 }
 
 /**
- * Returns the baseline OpenAPI document for the starter project.
+ * Returns the baseline OpenAPI document for the starter project: what `routa openapi check`
+ * generates for the starter's source, including the `x-request-id` header Routa sends on every
+ * response.
  *
  * @returns A formatted JSON string containing the OpenAPI 3.1 baseline.
  */
@@ -234,6 +236,13 @@ function openApiBaselineJson(): string {
 						responses: {
 							"200": {
 								description: "Service status",
+								headers: {
+									"x-request-id": {
+										required: true,
+										description: "The request identity Routa generated for this request.",
+										schema: { type: "string", format: "uuid" },
+									},
+								},
 								content: {
 									"application/json": {
 										schema: {

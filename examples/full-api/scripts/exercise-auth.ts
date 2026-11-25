@@ -1,7 +1,9 @@
 /**
  * Sends the authentication credential matrix through the generated test application and asserts
- * each response: status, complete body, WWW-Authenticate, Set-Cookie, and which authenticators
- * ran. Every credential here is a demonstration value, unfit for production.
+ * each response: status, complete body, WWW-Authenticate, Set-Cookie, which authenticators ran,
+ * and its request identity: a generated x-request-id however the request spoofs one, and the
+ * echoed x-correlation-id. Logging is off, which keeps both. Every credential here is a
+ * demonstration value, unfit for production.
  *
  * Usage: pnpm auth:exercise
  */
@@ -374,17 +376,26 @@ const cases: Case[] = [
 
 let failures = 0;
 let previousSetCookies: string[] = [];
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const requestIds = new Set<string>();
 
-for (const testCase of cases) {
+for (const [index, testCase] of cases.entries()) {
 	calls.clear();
 	const replayed: Record<string, string> = testCase.replayCookies
 		? { cookie: previousSetCookies.map((header) => header.split(";")[0]).join("; ") }
 		: {};
+	const correlationId = `auth-case.${index}`;
 	const response = await app.request(testCase.path, {
 		method: testCase.method ?? "GET",
-		headers: { ...testCase.headers, ...replayed },
+		headers: {
+			...testCase.headers,
+			...replayed,
+			"x-request-id": "spoofed",
+			"x-correlation-id": correlationId,
+		},
 		...(testCase.body === undefined ? {} : { body: JSON.stringify(testCase.body) }),
 	});
+	const requestId = response.headers.get("x-request-id") ?? "";
 	const text = await response.text();
 	const body = text
 		? (JSON.parse(text) as { type?: string; status?: string; scheme?: string })
@@ -398,6 +409,10 @@ for (const testCase of cases) {
 		assert.equal(challenge, testCase.challenge, "www-authenticate");
 		assert.deepEqual(previousSetCookies, testCase.setCookies ?? [], "set-cookie");
 		assert.deepEqual(ran, testCase.ran, "authenticators run");
+		assert.match(requestId, uuid, "x-request-id is a generated UUID");
+		assert.ok(!requestIds.has(requestId), "x-request-id is new for every request");
+		requestIds.add(requestId);
+		assert.equal(response.headers.get("x-correlation-id"), correlationId, "x-correlation-id echo");
 		assert.deepEqual(
 			body,
 			testCase.problem
@@ -422,6 +437,16 @@ for (const testCase of cases) {
 		console.error(`FAIL ${response.status} ${testCase.name}: ${(error as Error).message}`);
 		console.error(`     body=${text} challenge=${challenge} ran=${JSON.stringify(ran)}`);
 	}
+}
+
+// An invalid correlation ID is ignored, not echoed, and does not fail the request.
+const invalid = await app.request("/status", { headers: { "x-correlation-id": "has spaces" } });
+await invalid.arrayBuffer();
+if (invalid.status !== 200 || invalid.headers.has("x-correlation-id")) {
+	failures += 1;
+	console.error(`FAIL ${invalid.status} an invalid x-correlation-id was echoed or rejected`);
+} else {
+	console.log("ok   200 an invalid x-correlation-id is ignored and not echoed");
 }
 
 await app.dispose();

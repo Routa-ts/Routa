@@ -7,6 +7,15 @@ import { run } from "./index.js";
 import { generateOpenApi } from "./openapi.js";
 import { validateProject } from "./project.js";
 
+/** The header Routa documents on every response. */
+const identity = {
+	"x-request-id": {
+		required: true,
+		description: "The request identity Routa generated for this request.",
+		schema: { type: "string", format: "uuid" },
+	},
+};
+
 type Json = Record<string, unknown>;
 
 describe("schema contracts", () => {
@@ -1386,6 +1395,7 @@ import { ItemHeaders, NewItem, Search } from "../../schemas/shared.js";`,
 		});
 		expect(responses["200"].headers).toEqual({
 			etag: { required: true, schema: { type: "string" } },
+			...identity,
 		});
 		expect(responseSchema(document, "/items", "post", 403)).toEqual({
 			$ref: "#/components/schemas/Problem",
@@ -1572,6 +1582,7 @@ export const ListProjectsQuery = z.object({
 						responses: {
 							"200": {
 								description: "Users",
+								headers: identity,
 								content: {
 									"application/json": {
 										schema: {

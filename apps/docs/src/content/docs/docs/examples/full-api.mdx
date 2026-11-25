@@ -24,7 +24,7 @@ once at startup, so export it before you start the server.
 
 <FileTree>
 - src/
-  - routa.ts host, port, logger, lifecycleHeaders, authentication
+  - routa.ts host, port, logger, correlation, lifecycleHeaders, authentication
   - identities.ts demo credential lookups the authenticators call
   - session.ts signed demo session tokens
   - cookies.ts `createCookie` handles
@@ -32,7 +32,6 @@ once at startup, so export it before you start the server.
   - services.ts service contracts and the application factory
   - middleware/ application-owned middleware
   - routes/
-    - middleware.ts `withRequest`
     - status/
     - whoami/ public route that reads `ctx.auth`
     - auth/
@@ -55,19 +54,26 @@ once at startup, so export it before you start the server.
     - logger-showcase/
       - route.ts
 - scripts/
-  - exercise-auth.ts the credential matrix, asserted
-  - exercise-pino-sink.ts the Pino line one event produces, asserted
+  - exercise-auth.ts the credential matrix and each response's identity headers, asserted
+  - exercise-pino-sink.ts the Pino lines events and one request produce, asserted
   - mint-session.mjs signs a demo session token
   - demo-client-cert.pem a demo client certificate, without its key
 </FileTree>
 
 ## How It Works
 
-The middleware chain accumulates down the tree. `src/routes/middleware.ts` provides
-`requestId` for everything. Routa resolves `ctx.auth` before any middleware runs.
-`(private)/middleware.ts` requires authentication, and `(private)/admin/middleware.ts` adds
-`admin` on top of it. By the time `audit-events/route.ts` runs, `ctx` carries `requestId`,
-`auth`, and `admin`, and each one is typed.
+The middleware chain accumulates down the tree. Routa gives every request its
+`ctx.requestId`, and with `correlation: true` its `ctx.correlationId`, before anything else
+runs, then resolves `ctx.auth` before any middleware runs. `(private)/middleware.ts` requires
+authentication, and `(private)/admin/middleware.ts` adds `admin` on top of it. By the time
+`audit-events/route.ts` runs, `ctx` carries `requestId`, `auth`, and `admin`, and each one is
+typed.
+
+The project catalog in `src/services.ts` logs through the shared logger it imports, so its
+events carry no request identity. The projects `POST` gives `ProjectAudit.flush` its
+`ctx.logger`, so `projects.created` carries the request's `requestId` and `correlationId`.
+`vp run --filter full-api pino:exercise` starts the application through its generated
+`createTestApp`, creates one project, and asserts both events as Pino writes them.
 
 `(private)` is a route group: it shapes the middleware tree without appearing in any URL.
 `/admin/audit-events` is the real path, not `/private/admin/audit-events`.
@@ -262,7 +268,9 @@ The full matrix:
 
 `scripts/exercise-auth.ts` sends every row through the generated `createTestApp`, replacing the
 `identities` service with one that counts calls, and asserts the status, the complete body,
-the challenge, every `Set-Cookie` header, and the calls. The repository's `vp run verify` runs it:
+the challenge, every `Set-Cookie` header, and the calls. Each row also spoofs `x-request-id` and
+sends an `x-correlation-id`; the script asserts a new generated UUID and the echo on every
+response, with logging off. The repository's `vp run verify` runs it:
 
 ```sh
 vp run --filter full-api auth:exercise
@@ -276,6 +284,7 @@ ok   401 tenant area, no credential: authentication-required challenge=Session, 
 ok   400 tenant area, session and API key: ambiguous-credentials ran={}
 …
 ok   401 sign-in with a stale session cookie (known limit): authentication-failed challenge=Session ran={"session":1}
+ok   200 an invalid x-correlation-id is ignored and not echoed
 All 28 authentication cases passed.
 ```
 

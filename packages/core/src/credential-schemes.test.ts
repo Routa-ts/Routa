@@ -427,7 +427,7 @@ describe("credential values stay out of logs", () => {
 				.status,
 		).toBe(401);
 		const logged = JSON.stringify(events);
-		expect(logged).toContain("http.request");
+		expect(logged).toContain("http.response.prepared");
 		expect(logged).toContain("http.error");
 		expect(logged).not.toContain("key-secret-value");
 		expect(logged).not.toContain("session-secret-value");

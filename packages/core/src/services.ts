@@ -101,19 +101,14 @@ export async function constructServices(
 }
 
 /**
- * Logs the failures a scope's cleanup reported. Callers report another error or response, so a
- * logger that throws here is ignored rather than allowed to replace it.
+ * Logs how many callbacks a scope's cleanup reported failing. The event holds no error's message,
+ * name, or stack, which may carry credentials or personal data. Callers report another error or
+ * response, so a logger that throws here is ignored rather than allowed to replace it.
  */
 export function logCleanupFailure(logger: RoutaLogger, error: unknown): void {
-	const failures = error instanceof AggregateError ? error.errors : [error];
-
 	try {
 		logger.error("services.cleanup_failed", "Service cleanup failed.", {
-			failures: failures.map((failure) =>
-				failure instanceof Error
-					? { error: failure.message, name: failure.name, stack: failure.stack }
-					: { error: String(failure) },
-			),
+			failureCount: error instanceof AggregateError ? error.errors.length : 1,
 		});
 	} catch {
 		// The error being reported stays primary.

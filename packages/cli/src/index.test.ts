@@ -25,6 +25,15 @@ import {
 import { createProjectApplication } from "./runtime.js";
 import { shouldUseColor } from "./ui.js";
 
+/** The header Routa documents on every response. */
+const identity = {
+	"x-request-id": {
+		required: true,
+		description: "The request identity Routa generated for this request.",
+		schema: { type: "string", format: "uuid" },
+	},
+};
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 describe("routa cli", () => {
@@ -294,6 +303,35 @@ export default createRouteRoot("/users")({
 		expect(result.code).toBe(1);
 		expect(result.stderr).toContain("ROUTA_MIDDLEWARE_ORDER");
 		expect(result.stderr).toContain("requires ctx.db");
+	});
+
+	it("treats the request identity and logger as provided to every middleware", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-middleware-identity-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src/routes/status"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routes/middleware.ts"),
+			`import { createMiddleware } from "@routa-ts/core";
+
+export const audit = createMiddleware({
+\trequires: ["requestId", "correlationId", "logger"],
+});
+`,
+		);
+		writeFileSync(
+			join(cwd, "src/routes/status/route.ts"),
+			`import { createRoute, createRouteRoot } from "@routa-ts/core";
+
+export default createRouteRoot("/status")({
+\tget: createRoute({ responses: { ok: { status: 204 } }, run: () => ({ type: "ok" }) }),
+});
+`,
+		);
+
+		const result = await run(["check"], { cwd });
+
+		expect(result.stderr ?? "").toBe("");
+		expect(result.code).toBe(0);
 	});
 
 	it("reports middleware that cannot be statically resolved", async () => {
@@ -2194,6 +2232,68 @@ paths:
 		expect(drift.stdout).toContain("No drift detected");
 	});
 
+	it("keeps one x-request-id when the source documents it in another case", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-identity-case-"));
+		createTypeScriptProject(cwd);
+		writeOpenApiPaths(
+			cwd,
+			`  /status:
+    get:
+      operationId: getStatus
+      responses:
+        "204":
+          description: Up
+          headers:
+            X-Request-ID:
+              schema:
+                type: string
+`,
+		);
+
+		const scaffold = await run(["scaffold", "openapi.yaml"], { cwd });
+		expect(scaffold.code).toBe(0);
+
+		const baseline = readFileSync(join(cwd, ".routa/openapi-baseline.json"), "utf8");
+		expect(baseline).not.toContain("X-Request-ID");
+
+		const drift = await run(["openapi", "check"], { cwd });
+		expect(drift.code).toBe(0);
+		expect(drift.stdout).toContain("No drift detected");
+	});
+
+	it("documents the project's correlation header in the scaffold baseline", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-identity-correlation-"));
+		createTypeScriptProject(cwd);
+		mkdirSync(join(cwd, "src"), { recursive: true });
+		writeFileSync(
+			join(cwd, "src/routa.ts"),
+			'import { createRouta } from "@routa-ts/core";\n\nexport default createRouta({ correlation: true });\n',
+		);
+		writeOpenApiPaths(
+			cwd,
+			`  /status:
+    get:
+      operationId: getStatus
+      responses:
+        "204":
+          description: Up
+`,
+		);
+
+		const scaffold = await run(["scaffold", "openapi.yaml"], { cwd });
+		expect(scaffold.code).toBe(0);
+
+		const baseline = readFileSync(join(cwd, ".routa/openapi-baseline.json"), "utf8");
+		expect(baseline).toContain('"x-correlation-id"');
+		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
+			'routaCorrelationHeader = "x-correlation-id"',
+		);
+
+		const drift = await run(["openapi", "check"], { cwd });
+		expect(drift.code).toBe(0);
+		expect(drift.stdout).toContain("No drift detected");
+	});
+
 	it("rejects structured parameter schemas that cannot arrive as strings", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "routa-openapi-param-structured-"));
 		createTypeScriptProject(cwd);
@@ -3842,6 +3942,7 @@ export default createRouteRoot("/users/:id")({
 		});
 		expect(operation?.responses?.["200"]).toEqual({
 			description: "Success",
+			headers: identity,
 			content: {
 				"application/json": {
 					schema: {
@@ -3892,16 +3993,17 @@ export default createRouteRoot("/users/:id")({
 		expect(openapi).not.toHaveProperty("x-routa-diagnostics");
 		expect(get?.["200"]).toEqual({
 			description: "Ok",
+			headers: identity,
 			content: {
 				"application/json": {
 					schema: { type: "object", required: ["id"], properties: { id: { type: "string" } } },
 				},
 			},
 		});
-		expect(get?.["304"]).toEqual({ description: "Not modified" });
-		expect(get?.["410"]).toEqual({ description: "The user was removed." });
-		expect(del?.["204"]).toEqual({ description: "The user was deleted." });
-		expect(del?.["205"]).toEqual({ description: "Reset" });
+		expect(get?.["304"]).toEqual({ description: "Not modified", headers: identity });
+		expect(get?.["410"]).toEqual({ description: "The user was removed.", headers: identity });
+		expect(del?.["204"]).toEqual({ description: "The user was deleted.", headers: identity });
+		expect(del?.["205"]).toEqual({ description: "Reset", headers: identity });
 	});
 
 	it("documents schema-less middleware rejects without content", async () => {
@@ -3942,8 +4044,8 @@ export default createRouteRoot("/users")({
 		expect(readFileSync(join(cwd, ".routa/routes.gen.ts"), "utf8")).toContain(
 			'"type": "tooManyRequests"',
 		);
-		expect(responses?.["401"]).toEqual({ description: "Sign in first." });
-		expect(responses?.["429"]).toEqual({ description: "Too many requests" });
+		expect(responses?.["401"]).toEqual({ description: "Sign in first.", headers: identity });
+		expect(responses?.["429"]).toEqual({ description: "Too many requests", headers: identity });
 	});
 
 	it("rejects outcome declarations that HTTP or the method forbids", async () => {

@@ -4,9 +4,11 @@ import { createMiddleware, createRoute, createRouteRootFactory } from "./index.j
 import { createLogger } from "./logger.js";
 import { createRequestExecutor, type RuntimeRouteContract } from "./request-execution.js";
 
-const executionOptions = {
+const executionOptions = { validateResponses: true };
+const state = {
+	requestId: "00000000-0000-4000-8000-000000000000",
 	logger: createLogger({ enabled: false }),
-	validateResponses: true,
+	event: () => undefined,
 };
 
 describe("createRequestExecutor", () => {
@@ -38,9 +40,11 @@ describe("createRequestExecutor", () => {
 			executionOptions,
 		);
 
-		const response = await execute(new Request("http://local/users?include=posts"), {
-			id: "user_1",
-		});
+		const response = await execute(
+			new Request("http://local/users?include=posts"),
+			{ id: "user_1" },
+			state,
+		);
 
 		expect(response.status).toBe(200);
 		await expect(response.json()).resolves.toEqual({ user: "user_1", include: "posts" });
@@ -70,10 +74,10 @@ describe("createRequestExecutor", () => {
 				...executionOptions,
 				validateResponses,
 			});
-			const found = await execute(new Request("http://local/users?found=yes"), {});
+			const found = await execute(new Request("http://local/users?found=yes"), {}, state);
 			expect(found.status).toBe(201);
 			await expect(found.json()).resolves.toEqual({ id: "1" });
-			const missing = await execute(new Request("http://local/users?found=no"), {});
+			const missing = await execute(new Request("http://local/users?found=no"), {}, state);
 			expect(missing.status).toBe(404);
 			await expect(missing.json()).resolves.toEqual({ message: "missing" });
 		},
@@ -88,7 +92,7 @@ describe("createRequestExecutor", () => {
 			contract as unknown as RuntimeRouteContract,
 			executionOptions,
 		);
-		const response = await execute(new Request("http://local/users"), {});
+		const response = await execute(new Request("http://local/users"), {}, state);
 		expect(response.status).toBe(500);
 		await expect(response.json()).resolves.toMatchObject({ title: "Invalid handler output" });
 	});
@@ -108,7 +112,7 @@ describe("createRequestExecutor", () => {
 				contract as unknown as RuntimeRouteContract,
 				executionOptions,
 			);
-			const response = await execute(new Request("http://local/status"), {});
+			const response = await execute(new Request("http://local/status"), {}, state);
 			expect(response.status).toBe(200);
 			await expect(response.json()).resolves.toBe("value");
 		},
@@ -126,7 +130,7 @@ describe("createRequestExecutor", () => {
 			executionOptions,
 		);
 
-		const response = await execute(new Request("http://local/status"), {});
+		const response = await execute(new Request("http://local/status"), {}, state);
 
 		expect(response.status).toBe(500);
 		await expect(response.json()).resolves.toMatchObject({

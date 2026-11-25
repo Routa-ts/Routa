@@ -159,7 +159,7 @@ describe("continuing middleware (runtime)", () => {
 			expect(response.headers.get("etag")).toBeNull();
 			expect(response.headers.getSetCookie()).toEqual([]);
 			// next() resolves to a frozen token, so even an in-place change cannot reach the outcome.
-			expect(JSON.stringify(events)).toMatch(/next\(\)|not extensible/);
+			expect(events.find((event) => event.event === "http.error")?.data?.status).toBe(500);
 		}
 	});
 

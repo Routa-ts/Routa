@@ -386,6 +386,9 @@ describe("custom schemes in credential selection", () => {
 });
 
 describe("custom scheme failures", () => {
+	/** The data `http.error` logs for a failed GET /whoami, after its request ID. */
+	const failedWhoami = '"method":"GET","route":"/whoami","status":500}';
+
 	function failing(
 		extract: (value: string) => unknown,
 		authenticate: (credential: any) => unknown = () => ({ type: "rejected" }),
@@ -417,7 +420,7 @@ describe("custom scheme failures", () => {
 		return { status: result.status, logs: JSON.stringify(events) };
 	}
 
-	it("answers 500 for a throwing extractor and logs only the scheme", async () => {
+	it("answers 500 for a throwing extractor and logs nothing it threw", async () => {
 		const { status, logs } = await logged(
 			failing((value) => {
 				throw new Error(`provider could not parse ${value}`);
@@ -425,7 +428,7 @@ describe("custom scheme failures", () => {
 		);
 
 		expect(status).toBe(500);
-		expect(logs).toContain('Credential extraction for scheme \\"signed\\" threw.');
+		expect(logs).toContain(failedWhoami);
 		expect(logs).not.toContain("secret-credential-value");
 		expect(logs).not.toContain("provider could not parse");
 	});
@@ -439,7 +442,7 @@ describe("custom scheme failures", () => {
 		]) {
 			const { status, logs } = await logged(failing(() => result));
 			expect(status).toBe(500);
-			expect(logs).toContain("AuthenticationContractError");
+			expect(logs).toContain(failedWhoami);
 			expect(logs).not.toContain("secret-credential-value");
 		}
 	});
@@ -474,7 +477,7 @@ describe("custom scheme failures", () => {
 				await new Promise((resolve) => setTimeout(resolve, 10));
 
 				expect(status, name).toBe(500);
-				expect(logs, name).toContain("AuthenticationContractError");
+				expect(logs, name).toContain(failedWhoami);
 				expect(logs, name).not.toContain("secret-credential-value");
 				expect(unhandled, name).toEqual([]);
 			}
@@ -483,7 +486,7 @@ describe("custom scheme failures", () => {
 		}
 	});
 
-	it("keeps authenticator throws and invalid principals as distinct server errors", async () => {
+	it("keeps authenticator throws and invalid principals server errors that log nothing they carry", async () => {
 		const extract = (value: string) => ({ type: "credential", credential: value });
 		const thrown = await logged(
 			failing(extract, () => {
@@ -491,14 +494,16 @@ describe("custom scheme failures", () => {
 			}),
 		);
 		expect(thrown.status).toBe(500);
-		expect(thrown.logs).toContain('Authenticator for scheme \\"signed\\" threw.');
+		expect(thrown.logs).toContain(failedWhoami);
 		expect(thrown.logs).not.toContain("secret-credential-value");
+		expect(thrown.logs).not.toContain("provider down");
 
 		const invalid = await logged(
 			failing(extract, () => ({ type: "authenticated", principal: { type: "admin", id: "a" } })),
 		);
 		expect(invalid.status).toBe(500);
-		expect(invalid.logs).toContain("does not match the principal schema");
+		expect(invalid.logs).toContain(failedWhoami);
+		expect(invalid.logs).not.toContain("admin");
 	});
 
 	it("gives the extractor the declared value alone and keeps contract facts out of its reach", async () => {

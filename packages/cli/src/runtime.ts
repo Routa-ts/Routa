@@ -34,16 +34,13 @@ export async function startRuntime(
 	const hostname = process.env.HOST ?? config.host ?? "127.0.0.1";
 	const port = Number(process.env.PORT ?? config.port ?? 3000);
 	// No request was accepted when the listener fails, so the services can be released at once.
+	// The event says how many callbacks failed, never their errors' text, which may carry
+	// credentials or personal data.
 	const release = () =>
 		application.dispose().catch((cleanupError: unknown) => {
 			try {
 				logger?.error("services.cleanup_failed", "Application service cleanup failed.", {
-					failures: (cleanupError instanceof AggregateError
-						? cleanupError.errors
-						: [cleanupError]
-					).map((failure: unknown) =>
-						failure instanceof Error ? failure.message : String(failure),
-					),
+					failureCount: cleanupError instanceof AggregateError ? cleanupError.errors.length : 1,
 				});
 			} catch {
 				// A failing logger must not replace the startup error.

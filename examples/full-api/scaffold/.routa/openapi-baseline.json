@@ -46,6 +46,16 @@
 									"$ref": "#/components/schemas/CatalogItem"
 								}
 							}
+						},
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							}
 						}
 					}
 				}
@@ -71,6 +81,16 @@
 									"$ref": "#/components/schemas/CatalogItem"
 								}
 							}
+						},
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							}
 						}
 					}
 				}
@@ -79,7 +99,17 @@
 				"operationId": "inspectCatalogItem",
 				"responses": {
 					"204": {
-						"description": "Catalog item exists"
+						"description": "Catalog item exists",
+						"headers": {
+							"x-request-id": {
+								"required": true,
+								"description": "The request identity Routa generated for this request.",
+								"schema": {
+									"type": "string",
+									"format": "uuid"
+								}
+							}
+						}
 					}
 				}
 			}

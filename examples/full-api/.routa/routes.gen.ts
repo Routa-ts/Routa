@@ -28,20 +28,6 @@ export const routaRoutes = [
 		},
 		"middleware": [
 			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			},
-			{
 				"file": "src/routes/(private)/middleware.ts",
 				"name": "signedIn",
 				"requires": [],
@@ -92,20 +78,6 @@ export const routaRoutes = [
 		],
 		"methodMiddleware": {
 			"get": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
 				{
 					"file": "src/routes/(private)/middleware.ts",
 					"name": "signedIn",
@@ -157,13 +129,11 @@ export const routaRoutes = [
 			]
 		},
 		"middlewareFiles": [
-			"src/routes/middleware.ts",
 			"src/routes/(private)/middleware.ts",
 			"src/routes/(private)/admin/middleware.ts"
 		],
 		"ctx": [
-			"admin",
-			"requestId"
+			"admin"
 		],
 		"groups": [
 			"(private)"
@@ -196,20 +166,6 @@ export const routaRoutes = [
 			}
 		},
 		"middleware": [
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			},
 			{
 				"file": "src/routes/(private)/middleware.ts",
 				"name": "signedIn",
@@ -261,20 +217,6 @@ export const routaRoutes = [
 		],
 		"methodMiddleware": {
 			"get": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
 				{
 					"file": "src/routes/(private)/middleware.ts",
 					"name": "signedIn",
@@ -347,13 +289,11 @@ export const routaRoutes = [
 			]
 		},
 		"middlewareFiles": [
-			"src/routes/middleware.ts",
 			"src/routes/(private)/middleware.ts",
 			"src/routes/(private)/admin/middleware.ts"
 		],
 		"ctx": [
-			"admin",
-			"requestId"
+			"admin"
 		],
 		"groups": [
 			"(private)"
@@ -398,62 +338,13 @@ export const routaRoutes = [
 				"body": false
 			}
 		},
-		"middleware": [
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			}
-		],
+		"middleware": [],
 		"methodMiddleware": {
-			"post": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			],
-			"delete": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			]
+			"post": [],
+			"delete": []
 		},
-		"middlewareFiles": [
-			"src/routes/middleware.ts"
-		],
-		"ctx": [
-			"requestId"
-		],
+		"middlewareFiles": [],
+		"ctx": [],
 		"groups": [],
 		"segments": [
 			"auth",
@@ -482,46 +373,12 @@ export const routaRoutes = [
 				"body": false
 			}
 		},
-		"middleware": [
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			}
-		],
+		"middleware": [],
 		"methodMiddleware": {
-			"get": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			]
+			"get": []
 		},
-		"middlewareFiles": [
-			"src/routes/middleware.ts"
-		],
-		"ctx": [
-			"requestId"
-		],
+		"middlewareFiles": [],
+		"ctx": [],
 		"groups": [],
 		"segments": [
 			"demo"
@@ -554,46 +411,12 @@ export const routaRoutes = [
 				"replacement": "/status"
 			}
 		},
-		"middleware": [
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			}
-		],
+		"middleware": [],
 		"methodMiddleware": {
-			"get": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			]
+			"get": []
 		},
-		"middlewareFiles": [
-			"src/routes/middleware.ts"
-		],
-		"ctx": [
-			"requestId"
-		],
+		"middlewareFiles": [],
+		"ctx": [],
 		"groups": [],
 		"segments": [
 			"legacy"
@@ -626,46 +449,12 @@ export const routaRoutes = [
 				"replacement": "https://api.example.invalid/migrations/legacy-projects"
 			}
 		},
-		"middleware": [
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			}
-		],
+		"middleware": [],
 		"methodMiddleware": {
-			"get": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			]
+			"get": []
 		},
-		"middlewareFiles": [
-			"src/routes/middleware.ts"
-		],
-		"ctx": [
-			"requestId"
-		],
+		"middlewareFiles": [],
+		"ctx": [],
 		"groups": [],
 		"segments": [
 			"legacy",
@@ -695,46 +484,12 @@ export const routaRoutes = [
 				"body": true
 			}
 		},
-		"middleware": [
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			}
-		],
+		"middleware": [],
 		"methodMiddleware": {
-			"post": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			]
+			"post": []
 		},
-		"middlewareFiles": [
-			"src/routes/middleware.ts"
-		],
-		"ctx": [
-			"requestId"
-		],
+		"middlewareFiles": [],
+		"ctx": [],
 		"groups": [],
 		"segments": [
 			"logger-showcase"
@@ -789,78 +544,14 @@ export const routaRoutes = [
 				"body": false
 			}
 		},
-		"middleware": [
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			}
-		],
+		"middleware": [],
 		"methodMiddleware": {
-			"get": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			],
-			"put": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			],
-			"head": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			]
+			"get": [],
+			"put": [],
+			"head": []
 		},
-		"middlewareFiles": [
-			"src/routes/middleware.ts"
-		],
-		"ctx": [
-			"requestId"
-		],
+		"middlewareFiles": [],
+		"ctx": [],
 		"groups": [],
 		"segments": [
 			"showcase",
@@ -889,46 +580,12 @@ export const routaRoutes = [
 				"body": false
 			}
 		},
-		"middleware": [
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			}
-		],
+		"middleware": [],
 		"methodMiddleware": {
-			"get": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			]
+			"get": []
 		},
-		"middlewareFiles": [
-			"src/routes/middleware.ts"
-		],
-		"ctx": [
-			"requestId"
-		],
+		"middlewareFiles": [],
+		"ctx": [],
 		"groups": [],
 		"segments": [
 			"status"
@@ -971,20 +628,6 @@ export const routaRoutes = [
 			}
 		},
 		"middleware": [
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			},
 			{
 				"file": "src/routes/(private)/middleware.ts",
 				"name": "signedIn",
@@ -1065,20 +708,6 @@ export const routaRoutes = [
 		],
 		"methodMiddleware": {
 			"get": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
 				{
 					"file": "src/routes/(private)/middleware.ts",
 					"name": "signedIn",
@@ -1198,20 +827,6 @@ export const routaRoutes = [
 			],
 			"post": [
 				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
 					"file": "src/routes/(private)/middleware.ts",
 					"name": "signedIn",
 					"requires": [],
@@ -1315,7 +930,6 @@ export const routaRoutes = [
 			]
 		},
 		"middlewareFiles": [
-			"src/routes/middleware.ts",
 			"src/routes/(private)/middleware.ts",
 			"src/routes/(private)/tenants/$tenantId/middleware.ts"
 		],
@@ -1342,7 +956,6 @@ export const routaRoutes = [
 			"projectListMode",
 			"projectPermissions",
 			"projectScope",
-			"requestId",
 			"tenant"
 		],
 		"groups": [
@@ -1405,20 +1018,6 @@ export const routaRoutes = [
 			}
 		},
 		"middleware": [
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			},
 			{
 				"file": "src/routes/(private)/middleware.ts",
 				"name": "signedIn",
@@ -1500,20 +1099,6 @@ export const routaRoutes = [
 		"methodMiddleware": {
 			"get": [
 				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
 					"file": "src/routes/(private)/middleware.ts",
 					"name": "signedIn",
 					"requires": [],
@@ -1592,20 +1177,6 @@ export const routaRoutes = [
 				}
 			],
 			"patch": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
 				{
 					"file": "src/routes/(private)/middleware.ts",
 					"name": "signedIn",
@@ -1710,20 +1281,6 @@ export const routaRoutes = [
 			],
 			"delete": [
 				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				},
-				{
 					"file": "src/routes/(private)/middleware.ts",
 					"name": "signedIn",
 					"requires": [],
@@ -1827,14 +1384,12 @@ export const routaRoutes = [
 			]
 		},
 		"middlewareFiles": [
-			"src/routes/middleware.ts",
 			"src/routes/(private)/middleware.ts",
 			"src/routes/(private)/tenants/$tenantId/middleware.ts"
 		],
 		"ctx": [
 			"projectPermissions",
 			"projectScope",
-			"requestId",
 			"tenant"
 		],
 		"groups": [
@@ -1869,46 +1424,12 @@ export const routaRoutes = [
 				"body": false
 			}
 		},
-		"middleware": [
-			{
-				"file": "src/routes/middleware.ts",
-				"name": "withRequest",
-				"requires": [],
-				"provides": [
-					"requestId"
-				],
-				"providesTypes": {
-					"requestId": "string"
-				},
-				"rejects": [],
-				"security": [],
-				"permissions": []
-			}
-		],
+		"middleware": [],
 		"methodMiddleware": {
-			"get": [
-				{
-					"file": "src/routes/middleware.ts",
-					"name": "withRequest",
-					"requires": [],
-					"provides": [
-						"requestId"
-					],
-					"providesTypes": {
-						"requestId": "string"
-					},
-					"rejects": [],
-					"security": [],
-					"permissions": []
-				}
-			]
+			"get": []
 		},
-		"middlewareFiles": [
-			"src/routes/middleware.ts"
-		],
-		"ctx": [
-			"requestId"
-		],
+		"middlewareFiles": [],
+		"ctx": [],
 		"groups": [],
 		"segments": [
 			"whoami"
@@ -1940,42 +1461,43 @@ export type RoutaAuthenticationScheme = "accountToken" | "session" | "serviceKey
 /** `ctx.auth` on an operation no requireAuth guard protects. */
 export type RoutaAuth = import("@routa-ts/core").AuthContext<RoutaAuthenticationScheme, RoutaPrincipal>;
 
+/** The header `src/routa.ts` reads correlation from, which startup checks against it. */
+export const routaCorrelationHeader = "x-correlation-id";
+
 export type AdminAuditEventsCtx = {
 	"admin": unknown;
-	"requestId": unknown;
 };
 
 export type AdminReportsCtx = {
 	"admin": unknown;
-	"requestId": unknown;
 };
 
 export type AuthSessionCtx = {
-	"requestId": unknown;
+	readonly __empty?: never;
 };
 
 export type DemoCtx = {
-	"requestId": unknown;
+	readonly __empty?: never;
 };
 
 export type LegacyCtx = {
-	"requestId": unknown;
+	readonly __empty?: never;
 };
 
 export type LegacyIdCtx = {
-	"requestId": unknown;
+	readonly __empty?: never;
 };
 
 export type LoggerShowcaseCtx = {
-	"requestId": unknown;
+	readonly __empty?: never;
 };
 
 export type ShowcaseItemIdCtx = {
-	"requestId": unknown;
+	readonly __empty?: never;
 };
 
 export type StatusCtx = {
-	"requestId": unknown;
+	readonly __empty?: never;
 };
 
 export type TenantsTenantIdProjectsCtx = {
@@ -1983,19 +1505,17 @@ export type TenantsTenantIdProjectsCtx = {
 	"projectListMode": unknown;
 	"projectPermissions": unknown;
 	"projectScope": unknown;
-	"requestId": unknown;
 	"tenant": unknown;
 };
 
 export type TenantsTenantIdProjectsProjectIdCtx = {
 	"projectPermissions": unknown;
 	"projectScope": unknown;
-	"requestId": unknown;
 	"tenant": unknown;
 };
 
 export type WhoamiCtx = {
-	"requestId": unknown;
+	readonly __empty?: never;
 };
 
 export type RoutaRouteCtxByPath = {
@@ -2004,42 +1524,36 @@ export type RoutaRouteCtxByPath = {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"requestId": string;
 			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 		post: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"requestId": string;
 			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 		put: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"requestId": string;
 			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 		patch: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"requestId": string;
 			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 		delete: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"requestId": string;
 			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 		head: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"requestId": string;
 			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 	};
@@ -2048,224 +1562,176 @@ export type RoutaRouteCtxByPath = {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"requestId": string;
 			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken", RoutaPrincipal>;
 		};
 		post: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"requestId": string;
 			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 		put: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"requestId": string;
 			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 		patch: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"requestId": string;
 			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 		delete: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"requestId": string;
 			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 		head: {
 			"admin": {
 				readonly "role": "owner";
 			};
-			"requestId": string;
 			readonly "auth": import("@routa-ts/core").AuthenticatedAuthContext<"accountToken" | "session" | "serviceKey" | "clientCert", RoutaPrincipal>;
 		};
 	};
 	"/auth/session": {
 		get: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		post: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		put: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		patch: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		delete: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		head: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 	};
 	"/demo": {
 		get: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		post: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		put: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		patch: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		delete: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		head: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 	};
 	"/legacy": {
 		get: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		post: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		put: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		patch: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		delete: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		head: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 	};
 	"/legacy/:id": {
 		get: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		post: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		put: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		patch: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		delete: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		head: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 	};
 	"/logger-showcase": {
 		get: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		post: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		put: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		patch: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		delete: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		head: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 	};
 	"/showcase/:itemId": {
 		get: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		post: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		put: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		patch: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		delete: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		head: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 	};
 	"/status": {
 		get: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		post: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		put: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		patch: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		delete: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		head: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 	};
@@ -2285,7 +1751,6 @@ export type RoutaRouteCtxByPath = {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
-			"requestId": string;
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
@@ -2302,7 +1767,6 @@ export type RoutaRouteCtxByPath = {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
-			"requestId": string;
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
@@ -2315,7 +1779,6 @@ export type RoutaRouteCtxByPath = {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
-			"requestId": string;
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
@@ -2328,7 +1791,6 @@ export type RoutaRouteCtxByPath = {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
-			"requestId": string;
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
@@ -2341,7 +1803,6 @@ export type RoutaRouteCtxByPath = {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
-			"requestId": string;
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
@@ -2354,7 +1815,6 @@ export type RoutaRouteCtxByPath = {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
-			"requestId": string;
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
@@ -2369,7 +1829,6 @@ export type RoutaRouteCtxByPath = {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
-			"requestId": string;
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
@@ -2381,7 +1840,6 @@ export type RoutaRouteCtxByPath = {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
-			"requestId": string;
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
@@ -2393,7 +1851,6 @@ export type RoutaRouteCtxByPath = {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
-			"requestId": string;
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
@@ -2409,7 +1866,6 @@ export type RoutaRouteCtxByPath = {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
-			"requestId": string;
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
@@ -2425,7 +1881,6 @@ export type RoutaRouteCtxByPath = {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
-			"requestId": string;
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
@@ -2437,7 +1892,6 @@ export type RoutaRouteCtxByPath = {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
-			"requestId": string;
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
@@ -2447,27 +1901,21 @@ export type RoutaRouteCtxByPath = {
 	};
 	"/whoami": {
 		get: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		post: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		put: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		patch: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		delete: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 		head: {
-			"requestId": string;
 			readonly "auth": RoutaAuth;
 		};
 	};
@@ -2476,7 +1924,6 @@ export type RoutaRouteCtxByPath = {
 export type RoutaFactoryCtxByPath = {
 	"/tenants/:tenantId/projects": {
 		routeFile: {
-			"requestId": string;
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
@@ -2489,7 +1936,6 @@ export type RoutaFactoryCtxByPath = {
 				readonly "tenantId": string;
 				readonly "canWrite": boolean;
 			};
-			"requestId": string;
 			"tenant": {
 				readonly "id": string;
 				readonly "name": string;
@@ -2533,7 +1979,6 @@ export type RoutaCtxByKey = {
 		readonly "tenantId": string;
 		readonly "canWrite": boolean;
 	};
-	"requestId": string;
 	"tenant": {
 		readonly "id": string;
 		readonly "name": string;

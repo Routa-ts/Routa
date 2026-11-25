@@ -1209,7 +1209,7 @@ describe("factory-created loggers", () => {
 		await hono.request("/status");
 		await application.fetch(new Request("http://localhost/status"));
 
-		expect(events).toEqual(["http.request", "http.request"]);
+		expect(events).toEqual(["http.response.prepared", "http.response.prepared"]);
 		expect(swapped.info).not.toHaveBeenCalled();
 	});
 
@@ -1241,7 +1241,7 @@ describe("factory-created loggers", () => {
 
 			expect(response.headers.get("deprecation"), options.constructor.name).toBe("true");
 		}
-		expect(events).toEqual(["http.request", "http.request"]);
+		expect(events).toEqual(["http.response.prepared", "http.response.prepared"]);
 	});
 
 	it("LOG-AC-01 refuses an object whose brand is not the factory's own true value", () => {
@@ -1317,10 +1317,10 @@ describe("factory-created loggers", () => {
 			expect(delivered).toEqual([
 				"status.read",
 				"status.child",
-				"http.request",
+				"http.response.prepared",
 				"status.read",
 				"status.child",
-				"http.request",
+				"http.response.prepared",
 			]);
 			expect(unhandled).not.toHaveBeenCalled();
 			// Each createLogger call, its children included, reports each kind of failure once; a

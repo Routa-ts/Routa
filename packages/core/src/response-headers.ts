@@ -14,6 +14,7 @@ export const reservedHeaders = [
 	"transfer-encoding",
 	"connection",
 	"set-cookie",
+	"x-request-id",
 ] as const;
 
 const reservedHeaderNames: ReadonlySet<string> = new Set(reservedHeaders);
@@ -24,17 +25,25 @@ const valueTypes = "string, number, or boolean";
 
 type HeaderOutcome = { headers?: unknown };
 
+/** The headers a route's configuration gives Routa besides {@link reservedHeaders}. */
+export type OwnedHeaders = {
+	/** Header names the response lifecycle owns for the route. */
+	readonly lifecycle: ReadonlySet<string>;
+	/** The lowercase correlation header, when correlation is on. */
+	readonly correlation?: string | undefined;
+};
+
 /**
  * Describes why a header declaration is invalid, or returns `undefined` when it is valid.
  *
  * TypeScript and `routa check` report the same rules earlier. This keeps hand-built contracts honest.
  *
  * @param headers - The outcome's `headers` declaration
- * @param lifecycleOwned - Header names the response lifecycle owns for this route
+ * @param owned - The headers the route's configuration gives Routa
  */
 export function headerDeclarationProblem(
 	headers: unknown,
-	lifecycleOwned: ReadonlySet<string>,
+	owned: OwnedHeaders,
 ): string | undefined {
 	const shape = declaredShape(headers);
 
@@ -69,7 +78,11 @@ export function headerDeclarationProblem(
 			return `declares header "${name}", but Routa owns ${lower}. Remove it from headers.`;
 		}
 
-		if (lifecycleOwned.has(lower)) {
+		if (lower === owned.correlation) {
+			return `declares header "${name}", but Routa echoes the correlation ID in ${lower}. Remove it from headers.`;
+		}
+
+		if (owned.lifecycle.has(lower)) {
 			return `declares header "${name}", but the route's lifecycle headers own it. Remove it, or turn lifecycle headers off.`;
 		}
 

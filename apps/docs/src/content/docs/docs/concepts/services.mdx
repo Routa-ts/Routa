@@ -351,12 +351,14 @@ and fail in the other.
 At runtime, Routa checks that every name in `requiresServices` is on the middleware's
 `ctx.services` immediately before it runs. A missing name, which only a project that bypassed
 `routa check` can reach, stops the request before the callback with the standard `500` problem.
-The client gets no details. The `http.error` log names the middleware, the service, the route,
-and the method:
+The client gets no details. The `http.error` log records the request identity, the method, the
+route, and the status, and no error text:
 
 ```txt
-Middleware withRateLimit on GET /orders requires service "limiter", but ctx.services does not provide it where the middleware runs. Declare "limiter" in a services scope that runs before the middleware.
+{"timestamp":"2026-01-01T00:00:00.000Z","level":"error","event":"http.error","message":"Request failed.","data":{"requestId":"5e8f2a1c-3b4d-4c6e-9f0a-1b2c3d4e5f6a","method":"GET","route":"/orders","status":500}}
 ```
+
+Run `routa check` to find the placement; it reports the same mistake from source.
 
 Routa checks names at runtime, not the members of the services.
 
@@ -478,8 +480,9 @@ Cleanup runs once per application instance:
   settles keeps it pending.
 
 A cleanup failure never replaces a startup error. Routa logs it as
-`services.cleanup_failed`. `dispose()` rejects with an `AggregateError` of the failures
-after every callback has been attempted.
+`services.cleanup_failed`, with how many callbacks failed and none of their error text.
+`dispose()` rejects with an `AggregateError` of the failures after every callback has been
+attempted.
 
 ### Request Cleanup
 
@@ -493,14 +496,15 @@ after the response is ready:
    registration order.
 4. Routa returns the prepared response.
 
-A request cleanup failure is logged as `services.cleanup_failed` and never changes the
-response. Application services stay available throughout, and `dispose()` waits for active
+A request cleanup failure is logged as `services.cleanup_failed`, with the request's
+identity and how many callbacks failed, and never changes the response. The event holds no
+error text, so a callback that needs its error logged catches it and logs what is safe. Application services stay available throughout, and `dispose()` waits for active
 requests to finish their cleanup before releasing application services.
 
 When a request factory throws or returns the wrong names, Routa skips every later factory,
 middleware, and the handler, and responds with the standard `500` problem, whatever the
 factory threw. A `ZodError` from a factory is an internal failure, not a validation error.
-The error is logged as `http.error` and never reaches the client. A middleware reject also
+Routa logs `http.error` without the error's text, and the error never reaches the client. A middleware reject also
 skips later factories. Either way, Routa releases the scopes the request started, including
 the callbacks a failed factory registered, after the chain unwinds and in the same order. It
 does not retry a factory or substitute a service.

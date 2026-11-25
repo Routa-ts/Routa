@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { operationId, pascalCase } from "./operation-id.js";
+import { identityHeaders } from "./request-identity.js";
 import {
 	type RouteMetadata,
 	type RouteMethodInputMetadata,
@@ -68,11 +69,15 @@ function assembleScaffoldPlan(
 	document: unknown,
 	source: string,
 	input: ScaffoldPlanInput,
+	correlationHeader: string | undefined,
 ): ScaffoldPlan {
 	const files = new Map(input.files);
 	const metadataPath = ".routa/routes.gen.ts";
 	const baselinePath = ".routa/openapi-baseline.json";
-	files.set(baselinePath, `${JSON.stringify(document, null, "\t")}\n`);
+	files.set(
+		baselinePath,
+		`${JSON.stringify(withIdentityHeaders(document, correlationHeader), null, "\t")}\n`,
+	);
 
 	const manifestGenerated = Array.from(input.generatedPaths)
 		.sort()
@@ -407,6 +412,73 @@ function parseOpenApi(raw: string, extension: string, source: string): OpenApiDo
  * @param document - The parsed document used to suggest a corrected structure.
  * @returns A formatted scaffold error message.
  */
+/**
+ * The baseline a scaffold writes: the source document with the `x-request-id` header Routa sends
+ * on every response, and the project's correlation header when it configures one, added to each
+ * operation's responses, so the scaffolded project's generated OpenAPI starts without drift. A
+ * response written as a `$ref` is left as it is.
+ */
+function withIdentityHeaders(document: unknown, correlationHeader: string | undefined): unknown {
+	const { paths } = document as OpenApiDocument;
+
+	return {
+		...(document as object),
+		paths: Object.fromEntries(
+			Object.entries(paths ?? {}).map(([path, item]) => [
+				path,
+				isRecord(item)
+					? Object.fromEntries(
+							Object.entries(item).map(([method, operation]) => [
+								method,
+								isRecord(operation) && isRecord(operation.responses)
+									? {
+											...operation,
+											responses: responsesWithIdentity(operation.responses, correlationHeader),
+										}
+									: operation,
+							]),
+						)
+					: item,
+			]),
+		),
+	};
+}
+
+function responsesWithIdentity(
+	responses: Record<string, unknown>,
+	correlationHeader: string | undefined,
+): Record<string, unknown> {
+	return Object.fromEntries(
+		Object.entries(responses).map(([status, response]) => [
+			status,
+			isRecord(response) && !("$ref" in response)
+				? {
+						...response,
+						headers: {
+							...withoutIdentityHeaders(response.headers, correlationHeader),
+							...identityHeaders(correlationHeader),
+						},
+					}
+				: response,
+		]),
+	);
+}
+
+/** A source response's headers without the ones Routa owns, in any spelling. */
+function withoutIdentityHeaders(
+	headers: unknown,
+	correlationHeader: string | undefined,
+): Record<string, unknown> {
+	if (!isRecord(headers)) {
+		return {};
+	}
+
+	const owned = new Set(Object.keys(identityHeaders(correlationHeader)));
+	return Object.fromEntries(
+		Object.entries(headers).filter(([name]) => !owned.has(name.toLowerCase())),
+	);
+}
+
 function formatMissingPathsError(source: string, document: unknown): string {
 	const keys =
 		document && typeof document === "object" && !Array.isArray(document)
@@ -1681,7 +1753,12 @@ function validateGeneratedIdentifier(name: string, context: string): void {
 }
 
 /** Converts source text into deterministic generated output without filesystem access. */
-export function createScaffoldPlan(raw: string, extension: string, source: string): ScaffoldPlan {
+export function createScaffoldPlan(
+	raw: string,
+	extension: string,
+	source: string,
+	correlationHeader?: string,
+): ScaffoldPlan {
 	const document = parseOpenApi(raw, extension, source);
 	validateOpenApiDocument(document);
 	const paths = document.paths ?? {};
@@ -1873,12 +1950,19 @@ ${Array.from(schemaExports.entries())
 	}
 
 	// Shared with `routa check` so the runtime always loads the same metadata shape.
-	generatedContent.set(".routa/routes.gen.ts", routesMetadataSource(metadataRoutes));
-	generatedContent.set(".routa/openapi-baseline.json", `${JSON.stringify(document, null, "\t")}\n`);
+	generatedContent.set(
+		".routa/routes.gen.ts",
+		routesMetadataSource(metadataRoutes, undefined, undefined, correlationHeader),
+	);
 
-	return assembleScaffoldPlan(document, source, {
-		files: generatedContent,
-		generatedPaths: generated,
-		routes,
-	});
+	return assembleScaffoldPlan(
+		document,
+		source,
+		{
+			files: generatedContent,
+			generatedPaths: generated,
+			routes,
+		},
+		correlationHeader,
+	);
 }

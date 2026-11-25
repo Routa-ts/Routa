@@ -1,7 +1,8 @@
-import { existsSync } from "node:fs";
-import { join, sep } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, relative, sep } from "node:path";
 import {
 	callName,
+	coreCall,
 	createRouteObject,
 	objectLiteral,
 	objectProperties,
@@ -61,18 +62,19 @@ export function applicationServices(
 
 	const { declaration, hidden } = routaConfigMember(cwd, parser, "services");
 	// Tuning values may be runtime expressions, so a config Routa cannot read is not an error.
-	const warnings: Diagnostic[] = hidden
-		? [
-				{
-					code: "ROUTA_SERVICES_SPREAD_UNRESOLVED",
-					severity: "warning",
-					message: `The createRouta config in ${configFile} has a spread, computed key, or config argument that cannot be statically read, so application services inside it cannot be read.`,
-					file: configFile,
-					suggestion:
-						"Declare application services as a visible services member of the createRouta object, after any spread, or spread a const object literal. Startup rejects services that routa generate could not read.",
-				},
-			]
-		: [];
+	const warnings: Diagnostic[] =
+		hidden.length > 0
+			? [
+					{
+						code: "ROUTA_SERVICES_SPREAD_UNRESOLVED",
+						severity: "warning",
+						message: `The createRouta config in ${configFile} has a spread, computed key, or config argument that cannot be statically read, so application services inside it cannot be read.`,
+						file: configFile,
+						suggestion:
+							"Declare application services as a visible services member of the createRouta object, after any spread, or spread a const object literal. Startup rejects services that routa generate could not read.",
+					},
+				]
+			: [];
 
 	if (!declaration) {
 		return { diagnostics: [], warnings };
@@ -181,73 +183,253 @@ function declaredContract(
 	});
 }
 
+/**
+ * A part of the `createRouta` config Routa cannot read, which may hold a member: a spread, a
+ * config argument, or a default export whose `value` it cannot follow, or a computed `key` it
+ * cannot read.
+ */
+export type HiddenPart = {
+	readonly kind: "value" | "key";
+	/** The module the part is written in, relative to the project root. */
+	readonly file: string;
+	readonly node: ts.Node;
+};
+
 type ConfigMember = {
 	/** The member's value, and the module it is written in. */
 	declaration?: { file: string; node: ts.Node } | undefined;
-	/** Whether a spread, computed key, or argument Routa cannot read may hold the member, after any visible member. */
-	hidden: boolean;
+	/** The parts Routa cannot read that may hold the member, after any visible member. */
+	hidden: readonly HiddenPart[];
 };
 
 /**
- * Finds a member, such as `services`, of the default-exported `createRouta({ ... })` call in
- * `src/routa.ts`, the config Routa loads at startup. The export may be the call itself or a
- * `const` bound to it; any other default export may hide the member.
+ * Finds a member, such as `services`, of the config `src/routa.ts` exports as default, the config
+ * Routa loads at startup. The export, its `createRouta` argument, and each spread in it are read
+ * through {@link configValue}. Any part it cannot follow may hide the member.
  */
 export function routaConfigMember(
 	cwd: string,
 	parser: ts.SourceFileParser,
 	member: string,
 ): ConfigMember {
-	const sourceFile = parseTypeScriptFile(join(cwd, configFile), parser);
-	const exported = sourceFile.statements.find(ts.isExportAssignment)?.expression;
-	const call = exported && createRoutaCall(sourceFile, exported);
+	const exported = defaultExport(parseTypeScriptFile(join(cwd, configFile), parser));
 
-	if (!call) {
-		return { hidden: exported !== undefined };
+	if (!exported) {
+		return { hidden: [] };
 	}
 
-	// The config argument is read like a spread: an object literal or a `const` binding to one.
-	const argument = call.arguments[0];
-	const config = argument && spreadObject(cwd, configFile, argument, parser, 0);
+	const config = configValue(cwd, parser, configFile, exported, 0);
 
-	return config
-		? objectMember(cwd, config.file, config.object, parser, 1, member)
-		: { hidden: argument !== undefined };
+	if (!config) {
+		return { hidden: [] };
+	}
+
+	return ts.isObjectLiteralExpression(config.node)
+		? objectMember(cwd, config.file, config.node, parser, 1, member)
+		: { hidden: [{ kind: "value", ...config }] };
 }
 
-/** The `createRouta(...)` call an expression is, or a local `const` it names is bound to. */
-function createRoutaCall(
-	sourceFile: ts.SourceFile,
-	expression: ts.Expression,
-): ts.CallExpression | undefined {
-	let node: ts.Expression | undefined = unwrapExpression(expression);
+/**
+ * Follows a part of the config, such as the default export, the `createRouta` argument, or a
+ * spread, to the value it stands for: through `const` bindings, imports, and re-exports, and into
+ * the argument of each `createRouta` call, which returns its argument unchanged. The checker
+ * resolves bindings without running any module. A call is `createRouta` when it calls the one
+ * `@routa-ts/core` declares, as {@link callsCreateRouta} decides; an application function that
+ * shares the name is read by its type.
+ *
+ * @param file - The module containing `node`, relative to `cwd`
+ * @returns The object literal it found, or the node it stopped at as written, so its type keeps
+ *   any assertion, with the module it is written in; `undefined` for a `createRouta()` call
+ *   without a config, which holds no member
+ */
+function configValue(
+	cwd: string,
+	parser: ts.SourceFileParser,
+	file: string,
+	node: ts.Node,
+	depth: number,
+): { file: string; node: ts.Node } | undefined {
+	const bound = boundValue(cwd, parser, file, node);
+	const value = ts.isExpression(bound.node) ? unwrapExpression(bound.node) : bound.node;
 
-	if (ts.isIdentifier(node)) {
-		const name = node.text;
-		node = undefined;
+	if (ts.isObjectLiteralExpression(value)) {
+		return { file: bound.file, node: value };
+	}
 
-		for (const statement of sourceFile.statements) {
-			if (
-				ts.isVariableStatement(statement)
-				&& (statement.declarationList.flags & ts.NodeFlags.Const) !== 0
-			) {
-				const declaration = statement.declarationList.declarations.find(
-					(item) => ts.isIdentifier(item.name) && item.name.text === name,
-				);
-				node = declaration?.initializer ? unwrapExpression(declaration.initializer) : node;
+	if (
+		!ts.isCallExpression(value)
+		|| depth >= maxBindingDepth
+		|| !callsCreateRouta(cwd, parser, bound.file, value)
+	) {
+		return bound;
+	}
+
+	const [argument] = value.arguments;
+	return argument && configValue(cwd, parser, bound.file, argument, depth + 1);
+}
+
+/**
+ * Whether a call calls the `createRouta` that `@routa-ts/core` declares: imported from core under
+ * any name or called on a namespace import of it, as in `core.createRouta()`, or reached through
+ * a module that re-exports it, such as a local `export { createRouta } from "@routa-ts/core"`.
+ * The checker follows the imports and re-exports to the declaration without running any module,
+ * and the declaration must be in the `@routa-ts/core` package.
+ *
+ * @param file - The module containing `call`, relative to `cwd`
+ */
+function callsCreateRouta(
+	cwd: string,
+	parser: ts.SourceFileParser,
+	file: string,
+	call: ts.CallExpression,
+): boolean {
+	if (coreCall(call, "createRouta")) {
+		return true;
+	}
+
+	const callee = unwrapExpression(call.expression);
+	const name = ts.isPropertyAccessExpression(callee) ? callee.name : callee;
+	const declaredIn = parser.withChecker(join(cwd, file), (checker) => {
+		const symbol = checker.getSymbolAtLocation(name);
+		const resolved =
+			symbol && symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+		const [declaration, ...others] = resolved?.declarations ?? [];
+		return resolved?.name === "createRouta" && others.length === 0
+			? declaration?.resolve()?.getSourceFile().fileName
+			: undefined;
+	});
+
+	return declaredIn !== undefined && packageName(declaredIn) === coreModule;
+}
+
+const coreModule = "@routa-ts/core";
+
+/**
+ * The `name` in the nearest `package.json` above a file that has one, such as `@routa-ts/core`
+ * for its source or its published declarations.
+ */
+function packageName(file: string): string | undefined {
+	for (let directory = dirname(file); ; directory = dirname(directory)) {
+		const name = manifestName(join(directory, "package.json"));
+
+		if (name !== undefined || dirname(directory) === directory) {
+			return name;
+		}
+	}
+}
+
+/** The `name` a `package.json` declares, or `undefined` when it is missing or has none. */
+function manifestName(path: string): string | undefined {
+	if (!existsSync(path)) {
+		return undefined;
+	}
+
+	try {
+		const { name } = JSON.parse(readFileSync(path, "utf8")) as { name?: unknown };
+		return typeof name === "string" ? name : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * What a module exports as default: the expression of `export default`, or the name in
+ * `export { config as default }`, which may re-export from another module.
+ */
+function defaultExport(sourceFile: ts.SourceFile): ts.Node | undefined {
+	for (const statement of sourceFile.statements) {
+		if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
+			return statement.expression;
+		}
+
+		if (
+			ts.isExportDeclaration(statement)
+			&& !statement.isTypeOnly
+			&& statement.exportClause
+			&& ts.isNamedExports(statement.exportClause)
+		) {
+			const element = statement.exportClause.elements.find((item) => item.name.text === "default");
+
+			if (element) {
+				// The checker resolves the exported name to what it names, here or in the source module.
+				return element.name;
 			}
 		}
 	}
+}
 
-	return node && ts.isCallExpression(node) && callName(node.expression) === "createRouta"
-		? node
-		: undefined;
+/**
+ * Follows a name to the value it is bound to: through imports and re-exports, to a `const`
+ * initializer or an `export default` expression, which the checker resolves without running any
+ * module. It stops at any other node, such as a call, or a binding it cannot follow.
+ *
+ * @param file - The module containing `node`, relative to `cwd`
+ * @returns The node it stopped at, as written, and the module it is written in
+ */
+function boundValue(
+	cwd: string,
+	parser: ts.SourceFileParser,
+	file: string,
+	node: ts.Node,
+	depth = 0,
+): { file: string; node: ts.Node } {
+	const value = ts.isExpression(node) ? unwrapExpression(node) : node;
+	const target =
+		ts.isIdentifier(value) && depth <= maxBindingDepth
+			? parser.withChecker(join(cwd, file), (checker) => {
+					const symbol = checker.getSymbolAtLocation(value);
+					const resolved =
+						symbol && symbol.flags & ts.SymbolFlags.Alias
+							? checker.getAliasedSymbol(symbol)
+							: symbol;
+					const [declaration, ...others] = resolved?.declarations ?? [];
+					const declared = others.length === 0 ? declaration?.resolve() : undefined;
+					return declared && { fileName: declared.getSourceFile().fileName, pos: declared.pos };
+				})
+			: undefined;
+
+	if (!target) {
+		return { file, node };
+	}
+
+	// Read the declaration from this parser's own parse of its module, where later reads find it.
+	const declaredFile = relative(cwd, target.fileName);
+	const declared = boundInitializer(
+		parseTypeScriptFile(join(cwd, declaredFile), parser),
+		target.pos,
+	);
+
+	return declared ? boundValue(cwd, parser, declaredFile, declared, depth + 1) : { file, node };
+}
+
+/**
+ * The value a top-level declaration at `pos` binds: an `export default` expression, or the
+ * initializer of a `const`.
+ */
+function boundInitializer(sourceFile: ts.SourceFile, pos: number): ts.Expression | undefined {
+	for (const statement of sourceFile.statements) {
+		if (ts.isExportAssignment(statement) && !statement.isExportEquals && statement.pos === pos) {
+			return statement.expression;
+		}
+
+		if (
+			ts.isVariableStatement(statement)
+			&& (statement.declarationList.flags & ts.NodeFlags.Const) !== 0
+		) {
+			const declaration = statement.declarationList.declarations.find((item) => item.pos === pos);
+
+			if (declaration) {
+				return declaration.initializer;
+			}
+		}
+	}
 }
 
 /**
  * Reads a member from a config object in source order, so a later member replaces an earlier
- * one as it does at runtime. A spread of an object literal, or of a `const` object literal
- * declared locally or imported, is read like members written in place.
+ * one as it does at runtime. A spread that {@link configValue} follows to an object literal, such
+ * as a `const` bound to one or to a `createRouta` call, declared locally or imported, is read like
+ * members written in place.
  *
  * @param file - The module containing `object`, relative to `cwd`
  */
@@ -259,26 +441,51 @@ function objectMember(
 	depth: number,
 	name: string,
 ): ConfigMember {
-	let found: ConfigMember = { hidden: false };
+	let found: ConfigMember = { hidden: [] };
 
 	for (const property of object.properties) {
 		if (ts.isSpreadAssignment(property)) {
-			const spread = spreadObject(cwd, file, property.expression, parser, depth);
-			const member = spread
-				? objectMember(cwd, spread.file, spread.object, parser, depth + 1, name)
-				: { hidden: true };
+			const spread =
+				depth <= maxBindingDepth
+					? configValue(cwd, parser, file, property.expression, depth)
+					: { file, node: property.expression };
+			const member: ConfigMember = !spread
+				? { hidden: [] }
+				: ts.isObjectLiteralExpression(spread.node)
+					? objectMember(cwd, spread.file, spread.node, parser, depth + 1, name)
+					: { hidden: [{ kind: "value", ...spread }] };
 			found = member.declaration
 				? member
-				: { declaration: found.declaration, hidden: found.hidden || member.hidden };
-		} else if (ts.isComputedPropertyName(property.name)) {
-			found = { ...found, hidden: true };
-		} else if (propertyName(property.name) === name) {
-			// A visible member replaces whatever an earlier unreadable part held.
-			found = { declaration: { file, node: memberValue(property) }, hidden: false };
+				: { declaration: found.declaration, hidden: [...found.hidden, ...member.hidden] };
+		} else {
+			const key = memberKey(property.name);
+
+			if (key === undefined) {
+				const hiddenKey = ts.isComputedPropertyName(property.name)
+					? property.name.expression
+					: property.name;
+				found = { ...found, hidden: [...found.hidden, { kind: "key", file, node: hiddenKey }] };
+			} else if (key === name) {
+				// A visible member replaces whatever an earlier unreadable part held.
+				found = { declaration: { file, node: memberValue(property) }, hidden: [] };
+			}
 		}
 	}
 
 	return found;
+}
+
+/**
+ * A config member's key. A computed key that is a string or number literal, such as
+ * `["correlation"]`, is the plain key it spells; any other computed key cannot be read.
+ */
+function memberKey(name: ts.PropertyName): string | undefined {
+	if (!ts.isComputedPropertyName(name)) {
+		return propertyName(name);
+	}
+
+	const key = unwrapExpression(name.expression);
+	return ts.isStringLiteralLike(key) || ts.isNumericLiteral(key) ? key.text : undefined;
 }
 
 /**

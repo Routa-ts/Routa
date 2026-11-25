@@ -16,6 +16,9 @@ export default createRouta({
 	// `false` turns off Routa's logging for this application only; modules that import the shared
 	// logger keep writing through it.
 	logger: process.env.ROUTA_DEMO_LOGGER === "off" ? false : logger,
+	// Every response carries x-request-id, which Routa generates. This also accepts one valid
+	// x-correlation-id from the caller, exposes it as ctx.correlationId, and echoes it.
+	correlation: true,
 	lifecycleHeaders: true,
 	services: appServices,
 	// Every credential below is a demonstration value from src/identities.ts. None is fit for production.

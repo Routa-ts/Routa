@@ -13,6 +13,7 @@ import { basename, dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	callName,
+	coreCall,
 	createRouteObject,
 	objectLiteral,
 	objectProperties,
@@ -29,7 +30,6 @@ import {
 	type AuthenticationMetadata,
 	type AuthenticationRequirementMetadata,
 	authenticationFailedDescription,
-	coreCall,
 	folderGuard,
 	rejectsAmbiguousCredentials,
 	requireAuthMiddleware,
@@ -48,6 +48,7 @@ import {
 	variableDeclarations,
 } from "./declarations.js";
 import { operationId, toOpenApiPath } from "./operation-id.js";
+import { applicationCorrelation } from "./request-identity.js";
 import {
 	applicationServices,
 	contractTypeReference,
@@ -133,6 +134,8 @@ export type ProjectValidationResult = {
 	schemas: ContractSchemaProjection;
 	/** The authentication contract `src/routa.ts` declares, when it declares one. */
 	authentication?: AuthenticationMetadata;
+	/** The lowercase header `src/routa.ts` reads correlation from, when correlation is on. */
+	correlationHeader?: string;
 };
 
 const generatedHeader =
@@ -194,11 +197,14 @@ function validateProjectInSession(
 	const write = options.write ?? true;
 	const auth = applicationAuthentication(cwd, parser);
 	const { authentication } = auth;
+	const correlation = applicationCorrelation(cwd, parser);
+	const correlationHeader = correlation.header;
 	const discovery = discoverRoutes(cwd, parser, authentication);
 	const routes = discovery.routes;
 	const schemas = projectContractSchemas(cwd, routes, parser, {
 		lifecycleHeaders: lifecycleHeadersEnabled(cwd, parser),
 		...(authentication && { authentication }),
+		...(correlationHeader && { correlationHeader }),
 	});
 	const services = applicationServices(cwd, parser);
 	const discovered = [
@@ -209,6 +215,7 @@ function validateProjectInSession(
 	const diagnostics = [
 		...projectStructureDiagnostics(cwd),
 		...auth.diagnostics,
+		...correlation.diagnostics,
 		...discovered.filter((item) => item.severity !== "warning"),
 		...services.diagnostics,
 		...runResultShapeDiagnostics(cwd, parser),
@@ -226,15 +233,22 @@ function validateProjectInSession(
 	];
 
 	if (write && diagnostics.length === 0) {
-		writeGeneratedState(cwd, routes, services.services, authentication);
+		writeGeneratedState(cwd, routes, services.services, authentication, correlationHeader);
 	}
 
 	return {
 		routes,
 		diagnostics,
-		warnings: [...auth.warnings, ...services.warnings, ...discoveryWarnings, ...schemas.warnings],
+		warnings: [
+			...auth.warnings,
+			...correlation.warnings,
+			...services.warnings,
+			...discoveryWarnings,
+			...schemas.warnings,
+		],
 		schemas,
 		...(authentication && { authentication }),
+		...(correlationHeader && { correlationHeader }),
 	};
 }
 
@@ -2851,8 +2865,14 @@ function middlewareOrderDiagnostics(routes: RouteMetadata[], authenticated: bool
 				: [route.middleware];
 
 		for (const chain of chains) {
-			// Credential orchestration resolves ctx.auth before the first middleware runs.
-			const provided = new Set<string>(authenticated ? ["auth"] : []);
+			// Credential orchestration resolves ctx.auth before the first middleware runs, and Routa
+			// gives every middleware the request identity and logger.
+			const provided = new Set<string>([
+				...(authenticated ? ["auth"] : []),
+				"requestId",
+				"correlationId",
+				"logger",
+			]);
 
 			for (const middleware of chain) {
 				for (const required of middleware.requires) {
@@ -2878,10 +2898,34 @@ function middlewareOrderDiagnostics(routes: RouteMetadata[], authenticated: bool
 	return diagnostics;
 }
 
+/** The context keys Routa reserves, and what for, which no middleware can provide or pass on. */
+const reservedContext: ReadonlyArray<readonly [string, string, string]> = [
+	[
+		"services",
+		"injected services",
+		"Rename the context key. To share an application dependency, declare it as an application service.",
+	],
+	[
+		"requestId",
+		"the request identity it generates",
+		"Rename the context key. Every middleware, route-file and method services factory, and handler already reads ctx.requestId.",
+	],
+	[
+		"correlationId",
+		"the correlation ID it accepts",
+		"Rename the context key. Configure correlation in createRouta, and read the accepted value as ctx.correlationId.",
+	],
+	[
+		"logger",
+		"the request logger",
+		"Rename the context key. Handlers and services factories receive the request logger as ctx.logger.",
+	],
+];
+
 /**
- * Reports middleware context Routa cannot accept: `ctx.services`, which it reserves for injected
- * services, whether provided or passed to `next()`, `provides` it cannot read from source, and a
- * requirement interface it cannot read.
+ * Reports middleware context Routa cannot accept: `ctx.services`, `ctx.requestId`,
+ * `ctx.correlationId`, and `ctx.logger`, which it reserves, whether provided or passed to
+ * `next()`, `provides` it cannot read from source, and a requirement interface it cannot read.
  *
  * @param routes - Route metadata whose middleware chains are checked, each contract once
  */
@@ -2904,8 +2948,7 @@ function middlewareContextDiagnostics(
 			diagnostics.push(...source.requirementDiagnostics);
 			const report = (code: string, message: string, suggestion: string) =>
 				diagnostics.push({ code, severity: "error", message, file: source.file, suggestion });
-			const reserved =
-				"Rename the context key. To share an application dependency, declare it as an application service.";
+			const passed = nextPayloadKeys(source.contract);
 
 			if (source.providesUnresolved) {
 				report(
@@ -2915,12 +2958,14 @@ function middlewareContextDiagnostics(
 				);
 			}
 
-			if (item.provides.includes("services")) {
-				report(
-					"ROUTA_CONTEXT_RESERVED",
-					`Middleware ${item.name} provides ctx.services, which Routa reserves for injected services.`,
-					reserved,
-				);
+			for (const [key, owner, suggestion] of reservedContext) {
+				if (item.provides.includes(key)) {
+					report(
+						"ROUTA_CONTEXT_RESERVED",
+						`Middleware ${item.name} provides ctx.${key}, which Routa reserves for ${owner}.`,
+						suggestion,
+					);
+				}
 			}
 
 			if (authenticated && item.provides.includes("auth")) {
@@ -2931,12 +2976,14 @@ function middlewareContextDiagnostics(
 				);
 			}
 
-			if (nextPayloadKeys(source.contract).includes("services")) {
-				report(
-					"ROUTA_CONTEXT_RESERVED",
-					`Middleware ${item.name} passes ctx.services to next(), which Routa reserves for injected services.`,
-					reserved,
-				);
+			for (const [key, owner, suggestion] of reservedContext) {
+				if (passed.includes(key)) {
+					report(
+						"ROUTA_CONTEXT_RESERVED",
+						`Middleware ${item.name} passes ctx.${key} to next(), which Routa reserves for ${owner}.`,
+						suggestion,
+					);
+				}
 			}
 		}
 	}
@@ -2964,6 +3011,16 @@ function nextPayloadKeys(contract: ts.ObjectLiteralExpression): string[] {
 			return;
 		}
 
+		// A block that declares its own binding of the name calls that binding, not the continuation.
+		if (
+			ts.isBlock(node)
+			&& node.parent !== run
+			&& "binding" in continuation
+			&& blockDeclares(node, continuation.binding)
+		) {
+			return;
+		}
+
 		if (ts.isCallExpression(node) && callsContinuation(node.expression, continuation)) {
 			keys.push(...payloadKeys(run, payloadObject(run, node.arguments[0]), 0));
 		}
@@ -2973,6 +3030,18 @@ function nextPayloadKeys(contract: ts.ObjectLiteralExpression): string[] {
 
 	visit(run);
 	return keys;
+}
+
+/** Whether a block's own statements declare `name`, as a variable, function, or class. */
+function blockDeclares(block: ts.Block, name: string): boolean {
+	return block.statements.some((statement) =>
+		ts.isVariableStatement(statement)
+			? statement.declarationList.declarations.some((declaration) =>
+					bindsName(declaration.name, name),
+				)
+			: (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement))
+				&& statement.name?.text === name,
+	);
 }
 
 /** The keys an object payload names, including those of spreads `payloadObject` can read. */
@@ -3113,23 +3182,77 @@ function payloadObject(
 		return;
 	}
 
-	let found: ts.ObjectLiteralExpression | undefined;
-	const visit = (node: ts.Node): void => {
+	// The `const` the call can see: the one declared in the nearest enclosing block within `run`,
+	// so a same-named `const` in another block never stands in for the payload.
+	for (let scope: ts.Node | undefined = payload.parent; scope; scope = scope.parent) {
+		// A function between the call and `run` that binds the name as a parameter shadows any
+		// outer `const`; what that parameter holds is not statically known.
 		if (
-			ts.isVariableDeclaration(node)
-			&& ts.isIdentifier(node.name)
-			&& node.name.text === payload.text
-			&& ts.isVariableDeclarationList(node.parent)
-			&& (node.parent.flags & ts.NodeFlags.Const) !== 0
+			scope !== run
+			&& (ts.isArrowFunction(scope)
+				|| ts.isFunctionExpression(scope)
+				|| ts.isFunctionDeclaration(scope)
+				|| ts.isMethodDeclaration(scope))
+			&& scope.parameters.some((parameter) => bindsName(parameter.name, payload.text))
 		) {
-			found ??= objectLiteral(node.initializer);
+			return;
 		}
 
-		ts.forEachChild(node, visit);
-	};
+		// A loop or catch binding between the call and `run` also shadows an outer `const`.
+		if (
+			(ts.isForOfStatement(scope) || ts.isForInStatement(scope) || ts.isForStatement(scope))
+			&& scope.initializer
+			&& ts.isVariableDeclarationList(scope.initializer)
+			&& scope.initializer.declarations.some((declaration) =>
+				bindsName(declaration.name, payload.text),
+			)
+		) {
+			return;
+		}
 
-	visit(run);
-	return found;
+		if (
+			ts.isCatchClause(scope)
+			&& scope.variableDeclaration
+			&& bindsName(scope.variableDeclaration.name, payload.text)
+		) {
+			return;
+		}
+
+		if (ts.isBlock(scope)) {
+			for (const statement of scope.statements) {
+				if (ts.isVariableStatement(statement)) {
+					const isConst = (statement.declarationList.flags & ts.NodeFlags.Const) !== 0;
+
+					for (const declaration of statement.declarationList.declarations) {
+						if (bindsName(declaration.name, payload.text)) {
+							// Only a `const` object literal is known; a `let` or `var` may hold anything.
+							return isConst && ts.isIdentifier(declaration.name)
+								? objectLiteral(declaration.initializer)
+								: undefined;
+						}
+					}
+				}
+			}
+		}
+
+		if (scope === run) {
+			return;
+		}
+	}
+
+	return;
+}
+
+/** Whether a parameter's binding, destructured or not, declares `name`. */
+function bindsName(binding: ts.BindingName, name: string): boolean {
+	if (ts.isIdentifier(binding)) {
+		return binding.text === name;
+	}
+
+	return binding.elements.some(
+		(element) =>
+			ts.isBindingElement(element) && element.name !== undefined && bindsName(element.name, name),
+	);
 }
 
 function middlewareRejectStatusDiagnostics(routes: RouteMetadata[]): Diagnostic[] {
@@ -3472,12 +3595,14 @@ function isExternalApiUrl(value: string): boolean {
  * @param routes - The route metadata to serialize.
  * @param services - The application service contract, when `src/routa.ts` declares one.
  * @param authentication - The authentication contract, when `src/routa.ts` declares one.
+ * @param correlationHeader - The header `src/routa.ts` reads correlation from, when it is on.
  * @returns The generated TypeScript source.
  */
 export function routesMetadataSource(
 	routes: RouteMetadata[],
 	services?: ServiceContractMetadata,
 	authentication?: AuthenticationMetadata,
+	correlationHeader?: string,
 ): string {
 	const orderedRoutes = [...routes].sort(
 		(left, right) => compareText(left.path, right.path) || compareText(left.file, right.file),
@@ -3505,9 +3630,15 @@ export type RoutaAuth = import("@routa-ts/core").AuthContext<RoutaAuthentication
 
 `
 		: "";
+	const correlationSource = correlationHeader
+		? `/** The header \`src/routa.ts\` reads correlation from, which startup checks against it. */
+export const routaCorrelationHeader = ${JSON.stringify(correlationHeader)};
+
+`
+		: "";
 	return `${generatedHeader}export const routaRoutes = ${JSON.stringify(orderedRoutes, null, "\t")} as const;
 
-${servicesSource}${authenticationSource}${routeContextTypes(orderedRoutes, services !== undefined, authentication)}
+${servicesSource}${authenticationSource}${correlationSource}${routeContextTypes(orderedRoutes, services !== undefined, authentication)}
 `;
 }
 
@@ -3524,10 +3655,14 @@ function writeGeneratedState(
 	routes: RouteMetadata[],
 	services: ServiceContractMetadata | undefined,
 	authentication: AuthenticationMetadata | undefined,
+	correlationHeader: string | undefined,
 ): void {
 	const routesFile = join(cwd, ".routa/routes.gen.ts");
 	const previous = existsSync(routesFile) ? readFileSync(routesFile, "utf8") : undefined;
-	writeGeneratedFile(routesFile, routesMetadataSource(routes, services, authentication));
+	writeGeneratedFile(
+		routesFile,
+		routesMetadataSource(routes, services, authentication, correlationHeader),
+	);
 
 	try {
 		writeGeneratedFile(join(cwd, ".routa/testing.gen.ts"), testingModuleSource(routes, services));

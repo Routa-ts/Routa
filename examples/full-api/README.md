@@ -19,8 +19,9 @@ Runtime configuration is executable and typed in `src/routa.ts`:
 
 - `host` and `port` provide application defaults.
 - `HOST=0.0.0.0 PORT=4000 pnpm dev` demonstrates runtime environment overrides.
-- `src/logger.ts` creates the application's shared logger with `createLogger({ sink })`. The sink forwards each event, already redacted and escaped by Routa, to Pino, keeping the event data under `data` so a field such as `level` cannot replace Pino's own. `pnpm pino:exercise` builds the logger through the same `createAppLogger` factory, captures what Pino writes, and asserts that line and that `LOG_LEVEL` alone decides which levels pass. Pino is an example dependency, not part of Routa's contract, and the application owns its destination, buffering, and shutdown. Development uses `pino-pretty` for readable terminal output; `NODE_ENV=production pnpm start` keeps structured JSON for log collectors.
-- `src/routa.ts` configures that logger, and `src/services.ts` imports it directly: the project catalog logs `projects.catalog_ready` through a child with a `service` binding. Request work passes `ctx.logger` instead, as `ProjectAudit.flush` does.
+- `src/logger.ts` creates the application's shared logger with `createLogger({ sink })`. The sink forwards each event, already redacted and escaped by Routa, to Pino, keeping the event data under `data` so a field such as `level` cannot replace Pino's own. `pnpm pino:exercise` builds the logger through the same `createAppLogger` factory, captures what Pino writes, and asserts that line and that `LOG_LEVEL` alone decides which levels pass. It then starts this application through the generated `createTestApp` in a child process, with Pino writing production JSON, sends one request that creates a project, and asserts the events Pino wrote. Pino is an example dependency, not part of Routa's contract, and the application owns its destination, buffering, and shutdown. Development uses `pino-pretty` for readable terminal output; `NODE_ENV=production pnpm start` keeps structured JSON for log collectors.
+- `src/routa.ts` configures that logger, and `src/services.ts` imports it directly: the project catalog logs `projects.catalog_ready` through a child with a `service` binding and no request identity. Request work passes `ctx.logger` instead, as `ProjectAudit.flush` does, so `projects.created` carries the request's `requestId` and `correlationId`. `pnpm pino:exercise` checks both events as the real catalog and projects route write them to Pino.
+- Every response carries `x-request-id`, a UUID Routa generates for the request; a client-sent `x-request-id` never replaces it. `correlation: true` also accepts one valid `x-correlation-id`, exposes it as `ctx.correlationId`, and echoes it. `pnpm auth:exercise` checks both on every authentication case.
 - `LOG_LEVEL=debug pnpm dev` sets the shared logger's minimum level.
 - `ROUTA_DEMO_LOGGER=off pnpm dev` demonstrates `logger: false`; routes still receive a typed no-op `ctx.logger` and do not need conditional logging code. Modules that import the shared logger keep writing through it.
 - `ROUTA_DEMO_LOGGER_SHOWCASE=on` explicitly enables the dedicated logger exercise route; it returns `403` by default so normal runs cannot emit demonstration `error` or `fatal` events.
@@ -36,7 +37,8 @@ Runtime configuration is executable and typed in `src/routa.ts`:
 | 200, 201, 204, 400, 401, 403, 404, 405, 406, 415                        | Runnable requests below                                                                              |
 | Params, query, headers, cookies, JSON body                              | Project, session, audit, and showcase routes                                                         |
 | Zod parsing and coercion                                                | `verbose` uses `z.stringbool()`; scaffold query parameters generate boolean/number coercion          |
-| Global, group, segment, route, and method middleware                    | `src/routes/middleware.ts`, `(private)`, `admin`, tenant, and project contracts                      |
+| Group, segment, route, and method middleware                            | `(private)`, `admin`, tenant, and project contracts                                                  |
+| Generated request identity and correlation                              | `x-request-id` on every response, `correlation: true` in `src/routa.ts`, and `pnpm auth:exercise`    |
 | Middleware `requires`, `provides`, typed rejects, security, permissions | `src/middleware` and private route graph                                                             |
 | Authentication: principal union, Bearer, API key, session, custom       | `src/routa.ts`, `src/identities.ts`, `GET /whoami`, and `pnpm auth:exercise`                         |
 | Inherited, nested, and method-level `requireAuth`                       | `(private)/middleware.ts`, `(private)/tenants/$tenantId/middleware.ts`, `admin/reports.ts`           |
@@ -60,7 +62,6 @@ Runtime configuration is executable and typed in `src/routa.ts`:
 
 ```txt
 src/routes/
-  middleware.ts
   status/route.ts
   whoami/route.ts                        # public: anonymous or authenticated ctx.auth
   auth/session/route.ts                  # POST sign-in, DELETE sign-out
@@ -101,7 +102,7 @@ curl -s 'http://127.0.0.1:3000/showcase/item-1?verbose=true'       # 200 success
 curl -s -i http://127.0.0.1:3000/showcase/missing                  # 404 notFound
 ```
 
-Both showcase requests emit a route-owned `showcase.item_read` info event through the configured `ctx.logger`, followed by Routa's global `http.request` event. The same configured logger instance is used for both paths. `RoutaLogger` supports `trace`, `debug`, `info`, `warn`, `error`, `fatal`, and a `silent` no-op, plus child bindings and level checks. Every event passes through Routa's redaction before the Pino sink receives it.
+Both showcase requests emit a route-owned `showcase.item_read` info event through the configured `ctx.logger`, followed by Routa's `http.response.prepared` event. The same configured logger instance is used for both paths. `RoutaLogger` supports `trace`, `debug`, `info`, `warn`, `error`, `fatal`, and a `silent` no-op, plus child bindings and level checks. Every event passes through Routa's redaction before the Pino sink receives it.
 
 ### Exercise every logger capability
 
@@ -122,14 +123,14 @@ pnpm logger:exercise
 
 The script sends one request for each capability:
 
-| Capability                                         | Concrete behavior                                                                                                       |
-| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `log`                                              | Sends a complete structured Routa event at `info`.                                                                      |
-| `trace`, `debug`, `info`, `warn`, `error`, `fatal` | Calls the matching typed method with event name, message, and structured data.                                          |
-| `silent`                                           | Calls the typed no-op; no route-owned event is emitted, though the normal `http.request` lifecycle event still appears. |
-| `child`                                            | Derives a logger carrying `showcase` and middleware-provided `requestId` bindings.                                      |
-| `bindings`                                         | Reads the child bindings and returns only confirmation booleans, never backend-owned process or host fields.            |
-| `isLevelEnabled`                                   | Checks the requested level; the response shows both that result and whether the operation log was emitted.              |
+| Capability                                         | Concrete behavior                                                                                                    |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `log`                                              | Sends a complete structured Routa event at `info`.                                                                   |
+| `trace`, `debug`, `info`, `warn`, `error`, `fatal` | Calls the matching typed method with event name, message, and structured data.                                       |
+| `silent`                                           | Calls the typed no-op; no route-owned event is emitted, though Routa's `http.response.prepared` event still appears. |
+| `child`                                            | Derives a logger carrying a `showcase` binding beside the `requestId` that `ctx.logger` already binds.               |
+| `bindings`                                         | Reads the child bindings and returns only confirmation booleans, never backend-owned process or host fields.         |
+| `isLevelEnabled`                                   | Checks the requested level; the response shows both that result and whether the operation log was emitted.           |
 
 This command intentionally produces `warn`, `error`, and `fatal` severity examples. Use it only for the local showcase; the explicit environment gate prevents accidental normal or production traffic from doing so.
 

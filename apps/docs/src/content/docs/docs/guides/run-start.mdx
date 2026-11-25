@@ -49,10 +49,11 @@ The default logger writes one JSON line per event and reports a successful start
 {"timestamp":"2026-01-01T00:00:00.000Z","level":"info","event":"api.started","message":"Routa API started.","data":{"host":"127.0.0.1","port":3000,"routes":4}}
 ```
 
-Each completed request is logged at `info`, so a `curl` should produce a second line:
+Each prepared response is logged at `info`, so a `curl` should produce a second line. Its
+`requestId` matches the response's `x-request-id` header:
 
 ```txt
-{"timestamp":"2026-01-01T00:00:00.000Z","level":"info","event":"http.request","message":"Request completed.","data":{"method":"GET","path":"/status","status":200,"durationMs":1.42}}
+{"timestamp":"2026-01-01T00:00:00.000Z","level":"info","event":"http.response.prepared","message":"Response prepared.","data":{"requestId":"9b2e4f1a-6c3d-4e5f-8a7b-0c1d2e3f4a5b","method":"GET","route":"/status","status":200,"durationMs":1.42}}
 ```
 
 ## Development Versus Production
