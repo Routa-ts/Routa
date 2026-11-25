@@ -46,7 +46,10 @@ metadata, example contracts, scaffold diagnostics, and packed-package validation
   `localeCompare`, `toLocaleLowerCase`, and `toLocaleUpperCase` in package source. Sort
   names with the CLI's `compareText`, which compares UTF-16 code units.
 - `vp run build:packages` builds the three published packages with `vp pack` and caches
-  their `dist` outputs. Source, manifests, lockfile, and build-config changes invalidate
+  their `dist` outputs. It first emits the declarations of the private
+  `@routa-ts/contract-rules`, which core and the CLI bundle from source; core's own
+  declarations inline them, and `.pnpmfile.mjs` drops the package from published
+  manifests. Source, manifests, lockfile, and build-config changes invalidate
   the cache. The CLI also fingerprints core and creator outputs; task dependencies
   control ordering, while these inputs prevent stale bundles. Use
   `vp run --no-cache compile` to force a rebuild. Run
@@ -77,8 +80,8 @@ job summaries and one PR comment that updates on each run. The comment includes 
 commit, job results, and a link to the full reports. Long reports are shortened in the
 comment. Fork and Dependabot PRs keep reports in Actions because their tokens cannot
 write comments. Neither report blocks a merge yet. The audit lists dead code, complexity,
-duplication, and import cycles in changed files. The mutation report changes the core and
-CLI code the pull request touched and lists the changes no test catches. `.fallowrc.jsonc`
+duplication, and import cycles in changed files. The mutation report changes the core,
+CLI, and contract-rules code the pull request touched and lists the changes no test catches. `.fallowrc.jsonc`
 declares the files Routa loads by convention. Run them locally with `vp exec fallow audit`
 and `vp exec fallow mutation --root packages/core`. The measurements behind these checks
 are in [Code-quality tooling for Routa](docs/quality-tooling-research.md).

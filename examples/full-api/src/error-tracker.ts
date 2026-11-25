@@ -11,7 +11,7 @@ export type CapturedError = {
  * the example can show what a tracker receives. A real tracker client sends them to its service,
  * and the application owns that client's configuration, buffering, and flushing.
  */
-export class ErrorTracker {
+class ErrorTracker {
 	readonly captured: CapturedError[] = [];
 
 	capture(error: unknown, tags: RequestErrorDiagnostic): void {

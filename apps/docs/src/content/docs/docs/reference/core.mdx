@@ -5,6 +5,7 @@ description: Every export of the @routa-ts/core entry points.
 
 import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
 import PackageManagers from "@components/PackageManagers.astro";
+import RequestErrorType from "@components/RequestErrorType.astro";
 
 `@routa-ts/core` holds the helpers you write against and the runtime primitives generated
 code uses. It exposes four entry points, and `hono` and `zod` are peer dependencies rather
@@ -1685,9 +1686,7 @@ assignment that bypasses the types throws inside the callback and never changes 
 
 ## `RequestErrorCode`
 
-```ts
-type RequestErrorCode = "unexpected_failure" | "contract_violation" | "configuration_error"
-```
+<RequestErrorType type="RequestErrorCode" />
 
 Whether application code threw, or produced a value its declared contract forbids. The
 [failure codes and stages](/docs/reference/configuration/#failure-codes-and-stages) table
@@ -1708,17 +1707,7 @@ export const errorTitles: Record<RequestErrorCode, string> = {
 
 ## `RequestErrorStage`
 
-```ts
-type RequestErrorStage =
-	| "identity"
-	| "authentication"
-	| "context"
-	| "input"
-	| "services"
-	| "middleware"
-	| "handler"
-	| "response"
-```
+<RequestErrorType type="RequestErrorStage" />
 
 Where the request failed. The
 [failure codes and stages](/docs/reference/configuration/#failure-codes-and-stages) table

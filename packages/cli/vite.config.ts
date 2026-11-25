@@ -14,8 +14,10 @@ export default defineConfig({
 						"package.json",
 						"tsconfig.json",
 						"vite.config.ts",
-						// The CLI bundles the creator and reads core declarations.
+						// The CLI bundles the creator and the contract rules' source, and reads core
+						// declarations.
 						{ pattern: "packages/{core,create-routa-ts}/dist/**", base: "workspace" },
+						{ pattern: "packages/contract-rules/src/**", base: "workspace" },
 						{
 							pattern:
 								"{vite.config.ts,tsconfig.base.json,package.json,pnpm-lock.yaml,pnpm-workspace.yaml,.npmrc,.nvmrc}",

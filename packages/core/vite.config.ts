@@ -14,6 +14,8 @@ export default defineConfig({
 						"package.json",
 						"tsconfig.json",
 						"vite.config.ts",
+						// Core bundles the contract rules' source and inlines their declarations.
+						{ pattern: "packages/contract-rules/{src,dist}/**", base: "workspace" },
 						{
 							pattern:
 								"{vite.config.ts,tsconfig.base.json,package.json,pnpm-lock.yaml,pnpm-workspace.yaml,.npmrc,.nvmrc}",
@@ -52,6 +54,7 @@ export default defineConfig({
 		target: "node24",
 		dts: { generator: "tsgo", sourcemap: false },
 		sourcemap: false,
-		deps: { neverBundle: true },
+		// The private contract rules are bundled, so no published manifest names them.
+		deps: { neverBundle: true, alwaysBundle: ["@routa-ts/contract-rules"] },
 	},
 });

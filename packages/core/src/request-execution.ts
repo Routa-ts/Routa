@@ -1,3 +1,4 @@
+import { reservedContext } from "@routa-ts/contract-rules";
 import { ZodError, type z } from "zod";
 import {
 	type AuthContext,
@@ -705,14 +706,6 @@ function assertMiddlewareServices(
 	}
 }
 
-/** What Routa reserves each context key for, which middleware cannot pass to `next()`. */
-const reservedContext: Readonly<Record<string, string>> = {
-	services: "injected services",
-	requestId: "request identity",
-	correlationId: "request identity",
-	logger: "the request logger",
-};
-
 /**
  * Fails when a `next()` payload claims a context key Routa reserves.
  *
@@ -720,12 +713,8 @@ const reservedContext: Readonly<Record<string, string>> = {
  * @param source - Who supplied the value, for the message
  */
 function assertNoReservedContext(value: unknown, source: string): void {
-	for (const [key, owner] of Object.entries(reservedContext)) {
-		if (typeof value === "object" && value !== null && Object.hasOwn(value, key)) {
-			throw new InvalidHandlerOutputError(
-				`${source} ctx.${key}, which Routa reserves for ${owner}. Rename the context key.`,
-			);
-		}
+	for (const key of Object.keys(reservedContext)) {
+		assertNotReserved(value, source, key as keyof typeof reservedContext);
 	}
 }
 
@@ -736,9 +725,18 @@ function assertNoReservedContext(value: unknown, source: string): void {
  * @param source - Who supplied the value, for the message
  */
 function assertNoServices(value: unknown, source: string): void {
-	if (typeof value === "object" && value !== null && Object.hasOwn(value, "services")) {
+	assertNotReserved(value, source, "services");
+}
+
+function assertNotReserved(
+	value: unknown,
+	source: string,
+	key: keyof typeof reservedContext,
+): void {
+	if (typeof value === "object" && value !== null && Object.hasOwn(value, key)) {
+		const { reason, advice } = reservedContext[key];
 		throw new InvalidHandlerOutputError(
-			`${source} ctx.services, which Routa reserves for injected services. Rename the context key.`,
+			`${source} ctx.${key}, which Routa reserves for ${reason}. ${advice}`,
 		);
 	}
 }

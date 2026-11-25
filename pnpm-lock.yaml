@@ -8,6 +8,8 @@ overrides:
   '@emnapi/core': 1.11.3
   '@emnapi/runtime': 1.11.3
 
+pnpmfileChecksum: sha256-7TFOcLGpvanT3iQFWXXp3tyCJ53T2YEj2J3zp7jnv88=
+
 importers:
 
   .:
@@ -85,6 +87,9 @@ importers:
       '@astrojs/starlight-tailwind':
         specifier: 5.0.0
         version: 5.0.0(@astrojs/starlight@0.43.1(astro@7.4.5(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(typescript@6.0.3))(tailwindcss@4.3.5)
+      '@routa-ts/contract-rules':
+        specifier: workspace:*
+        version: link:../../packages/contract-rules
       '@tailwindcss/vite':
         specifier: 4.3.5
         version: 4.3.5(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -179,6 +184,9 @@ importers:
         specifier: 2.9.1
         version: 2.9.1
     devDependencies:
+      '@routa-ts/contract-rules':
+        specifier: workspace:*
+        version: link:../contract-rules
       create-routa-ts:
         specifier: workspace:*
         version: link:../create-routa-ts
@@ -186,8 +194,13 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
 
+  packages/contract-rules: {}
+
   packages/core:
     devDependencies:
+      '@routa-ts/contract-rules':
+        specifier: workspace:*
+        version: link:../contract-rules
       hono:
         specifier: ^4.13.19
         version: 4.13.19

@@ -82,6 +82,7 @@ These repository rules take precedence over installed skills' PR workflows and t
 - `packages/core/` owns public route and middleware contracts, type inference, the Hono runtime adapter, and framework logging.
 - `packages/cli/` owns project and route-graph analysis, TypeScript parsing, generation, OpenAPI checks, scaffolding, diagnostics, and CLI commands.
 - `packages/create-routa-ts/` creates Routa projects.
+- `packages/contract-rules/` holds, once, each rule core and the CLI both enforce: identity header names and grammars, reserved names with their reasons, and request error codes and stages. It is private; core and the CLI bundle it, so no published package depends on it.
 - `examples/basic-api/` proves the smallest executable consumer.
 - `examples/full-api/` proves broader framework behavior and integration patterns.
 - `apps/docs/` is the public documentation site. Follow its own `AGENTS.md` when working there.

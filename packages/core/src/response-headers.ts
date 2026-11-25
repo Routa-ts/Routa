@@ -1,31 +1,18 @@
+import { isHeaderName, reservedResponseHeaders } from "@routa-ts/contract-rules";
 import type { z } from "zod";
 import { InvalidHandlerOutputError } from "./handler-output-error.js";
 
 /** What an outcome's `headers` result field holds after structural checks: declared, defined values. */
 export type HeaderValues = Record<string, unknown>;
 
-/**
- * Header names Routa owns on every response, so no outcome can declare them. The declaration
- * types derive their reserved names from this list.
- */
-export const reservedHeaders = [
-	"content-type",
-	"content-length",
-	"transfer-encoding",
-	"connection",
-	"set-cookie",
-	"x-request-id",
-] as const;
+const reservedHeaderNames: ReadonlySet<string> = new Set(reservedResponseHeaders);
 
-const reservedHeaderNames: ReadonlySet<string> = new Set(reservedHeaders);
-
-const tokenPattern = /^[!#$%&'*+\-.^_`|~0-9a-z]+$/;
 const safeValuePattern = /^[\t\x20-\x7e\x80-\xff]*$/;
 const valueTypes = "string, number, or boolean";
 
 type HeaderOutcome = { headers?: unknown };
 
-/** The headers a route's configuration gives Routa besides {@link reservedHeaders}. */
+/** The headers a route's configuration gives Routa besides the headers it owns on every response. */
 export type OwnedHeaders = {
 	/** Header names the response lifecycle owns for the route. */
 	readonly lifecycle: ReadonlySet<string>;
@@ -66,7 +53,7 @@ export function headerDeclarationProblem(
 	for (const [name, schema] of Object.entries(shape)) {
 		const lower = name.toLowerCase();
 
-		if (!tokenPattern.test(lower)) {
+		if (!isHeaderName(lower)) {
 			return `declares "${name}", which is not a valid header name.`;
 		}
 

@@ -1,0 +1,48 @@
+---
+import { requestErrorCodes, requestErrorStages } from "@routa-ts/contract-rules";
+
+type Props = {
+	/** The failure codes or the stages Routa reports to `onRequestError` and in `http.error`. */
+	list: "codes" | "stages";
+};
+
+const tables = {
+	codes: { column: "code", heading: "Meaning", entries: requestErrorCodes },
+	stages: { column: "stage", heading: "Where the failure happened", entries: requestErrorStages },
+};
+const { column, heading, entries } = tables[Astro.props.list];
+
+/**
+ * Splits a description into text and its `code` spans. Text gets the typographic apostrophes
+ * Markdown gives the rest of the page.
+ */
+const spans = (description: string) =>
+	description.split("`").map((text, index) =>
+		index % 2 === 1 ? { code: true, text } : { code: false, text: text.replaceAll("'", "’") },
+	);
+---
+
+<table>
+	<thead>
+		<tr>
+			<th>
+				<code dir="auto">{column}</code>
+			</th>
+			<th>{heading}</th>
+		</tr>
+	</thead>
+	<tbody>
+		{entries.map(({ name, description }) => (
+			<tr>
+				<td>
+					<code dir="auto">{name}</code>
+				</td>
+				<td>
+					{spans(description).map(({ code, text }) =>
+						code ? <code dir="auto">{text}</code> : text,
+					)}
+				</td>
+			</tr>
+		))}
+	</tbody>
+</table>

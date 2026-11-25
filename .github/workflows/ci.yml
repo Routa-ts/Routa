@@ -108,7 +108,7 @@ jobs:
         changes="$RUNNER_TEMP/changes.diff"
         git diff "origin/$GITHUB_BASE_REF...HEAD" > "$changes"
         status=0
-        for root in packages/core packages/cli; do
+        for root in packages/contract-rules packages/core packages/cli; do
           # With no paths under "$root", Fallow cannot tell which base the diff uses and exits 2.
           if git diff --quiet "origin/$GITHUB_BASE_REF...HEAD" -- "$root"; then
             printf '### Mutation report: %s\n\nNo changes under %s.\n\n' "$root" "$root" >> "$GITHUB_STEP_SUMMARY"

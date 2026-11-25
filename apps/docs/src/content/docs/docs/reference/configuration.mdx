@@ -4,6 +4,8 @@ description: Every option src/routa.ts accepts and every environment variable Ro
 ---
 
 import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
+import RequestErrorNames from "@components/RequestErrorNames.astro";
+import RequestErrorTable from "@components/RequestErrorTable.astro";
 
 Routa reads its runtime configuration from the default export of `src/routa.ts`. The file
 is required — Routa reports `ROUTA_PROJECT_REQUIRED` without it — even when it sets no
@@ -269,7 +271,7 @@ The diagnostic holds the same facts as the request's `http.error` event:
 
 | Field           | Value                                                                    |
 | --------------- | ------------------------------------------------------------------------ |
-| `code`          | `unexpected_failure`, `contract_violation`, or `configuration_error`     |
+| `code`          | <RequestErrorNames list="codes" />                                       |
 | `stage`         | Where the request failed, from the table below                           |
 | `requestId`     | The request's `x-request-id`                                             |
 | `correlationId` | The accepted correlation ID; absent when Routa accepted none             |
@@ -279,22 +281,9 @@ The diagnostic holds the same facts as the request's `http.error` event:
 
 ### Failure Codes and Stages
 
-| `code`                | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `unexpected_failure`  | Application code threw, or Routa failed for a reason it did not expect. The callback receives what was thrown: for an authenticator, extractor, principal schema, services factory, response data `JSON.stringify` throws for, such as a bigint, a circular reference, or a throwing `toJSON()` or getter, or a refinement in a response, header, cookie, or `provides` schema, its own error                                                                               |
-| `contract_violation`  | Application code produced a value its declared contract forbids, such as response data, headers, or cookies that fail the outcome's schema, response data JSON writes no text for, such as `undefined`, a `next()` payload that fails `provides`, a services factory result that is not exactly its declared services, or an authenticator result or principal that fails its contract without throwing. The callback receives Routa's error, which describes the violation |
-| `configuration_error` | The application is configured in a way Routa cannot serve safely: a Routa app mounted in another Routa app with `route()`, which Routa does not support. The callback receives Routa's error, which says so and what to do instead                                                                                                                                                                                                                                          |
+<RequestErrorTable list="codes" />
 
-| `stage`          | Where the failure happened                                                                                                                                                                                                   |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `identity`       | Identifying the request: a Routa app mounted in another Routa app received it                                                                                                                                                |
-| `authentication` | Resolving credentials: an authenticator or extractor threw or returned an invalid result                                                                                                                                     |
-| `context`        | Building a low-level `createContext` value, including reading the object it returns                                                                                                                                          |
-| `input`          | Reading input, such as a schema refinement that throws instead of reporting an issue                                                                                                                                         |
-| `services`       | A route-file or method services factory                                                                                                                                                                                      |
-| `middleware`     | A middleware callback, including what it passes to `next()` and what it returns                                                                                                                                              |
-| `handler`        | The route handler, including a return value that is not an outcome result at all                                                                                                                                             |
-| `response`       | Preparing the response: reading the route's `deprecation` for lifecycle headers, and checking and serializing the selected outcome, including an outcome type the route does not declare, and its body, headers, and cookies |
+<RequestErrorTable list="stages" />
 
 A failure is reported once, at the stage where it was first thrown. A handler error that
 middleware rethrows keeps the `handler` stage; a different error that middleware throws in its

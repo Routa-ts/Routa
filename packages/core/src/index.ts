@@ -1,8 +1,13 @@
+import type {
+	requestErrorCodes,
+	requestErrorStages,
+	reservedContext,
+	reservedResponseHeaders,
+} from "@routa-ts/contract-rules";
 import type { z } from "zod";
 import type { AuthenticationChecks, AuthenticationConfig } from "./authentication.js";
 import type { RoutaLogger } from "./logger.js";
 import { defineCookie } from "./response-cookies.js";
-import type { reservedHeaders } from "./response-headers.js";
 
 export type {
 	CreateLoggerOptions,
@@ -286,7 +291,7 @@ type ValueChangeMessage<TKey extends string> = {
 };
 
 /** Header names Routa owns on every response. */
-type ReservedHeaderName = (typeof reservedHeaders)[number];
+type ReservedHeaderName = (typeof reservedResponseHeaders)[number];
 
 type HeaderNameProblem<TName extends string> = TName extends ReservedHeaderName
 	? `Header "${TName}" is reserved: Routa owns it, so an outcome cannot declare it.`
@@ -475,21 +480,25 @@ declare class SelectedOutcome {
 export type MiddlewareContinuation = SelectedOutcome;
 
 /**
+ * The compiler message for each context key Routa reserves. The keys come from the shared reserved
+ * context map, so a key added there fails this type until it has a message.
+ */
+type ReservedContextMessages = ForEachReservedKey<{
+	services: "ctx.services is reserved for injected services. Rename this context key.";
+	requestId: "ctx.requestId is reserved for the request identity Routa generates. Rename this context key.";
+	correlationId: "ctx.correlationId is reserved for the correlation ID Routa accepts. Rename this context key.";
+	logger: "ctx.logger is reserved for the request logger. Rename this context key.";
+}>;
+
+type ForEachReservedKey<T extends Record<keyof typeof reservedContext, string>> = T;
+
+/**
  * The context keys Routa reserves, each typed so the property name carries the message; see
  * {@link ForbiddenData}.
  */
 type ReservedContextKeys = {
-	readonly services: {
-		readonly "ctx.services is reserved for injected services. Rename this context key.": never;
-	};
-	readonly requestId: {
-		readonly "ctx.requestId is reserved for the request identity Routa generates. Rename this context key.": never;
-	};
-	readonly correlationId: {
-		readonly "ctx.correlationId is reserved for the correlation ID Routa accepts. Rename this context key.": never;
-	};
-	readonly logger: {
-		readonly "ctx.logger is reserved for the request logger. Rename this context key.": never;
+	readonly [K in keyof typeof reservedContext]: {
+		readonly [M in ReservedContextMessages[K]]: never;
 	};
 };
 
@@ -894,22 +903,14 @@ export type CorrelationConfig = boolean | { readonly header: string };
  * `configuration_error`: the application is configured in a way Routa cannot serve safely, such
  * as a Routa app mounted in another Routa app with `route()`.
  */
-export type RequestErrorCode = "unexpected_failure" | "contract_violation" | "configuration_error";
+export type RequestErrorCode = (typeof requestErrorCodes)[number]["name"];
 
 /**
  * Where in the request the failure happened: identifying the request, resolving credentials,
  * building the low-level route context, reading input, constructing request services, running
  * middleware, running the handler, or preparing the selected outcome's response.
  */
-export type RequestErrorStage =
-	| "identity"
-	| "authentication"
-	| "context"
-	| "input"
-	| "services"
-	| "middleware"
-	| "handler"
-	| "response";
+export type RequestErrorStage = (typeof requestErrorStages)[number]["name"];
 
 /** What Routa knows about a failed request. It holds no error text and no request data. */
 export type RequestErrorDiagnostic = Readonly<{
