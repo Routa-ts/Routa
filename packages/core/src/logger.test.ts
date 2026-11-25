@@ -953,6 +953,34 @@ describe("createLogger failure containment", () => {
 		}
 	});
 
+	it("LOG-AC-05 never reads the then of a value a sink's promise fulfilled with", async () => {
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+		const unhandled = vi.fn<(reason: unknown) => void>();
+		process.on("unhandledRejection", unhandled);
+		const reads = vi.fn();
+		const fulfilled = {};
+		const promise = Promise.resolve(fulfilled);
+		// oxlint-disable-next-line unicorn/no-thenable -- the throwing then is the hostile input.
+		Object.defineProperty(fulfilled, "then", {
+			get() {
+				reads();
+				throw new Error("late then");
+			},
+		});
+
+		try {
+			createLogger({ sink: () => promise as unknown as void }).info("fulfills", "Fulfills.");
+			await new Promise((resolve) => setTimeout(resolve, 10));
+
+			expect(reads).not.toHaveBeenCalled();
+			expect(unhandled).not.toHaveBeenCalled();
+			expect(fallbackLines(consoleError)).toEqual([]);
+		} finally {
+			process.off("unhandledRejection", unhandled);
+			consoleError.mockRestore();
+		}
+	});
+
 	it("LOG-AC-05 reports a failing console sink without retrying it", () => {
 		const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {
 			throw new Error("stdout closed");
@@ -1021,6 +1049,12 @@ describe("createLogger options", () => {
 		expect(() => createLogger(JSON.parse('{"__proto__":{"enabled":false}}'))).toThrow(
 			'createLogger does not accept "__proto__".',
 		);
+	});
+
+	it("LOG-AC-01 rejects a non-enumerable unknown option", () => {
+		const options = Object.defineProperty({}, "transport", { value: {}, enumerable: false });
+
+		expect(() => createLogger(options)).toThrow('createLogger does not accept "transport".');
 	});
 
 	it("LOG-AC-03 reads each option once, so the redact paths it validated are the ones applied", () => {

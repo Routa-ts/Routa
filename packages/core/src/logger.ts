@@ -289,7 +289,7 @@ function snapshotLoggerOptions(input: unknown): CreateLoggerOptions {
 }
 
 function assertKnownOptionNames(options: object): void {
-	for (const name of Object.keys(options)) {
+	for (const name of Object.getOwnPropertyNames(options)) {
 		if (!(optionNames as readonly string[]).includes(name)) {
 			throw new TypeError(
 				`createLogger does not accept ${JSON.stringify(name)}. It accepts enabled, level, sink, redact, and now; send events to another backend from a sink.`,
@@ -349,7 +349,8 @@ function assertLoggerOptions(options: unknown): asserts options is CreateLoggerO
  * Calls `onRejected` if what a sink returned rejects, without waiting for it. A native promise,
  * a subclass's instance included, gets the handler through the intrinsic `then`, so its own
  * `then` never runs and its rejection is always handled. Any other value is resolved as `await`
- * would resolve it, which runs a thenable's `then`.
+ * would resolve it, which runs a thenable's `then`. The fulfilled value is dropped: the derived
+ * promise would otherwise read that value's `then`, whose throw nothing handles.
  *
  * A promise subclass whose `constructor`, `Symbol.species`, or species constructor throws cannot
  * be observed: every intrinsic that attaches a handler runs them first.
@@ -359,9 +360,9 @@ function assertLoggerOptions(options: unknown): asserts options is CreateLoggerO
 function observeRejection(delivery: unknown, onRejected: () => void): void {
 	try {
 		// Throws a TypeError, before reading anything, for a value that is not a native promise.
-		void Promise.prototype.then.call(delivery, undefined, onRejected);
+		void Promise.prototype.then.call(delivery, () => undefined, onRejected);
 	} catch {
-		void Promise.prototype.then.call(Promise.resolve(delivery), undefined, onRejected);
+		void Promise.prototype.then.call(Promise.resolve(delivery), () => undefined, onRejected);
 	}
 }
 
